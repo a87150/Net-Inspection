@@ -1,0 +1,27 @@
+<section class="tab-pane fade {% if tab.active %}show active{% endif %}" id="people-panel-{{ tab.provider }}" role="tabpanel" aria-labelledby="people-tab-{{ tab.provider }}">
+    <h3 class="h6">从 API 导入 · {{ tab.label }}</h3>
+    <p class="text-secondary small">先选择或保存来源，再由 Worker 生成预览。连接测试可选；只有明确确认预览才会修改人员。不同来源不会转移人员归属。</p>
+    <form method="get" action="{% url 'asset_list' 'people' %}" class="d-flex flex-column flex-sm-row gap-2 mb-3">
+        <input type="hidden" name="import" value="api"><input type="hidden" name="provider" value="{{ tab.provider }}">
+        <label class="visually-hidden" for="source-select-{{ tab.provider }}">选择{{ tab.label }}来源</label>
+        <select class="form-select" id="source-select-{{ tab.provider }}" name="source_id"><option value="">新建来源</option>{% for source in tab.sources %}<option value="{{ source.id }}" {% if source.id == tab.selected.id %}selected{% endif %}>{{ source.name }} · {{ source.source_key }}{% if not source.is_enabled %}（已停用）{% endif %}</option>{% endfor %}</select>
+        <button type="submit" class="btn btn-outline-secondary text-nowrap">选择来源</button>
+    </form>
+    <form method="post" action="{% url 'people_source_save' %}" class="d-grid gap-3">
+        {% csrf_token %}<input type="hidden" name="source_id" value="{{ tab.selected.id|default:'' }}">
+        {{ tab.form.source_type }}
+        {% if tab.form.errors %}<div class="alert alert-danger mb-0" role="alert">请检查来源配置。{{ tab.form.non_field_errors }}</div>{% endif %}
+        {% for field in tab.form.visible_fields %}<div><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}{% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}</div>{% endfor %}
+        <button class="btn btn-dark" type="submit">保存{{ tab.label }}来源</button>
+    </form>
+    {% if tab.selected %}
+    <div class="border-top mt-3 pt-3"><p class="small">当前来源：{{ tab.selected.name }} · {{ tab.selected.source_key }}{% if not tab.selected.is_enabled %} · 已停用{% endif %}</p>
+        <div class="d-flex flex-wrap gap-2">
+            <form method="post" action="{% url 'people_test' %}">{% csrf_token %}<input type="hidden" name="source_id" value="{{ tab.selected.id }}"><button type="submit" class="btn btn-outline-primary" {% if not tab.selected.is_enabled %}disabled{% endif %}>测试连接（可选）</button></form>
+            <form method="post" action="{% url 'people_preview' %}">{% csrf_token %}<input type="hidden" name="source_id" value="{{ tab.selected.id }}"><button type="submit" class="btn btn-primary" {% if not tab.selected.is_enabled %}disabled{% endif %}>生成同步预览</button></form>
+        </div>
+    </div>
+    {% else %}
+    <form method="post" action="{% url 'import_people_from_api' tab.provider %}" class="mt-3">{% csrf_token %}<button type="submit" class="btn btn-outline-secondary">配置{{ tab.label }}导入</button></form>
+    {% endif %}
+</section>

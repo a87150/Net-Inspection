@@ -1,0 +1,297 @@
+"""End-to-end contracts for the infrastructure task Worker."""
+
+import threading
+import time
+from io import StringIO
+from unittest.mock import patch
+
+from django.core.management import call_command
+from django.test import TestCase, TransactionTestCase
+from django.urls import reverse
+
+from net.models import (
+    ComputerAnalysisProfile,
+    ComputerLogFile,
+    Error_Server,
+    InspectionProfile,
+    Network_Device,
+    Network_Device_Inspection,
+    Server,
+    Server_Inspection,
+    TaskRun,
+)
+from net.services.collectors import CollectionResult
+from net.tasks import enqueue_task
+from net.tasks.queue import claim_next_task
+from net.tasks.executors.inspection import execute_target
+from net.tasks.worker import TaskWorker
+
+
+class InfrastructureExecutorTests(TestCase):
+    def setUp(self):
+        self.profile = InspectionProfile.objects.create(
+            name='服务器执行配置',
+            device_type=InspectionProfile.DeviceType.SERVER,
+            selected_items=['cpu'],
+            timeout_seconds=10,
+            concurrent_workers=2,
+        )
+        self.server = Server.objects.create(
+            name='LINUX-01',
+            ip='192.0.2.110',
+            server_type='linux',
+            username='reader',
+            password='snapshot-secret',
+        )
+
+    def _claimed_target(self):
+        task = enqueue_task(
+            self.profile,
+            [self.server.pk],
+            TaskRun.Source.MANUAL,
+        )
+        claimed = claim_next_task('executor-test', 30)
+        return claimed.target_runs.get(), claimed
+
+    @patch('net.tasks.executors.inspection.collect_windows_http')
+    @patch('net.tasks.executors.inspection.collect_linux_ssh')
+    def test_execute_target_uses_immutable_snapshot_and_selected_fields(
+        self, linux_collect, windows_collect,
+    ):
+        target, _task = self._claimed_target()
+        self.server.server_type = 'windows'
+        self.server.ip = '192.0.2.111'
+        self.server.save(update_fields=['server_type', 'ip'])
+        linux_collect.return_value = CollectionResult(
+            True,
+            'success',
+            data={'cpu': {'usage_percent': 22}, 'memory': {'used_percent': 91}},
+            raw={'cpu': {'output': 'ok', 'password': 'must-not-persist'}, 'logs': 'unselected'},
+            duration_ms=14,
+        )
+        windows_collect.return_value = CollectionResult(False, 'failed', 'wrong dispatch')
+
+        outcome = execute_target(target, worker_id='executor-test')
+
+        self.assertEqual(outcome.status, TaskRun.Status.SUCCESS)
+        inspection = Server_Inspection.objects.get()
+        self.assertEqual(inspection.details, {'cpu': {'usage_percent': 22}})
+        self.assertEqual(inspection.raw_output, {'cpu': {'output': 'ok', 'password': '[REDACTED]'}})
+        self.assertEqual(inspection.task_target_id, target.pk)
+        target.refresh_from_db()
+        self.assertEqual(target.result_type, 'server_inspection')
+        self.assertEqual(target.result_id, str(inspection.pk))
+        self.assertEqual(target.result_snapshot['details'], {'cpu': {'usage_percent': 22}})
+        self.assertNotIn('raw_output', target.result_snapshot)
+
+
+class TaskWorkerTests(TransactionTestCase):
+    def _profile(self, *, concurrent_workers=2):
+        return InspectionProfile.objects.create(
+            name=f'并发配置-{concurrent_workers}-{InspectionProfile.objects.count()}',
+            device_type=InspectionProfile.DeviceType.SERVER,
+            selected_items=['cpu'],
+            timeout_seconds=10,
+            concurrent_workers=concurrent_workers,
+        )
+
+    def _server(self, suffix):
+        return Server.objects.create(
+            name=f'SRV-{suffix}',
+            ip=f'192.0.2.{120 + suffix}',
+            server_type='linux',
+            username='reader',
+            password='worker-secret',
+        )
+
+    @patch('net.tasks.executors.inspection.collect_linux_ssh')
+    def test_worker_isolates_target_failure_and_finishes_partial_task(self, collect):
+        profile = self._profile(concurrent_workers=1)
+        first, second = self._server(1), self._server(2)
+        enqueue_task(profile, [first.pk, second.pk], TaskRun.Source.MANUAL)
+
+        def collect_one(asset, timeout, selected_items=None):
+            if asset.ip.endswith('.122'):
+                raise RuntimeError('collector crashed')
+            return CollectionResult(True, 'success', data={'cpu': {'usage_percent': 8}})
+
+        collect.side_effect = collect_one
+
+        self.assertTrue(TaskWorker(worker_id='partial-worker', threads=4, lease_seconds=10).run_once())
+
+        task = TaskRun.objects.get()
+        self.assertEqual(task.status, TaskRun.Status.PARTIAL)
+        self.assertEqual(task.successful_targets, 1)
+        self.assertEqual(task.failed_targets, 1)
+        self.assertEqual(Server_Inspection.objects.count(), 2)
+        self.assertEqual(Error_Server.objects.count(), 1)
+        self.assertEqual(task.target_runs.filter(status=TaskRun.Status.FAILED).count(), 1)
+
+    @patch('net.tasks.executors.inspection.collect_linux_ssh')
+    def test_worker_honors_manual_concurrency_override_within_global_cap(self, collect):
+        profile = self._profile(concurrent_workers=3)
+        first, second = self._server(3), self._server(4)
+        enqueue_task(
+            profile,
+            [first.pk, second.pk],
+            TaskRun.Source.MANUAL,
+            overrides={'parameters': {'concurrent_workers': 1}},
+        )
+        active = 0
+        peak = 0
+        lock = threading.Lock()
+
+        def slow_collect(_asset, _timeout, selected_items=None):
+            nonlocal active, peak
+            with lock:
+                active += 1
+                peak = max(peak, active)
+            try:
+                time.sleep(0.05)
+                return CollectionResult(True, 'success', data={'cpu': {'usage_percent': 10}})
+            finally:
+                with lock:
+                    active -= 1
+
+        collect.side_effect = slow_collect
+
+        TaskWorker(worker_id='bounded-worker', threads=4, lease_seconds=10).run_once()
+
+        self.assertEqual(peak, 1)
+        self.assertEqual(TaskRun.objects.get().status, TaskRun.Status.SUCCESS)
+
+    @patch('net.tasks.executors.inspection.collect_linux_ssh')
+    def test_worker_runs_collectors_concurrently_up_to_global_cap(self, collect):
+        profile = self._profile(concurrent_workers=2)
+        first, second = self._server(7), self._server(8)
+        enqueue_task(profile, [first.pk, second.pk], TaskRun.Source.MANUAL)
+        active = 0
+        peak = 0
+        lock = threading.Lock()
+
+        def slow_collect(_asset, _timeout, selected_items=None):
+            nonlocal active, peak
+            with lock:
+                active += 1
+                peak = max(peak, active)
+            try:
+                time.sleep(0.08)
+                return CollectionResult(True, 'success', data={'cpu': {'usage_percent': 10}})
+            finally:
+                with lock:
+                    active -= 1
+
+        collect.side_effect = slow_collect
+
+        TaskWorker(worker_id='global-cap-worker', threads=2, lease_seconds=10).run_once()
+
+        self.assertEqual(peak, 2)
+        self.assertEqual(TaskRun.objects.get().status, TaskRun.Status.SUCCESS)
+
+    def test_worker_claims_computer_analysis_tasks_and_isolates_invalid_log_evidence(self):
+        profile = ComputerAnalysisProfile.objects.create(
+            name='尚未启用的分析器',
+            scan_directories=['C:/logs'],
+            analysis_items=['activation'],
+        )
+        log_file = ComputerLogFile.objects.create(
+            source_path='C:/logs/pc.json',
+            modified_at='2026-08-31T00:00:00+08:00',
+            content_hash='a' * 64,
+            import_status='success',
+        )
+        task = enqueue_task(profile, [log_file.pk], TaskRun.Source.MANUAL)
+
+        self.assertTrue(TaskWorker(worker_id='computer-aware', threads=1, lease_seconds=10).run_once())
+
+        task.refresh_from_db()
+        self.assertEqual(task.status, TaskRun.Status.FAILED)
+        self.assertEqual(task.target_runs.get().status, TaskRun.Status.FAILED)
+
+    @patch('net.tasks.executors.inspection.collect_linux_ssh')
+    def test_collector_exception_never_persists_secret_text(self, collect):
+        profile = self._profile(concurrent_workers=1)
+        server = self._server(9)
+        enqueue_task(profile, [server.pk], TaskRun.Source.MANUAL)
+        collect.side_effect = RuntimeError('api_token=super-secret-token')
+
+        TaskWorker(worker_id='redaction-worker', threads=1, lease_seconds=10).run_once()
+
+        target = TaskRun.objects.get().target_runs.get()
+        inspection = Server_Inspection.objects.get()
+        self.assertNotIn('super-secret-token', target.error_message)
+        self.assertNotIn('super-secret-token', inspection.summary)
+        self.assertNotIn('super-secret-token', Error_Server.objects.get().error_message['详细信息'])
+
+    @patch('net.tasks.worker.renew_lease', wraps=__import__('net.tasks.queue', fromlist=['renew_lease']).renew_lease)
+    @patch('net.tasks.executors.inspection.collect_linux_ssh')
+    def test_worker_renews_lease_until_long_collector_finishes(self, collect, renew):
+        profile = self._profile(concurrent_workers=1)
+        server = self._server(5)
+        enqueue_task(profile, [server.pk], TaskRun.Source.MANUAL)
+
+        def slow_collect(_asset, _timeout, selected_items=None):
+            time.sleep(1.1)
+            return CollectionResult(True, 'success', data={'cpu': {'usage_percent': 12}})
+
+        collect.side_effect = slow_collect
+
+        TaskWorker(worker_id='heartbeat-worker', threads=1, lease_seconds=1).run_once()
+
+        self.assertGreaterEqual(renew.call_count, 1)
+        self.assertEqual(TaskRun.objects.get().status, TaskRun.Status.SUCCESS)
+
+    @patch('net.tasks.executors.inspection.collect_linux_ssh')
+    @patch('net.tasks.worker.renew_lease', return_value=False)
+    def test_stale_worker_does_not_persist_collector_result(self, renew, collect):
+        profile = self._profile(concurrent_workers=1)
+        server = self._server(6)
+        enqueue_task(profile, [server.pk], TaskRun.Source.MANUAL)
+        def slow_collect(_asset, _timeout, selected_items=None):
+            time.sleep(0.45)
+            return CollectionResult(True, 'success', data={'cpu': {'usage_percent': 5}})
+
+        collect.side_effect = slow_collect
+
+        TaskWorker(worker_id='stale-worker', threads=1, lease_seconds=1).run_once()
+
+        self.assertGreaterEqual(renew.call_count, 1)
+        self.assertEqual(Server_Inspection.objects.count(), 0)
+        task = TaskRun.objects.get()
+        self.assertEqual(task.status, TaskRun.Status.RUNNING)
+        self.assertEqual(task.target_runs.get().status, TaskRun.Status.RUNNING)
+
+
+class WorkerCommandAndLegacyEntryTests(TestCase):
+    def test_once_command_exits_when_queue_is_empty(self):
+        output = StringIO()
+
+        call_command('run_task_worker', '--once', stdout=output)
+
+        self.assertIn('没有可执行任务', output.getvalue())
+
+    def test_legacy_command_and_web_entry_only_enqueue_work(self):
+        device = Network_Device.objects.create(
+            device_name='SW-QUEUE', ip='192.0.2.140', username='reader', password='secret',
+        )
+        output = StringIO()
+
+        call_command('run_network_checks', asset_type='networks', asset_id=str(device.pk), stdout=output)
+
+        self.assertIn('已创建', output.getvalue())
+        self.assertEqual(Network_Device_Inspection.objects.count(), 0)
+        self.assertEqual(TaskRun.objects.filter(status=TaskRun.Status.QUEUED).count(), 1)
+
+    def test_web_manual_entry_enqueues_without_running_collectors(self):
+        device = Network_Device.objects.create(
+            device_name='SW-WEB-QUEUE', ip='192.0.2.141', username='reader', password='secret',
+        )
+
+        response = self.client.post(reverse('run_infrastructure_inspection'), {
+            'asset_type': 'networks',
+            'asset_id': str(device.pk),
+        })
+
+        self.assertRedirects(response, reverse('item_list', args=['networks']))
+        self.assertEqual(Network_Device_Inspection.objects.count(), 0)
+        self.assertEqual(TaskRun.objects.filter(status=TaskRun.Status.QUEUED).count(), 1)

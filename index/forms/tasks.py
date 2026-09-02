@@ -1,0 +1,336 @@
+"""Allowlisted Web forms for task profiles, schedules and manual runs."""
+
+from django import forms
+from django.core.exceptions import ValidationError
+
+from net.models import ComputerAnalysisProfile, InspectionProfile, Schedule
+from net.services.collectors.selection import (
+    LINUX_FIELDS,
+    NETWORK_FIELDS,
+    SECURITY_FIELDS,
+    WINDOWS_FIELDS,
+)
+from net.services.computer_analysis import ANALYSIS_ITEMS
+
+
+_INSPECTION_LABELS = {
+    'computer_name': '设备名称', 'system_info': '系统信息', 'cpu': 'CPU',
+    'memory': '内存', 'storage_status': '存储', 'network_info': '网络',
+    'services': '服务状态', 'logs': '系统日志', 'device_info': '设备信息',
+    'temperature': '温度', 'interface_status': '接口状态',
+    'vlan_status': 'VLAN 状态', 'status_data': '设备状态',
+    'channel_status': '通道状态',
+    'config_info': '设备配置（只读、脱敏，非完整恢复备份）',
+}
+_ANALYSIS_LABELS = {
+    'activation': 'Windows 激活', 'software': '已安装软件',
+    'processes': '运行进程', 'bitlocker': 'BitLocker',
+    'defender': 'Defender 信息', 'patches': '系统更新',
+    'domain': '域状态', 'resource': '资源使用情况',
+    'event_findings': '事件发现',
+}
+
+
+def inspection_item_choices(device_type):
+    """Return only collector keys that this project type can execute."""
+    if device_type == InspectionProfile.DeviceType.NETWORK_DEVICE:
+        keys = set(NETWORK_FIELDS)
+    elif device_type == InspectionProfile.DeviceType.SERVER:
+        keys = set(LINUX_FIELDS) | set(WINDOWS_FIELDS)
+    elif device_type == InspectionProfile.DeviceType.MONITOR:
+        keys = set(SECURITY_FIELDS)
+    else:
+        keys = set()
+    return tuple((key, _INSPECTION_LABELS.get(key, key)) for key in sorted(keys))
+
+
+def analysis_item_choices():
+    return tuple(
+        (key, _ANALYSIS_LABELS.get(key, key)) for key in sorted(ANALYSIS_ITEMS)
+    )
+
+
+class _ScheduleFieldsMixin:
+    schedule_enabled = forms.BooleanField(required=False, label='启用定时执行')
+    schedule_kind = forms.ChoiceField(
+        required=False,
+        choices=Schedule.Kind.choices,
+        label='执行方式',
+    )
+    interval_value = forms.IntegerField(required=False, min_value=1, label='间隔数值')
+    interval_unit = forms.ChoiceField(
+        required=False,
+        choices=Schedule.IntervalUnit.choices,
+        label='间隔单位',
+    )
+    daily_time = forms.TimeField(required=False, label='每天执行时间')
+
+    def _clean_schedule(self):
+        cleaned = self.cleaned_data
+        if not cleaned.get('schedule_enabled'):
+            return
+        kind = cleaned.get('schedule_kind')
+        if kind == Schedule.Kind.INTERVAL:
+            if cleaned.get('interval_value') is None:
+                self.add_error('interval_value', '间隔计划必须设置间隔数值。')
+            if not cleaned.get('interval_unit'):
+                self.add_error('interval_unit', '间隔计划必须选择分钟或小时。')
+        elif kind == Schedule.Kind.DAILY:
+            if cleaned.get('daily_time') is None:
+                self.add_error('daily_time', '每日计划必须设置执行时间。')
+        else:
+            self.add_error('schedule_kind', '请选择间隔执行或每天执行。')
+
+
+class InspectionProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
+    target_rule_mode = forms.ChoiceField(required=False, initial='all', label='定时目标范围',
+        choices=(('all', '全部设备'), ('selected', '指定设备'), ('filtered', '按条件精确匹配')))
+    target_rule_ids = forms.MultipleChoiceField(required=False, label='指定设备',
+        widget=forms.SelectMultiple(attrs={'class': 'form-select', 'size': 5}))
+    profile_id = forms.UUIDField(required=False, widget=forms.HiddenInput)
+    name = forms.CharField(max_length=255, label='配置名称')
+    selected_items = forms.MultipleChoiceField(
+        choices=(),
+        widget=forms.CheckboxSelectMultiple,
+        error_messages={'invalid_choice': '不支持的巡检项目。'},
+        label='巡检项目',
+    )
+    timeout_seconds = forms.IntegerField(min_value=1, max_value=3600, label='超时（秒）')
+    concurrent_workers = forms.IntegerField(min_value=1, max_value=64, label='并发数')
+    schedule_enabled = forms.BooleanField(required=False, label='启用定时执行')
+    schedule_kind = forms.ChoiceField(required=False, choices=Schedule.Kind.choices, label='执行方式')
+    interval_value = forms.IntegerField(required=False, min_value=1, label='间隔数值')
+    interval_unit = forms.ChoiceField(required=False, choices=Schedule.IntervalUnit.choices, label='间隔单位')
+    daily_time = forms.TimeField(required=False, label='每天执行时间')
+
+    def __init__(self, *args, device_type, instance=None, schedule=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.device_type = device_type
+        self.instance = instance
+        from net.tasks.schedules import _ASSET_MODELS, target_rule_fields
+        self.fields['target_rule_ids'].choices = [(str(obj.pk), str(obj)) for obj in _ASSET_MODELS[device_type].objects.order_by('pk')]
+        self.rule_fields = target_rule_fields(device_type)
+        for key, (model_field, label) in self.rule_fields.items():
+            if model_field.get_internal_type() == 'BooleanField':
+                field = forms.TypedChoiceField(required=False, choices=(('', '不限'), ('true', '是'), ('false', '否')),
+                                               coerce=lambda value: value == 'true', empty_value=None)
+            else:
+                field = model_field.formfield(required=False)
+                field.initial = None
+                if isinstance(field, forms.ChoiceField):
+                    field.choices = [('', '不限')] + [(key, label) for key, label in field.choices if key != '']
+            field.label = label
+            field.widget.attrs['class'] = 'form-select' if isinstance(field.widget, forms.Select) else 'form-control'
+            self.fields['rule_' + key] = field
+        selector = instance.target_selector if instance else {}
+        self.initial.update({'target_rule_mode': selector.get('mode', 'all'),
+                             'target_rule_ids': selector.get('target_ids', [])})
+        for key, value in selector.get('filters', {}).items():
+            self.initial['rule_' + key] = str(value).lower() if isinstance(value, bool) else value
+        self.fields['selected_items'].choices = inspection_item_choices(device_type)
+        if instance is not None and not self.is_bound:
+            self.initial.update({
+                'profile_id': instance.pk,
+                'name': instance.name,
+                'selected_items': instance.selected_items,
+                'timeout_seconds': instance.timeout_seconds,
+                'concurrent_workers': instance.concurrent_workers,
+            })
+        if schedule is not None and not self.is_bound:
+            self.initial.update({
+                'schedule_enabled': schedule.is_enabled,
+                'schedule_kind': schedule.kind,
+                'interval_value': schedule.interval_value,
+                'interval_unit': schedule.interval_unit,
+                'daily_time': schedule.daily_time,
+            })
+
+    def clean(self):
+        cleaned = super().clean()
+        self._clean_schedule()
+        mode = cleaned.get('target_rule_mode') or 'all'
+        selector = {'mode': mode}
+        if mode == 'selected':
+            selector['target_ids'] = cleaned.get('target_rule_ids', [])
+        elif mode == 'filtered':
+            selector['filters'] = {key: cleaned['rule_' + key] for key in self.rule_fields
+                                   if cleaned.get('rule_' + key) not in (None, '')}
+        if mode != 'all' and not self.errors:
+            from net.tasks.schedules import _selected_target_ids
+            candidate = InspectionProfile(device_type=self.device_type, target_selector=selector)
+            try:
+                _selected_target_ids(candidate)
+            except ValidationError as exc:
+                self.add_error('target_rule_mode', '；'.join(exc.messages))
+        cleaned['target_selector'] = selector
+        return cleaned
+
+    @property
+    def target_filter_fields(self):
+        return [self['rule_' + key] for key in self.rule_fields]
+
+    def profile_values(self):
+        return {
+            'name': self.cleaned_data['name'],
+            'device_type': self.device_type,
+            'target_selector': self.cleaned_data['target_selector'],
+            'selected_items': self.cleaned_data['selected_items'],
+            'timeout_seconds': self.cleaned_data['timeout_seconds'],
+            'concurrent_workers': self.cleaned_data['concurrent_workers'],
+        }
+
+
+class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
+    profile_id = forms.UUIDField(required=False, widget=forms.HiddenInput)
+    name = forms.CharField(max_length=255, label='配置名称')
+    scan_directories_text = forms.CharField(
+        required=False,
+        widget=forms.Textarea,
+        label='扫描目录',
+        help_text='每行一个服务器上的绝对目录。',
+    )
+    recursive = forms.BooleanField(required=False, label='递归扫描子目录')
+    processed_directory = forms.CharField(required=False, widget=forms.TextInput, label='已处理目录')
+    failed_directory = forms.CharField(required=False, widget=forms.TextInput, label='失败目录')
+    file_time_mode = forms.ChoiceField(
+        choices=ComputerAnalysisProfile.FileTimeMode.choices,
+        label='文件时间范围',
+    )
+    recent_days = forms.IntegerField(required=False, min_value=1, max_value=3650, label='最近 N 天')
+    range_start_date = forms.DateField(required=False, label='开始日期')
+    range_end_date = forms.DateField(required=False, label='结束日期')
+    analysis_items = forms.MultipleChoiceField(
+        choices=analysis_item_choices(),
+        widget=forms.CheckboxSelectMultiple,
+        error_messages={'invalid_choice': '不支持的分析项目。'},
+        label='分析项目',
+    )
+    concurrent_workers = forms.IntegerField(min_value=1, max_value=64, label='并发数')
+    schedule_enabled = forms.BooleanField(required=False, label='启用定时执行')
+    schedule_kind = forms.ChoiceField(required=False, choices=Schedule.Kind.choices, label='执行方式')
+    interval_value = forms.IntegerField(required=False, min_value=1, label='间隔数值')
+    interval_unit = forms.ChoiceField(required=False, choices=Schedule.IntervalUnit.choices, label='间隔单位')
+    daily_time = forms.TimeField(required=False, label='每天执行时间')
+
+    def __init__(self, *args, instance=None, schedule=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.instance = instance
+        if instance is not None and not self.is_bound:
+            self.initial.update({
+                'profile_id': instance.pk,
+                'name': instance.name,
+                'scan_directories_text': '\n'.join(instance.scan_directories),
+                'recursive': instance.recursive,
+                'processed_directory': instance.processed_directory,
+                'failed_directory': instance.failed_directory,
+                'file_time_mode': instance.file_time_mode,
+                'recent_days': instance.recent_days,
+                'range_start_date': instance.range_start_date,
+                'range_end_date': instance.range_end_date,
+                'analysis_items': instance.analysis_items,
+                'concurrent_workers': instance.concurrent_workers,
+            })
+        if schedule is not None and not self.is_bound:
+            self.initial.update({
+                'schedule_enabled': schedule.is_enabled,
+                'schedule_kind': schedule.kind,
+                'interval_value': schedule.interval_value,
+                'interval_unit': schedule.interval_unit,
+                'daily_time': schedule.daily_time,
+            })
+
+    def clean_scan_directories_text(self):
+        directories = [
+            line.strip() for line in self.cleaned_data['scan_directories_text'].splitlines()
+            if line.strip()
+        ]
+        return directories
+
+    def clean(self):
+        cleaned = super().clean()
+        self._clean_schedule()
+        mode = cleaned.get('file_time_mode')
+        if cleaned.get('schedule_enabled') and not cleaned.get('scan_directories_text'):
+            self.add_error('scan_directories_text', '启用定时扫描时至少需要一个扫描目录。')
+        if mode == ComputerAnalysisProfile.FileTimeMode.RECENT_DAYS:
+            if cleaned.get('recent_days') is None:
+                self.add_error('recent_days', '最近天数模式必须设置天数。')
+        elif mode == ComputerAnalysisProfile.FileTimeMode.DATE_RANGE:
+            start, end = cleaned.get('range_start_date'), cleaned.get('range_end_date')
+            if start is None:
+                self.add_error('range_start_date', '指定日期模式必须设置开始日期。')
+            if end is None:
+                self.add_error('range_end_date', '指定日期模式必须设置结束日期。')
+            if start is not None and end is not None and start > end:
+                self.add_error('range_end_date', '结束日期不能早于开始日期。')
+        return cleaned
+
+    def profile_values(self):
+        cleaned = self.cleaned_data
+        mode = cleaned['file_time_mode']
+        return {
+            'name': cleaned['name'],
+            'scan_directories': cleaned['scan_directories_text'],
+            'recursive': cleaned['recursive'],
+            'processed_directory': cleaned['processed_directory'],
+            'failed_directory': cleaned['failed_directory'],
+            'file_time_mode': mode,
+            'recent_days': (
+                cleaned['recent_days']
+                if mode == ComputerAnalysisProfile.FileTimeMode.RECENT_DAYS else None
+            ),
+            'range_start_date': (
+                cleaned['range_start_date']
+                if mode == ComputerAnalysisProfile.FileTimeMode.DATE_RANGE else None
+            ),
+            'range_end_date': (
+                cleaned['range_end_date']
+                if mode == ComputerAnalysisProfile.FileTimeMode.DATE_RANGE else None
+            ),
+            'analysis_items': cleaned['analysis_items'],
+            'concurrent_workers': cleaned['concurrent_workers'],
+        }
+
+
+class ManualTaskForm(forms.Form):
+    profile_id = forms.UUIDField()
+    target_mode = forms.ChoiceField(
+        choices=(
+            ('all', '全部资产'),
+            ('selected', '已选资产'),
+            ('filtered', '当前筛选结果'),
+            ('scan', '扫描并分析新日志'),
+        ),
+    )
+    selected_items = forms.MultipleChoiceField(
+        choices=(),
+        widget=forms.CheckboxSelectMultiple,
+        error_messages={'invalid_choice': '所选项目不在当前配置的允许范围内。'},
+    )
+    concurrent_workers = forms.IntegerField(
+        required=False, min_value=1, max_value=64,
+    )
+    next = forms.CharField(required=False)
+
+    def __init__(self, *args, profile, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.profile = profile
+        if isinstance(profile, InspectionProfile):
+            choices = inspection_item_choices(profile.device_type)
+            enabled = set(profile.selected_items)
+        else:
+            choices = analysis_item_choices()
+            enabled = set(profile.analysis_items)
+        self.fields['selected_items'].choices = [
+            choice for choice in choices if choice[0] in enabled
+        ]
+
+    def clean_target_mode(self):
+        mode = self.cleaned_data['target_mode']
+        if isinstance(self.profile, InspectionProfile) and mode == 'scan':
+            raise ValidationError('设备巡检不支持扫描模式。')
+        if isinstance(self.profile, ComputerAnalysisProfile) and mode not in {
+            'all', 'selected', 'filtered', 'scan',
+        }:
+            raise ValidationError('计算机分析目标范围无效。')
+        return mode

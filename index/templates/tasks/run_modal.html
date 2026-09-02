@@ -1,0 +1,27 @@
+<div class="modal fade" id="runTaskModal" data-auto-open="{{ task_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="runTaskModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
+        <form id="manualTaskForm" method="post" action="{% url 'manual_task_create' %}">
+            {% csrf_token %}
+            <div class="modal-header"><h2 class="modal-title fs-5" id="runTaskModalLabel">{{ task_action_label }}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+            <div class="modal-body d-grid gap-3">
+                {% if task_profiles %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <input type="hidden" name="target_source" value="{{ task_target_source }}">
+                {% for name, value in task_filter_values %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+                <div><label class="form-label" for="task-profile">任务配置</label><select class="form-select" id="task-profile" name="profile_id">{% for profile in task_profiles %}<option value="{{ profile.pk }}"{% if profile.pk == task_default_profile.pk %} selected{% endif %}>{{ profile.name }}</option>{% endfor %}</select><div class="form-text">Worker 使用本次任务的配置与目标快照，不会读取后续修改。</div></div>
+                <fieldset><legend class="fs-6 mb-2">目标范围</legend><div class="d-flex flex-wrap gap-3">
+                    {% if task_project_kind == 'computers' %}<label class="form-check"><input class="form-check-input" type="radio" name="target_mode" value="scan" checked><span class="form-check-label">扫描并分析新日志</span></label>{% endif %}
+                    {% if task_project_kind != 'computers' %}
+                    <label class="form-check"><input class="form-check-input" type="radio" name="target_mode" value="all"{% if task_target_mode == 'all' %} checked{% endif %}><span class="form-check-label">全部资产</span></label>
+                    {% if task_allow_target_selection %}<label class="form-check"><input class="form-check-input" type="radio" name="target_mode" value="selected"{% if task_target_mode == 'selected' %} checked{% endif %}><span class="form-check-label">表格已选项目</span></label>{% endif %}
+                    <label class="form-check"><input class="form-check-input" type="radio" name="target_mode" value="filtered"{% if task_target_mode == 'filtered' %} checked{% endif %}><span class="form-check-label">当前筛选结果</span></label>
+                    {% endif %}
+                </div><div class="form-text">{% if task_project_kind == 'computers' %}扫描、导入与后续分析均由独立 Worker 执行，本次请求只创建任务。{% elif task_allow_target_selection %}“已选项目”及“当前筛选结果”都会在入队前按当前表格的允许筛选条件校验。{% else %}“当前筛选结果”会在入队前按当前表格的允许筛选条件校验。{% endif %}</div></fieldset>
+                <fieldset><legend class="fs-6 mb-2">执行项目</legend><div class="row row-cols-1 row-cols-md-2 g-2">{% for key, label in task_item_choices %}<label class="col form-check"><input class="form-check-input" type="checkbox" name="selected_items" value="{{ key }}"{% if key in task_default_items %} checked{% else %} disabled{% endif %}><span class="form-check-label">{{ label }}</span></label>{% endfor %}</div></fieldset>
+                <div><label class="form-label" for="manual-concurrency">本次并发数（可选）</label><input class="form-control" id="manual-concurrency" type="number" name="concurrent_workers" min="1" max="64"><div class="form-text">留空使用配置中的并发数；受 Worker 总线程数上限约束。</div></div>
+                {% else %}<div class="alert alert-info mb-0">请先完成{{ task_config_label }}，再创建后台任务。</div>{% endif %}
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit"{% if not task_profiles %} disabled{% endif %}>创建后台任务</button></div>
+        </form>
+    </div></div>
+</div>

@@ -1,0 +1,36 @@
+{% load extras %}
+<section class="card surface-card inspection-taskbar" aria-labelledby="inspection-taskbar-title">
+    <div class="card-header surface-card__header inspection-taskbar__header">
+        <div>
+            <p class="page-heading__eyebrow mb-1">执行中心</p>
+            <h2 class="h5 mb-0" id="inspection-taskbar-title">巡检任务栏</h2>
+        </div>
+        <a class="btn btn-outline-dark btn-sm" href="{% url 'task_list' %}">全部后台任务</a>
+    </div>
+    <div class="table-responsive" role="region" aria-label="巡检任务栏" tabindex="0">
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>类型</th><th>配置</th><th>来源</th><th>创建时间</th><th>完成时间</th><th>目标</th><th>正常结果</th><th>异常</th><th>待处理</th><th>已取消</th><th>状态</th><th></th></tr></thead>
+            <tbody>{% for summary in task_page %}<tr>
+                <td class="fw-semibold">{{ summary.type_label }}</td>
+                <td>{{ summary.profile_label }}</td>
+                <td>{{ summary.source_label }}</td>
+                <td class="text-nowrap">{{ summary.task.created_at|date:'Y-m-d H:i:s' }}</td>
+                <td class="text-nowrap">{{ summary.task.finished_at|date:'Y-m-d H:i:s'|default:'—' }}</td>
+                <td>{{ summary.total }}{% if summary.scan_success %}<span class="inspection-taskbar__scan-note">扫描成功 {{ summary.scan_success }}</span>{% endif %}{% if summary.integrity_warning %}<span class="inspection-taskbar__integrity-warning">{{ summary.integrity_warning }}</span>{% endif %}</td>
+                <td><span class="text-success">{{ summary.normal }}</span></td>
+                <td><span{% if summary.abnormal %} class="text-danger fw-semibold"{% endif %}>{{ summary.abnormal }}</span></td>
+                <td>{{ summary.pending }}</td>
+                <td>{{ summary.cancelled }}</td>
+                <td><span class="badge {% if summary.task.status == 'success' %}text-bg-success{% elif summary.task.status == 'failed' %}text-bg-danger{% elif summary.task.status == 'partial' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ summary.status_label }}</span></td>
+                <td class="text-end"><a class="btn btn-outline-dark btn-sm" href="{% url 'task_detail' summary.task.pk %}">详情</a></td>
+            </tr>{% empty %}<tr><td colspan="12"><div class="empty-state"><strong>暂无巡检任务</strong><span>从资产或日志页面发起巡检、扫描或分析后，任务进度会显示在这里。</span></div></td></tr>{% endfor %}</tbody>
+        </table>
+    </div>
+    {% if task_page.paginator.num_pages > 1 %}
+    <nav class="inspection-taskbar__pagination" aria-label="巡检任务分页"><ul class="pagination justify-content-center mb-0">
+        {% if task_page.has_previous %}{% query_transform request task_page=task_page.previous_page_number as previous_query %}<li class="page-item"><a class="page-link" href="?{{ previous_query }}">上一页</a></li>{% endif %}
+        <li class="page-item active"><span class="page-link">{{ task_page.number }} / {{ task_page.paginator.num_pages }}</span></li>
+        {% if task_page.has_next %}{% query_transform request task_page=task_page.next_page_number as next_query %}<li class="page-item"><a class="page-link" href="?{{ next_query }}">下一页</a></li>{% endif %}
+    </ul></nav>
+    {% endif %}
+</section>

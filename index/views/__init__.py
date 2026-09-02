@@ -1,0 +1,115 @@
+from .assets import (
+    ASSET_PAGES,
+    asset_detail,
+    asset_list,
+    item_list,
+    person_detail,
+    run_infrastructure_inspection,
+)
+from .dashboard import detail, index, with_latest_status
+from .domain import (
+    domain_account_detail,
+    domain_computer_detail,
+    domain_controller_settings,
+    domain_object_detail,
+    domain_object_list,
+)
+from .domain_operations import domain_operation_create, domain_operation_retry
+from .imports import (
+    download_inventory_template,
+    import_inventory,
+    import_people_api,
+)
+from .exports import table_export
+from .computer_logs import computer_log_list, computer_log_detail, computer_log_analyze
+from .config_exports import configuration_download, configuration_zip
+from .scripts import pc_script_download
+from .integrations import people_source_save, people_test, people_preview, people_apply, people_operation
+from .alerts import (
+    alert_channel_save,
+    alert_detail,
+    alert_list,
+    alert_modal_context,
+    alert_policy_save,
+    alert_test_send,
+)
+from .tasks import (
+    computer_analysis_profile_configure,
+    inspection_profile_configure,
+    manual_task_create,
+    task_detail,
+    task_list,
+    task_modal_context,
+)
+from .records import (
+    RECORD_PAGES,
+    _error_records,
+    _inspection_records,
+    computer_analysis_detail,
+    computer_analysis_list,
+    computer_error_list,
+    computer_inspection_detail,
+    computer_inspection_list,
+    error_records,
+    infrastructure_inspection_detail,
+    inspection_records,
+    record_detail,
+    record_list,
+)
+
+
+__all__ = [
+    'ASSET_PAGES',
+    'RECORD_PAGES',
+    '_error_records',
+    '_inspection_records',
+    'asset_detail',
+    'asset_list',
+    'computer_analysis_detail',
+    'computer_analysis_list',
+    'computer_error_list',
+    'computer_inspection_detail',
+    'computer_inspection_list',
+    'detail',
+    'domain_account_detail',
+    'domain_computer_detail',
+    'domain_controller_settings',
+    'domain_object_detail',
+    'domain_object_list',
+    'domain_operation_create',
+    'domain_operation_retry',
+    'download_inventory_template',
+    'error_records',
+    'import_inventory',
+    'import_people_api',
+    'index',
+    'infrastructure_inspection_detail',
+    'inspection_records',
+    'item_list',
+    'person_detail',
+    'record_detail',
+    'record_list',
+    'run_infrastructure_inspection',
+    'table_export',
+    'configuration_download',
+    'configuration_zip',
+    'pc_script_download',
+    'people_source_save',
+    'people_test',
+    'people_preview',
+    'people_apply',
+    'people_operation',
+    'alert_channel_save',
+    'alert_detail',
+    'alert_list',
+    'alert_modal_context',
+    'alert_policy_save',
+    'alert_test_send',
+    'task_detail',
+    'task_list',
+    'task_modal_context',
+    'manual_task_create',
+    'inspection_profile_configure',
+    'computer_analysis_profile_configure',
+    'with_latest_status',
+]

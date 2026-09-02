@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+.deps/
+db.sqlite3
+staticfiles/
+.env
+*.log
+demo-runtime/
+.task6-artifacts/
+.worktrees/

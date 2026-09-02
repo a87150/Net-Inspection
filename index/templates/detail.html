@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}PC 分析统计{% endblock %}
+
+{% block content %}
+<header class="page-heading">
+    <div class="page-heading__copy">
+        <p class="page-heading__eyebrow">统计分析</p>
+        <h1 class="page-heading__title">PC 分析统计数据</h1>
+        <p class="page-heading__description">汇总 PC 分析日志与近 7 天异常趋势。</p>
+    </div>
+    <div class="page-heading__actions">
+        <a href="{% url 'index' %}" class="btn btn-outline-secondary">返回首页</a>
+    </div>
+</header>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-sm-6 col-xl-3">
+        <section class="card surface-card metric-card h-100"><div class="card-body"><p class="metric-label">今日分析设备数</p><div class="metric">{{ total_devices }}</div></div></section>
+    </div>
+    <div class="col-12 col-sm-6 col-xl-3">
+        <section class="card surface-card metric-card metric-card--danger h-100"><div class="card-body"><p class="metric-label">存在错误的设备</p><div class="metric text-danger">{{ error_devices }}</div></div></section>
+    </div>
+    <div class="col-12 col-sm-6 col-xl-3">
+        <section class="card surface-card metric-card metric-card--success h-100"><div class="card-body"><p class="metric-label">正常设备</p><div class="metric text-success">{{ normal_devices }}</div></div></section>
+    </div>
+    <div class="col-12 col-sm-6 col-xl-3">
+        <section class="card surface-card metric-card h-100"><div class="card-body"><p class="metric-label">最新分析时间</p><div class="metric metric--time">{{ latest_time }}</div></div></section>
+    </div>
+</div>
+
+<section class="card surface-card">
+    <div class="card-header surface-card__header table-toolbar">
+        <div><h2 class="h5 mb-1">最近 7 天每日错误分类汇总</h2><p class="text-secondary small mb-0">按日查看设备覆盖和异常分布。</p></div>
+        <div class="table-toolbar__actions"><input class="form-control form-control-sm" data-local-filter="#daily-summary tbody tr" placeholder="筛选当前统计" aria-label="筛选最近七天统计"></div>
+    </div>
+    <div class="table-responsive" role="region" aria-label="最近七天错误分类汇总" tabindex="0">
+        <table id="daily-summary" class="table table-hover text-center align-middle mb-0" data-local-sort>
+            <thead><tr><th>日期</th><th>设备总数</th><th>错误设备数</th>{% for etype in error_types %}<th>{{ etype }}</th>{% endfor %}</tr></thead>
+            <tbody>
+                {% for row in daily_summary_list %}<tr><td>{{ row.date }}</td><td>{{ row.total_devices }}</td><td>{{ row.error_devices }}</td>{% for val in row.values %}<td>{{ val }}</td>{% endfor %}</tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

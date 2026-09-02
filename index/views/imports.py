@@ -1,0 +1,67 @@
+from urllib.parse import quote
+
+from django.contrib import messages
+from django.http import Http404, HttpResponse
+from django.shortcuts import redirect
+from django.views.decorators.http import require_POST
+
+from net.services.inventory_io import (
+    IMPORTABLE_ENTITIES,
+    export_csv,
+    get_spec,
+    import_csv,
+)
+from net.services.personnel_import import get_personnel_provider_label
+
+
+def download_inventory_template(request, entity):
+    if entity not in IMPORTABLE_ENTITIES:
+        raise Http404('该数据由系统自动获取，不提供导入模板')
+    spec = get_spec(entity)
+    response = HttpResponse(
+        export_csv(entity, template_only=True),
+        content_type='text/csv; charset=utf-8',
+    )
+    filename = quote(f"{spec['name']}_导入模板.csv")
+    response['Content-Disposition'] = f"attachment; filename*=UTF-8''{filename}"
+    return response
+
+
+@require_POST
+def import_inventory(request, entity):
+    try:
+        get_spec(entity)
+    except ValueError as exc:
+        raise Http404(str(exc)) from exc
+    if entity not in IMPORTABLE_ENTITIES:
+        messages.error(request, '该数据由系统自动获取，不支持手动导入。')
+        if entity in {'accounts', 'domain_computers'}:
+            return redirect('domain_controller_settings')
+        return redirect('item_list', item=entity)
+
+    uploaded_file = request.FILES.get('file')
+    if not uploaded_file:
+        messages.error(request, '请选择 CSV 文件。')
+        request.session['open_import_modal'] = entity
+        return redirect('item_list', item=entity)
+
+    try:
+        created, updated = import_csv(entity, uploaded_file)
+        messages.success(request, f'导入完成：新增 {created} 条，更新 {updated} 条。')
+    except ValueError as exc:
+        messages.error(request, f'导入失败：{exc}')
+        request.session['open_import_modal'] = entity
+    return redirect('item_list', item=entity)
+
+
+@require_POST
+def import_people_api(request, provider):
+    try:
+        label = get_personnel_provider_label(provider)
+    except ValueError as exc:
+        raise Http404(str(exc)) from exc
+
+    messages.info(request, f'{label}人员接口尚未配置或尚未选择来源，请配置后生成预览并确认。')
+    request.session['open_import_modal'] = 'people'
+    request.session['people_import_provider'] = provider
+    return redirect('asset_list', kind='people')

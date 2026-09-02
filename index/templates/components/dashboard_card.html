@@ -1,0 +1,34 @@
+<section class="card h-100 surface-card metric-card" data-dashboard-card="{{ item.key }}" data-dashboard-card-state="{% if item.error %}error{% else %}ready{% endif %}">
+    <div class="card-body p-4 d-flex flex-column">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+            <h2 class="h5 mb-0">{{ item.name }}</h2>
+            {% if item.note %}<span class="badge text-bg-secondary">{{ item.note }}</span>{% endif %}
+        </div>
+        {% if item.error %}
+        <div class="alert alert-danger metric-card__error mb-0" role="alert">
+            <strong>{{ item.name }} 统计数据加载失败</strong>
+            <span class="d-block small mt-1">{{ item.error }}</span>
+        </div>
+        {% elif item.key == 'domain' %}
+        <div class="row text-center g-2 metric-card__domain-columns">
+            <div class="col-6"><div class="metric">{{ item.account_total }}</div><div class="metric-label">域账号</div><div class="small text-secondary mt-1">启用 {{ item.account_normal }} · 停用 {{ item.account_abnormal }}</div></div>
+            <div class="col-6"><div class="metric">{{ item.computer_total }}</div><div class="metric-label">域计算机</div><div class="small text-secondary mt-1">启用 {{ item.computer_normal }} · 停用 {{ item.computer_abnormal }}</div></div>
+        </div>
+        {% else %}
+        <div class="row text-center g-2">
+            <div class="col-4"><div class="metric">{{ item.total }}</div><div class="metric-label">{{ item.total_label }}</div></div>
+            <div class="col-4"><div class="metric text-success">{{ item.normal }}</div><div class="metric-label">{{ item.normal_label }}</div></div>
+            <div class="col-4"><div class="metric {% if item.abnormal %}text-danger{% endif %}">{{ item.abnormal }}</div><div class="metric-label">{{ item.abnormal_label }}</div></div>
+        </div>
+        {% if item.last_run_label %}<p class="metric-card__last-run text-secondary mb-0 mt-3">{{ item.last_run_label }}：{{ item.last_run_at|date:'Y-m-d H:i'|default:'暂无' }}</p>{% endif %}
+        {% endif %}
+    </div>
+    <div class="card-footer metric-card__footer metric-card__actions metric-card__actions--end px-4 pb-4 d-flex gap-2 flex-wrap">
+        {% if item.target_url %}<a href="{{ item.target_url }}" class="btn btn-outline-secondary btn-sm">进入管理</a>{% endif %}
+        {% if item.list_url %}<a href="{{ item.list_url }}" class="btn btn-outline-secondary btn-sm">{{ item.name }}列表</a>{% endif %}
+        {% if item.record_url %}<a href="{{ item.record_url }}" class="btn {% if item.key == 'computers' %}btn-primary metric-card__primary-action{% else %}btn-outline-dark{% endif %} btn-sm">{{ item.record_label }}</a>{% endif %}
+        {% if item.detail_url %}<a href="{{ item.detail_url }}" class="btn btn-outline-dark btn-sm">{{ item.detail_label }}</a>{% endif %}
+        {% if item.stats_url %}<a href="{{ item.stats_url }}" class="btn btn-outline-dark btn-sm">统计详情</a>{% endif %}
+        {% if item.manual_action_label %}<a class="btn btn-primary btn-sm metric-card__primary-action" href="{{ item.list_url }}?task_modal=run">{{ item.manual_action_label }}</a>{% endif %}
+    </div>
+</section>

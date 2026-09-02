@@ -1,0 +1,382 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+let controller = {};
+try {
+    controller = require('./table_workspace.js');
+} catch (_error) {
+    controller = {};
+}
+
+function element({dataset = {}, checked = false, value = '', hidden = false, options = [], name = ''} = {}) {
+    const listeners = new Map();
+    return {
+        dataset,
+        checked,
+        defaultChecked: checked,
+        value,
+        name,
+        disabled: false,
+        hidden,
+        options: options.map((optionValue) => ({value: String(optionValue)})),
+        addEventListener(type, listener) {
+            listeners.set(type, listener);
+        },
+        dispatch(type) {
+            listeners.get(type)?.({preventDefault() {}});
+        },
+        querySelectorAll(selector) {
+            return selector === '[name]' && this.name ? [this] : [];
+        },
+    };
+}
+
+function workspaceFixture({selectedPageSize = '20'} = {}) {
+    const columnToggles = [
+        element({dataset: {columnKey: 'name'}, checked: true}),
+        element({dataset: {columnKey: 'leader'}, checked: false}),
+    ];
+    const columnCells = [
+        element({dataset: {columnKey: 'name'}}),
+        element({dataset: {columnKey: 'name'}}),
+        element({dataset: {columnKey: 'leader'}, hidden: true}),
+        element({dataset: {columnKey: 'leader'}, hidden: true}),
+    ];
+    const filterToggles = [
+        element({dataset: {filterKey: 'name'}, checked: true}),
+        element({dataset: {filterKey: 'department'}, checked: true}),
+    ];
+    const filterFields = [
+        element({dataset: {filterKey: 'name'}, value: '当前查询', name: 'filter_name'}),
+        element({dataset: {filterKey: 'department'}, value: '技术部', name: 'filter_department'}),
+    ];
+    const pageSize = element({
+        dataset: {defaultPageSize: '20'},
+        value: selectedPageSize,
+        options: [20, 50, 100],
+    });
+    pageSize.name = 'page_size';
+    pageSize.form = {
+        submissions: 0,
+        requestSubmit() {
+            this.submissions += 1;
+        },
+    };
+    const reset = element();
+    const exportLink = {
+        href: 'https://example.test/tables/people/export/?filter_department=%E6%8A%80%E6%9C%AF%E9%83%A8&page=3&target=asset-1',
+    };
+    const configExportLink = {
+        href: 'https://example.test/assets/networks/configurations.zip?filter_department=IT&page=3&target=asset-1',
+    };
+    const moreFilters = {
+        open: false,
+        querySelectorAll(selector) {
+            assert.equal(selector, '[data-filter-field][data-filter-key]');
+            return [filterFields[1]];
+        },
+    };
+    const workspace = {
+        dataset: {tableKey: 'people'},
+        querySelectorAll(selector) {
+            return {
+                '[data-column-toggle]': columnToggles,
+                'th[data-column-key], td[data-column-key]': columnCells,
+                '[data-filter-toggle]': filterToggles,
+                '[data-filter-field][data-filter-key]': filterFields,
+                '[data-filtered-export]': [exportLink, configExportLink],
+            }[selector] || [];
+        },
+        querySelector(selector) {
+            return {
+                '[data-page-size]': pageSize,
+                '[data-table-reset]': reset,
+                '[data-more-filters]': moreFilters,
+                '[data-filtered-export]': exportLink,
+            }[selector] || null;
+        },
+    };
+    return {
+        workspace, columnToggles, columnCells, filterToggles, filterFields,
+        pageSize, reset, moreFilters, exportLink, configExportLink,
+    };
+}
+
+function memoryStorage(initialValue = null) {
+    return {
+        value: initialValue,
+        removed: [],
+        getItem(key) {
+            assert.equal(key, 'inspection-table:v1:people');
+            return this.value;
+        },
+        setItem(key, value) {
+            assert.equal(key, 'inspection-table:v1:people');
+            this.value = value;
+        },
+        removeItem(key) {
+            assert.equal(key, 'inspection-table:v1:people');
+            this.removed.push(key);
+            this.value = null;
+        },
+    };
+}
+
+test('applies intersected stored preferences without clearing filter values', () => {
+    assert.equal(typeof controller.initializeWorkspace, 'function');
+    const fixture = workspaceFixture();
+    const storage = memoryStorage(JSON.stringify({
+        visibleFields: ['leader', 'removed-column'],
+        filterFields: ['department', 'removed-filter'],
+        pageSize: 50,
+    }));
+
+    controller.initializeWorkspace(fixture.workspace, storage);
+
+    assert.deepEqual(fixture.columnToggles.map((toggle) => toggle.checked), [false, true]);
+    assert.deepEqual(fixture.columnCells.map((cell) => cell.hidden), [true, true, false, false]);
+    assert.deepEqual(fixture.filterToggles.map((toggle) => toggle.checked), [false, true]);
+    assert.deepEqual(fixture.filterFields.map((field) => field.hidden), [true, false]);
+    assert.deepEqual(fixture.filterFields.map((field) => field.value), ['当前查询', '技术部']);
+    assert.equal(fixture.pageSize.value, '50');
+});
+
+test('preserves the server-selected page size without stored preferences', () => {
+    assert.equal(typeof controller.initializeWorkspace, 'function');
+    const fixture = workspaceFixture({selectedPageSize: '50'});
+    const storage = memoryStorage();
+    const location = {
+        href: 'https://example.test/item/people/?page_size=50',
+        replacements: [],
+        replace(url) {
+            this.replacements.push(url);
+        },
+    };
+
+    controller.initializeWorkspace(fixture.workspace, storage, location);
+
+    assert.equal(fixture.pageSize.value, '50');
+    assert.deepEqual(location.replacements, []);
+    fixture.reset.dispatch('click');
+    assert.equal(fixture.pageSize.value, '20');
+});
+
+test('saves checkbox and page-size changes with the versioned schema', () => {
+    assert.equal(typeof controller.initializeWorkspace, 'function');
+    const fixture = workspaceFixture();
+    const storage = memoryStorage();
+    controller.initializeWorkspace(fixture.workspace, storage);
+
+    fixture.columnToggles[1].checked = true;
+    fixture.columnToggles[1].dispatch('change');
+    fixture.filterToggles[0].checked = false;
+    fixture.filterToggles[0].dispatch('change');
+    fixture.pageSize.value = '100';
+    fixture.pageSize.dispatch('change');
+
+    assert.deepEqual(JSON.parse(storage.value), {
+        visibleFields: ['name', 'leader'],
+        filterFields: ['department'],
+        pageSize: 100,
+    });
+    assert.equal(fixture.pageSize.form.submissions, 1);
+});
+
+test('keeps compact filter preferences and suggestion values after reload', () => {
+    assert.equal(typeof controller.initializeWorkspace, 'function');
+    const fixture = workspaceFixture();
+    fixture.filterFields[1].value = '技术部';
+    const storage = memoryStorage(JSON.stringify({
+        visibleFields: ['name'],
+        filterFields: ['department'],
+        pageSize: 20,
+    }));
+
+    controller.initializeWorkspace(fixture.workspace, storage);
+
+    assert.deepEqual(
+        fixture.filterToggles.map((toggle) => toggle.checked),
+        [false, true],
+    );
+    assert.equal(fixture.filterFields[1].value, '技术部');
+    assert.equal(fixture.moreFilters.open, true);
+});
+
+test('hiding an active filter clears it from controls URL and export state', () => {
+    const fixture = workspaceFixture();
+    fixture.filterToggles[1].dataset.filterActive = 'true';
+    fixture.filterFields[1].dataset.filterActive = 'true';
+    const storage = memoryStorage();
+    const location = {
+        href: 'https://example.test/assets/people/?filter_department=%E6%8A%80%E6%9C%AF%E9%83%A8&page=3&target=asset-1',
+        replacements: [],
+        replace(url) { this.replacements.push(url); },
+    };
+
+    controller.initializeWorkspace(fixture.workspace, storage, location);
+    fixture.filterToggles[1].checked = false;
+    fixture.filterToggles[1].dispatch('change');
+
+    assert.equal(fixture.filterFields[1].value, '');
+    assert.equal(fixture.filterFields[1].disabled, true);
+    assert.equal(new URL(fixture.exportLink.href).searchParams.has('filter_department'), false);
+    assert.equal(new URL(fixture.configExportLink.href).searchParams.has('filter_department'), false);
+    assert.equal(new URL(fixture.configExportLink.href).searchParams.has('page'), false);
+    assert.equal(new URL(fixture.configExportLink.href).pathname, '/assets/networks/configurations.zip');
+    assert.equal(location.replacements.length, 1);
+    const replacement = new URL(location.replacements[0]);
+    assert.equal(replacement.searchParams.has('filter_department'), false);
+    assert.equal(replacement.searchParams.has('page'), false);
+    assert.equal(replacement.searchParams.get('target'), 'asset-1');
+    assert.deepEqual(JSON.parse(storage.value).filterFields, ['name']);
+});
+
+test('stored page size replaces a mismatched query and drops the stale page', () => {
+    assert.equal(typeof controller.initializeWorkspace, 'function');
+    const fixture = workspaceFixture();
+    const storage = memoryStorage(JSON.stringify({
+        visibleFields: ['name'],
+        filterFields: ['name'],
+        pageSize: 50,
+    }));
+    const location = {
+        href: 'https://example.test/item/people/?q=%E5%BC%A0&page=3&page_size=20',
+        replacements: [],
+        replace(url) {
+            this.replacements.push(url);
+        },
+    };
+
+    controller.initializeWorkspace(fixture.workspace, storage, location);
+
+    assert.equal(location.replacements.length, 1);
+    const replacement = new URL(location.replacements[0]);
+    assert.equal(replacement.searchParams.get('q'), '张');
+    assert.equal(replacement.searchParams.get('page_size'), '50');
+    assert.equal(replacement.searchParams.has('page'), false);
+});
+
+test('reset removes storage and restores DOM defaults', () => {
+    assert.equal(typeof controller.initializeWorkspace, 'function');
+    const fixture = workspaceFixture();
+    const storage = memoryStorage(JSON.stringify({
+        visibleFields: ['leader'],
+        filterFields: [],
+        pageSize: 100,
+    }));
+    controller.initializeWorkspace(fixture.workspace, storage);
+
+    fixture.reset.dispatch('click');
+
+    assert.deepEqual(storage.removed, ['inspection-table:v1:people']);
+    assert.deepEqual(fixture.columnToggles.map((toggle) => toggle.checked), [true, false]);
+    assert.deepEqual(fixture.columnCells.map((cell) => cell.hidden), [false, false, true, true]);
+    assert.deepEqual(fixture.filterToggles.map((toggle) => toggle.checked), [true, true]);
+    assert.deepEqual(fixture.filterFields.map((field) => field.hidden), [false, false]);
+    assert.equal(fixture.pageSize.value, '20');
+    assert.equal(fixture.pageSize.form.submissions, 1);
+});
+
+test('keeps server defaults operational when storage access throws', () => {
+    assert.equal(typeof controller.initializeWorkspace, 'function');
+    const fixture = workspaceFixture();
+    const storage = {
+        getItem() { throw new Error('blocked'); },
+        setItem() { throw new Error('blocked'); },
+        removeItem() { throw new Error('blocked'); },
+    };
+
+    assert.doesNotThrow(() => controller.initializeWorkspace(fixture.workspace, storage));
+    assert.deepEqual(fixture.columnCells.map((cell) => cell.hidden), [false, false, true, true]);
+    assert.deepEqual(fixture.filterFields.map((field) => field.hidden), [false, false]);
+    assert.doesNotThrow(() => fixture.columnToggles[0].dispatch('change'));
+    assert.doesNotThrow(() => fixture.reset.dispatch('click'));
+});
+
+test('initializes every workspace found in the document', () => {
+    assert.equal(typeof controller.initializeAll, 'function');
+    const first = workspaceFixture();
+    const second = workspaceFixture();
+    second.workspace.dataset.tableKey = 'computers';
+    const keys = [];
+    const storage = {
+        getItem(key) { keys.push(key); return null; },
+        setItem() {},
+        removeItem() {},
+    };
+    const document = {
+        querySelectorAll(selector) {
+            assert.equal(selector, '[data-table-workspace]');
+            return [first.workspace, second.workspace];
+        },
+    };
+
+    controller.initializeAll(document, storage);
+
+    assert.deepEqual(keys, [
+        'inspection-table:v1:people',
+        'inspection-table:v1:computers',
+    ]);
+});
+
+test('keeps global and per-project record preferences in separate storage keys', () => {
+    const globalRecords = workspaceFixture();
+    const networkRecords = workspaceFixture();
+    globalRecords.workspace.dataset.tableKey = 'inspection_records-global';
+    networkRecords.workspace.dataset.tableKey = 'inspection_records-networks';
+    const values = new Map();
+    const storage = {
+        getItem(key) { return values.get(key) || null; },
+        setItem(key, value) { values.set(key, value); },
+        removeItem(key) { values.delete(key); },
+    };
+    const document = {
+        querySelectorAll() {
+            return [globalRecords.workspace, networkRecords.workspace];
+        },
+    };
+
+    controller.initializeAll(document, storage);
+    globalRecords.columnToggles[1].checked = true;
+    globalRecords.columnToggles[1].dispatch('change');
+    networkRecords.columnToggles[0].checked = false;
+    networkRecords.columnToggles[0].dispatch('change');
+
+    assert.deepEqual(
+        JSON.parse(values.get('inspection-table:v1:inspection_records-global')).visibleFields,
+        ['name', 'leader'],
+    );
+    assert.deepEqual(
+        JSON.parse(values.get('inspection-table:v1:inspection_records-networks')).visibleFields,
+        [],
+    );
+});
+
+test('opens an import modal marked for one-time auto-open', () => {
+    assert.equal(typeof controller.openAutoOpenImportModal, 'function');
+    const modalElement = {dataset: {autoOpen: 'true'}};
+    const modalInstance = {
+        showCount: 0,
+        show() { this.showCount += 1; },
+    };
+    const document = {
+        querySelector(selector) {
+            assert.equal(selector, '#importModal[data-auto-open="true"]');
+            return modalElement;
+        },
+    };
+    const bootstrap = {
+        Modal: {
+            getOrCreateInstance(element) {
+                assert.equal(element, modalElement);
+                return modalInstance;
+            },
+        },
+    };
+
+    controller.openAutoOpenImportModal(document, bootstrap);
+
+    assert.equal(modalInstance.showCount, 1);
+});

@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+{% block title %}{% if record_type == 'computer_analysis' %}分析详情{% else %}{{ item_name }}巡检详情{% endif %}{% endblock %}
+{% block content %}
+{% if analysis %}<p>{{ analysis.execution_status }} · {{ analysis.task_source }} · 异常 {{ analysis.error_count }} · {{ analysis.key_metrics }}</p>{% elif inspection %}<p>{{ inspection.execution_status }} · {{ inspection.task_source }} · 异常 {{ inspection.error_count }} · {{ inspection.key_metrics }}</p>{% endif %}
+{% if record_type == 'computer_analysis' %}
+<a class="btn btn-outline-primary mb-3" href="{% url 'computer_log_detail' analysis.log_file_id %}">日志证据 / 重新分析</a>
+<header class="page-heading">
+    <div class="page-heading__copy"><p class="page-heading__eyebrow">分析日志</p><h1 class="page-heading__title">{{ analysis.computer.computer_name }} 分析详情</h1><p class="page-heading__description">日志时间：{{ analysis.log_file.modified_at|date:'Y-m-d H:i:s'|default:'未知' }}</p></div>
+    <div class="page-heading__actions"><a href="{% url 'computer_analysis_list' %}" class="btn btn-outline-secondary">返回分析日志</a></div>
+</header>
+{% if analysis.errors.all %}<div class="card border-danger mb-4"><div class="card-header text-bg-danger">发现 {{ analysis.errors.count }} 项问题</div><ul class="list-group list-group-flush">{% for error in analysis.errors.all %}<li class="list-group-item"><strong>{{ error.error_type }}</strong><div class="text-secondary mt-1">{{ error.error_message }}</div></li>{% endfor %}</ul></div>{% else %}<div class="alert alert-success">本次分析未发现问题。</div>{% endif %}
+<div class="card border-0 shadow-sm mb-4"><div class="card-body"><div class="row g-3"><div class="col-md-4"><div class="metric-label">登录用户</div><div>{{ analysis.computer.user_name|default:'-' }}</div></div><div class="col-md-4"><div class="metric-label">结果</div><div>{{ analysis.get_status_display }}</div></div><div class="col-md-4"><div class="metric-label">入库时间</div><div>{{ analysis.created_at|date:'Y-m-d H:i:s' }}</div></div></div></div></div>
+<div class="accordion shadow-sm" id="analysisDetails">{% for title, value in detail_fields %}{% if value %}<div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#analysis-{{ forloop.counter }}">{{ title }}</button></h2><div id="analysis-{{ forloop.counter }}" class="accordion-collapse collapse" data-bs-parent="#analysisDetails"><div class="accordion-body"><pre class="json-view mb-0">{{ value|pretty_json }}</pre></div></div></div>{% endif %}{% endfor %}</div>
+{% else %}
+<header class="page-heading">
+    <div class="page-heading__copy"><p class="page-heading__eyebrow">巡检记录</p><h1 class="page-heading__title">{{ asset_name }} 巡检详情</h1><p class="page-heading__description">{{ item_name }} · {{ inspection.created_at|date:'Y-m-d H:i:s' }}</p></div>
+    <div class="page-heading__actions"><a href="{% url 'record_list' record_kind %}" class="btn btn-outline-secondary">返回巡检记录</a></div>
+</header>
+{% if inspection.is_reachable and inspection.status == 'success' %}<div class="alert alert-success">深度巡检成功 · 耗时 {{ inspection.duration_ms }} ms</div>{% elif inspection.is_reachable %}<div class="alert alert-warning">设备在线，但数据采集未完整成功：{{ inspection.summary|default:'请检查协议配置' }}</div>{% else %}<div class="alert alert-danger">设备不可达或管理协议连接失败：{{ inspection.summary|default:'请检查网络、电源或地址配置' }}</div>{% endif %}
+{% if inspection_errors %}<div class="card border-danger mb-4"><div class="card-header text-bg-danger">异常信息</div><ul class="list-group list-group-flush">{% for error in inspection_errors %}<li class="list-group-item"><pre class="mb-0">{{ error.error_message|pretty_json }}</pre></li>{% endfor %}</ul></div>{% endif %}
+{% if detail_fields %}<div class="accordion shadow-sm" id="recordDetails">{% for name, value in detail_fields %}<div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button {% if not forloop.first %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#record-{{ forloop.counter }}">{{ name }}</button></h2><div id="record-{{ forloop.counter }}" class="accordion-collapse collapse {% if forloop.first %}show{% endif %}" data-bs-parent="#recordDetails"><div class="accordion-body"><pre class="json-view mb-0">{{ value|pretty_json }}</pre></div></div></div>{% endfor %}</div>{% endif %}
+{% endif %}
+{% endblock %}

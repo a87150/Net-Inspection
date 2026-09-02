@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block title %}域控管理{% endblock %}
+{% block content %}
+<header class="page-heading">
+    <div class="page-heading__copy"><p class="page-heading__eyebrow">目录服务</p><h1 class="page-heading__title">域控管理</h1><p class="page-heading__description">统一配置 Active Directory，并同步查看域账号和域计算机。</p></div>
+    {% if can_manage_domain %}<div class="page-heading__actions"><button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#domainConfigModal">域控连接设置</button></div>{% endif %}
+</header>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-md-4"><a class="card surface-card metric-card h-100 text-decoration-none text-body" href="{% url 'domain_account_list' %}"><div class="card-body"><div class="metric-label">域账号</div><div class="metric">{{ account_total }}</div><div class="small text-primary mt-2">查看域账号</div></div></a></div>
+    <div class="col-12 col-md-4"><a class="card surface-card metric-card h-100 text-decoration-none text-body" href="{% url 'domain_computer_list' %}"><div class="card-body"><div class="metric-label">域计算机</div><div class="metric">{{ computer_total }}</div><div class="small text-primary mt-2">查看域计算机</div></div></a></div>
+    <div class="col-12 col-md-4"><div class="card surface-card metric-card h-100"><div class="card-body"><div class="metric-label">已停用对象</div><div class="metric {% if inactive_total %}text-danger{% endif %}">{{ inactive_total }}</div></div></div></div>
+</div>
+
+<section class="card surface-card mb-4">
+    <div class="card-body d-flex flex-column flex-md-row gap-3 align-items-md-center justify-content-between">
+        <div><h2 class="h5 mb-1">同步域控对象</h2><p class="text-secondary mb-0">域账号和域计算机只从域控获取，不提供手动导入。</p></div>
+        {% if can_manage_domain %}<form method="post">{% csrf_token %}<button class="btn btn-primary" name="action" value="sync">从域控同步</button></form>{% else %}<p class="text-secondary mb-0">测试连接、保存配置和同步需要域控运维权限。</p>{% endif %}
+    </div>
+</section>
+
+<section class="card surface-card mb-4">
+    <div class="card-body"><h2 class="h5 mb-1">当前连接摘要</h2><p class="mb-0">域控服务器：<code>{{ config.host }}</code> · 搜索根目录：<code>{{ config.base_dn }}</code></p></div>
+</section>
+
+{% if can_manage_domain %}
+<div class="modal fade" id="domainConfigModal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="domainConfigModalLabel" aria-describedby="domainConfigModalDescription" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+        <form method="post">
+            {% csrf_token %}
+            <div class="modal-header"><h2 class="modal-title fs-5" id="domainConfigModalLabel">域控连接设置</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+            <div class="modal-body">
+                <p class="text-secondary" id="domainConfigModalDescription">配置域控连接、身份验证和对象筛选条件。</p>
+                {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+                <div class="row g-4">
+                {% for field in form %}
+                    <div class="{% if field.name == 'user_filter' or field.name == 'computer_filter' or field.name == 'base_dn' %}col-12{% else %}col-md-6{% endif %}">
+                        {% if field.name == 'use_ssl' %}<div class="form-check mt-4">{{ field }} <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label></div>
+                        {% else %}<label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% endif %}
+                        {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                        {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                {% endfor %}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-outline-secondary" name="action" value="save">保存配置</button>
+                <button class="btn btn-outline-primary" name="action" value="test">测试连接</button>
+                <button class="btn btn-primary" name="action" value="sync">保存并从域控同步</button>
+            </div>
+        </form>
+    </div></div>
+</div>
+
+{% else %}<div class="modal fade" id="domainConfigModal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="domainConfigModalLabel" aria-describedby="domainConfigModalDescription" aria-hidden="true"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h2 class="modal-title fs-5 visually-hidden" id="domainConfigModalLabel">需要域控运维权限</h2></div><div class="modal-body"><p id="domainConfigModalDescription" class="visually-hidden">当前账号不能修改该连接。</p></div></div></div></div>{% endif %}
+{% if open_domain_modal %}
+<script>document.addEventListener('DOMContentLoaded', function () { bootstrap.Modal.getOrCreateInstance(document.getElementById('domainConfigModal')).show(); });</script>
+{% endif %}
+{% endblock %}

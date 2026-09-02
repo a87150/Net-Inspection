@@ -1,0 +1,10 @@
+{% extends 'base.html' %}{% load extras %}
+{% block title %}导入日志证据{% endblock %}
+{% block content %}
+<header class="page-heading"><div><h1>导入日志证据</h1><p>查看导入、解析和归档状态；从详情选择配置重新分析。</p></div><a class="btn btn-outline-secondary" href="{% url 'computer_analysis_list' %}">分析历史</a></header>
+<div data-table-workspace data-table-key="computer_logs"><div class="table-toolbar">{% include 'table_workspace.html' %}</div>
+<div class="table-responsive" role="region" aria-label="日志证据数据表" tabindex="0"><table class="table"><thead><tr>
+{% for field in table_definition.fields %}<th data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>
+{% if field.sortable %}{% if table_state.sort == field.key and table_state.order == 'asc' %}{% query_transform request page=None sort=field.key order='desc' as sort_query %}<a data-sort-key="{{ field.key }}" href="?{{ sort_query }}" aria-label="按{{ field.label }}降序排列">{{ field.label }}</a>{% else %}{% query_transform request page=None sort=field.key order='asc' as sort_query %}<a data-sort-key="{{ field.key }}" href="?{{ sort_query }}" aria-label="按{{ field.label }}升序排列">{{ field.label }}</a>{% endif %}{% else %}{{ field.label }}{% endif %}</th>{% endfor %}<th>操作</th></tr></thead><tbody>
+{% for log in page_obj %}<tr>{% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ log|get_attr:field.source|format_table_value:field.kind }}</td>{% endfor %}<td><a href="{% url 'computer_log_detail' log.pk %}">查看证据</a></td></tr>{% empty %}<tr><td colspan="5">暂无导入日志。</td></tr>{% endfor %}
+</tbody></table></div>{% include 'pagination.html' %}</div>{% endblock %}

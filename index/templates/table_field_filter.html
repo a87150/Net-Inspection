@@ -1,0 +1,34 @@
+{% load extras %}
+{% table_filter_parameter table_state field as filter_name %}
+{% table_filter_parameter table_state field 'from' as from_name %}
+{% table_filter_parameter table_state field 'to' as to_name %}
+{% with filter_value=table_state.filters|get_item:field.key field_options=table_state.field_options|get_item:field.key option_mode=table_state.field_option_modes|get_item:field.key %}
+<div class="table-filter-field" data-filter-field data-filter-key="{{ field.key }}" data-filter-parameters="{% if field.kind == 'date' or field.kind == 'datetime' %}{{ from_name }} {{ to_name }}{% else %}{{ filter_name }}{% endif %}"{% if filter_value %} data-filter-active{% endif %}{% if not field.default_filter and not filter_value %} hidden{% endif %}>
+    <label class="form-label small text-secondary">{{ field.label }}</label>
+    {% if field.kind == 'boolean' %}
+    <select class="form-select" name="{{ filter_name }}">
+        <option value="">全部</option>
+        <option value="true"{% if filter_value == 'true' %} selected{% endif %}>是</option>
+        <option value="false"{% if filter_value == 'false' %} selected{% endif %}>否</option>
+    </select>
+    {% elif field.kind == 'date' or field.kind == 'datetime' %}
+    <div class="input-group">
+        <input class="form-control" type="date" name="{{ from_name }}" value="{{ filter_value|get_item:'from' }}" aria-label="{{ field.label }}开始日期">
+        <span class="input-group-text">至</span>
+        <input class="form-control" type="date" name="{{ to_name }}" value="{{ filter_value|get_item:'to' }}" aria-label="{{ field.label }}结束日期">
+    </div>
+    {% elif option_mode == 'fixed' or option_mode == 'distinct' %}
+    <select class="form-select" name="{{ filter_name }}">
+        <option value="">全部</option>
+        {% for value, label in field_options %}<option value="{{ value }}"{% if filter_value == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    {% elif option_mode == 'suggest' %}
+    <input class="form-control" name="{{ filter_name }}" value="{{ filter_value|default:'' }}" list="{{ table_definition.key }}-{{ field.key }}-options" autocomplete="off">
+    <datalist id="{{ table_definition.key }}-{{ field.key }}-options">
+        {% for value, label in field_options %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+    </datalist>
+    {% else %}
+    <input class="form-control" name="{{ filter_name }}" value="{{ filter_value|default:'' }}">
+    {% endif %}
+</div>
+{% endwith %}

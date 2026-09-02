@@ -1,0 +1,23 @@
+[Unit]
+Description=Network Inspection Web (Waitress + WhiteNoise)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=net-inspection
+Group=net-inspection
+WorkingDirectory=/opt/net-inspection
+EnvironmentFile=/etc/net-inspection/environment
+ExecStart=/opt/net-inspection/.venv/bin/python -m waitress --listen=${WEB_LISTEN} --threads=${WEB_THREADS} net.wsgi:application
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=90
+UMask=0077
+NoNewPrivileges=true
+StandardOutput=append:/var/log/net-inspection/web.log
+StandardError=append:/var/log/net-inspection/web-error.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,51 @@
+<div class="modal fade" id="profileConfigModal" data-auto-open="{{ profile_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="profileConfigModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+        {% if task_project_kind == 'computers' %}
+        <form method="post" action="{% url 'computer_analysis_profile_configure' %}">
+        {% else %}
+        <form method="post" action="{% url 'inspection_profile_configure' %}">
+        {% endif %}
+            {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
+            {% if task_project_kind != 'computers' %}<input type="hidden" name="device_type" value="{{ task_device_type }}">{% endif %}
+            <div class="modal-header"><h2 class="modal-title fs-5" id="profileConfigModalLabel">{{ task_config_label }}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+            <div class="modal-body">
+                <p class="text-secondary small">配置保存后仅影响后续创建的任务；已经入队的任务继续使用各自的不可变快照。</p>
+                {% if task_project_kind == 'computers' %}
+                <div class="alert {% if task_default_profile and task_default_profile.scan_directories %}alert-secondary{% else %}alert-warning{% endif %} py-2 small">
+                    {% if task_default_profile and task_default_profile.is_enabled and task_default_profile.scan_directories %}
+                    <strong>PC 采集脚本：</strong>扫描目录使用本机兼容路径。<a href="{% url 'pc_script_download' task_default_profile.pk 'windows' %}">下载 Windows 采集脚本</a><span aria-hidden="true"> · </span><a href="{% url 'pc_script_download' task_default_profile.pk 'macos' %}">下载 macOS 采集脚本</a>
+                    {% else %}
+                    请先配置扫描目录，再下载 PC 采集脚本。
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% if task_profiles %}<div class="mb-3"><label class="form-label" for="config-profile">编辑配置</label><select class="form-select" id="config-profile" name="profile_id">{% for profile in task_profiles %}<option value="{{ profile.pk }}"{% if profile.pk == task_default_profile.pk %} selected{% endif %}>{{ profile.name }}</option>{% endfor %}</select></div>{% endif %}
+                <div class="row g-3">
+                    {% if target_rule_form %}
+                    <div class="col-12 border-bottom pb-3"><h3 class="h6">定时任务目标规则</h3>
+                    <div class="row g-3"><div class="col-md-4">{{ target_rule_form.target_rule_mode.label_tag }} {{ target_rule_form.target_rule_mode }}</div>
+                    <div class="col-md-8">{{ target_rule_form.target_rule_ids.label_tag }} {{ target_rule_form.target_rule_ids }}<div class="form-text">仅“指定设备”模式使用；桌面按 Ctrl/Cmd 多选。</div></div></div>
+                    <details class="mt-3"><summary>筛选条件（仅“按条件精确匹配”模式使用）</summary><div class="row g-3 mt-1">{% for field in target_rule_form.target_filter_fields %}<div class="col-md-4">{{ field.label_tag }} {{ field }}</div>{% endfor %}</div></details>
+                    <p class="form-text mb-0">所有非空条件同时满足才会入选；修改仅影响未来任务。密码、Token 和连接 URL 不可用于筛选。</p></div>
+                    {% endif %}
+                    <div class="col-md-6"><label class="form-label">配置名称</label><input class="form-control" name="name" value="{{ task_default_profile.name|default:'' }}" required></div>
+                    <div class="col-md-3"><label class="form-label">并发数</label><input class="form-control" type="number" name="concurrent_workers" min="1" max="64" value="{{ task_default_profile.concurrent_workers|default:4 }}" required></div>
+                    {% if task_project_kind != 'computers' %}<div class="col-md-3"><label class="form-label">超时（秒）</label><input class="form-control" type="number" name="timeout_seconds" min="1" max="3600" value="{{ task_default_profile.timeout_seconds|default:60 }}" required></div>{% endif %}
+                    {% if task_project_kind == 'computers' %}
+                    <div class="col-12"><label class="form-label">扫描目录</label><textarea class="form-control" name="scan_directories_text" rows="3">{{ task_scan_directories_text }}</textarea><div class="form-text">仅上传/重新分析可留空；定时扫描必填服务器绝对目录。扫描和归档由独立 Worker 完成。</div></div>
+                    <div class="col-md-6"><label class="form-label">已处理目录</label><input class="form-control" name="processed_directory" value="{{ task_default_profile.processed_directory|default:'' }}"></div>
+                    <div class="col-md-6"><label class="form-label">失败目录</label><input class="form-control" name="failed_directory" value="{{ task_default_profile.failed_directory|default:'' }}"></div>
+                    <div class="col-md-4"><label class="form-label">文件时间范围</label><select class="form-select" name="file_time_mode" data-file-time-mode><option value="recent_days"{% if task_default_profile.file_time_mode != 'date_range' %} selected{% endif %}>最近 N 天</option><option value="date_range"{% if task_default_profile.file_time_mode == 'date_range' %} selected{% endif %}>指定起止日期</option></select></div>
+                    <div class="col-md-2" data-recent-days><label class="form-label">最近 N 天</label><input class="form-control" type="number" name="recent_days" min="1" value="{{ task_default_profile.recent_days|default:7 }}"></div>
+                    <div class="col-md-3" data-date-range><label class="form-label">开始日期</label><input class="form-control" type="date" name="range_start_date" value="{{ task_default_profile.range_start_date|date:'Y-m-d' }}"></div>
+                    <div class="col-md-3" data-date-range><label class="form-label">结束日期</label><input class="form-control" type="date" name="range_end_date" value="{{ task_default_profile.range_end_date|date:'Y-m-d' }}"></div>
+                    <div class="col-12"><label class="form-check"><input class="form-check-input" type="checkbox" name="recursive"{% if task_default_profile.recursive %} checked{% endif %}><span class="form-check-label">递归扫描子目录</span></label></div>
+                    {% endif %}
+                    <div class="col-12"><fieldset><legend class="fs-6">{% if task_project_kind == 'computers' %}分析项目{% else %}巡检项目{% endif %}</legend><div class="row row-cols-1 row-cols-md-3 g-2">{% for key, label in task_item_choices %}<label class="col form-check"><input class="form-check-input" type="checkbox" name="{% if task_project_kind == 'computers' %}analysis_items{% else %}selected_items{% endif %}" value="{{ key }}"{% if key in task_default_items %} checked{% endif %}><span class="form-check-label">{{ label }}</span></label>{% endfor %}</div></fieldset></div>
+                    <div class="col-12 border-top pt-3"><label class="form-check mb-3"><input class="form-check-input" type="checkbox" name="schedule_enabled"{% if task_default_schedule and task_default_schedule.is_enabled %} checked{% endif %}><span class="form-check-label">启用定时执行</span></label><div class="row g-3"><div class="col-md-3"><label class="form-label">执行方式</label><select class="form-select" name="schedule_kind" data-schedule-kind><option value="interval"{% if not task_default_schedule or task_default_schedule.kind == 'interval' %} selected{% endif %}>每隔 N 分钟/小时</option><option value="daily"{% if task_default_schedule and task_default_schedule.kind == 'daily' %} selected{% endif %}>每天指定时间</option></select></div><div class="col-md-3" data-schedule-interval><label class="form-label">间隔</label><input class="form-control" type="number" min="1" name="interval_value" value="{{ task_default_schedule.interval_value|default:30 }}"></div><div class="col-md-3" data-schedule-interval><label class="form-label">单位</label><select class="form-select" name="interval_unit"><option value="minutes"{% if not task_default_schedule or task_default_schedule.interval_unit == 'minutes' %} selected{% endif %}>分钟</option><option value="hours"{% if task_default_schedule and task_default_schedule.interval_unit == 'hours' %} selected{% endif %}>小时</option></select></div><div class="col-md-3" data-schedule-daily><label class="form-label">每天执行时间</label><input class="form-control" type="time" name="daily_time" value="{{ task_default_schedule.daily_time|time:'H:i' }}"></div></div>{% if task_default_schedule %}<div class="small text-secondary mt-3">当前计划：{% if task_default_schedule.is_enabled %}已启用{% else %}已停用{% endif %}；最近入队 {{ task_default_schedule.last_enqueued_at|date:'Y-m-d H:i'|default:'暂无' }}；下次执行 {{ task_default_schedule.next_run_at|date:'Y-m-d H:i'|default:'待计算' }}。</div>{% else %}<div class="small text-secondary mt-3">当前尚未保存定时计划；保存并启用后由独立 Worker 调度。</div>{% endif %}<p class="form-text mb-0">运行中的任务不受后续配置更改影响。</p></div>
+                </div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">保存配置</button></div>
+        </form>
+    </div></div>
+</div>
