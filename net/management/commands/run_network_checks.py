@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand
 
 from net.models import InspectionProfile, Monitor, Network_Device, Server, TaskRun
-from net.tasks import enqueue_task
+from net.inspections.queue import enqueue_task
 
 
 _ASSET_TYPES = {

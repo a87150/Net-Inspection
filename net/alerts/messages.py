@@ -1,6 +1,6 @@
 """Normalize persisted alert events into transport-neutral messages."""
 
-from net.services.sanitization import sanitize
+from net.infrastructure.sanitization import sanitize
 
 from .base import AlertMessage
 

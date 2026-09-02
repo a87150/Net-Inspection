@@ -7,7 +7,7 @@ from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 
 from net.devices.security.payload import normalize_security_payload, collect_native_configuration
 from net.infrastructure.collection import CollectionResult, Timer
-from net.services.collectors.selection import SECURITY_FIELDS, WINDOWS_FIELDS, selected_fields
+from net.inspections.selection import SECURITY_FIELDS, WINDOWS_FIELDS, selected_fields
 
 
 def _xml_fields(node):

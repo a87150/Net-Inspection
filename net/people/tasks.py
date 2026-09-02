@@ -8,7 +8,7 @@ from django.utils.crypto import constant_time_compare, salted_hmac
 from net.people.directory.base import directory_source_configuration_identity
 from net.people.directory.sync import PeopleSyncApplyError, SyncPreview, apply_people_sync
 from net.models import PeopleSyncSource, TaskRun, TaskTargetRun
-from net.tasks.state import save_task
+from net.inspections.state import save_task
 
 
 def session_digest(session_key):

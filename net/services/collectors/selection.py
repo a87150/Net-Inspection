@@ -1,34 +1,6 @@
-"""Inspection item to protocol field mappings (no implicit collect-all for [])."""
+"""Compatibility alias for inspection item selection."""
 
-LINUX_FIELDS = {
-    'computer_name': ('hostname',), 'system_info': ('system', 'uptime'),
-    'cpu': ('cpu',), 'memory': ('memory',), 'storage_status': ('storage',),
-    'network_info': ('network',), 'services': ('services',), 'logs': ('logs',),
-}
-NETWORK_FIELDS = (
-    'device_info', 'device_info', 'cpu', 'memory', 'temperature',
-    'interface_status', 'vlan_status', 'logs',
-    'config_info',
-)
-WINDOWS_FIELDS = {
-    'computer_name': ('computer_name', 'hostname'), 'system_info': ('system_info', 'system'),
-    'cpu': ('cpu',), 'memory': ('memory',),
-    'storage_status': ('storage_status', 'storage', 'disks'),
-    'network_info': ('network_info', 'network'), 'services': ('services',), 'logs': ('logs',),
-}
-SECURITY_FIELDS = {
-    'device_info': ('device_info', 'device', 'deviceName', 'model', 'serialNumber', 'firmwareVersion'),
-    'status_data': ('status_data', 'status'), 'channel_status': ('channel_status', 'channels'),
-    'storage_status': ('storage_status', 'storage', 'disks'),
-    'config_info': ('config_info',),
-}
+import sys
+from importlib import import_module
 
-
-def selected_fields(payload, selected_items, aliases=None):
-    if not isinstance(payload, dict):
-        return {}
-    if selected_items is None:
-        return dict(payload)
-    aliases = aliases or {}
-    keys = {key for item in selected_items for key in aliases.get(item, (item,))}
-    return {key: value for key, value in payload.items() if key in keys}
+sys.modules[__name__] = import_module('net.inspections.selection')

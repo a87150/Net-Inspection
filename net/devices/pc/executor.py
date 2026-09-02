@@ -17,11 +17,11 @@ from net.models import (
 )
 from net.devices.pc.analysis import analyze_log
 from net.devices.pc.logs import ScanSummary, scan_log_directory
-from net.services.sanitization import sanitize
-from net.tasks.queue import enqueue_task
-from net.tasks.state import save_target
+from net.infrastructure.sanitization import sanitize
+from net.inspections.queue import enqueue_task
+from net.inspections.state import save_target
 
-from net.tasks.executors.inspection import (
+from net.inspections.executor import (
     ExecutionOutcome,
     _TERMINAL_STATUSES,
     _begin_target,

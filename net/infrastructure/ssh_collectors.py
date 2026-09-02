@@ -3,7 +3,7 @@ import re
 import time
 
 from net.infrastructure.collection import CollectionResult, Timer
-from net.services.collectors.selection import LINUX_FIELDS, NETWORK_FIELDS, selected_fields
+from net.inspections.selection import LINUX_FIELDS, NETWORK_FIELDS, selected_fields
 from net.exports.adapters import MAX_CONFIG_BYTES
 from net.devices.network.configuration import NETWORK_CONFIG, BAD_OUTPUT, network_vendor, validate_native
 

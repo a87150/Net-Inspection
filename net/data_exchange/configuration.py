@@ -7,7 +7,7 @@ from io import BytesIO, StringIO
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from net.models import Monitor, Network_Device
-from net.services.sanitization import configuration_secrets, sanitize_configuration
+from net.infrastructure.sanitization import configuration_secrets, sanitize_configuration
 from net.devices.network import configuration as network
 from net.devices.security import configuration as security
 from net.exports.adapters import NOTICE, UnsupportedConfiguration

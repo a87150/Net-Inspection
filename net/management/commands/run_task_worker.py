@@ -5,7 +5,7 @@ from contextlib import contextmanager
 import signal
 from threading import Event, current_thread, main_thread
 
-from net.tasks.worker import TaskWorker
+from net.inspections.worker import TaskWorker
 
 
 @contextmanager

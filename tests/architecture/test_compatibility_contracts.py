@@ -1,4 +1,5 @@
 from importlib import import_module
+from importlib.util import find_spec
 
 from django.apps import apps
 from django.test import SimpleTestCase
@@ -46,3 +47,24 @@ class CompatibilityContractTests(SimpleTestCase):
         self.assertEqual(reverse("computer_analysis_list"), "/computers/analyses/")
         self.assertEqual(reverse("task_list"), "/tasks/")
         self.assertEqual(reverse("alert_list"), "/alerts/")
+
+    def test_inspection_orchestration_has_canonical_and_legacy_imports(self):
+        module_names = (
+            "net.inspections.queue",
+            "net.inspections.schedules",
+            "net.inspections.worker",
+        )
+        self.assertEqual([name for name in module_names if find_spec(name) is None], [])
+
+        canonical_queue = import_module("net.inspections.queue")
+        canonical_schedules = import_module("net.inspections.schedules")
+        canonical_worker = import_module("net.inspections.worker")
+        legacy_queue = import_module("net.tasks.queue")
+        legacy_schedules = import_module("net.tasks.schedules")
+        legacy_worker = import_module("net.tasks.worker")
+
+        for name in ("enqueue_task", "claim_next_task", "finish_task"):
+            with self.subTest(module="queue", name=name):
+                self.assertIs(getattr(legacy_queue, name), getattr(canonical_queue, name))
+        self.assertIs(legacy_schedules.enqueue_due_schedules, canonical_schedules.enqueue_due_schedules)
+        self.assertIs(legacy_worker.TaskWorker, canonical_worker.TaskWorker)

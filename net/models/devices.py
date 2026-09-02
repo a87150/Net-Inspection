@@ -2,7 +2,7 @@ import uuid
 
 from django.db import models
 
-from net.services.sanitization import public_connection_url
+from net.infrastructure.sanitization import public_connection_url
 
 
 class Computer(models.Model):

@@ -10,7 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from net.models import Computer, ComputerAnalysis, ComputerLogFile, Error_Computer, RecordStatus
-from net.services.sanitization import sanitize
+from net.infrastructure.sanitization import sanitize
 from net.tool import check_bitlocker, parse_local_datetime
 
 

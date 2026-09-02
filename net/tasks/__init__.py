@@ -1,6 +1,6 @@
 """Database-backed task queue services."""
 
-from .queue import (
+from net.inspections.queue import (
     claim_next_task,
     enqueue_computer_scan_task,
     enqueue_task,

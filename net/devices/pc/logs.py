@@ -25,7 +25,7 @@ from django.utils import timezone
 
 from net.models import Computer, ComputerAnalysisProfile, ComputerLogFile, ComputerLogArchive
 from net.devices.pc.snapshot import extract_computer_snapshot
-from net.services.sanitization import sanitize
+from net.infrastructure.sanitization import sanitize
 from net.tool import parse_local_datetime
 
 

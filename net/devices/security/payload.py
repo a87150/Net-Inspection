@@ -1,6 +1,6 @@
 """Explicit native status mapping; unknown payloads are never a status fallback."""
 
-from net.services.collectors.selection import SECURITY_FIELDS, selected_fields
+from net.inspections.selection import SECURITY_FIELDS, selected_fields
 
 
 # Scalar leaves and known native container paths only. In particular, never

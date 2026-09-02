@@ -9,8 +9,8 @@ from net.people.directory.feishu import FeishuDirectoryAdapter
 from net.people.directory.sync import PeopleSyncError, preview_people_sync
 from net.models import PeopleSyncSource, TaskRun, TaskTargetRun
 from net.people.tasks import source_matches_task
-from net.tasks.state import save_target
-from net.tasks.executors.inspection import ExecutionOutcome, _begin_target, _database_guard, _has_live_lease, _target_id
+from net.inspections.state import save_target
+from net.inspections.executor import ExecutionOutcome, _begin_target, _database_guard, _has_live_lease, _target_id
 
 
 def build_directory_adapter(source):

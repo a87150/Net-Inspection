@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import json
 from typing import Mapping
 
-from net.services.sanitization import REDACTED, sanitize
+from net.infrastructure.sanitization import REDACTED, sanitize
 
 
 HTTP_TIMEOUT = (3.05, 10)

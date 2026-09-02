@@ -383,7 +383,7 @@ def process_persisted_target(target_run):
     Failed processing stays eligible. Its attempt time moves it behind untouched
     work and older retries, so poison input cannot pin the reconciliation batch.
     """
-    from net.tasks.executors.inspection import _database_guard
+    from net.inspections.executor import _database_guard
 
     target_id = getattr(target_run, 'pk', target_run)
     with _database_guard():

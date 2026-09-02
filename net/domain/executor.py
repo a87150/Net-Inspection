@@ -17,10 +17,10 @@ from net.models import (
     DomainOperation, Domain_Account, Domain_Computer,
     Domain_Controller_Config, TaskRun, TaskTargetRun,
 )
-from net.services.sanitization import sanitize
-from net.tasks.state import save_target
+from net.infrastructure.sanitization import sanitize
+from net.inspections.state import save_target
 
-from net.tasks.executors.inspection import ExecutionOutcome, _begin_target, _database_guard, _has_live_lease, _target_id
+from net.inspections.executor import ExecutionOutcome, _begin_target, _database_guard, _has_live_lease, _target_id
 
 
 @dataclass(frozen=True)
@@ -103,7 +103,7 @@ def abort_password_domain_task(task, *, worker_id, claim_generation):
                 })
     if not targets:
         return False
-    from net.tasks.queue import finish_task
+    from net.inspections.queue import finish_task
 
     try:
         finished = finish_task(task.pk, worker_id)

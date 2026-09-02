@@ -25,7 +25,7 @@ from net.models import (
     TaskRun,
     TaskTargetRun,
 )
-from net.tasks.executors.inspection import _database_guard
+from net.inspections.executor import _database_guard
 
 
 _DOMAIN_TARGETS = {

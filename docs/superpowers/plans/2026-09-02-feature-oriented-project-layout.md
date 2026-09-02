@@ -483,7 +483,7 @@ git commit -m "refactor: separate device collection features"
 - Consumes: Device executors from Task 4, task/record/alert models from Task 2, and domain/personnel task adapters from Task 3.
 - Produces: Canonical inspection queue and worker APIs while retaining all existing `net.tasks.*` paths and management command behavior.
 
-- [ ] **Step 1: Pin task and worker imports**
+- [x] **Step 1: Pin task and worker imports**
 
 Extend the contract test:
 
@@ -499,19 +499,19 @@ self.assertTrue(callable(enqueue_due_schedules))
 self.assertTrue(callable(TaskWorker))
 ```
 
-- [ ] **Step 2: Move queue, state, scheduling, and worker implementation**
+- [x] **Step 2: Move queue, state, scheduling, and worker implementation**
 
 Update canonical internal imports to `net.inspections.*`. Old modules re-export explicit public names. `net/tasks/__init__.py` remains the stable convenience API.
 
-- [ ] **Step 3: Move inspection execution and summaries**
+- [x] **Step 3: Move inspection execution and summaries**
 
 Route device kinds to the canonical Task 4 executors. Preserve task status transitions, leases, target selection, database guards, and result snapshots exactly.
 
-- [ ] **Step 4: Update alerts and dashboard imports**
+- [x] **Step 4: Update alerts and dashboard imports**
 
 Keep channel implementations and alert behavior unchanged. Only replace imports of sanitization, inspection execution, and summaries with canonical modules; old service paths remain facades.
 
-- [ ] **Step 5: Run focused orchestration checks**
+- [x] **Step 5: Run focused orchestration checks**
 
 ```powershell
 python manage.py test tests.architecture.test_compatibility_contracts index.test_phase2_queue index.test_phase2_schedules index.test_phase2_worker index.test_phase3_alert_service index.test_phase3_senders index.test_home_taskbar index.test_dashboard_summary --verbosity 1
@@ -520,7 +520,7 @@ python manage.py check
 
 Expected: selected orchestration tests pass. Do not run real schedules or external alert deliveries.
 
-- [ ] **Step 6: Commit and stop for inspection**
+- [x] **Step 6: Commit and stop for inspection**
 
 ```powershell
 git add net/inspections net/dashboard net/infrastructure net/tasks net/services net/alerts net/management tests/architecture

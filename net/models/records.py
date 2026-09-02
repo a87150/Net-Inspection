@@ -26,7 +26,7 @@ class DynamicRecord(models.Model):
 
     @property
     def key_metrics(self):
-        from net.services.record_summary import key_metrics
+        from net.inspections.record_summary import key_metrics
         return key_metrics(self.details)
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

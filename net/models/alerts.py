@@ -507,7 +507,7 @@ class AlertEvent(models.Model):
         # missing/failed analysis deliberately retains the log scope: it is not
         # evidence that a different computer is healthy.
         if task.task_type == 'computer_analysis' and target.result_type == 'computer_analysis':
-            from .record_models import ComputerAnalysis
+            from net.models.records import ComputerAnalysis
 
             analysis = ComputerAnalysis.objects.using(alias).filter(
                 pk=target.result_id,
