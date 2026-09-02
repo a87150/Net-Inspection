@@ -175,7 +175,7 @@ git commit -m "refactor: establish feature package boundaries"
 - Consumes: Current classes and validators from the six top-level `*_models.py` modules.
 - Produces: Canonical model definitions under `net.models.*`; unchanged exports from `net.models` and historical validator modules; domain-grouped admin registration.
 
-- [ ] **Step 1: Add model identity and schema-contract tests**
+- [x] **Step 1: Add model identity and schema-contract tests**
 
 Create `tests/architecture/test_model_contracts.py`:
 
@@ -211,7 +211,7 @@ class ModelContractTests(SimpleTestCase):
                 self.assertIs(apps.get_model("net", model.__name__), model)
 ```
 
-- [ ] **Step 2: Run the model test against the old layout**
+- [x] **Step 2: Run the model test against the old layout**
 
 ```powershell
 python manage.py test tests.architecture.test_model_contracts --verbosity 2
@@ -219,7 +219,7 @@ python manage.py test tests.architecture.test_model_contracts --verbosity 2
 
 Expected: PASS, confirming the values that must survive the move.
 
-- [ ] **Step 3: Move model definitions without changing class bodies**
+- [x] **Step 3: Move model definitions without changing class bodies**
 
 Place models and their local validators in these canonical modules:
 
@@ -260,7 +260,7 @@ Computer_Inspection = ComputerAnalysis
 
 Do not add `Meta.app_label`; Django continues to infer `net` because every canonical module is inside the `net` application package.
 
-- [ ] **Step 4: Convert historical model modules into explicit facades**
+- [x] **Step 4: Convert historical model modules into explicit facades**
 
 Each facade imports from the canonical module and defines `__all__`. Migration-referenced validators must be direct module attributes, for example:
 
@@ -275,7 +275,7 @@ from net.models.tasks import (
 
 Use equivalent explicit exports for `net.alert_models` and `net.domain_models`.
 
-- [ ] **Step 5: Move admin registration into the `net.admin` package**
+- [x] **Step 5: Move admin registration into the `net.admin` package**
 
 `net/admin/__init__.py` imports each registration module exactly once:
 
@@ -285,7 +285,7 @@ from . import assets, domain, records, tasks  # noqa: F401
 
 The four old `net/admin_*.py` paths become import-only facades so existing test or operator imports remain valid.
 
-- [ ] **Step 6: Run only model/admin compatibility checks**
+- [x] **Step 6: Run only model/admin compatibility checks**
 
 ```powershell
 python manage.py test tests.architecture.test_compatibility_contracts tests.architecture.test_model_contracts index.test_admin_registry --verbosity 2
@@ -295,7 +295,7 @@ python manage.py check
 
 Expected: focused tests pass, Django reports no changes, and system checks pass.
 
-- [ ] **Step 7: Commit and stop for inspection**
+- [x] **Step 7: Commit and stop for inspection**
 
 ```powershell
 git add net/models net/models.py net/*_models.py net/admin net/admin.py net/admin_*.py tests/architecture
