@@ -4,9 +4,11 @@ from io import StringIO
 from django.contrib import messages
 from django.core.management import call_command
 from django.core.paginator import Paginator
+from django.db.models import Count, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from index.table_query import PAGE_SIZES, apply_table_filters, query_without_page
@@ -168,6 +170,74 @@ def asset_detail(request, kind, pk):
 
 def person_detail(request, pk):
     return asset_detail(request, 'people', pk)
+
+
+def people_statistics(request):
+    as_of = timezone.localdate()
+    counts = People.objects.aggregate(
+        total=Count('pk'),
+        active=Count('pk', filter=Q(is_active=True)),
+        departed=Count('pk', filter=Q(is_active=False)),
+        hires_this_year=Count(
+            'pk', filter=Q(hire_date__year=as_of.year, hire_date__lte=as_of),
+        ),
+        departures_this_year=Count(
+            'pk',
+            filter=Q(
+                is_active=False,
+                departure_date__year=as_of.year,
+                departure_date__lte=as_of,
+            ),
+        ),
+    )
+    valid_hire_dates = list(People.objects.filter(
+        is_active=True,
+        hire_date__isnull=False,
+        hire_date__lte=as_of,
+    ).values_list('hire_date', flat=True))
+    average_tenure = (
+        round(
+            sum((as_of - hire_date).days for hire_date in valid_hire_dates)
+            / len(valid_hire_dates)
+            / 365.25,
+            1,
+        )
+        if valid_hire_dates else 0.0
+    )
+    metrics = {
+        **counts,
+        'active_rate': (
+            round(counts['active'] * 100 / counts['total'], 1)
+            if counts['total'] else 0.0
+        ),
+        'average_active_tenure_years': average_tenure,
+        'tenure_sample_count': len(valid_hire_dates),
+    }
+
+    department_totals = {}
+    grouped_departments = People.objects.values('department').annotate(
+        total=Count('pk'),
+        active=Count('pk', filter=Q(is_active=True)),
+    )
+    for group in grouped_departments:
+        department = (group['department'] or '').strip() or '未分配部门'
+        row = department_totals.setdefault(
+            department, {'department': department, 'total': 0, 'active': 0},
+        )
+        row['total'] += group['total']
+        row['active'] += group['active']
+    departments = []
+    for row in department_totals.values():
+        row['departed'] = row['total'] - row['active']
+        row['active_rate'] = round(row['active'] * 100 / row['total'], 1)
+        departments.append(row)
+    departments.sort(key=lambda row: (-row['total'], row['department']))
+
+    return render(request, 'people/statistics.html', {
+        'as_of': as_of,
+        'metrics': metrics,
+        'departments': departments,
+    })
 
 
 def item_list(request, item):

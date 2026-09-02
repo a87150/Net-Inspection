@@ -252,7 +252,7 @@ class DetailRouteTests(TestCase):
         )
         self.assertEqual(
             items['people']['detail_url'],
-            reverse('person_detail', args=[self.person.pk]),
+            reverse('people_statistics'),
         )
         for key, (list_url, record_url) in expected.items():
             with self.subTest(key=key):
@@ -263,7 +263,7 @@ class DetailRouteTests(TestCase):
 
         self.assertContains(
             response,
-            f'href="{reverse("person_detail", args=[self.person.pk])}"',
+            f'href="{reverse("people_statistics")}"',
         )
         self.assertContains(response, '手动执行巡检', count=3)
         self.assertNotContains(response, '巡检此类设备')

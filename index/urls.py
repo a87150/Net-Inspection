@@ -7,6 +7,7 @@ urlpatterns = [
     path('assets/<str:kind>/configurations.zip', views.configuration_zip, name='configuration_zip'),
     path('assets/<str:kind>/<uuid:pk>/configuration/', views.configuration_download, name='configuration_download'),
     path('assets/<str:kind>/<uuid:pk>/', views.asset_detail, name='asset_detail'),
+    path('people/statistics/', views.people_statistics, name='people_statistics'),
     path('people/<uuid:pk>/', views.person_detail, name='person_detail'),
     path('item/<str:item>/', views.item_list, name='item_list'),
     path('computers/analyses/', views.computer_analysis_list, name='computer_analysis_list'),

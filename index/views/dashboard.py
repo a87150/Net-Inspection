@@ -1,22 +1,13 @@
-import logging
-
 from django.core.paginator import Paginator
-from django.db import DatabaseError
 from django.shortcuts import render
 from django.urls import reverse
 
-from net.models import (
-    People,
-)
 from net.services.dashboard_summary import (
     DASHBOARD_SUMMARY_ERROR_MESSAGE,
     build_asset_card_summaries,
     with_latest_status,
 )
 from net.services.task_summary import inspection_task_queryset, summarize_task
-
-
-logger = logging.getLogger(__name__)
 
 
 def _card_summary_values(summary, *, static=False, waiting_label=''):
@@ -55,17 +46,6 @@ def index(request):
     summaries = {
         summary['key']: summary for summary in build_asset_card_summaries()
     }
-    first_person = None
-    if not summaries['people'].get('error'):
-        try:
-            first_person = People.objects.order_by('name', 'employee_id', 'pk').first()
-        except DatabaseError:
-            logger.exception('Dashboard people detail query failed')
-            summaries['people'] = {
-                'key': 'people',
-                'error': DASHBOARD_SUMMARY_ERROR_MESSAGE,
-            }
-
     items = [
         {
             'key': 'people',
@@ -77,11 +57,8 @@ def index(request):
             'checked_label': '在职人数',
             'bad_label': '离职人数',
             'list_url': reverse('asset_list', args=['people']),
-            'detail_url': (
-                reverse('person_detail', args=[first_person.pk])
-                if first_person else ''
-            ),
-            'detail_label': '人员详情',
+            'detail_url': reverse('people_statistics'),
+            'detail_label': '人员统计',
         },
         {
             'key': 'domain',

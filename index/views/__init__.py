@@ -4,6 +4,7 @@ from .assets import (
     asset_list,
     item_list,
     person_detail,
+    people_statistics,
     run_infrastructure_inspection,
 )
 from .dashboard import index, with_latest_status
@@ -86,6 +87,7 @@ __all__ = [
     'inspection_records',
     'item_list',
     'person_detail',
+    'people_statistics',
     'record_detail',
     'record_list',
     'run_infrastructure_inspection',
