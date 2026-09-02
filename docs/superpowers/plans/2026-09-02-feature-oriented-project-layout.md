@@ -59,7 +59,7 @@
 - Consumes: Existing `net.apps.NetConfig`, `net.models`, `net.urls`, `index.urls`, and Django model metadata.
 - Produces: Feature package import paths and `CompatibilityContractTests`, which every later task must keep passing.
 
-- [ ] **Step 1: Write contract tests before creating feature packages**
+- [x] **Step 1: Write contract tests before creating feature packages**
 
 Create `tests/architecture/test_compatibility_contracts.py` with concrete assertions:
 
@@ -105,7 +105,7 @@ class CompatibilityContractTests(SimpleTestCase):
         self.assertEqual(reverse("alert_list"), "/alerts/")
 ```
 
-- [ ] **Step 2: Run the contract test and record the baseline**
+- [x] **Step 2: Run the contract test and record the baseline**
 
 Run:
 
@@ -115,7 +115,7 @@ python manage.py test tests.architecture.test_compatibility_contracts --verbosit
 
 Expected: PASS against the current layout. This is a characterization test, so it is allowed to pass before the move.
 
-- [ ] **Step 3: Create the listed package marker files**
+- [x] **Step 3: Create the listed package marker files**
 
 Each marker contains a one-line ownership docstring matching its directory, for example:
 
@@ -125,7 +125,7 @@ Each marker contains a one-line ownership docstring matching its directory, for 
 
 Do not create `net/models/` or `net/admin/` yet because `net/models.py` and `net/admin.py` still occupy those import names.
 
-- [ ] **Step 4: Verify only package imports and Django wiring**
+- [x] **Step 4: Verify only package imports and Django wiring**
 
 Run:
 
@@ -136,7 +136,7 @@ python manage.py check
 
 Expected: contract tests pass and Django reports no issues.
 
-- [ ] **Step 5: Commit and stop for inspection**
+- [x] **Step 5: Commit and stop for inspection**
 
 ```powershell
 git add tests/architecture tests/__init__.py net/people net/devices net/inspections net/data_exchange net/dashboard net/infrastructure index/common index/dashboard index/people index/domain index/devices index/inspections index/alerts index/integrations
