@@ -85,7 +85,10 @@ class PeopleStatisticsPageTests(TestCase):
                 'departed': 1, 'active_rate': 50.0,
             },
         })
-        self.assertNotContains(response, '>人员列表</a>')
+        main_content = response.content.decode(response.charset).split(
+            '<main ', 1,
+        )[1].split('</main>', 1)[0]
+        self.assertNotIn('>人员列表</a>', main_content)
 
     def test_home_people_card_links_to_statistics_without_changing_list_entry(self):
         response = self.client.get(reverse('index'))

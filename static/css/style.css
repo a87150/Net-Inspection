@@ -76,6 +76,40 @@ body.app-shell {
     color: #fff;
 }
 
+.app-navbar button.nav-link {
+    background: transparent;
+    border: 0;
+}
+
+.app-navbar__dropdown-menu {
+    border: 0;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-raised);
+    margin-top: 0;
+    min-width: 10rem;
+    padding: .4rem;
+}
+
+.app-navbar__dropdown-menu .dropdown-item {
+    border-radius: calc(var(--radius-sm) - 2px);
+    color: var(--color-text);
+    font-size: .9rem;
+    padding: .55rem .75rem;
+}
+
+.app-navbar__dropdown-menu .dropdown-item:hover,
+.app-navbar__dropdown-menu .dropdown-item:focus {
+    background: rgba(49, 87, 213, .1);
+    color: var(--color-primary);
+}
+
+@media (min-width: 992px) {
+    .app-navbar .nav-item.dropdown:hover > .dropdown-menu,
+    .app-navbar .nav-item.dropdown:focus-within > .dropdown-menu {
+        display: block;
+    }
+}
+
 .app-navbar .navbar-text {
     color: var(--color-nav-muted);
 }
