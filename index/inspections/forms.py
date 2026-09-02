@@ -107,7 +107,7 @@ class InspectionProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
         super().__init__(*args, **kwargs)
         self.device_type = device_type
         self.instance = instance
-        from net.tasks.schedules import _ASSET_MODELS, target_rule_fields
+        from net.inspections.schedules import _ASSET_MODELS, target_rule_fields
         self.fields['target_rule_ids'].choices = [(str(obj.pk), str(obj)) for obj in _ASSET_MODELS[device_type].objects.order_by('pk')]
         self.rule_fields = target_rule_fields(device_type)
         for key, (model_field, label) in self.rule_fields.items():
@@ -156,7 +156,7 @@ class InspectionProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
             selector['filters'] = {key: cleaned['rule_' + key] for key in self.rule_fields
                                    if cleaned.get('rule_' + key) not in (None, '')}
         if mode != 'all' and not self.errors:
-            from net.tasks.schedules import _selected_target_ids
+            from net.inspections.schedules import _selected_target_ids
             candidate = InspectionProfile(device_type=self.device_type, target_selector=selector)
             try:
                 _selected_target_ids(candidate)

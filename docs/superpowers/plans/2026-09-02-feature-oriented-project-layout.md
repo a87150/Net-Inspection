@@ -4,7 +4,7 @@
 
 **Goal:** Reorganize the monitoring system into clear personnel, Active Directory, device, inspection, alert, integration, UI, static, agent, test, and deployment areas without changing its database or public interfaces.
 
-**Architecture:** Keep `net` and `index` as the only existing Django applications and move implementation into feature-oriented packages inside them. Preserve database identity, URLs, startup modules, migration imports, and operator-facing Python imports with thin compatibility facades. Execute one reviewable phase at a time and wait for user approval after every phase.
+**Architecture:** Keep `net` and `index` as the only existing Django applications and move implementation into feature-oriented packages inside them. Preserve database identity and active Django startup/URL surfaces, while switching internal code and migrations directly to canonical feature imports. Execute one reviewable phase at a time and wait for user approval after every phase.
 
 **Tech Stack:** Python 3, Django 5, Django REST Framework, SQLite-compatible Django ORM, PowerShell, POSIX shell, Bootstrap, vanilla JavaScript, Node test runner, Git.
 
@@ -632,7 +632,7 @@ git commit -m "refactor: organize UI and static assets by feature"
 - Move Django tests from `index/test_*.py` and `index/tests.py` into domain packages under `tests/`.
 - Move JavaScript tests from `static/app/js/**` into `tests/frontend/`.
 - Move: `index/test_windows_agent_selection.ps1` -> `tests/agents/test_windows_server_agent.ps1`
-- Move: `api_test.py` -> `tests/api/test_computer_upload_api.py`
+- Move the standalone `api_test.py` access-record client -> `tools/access_records_client.py`
 - Move: `ps/GetInfo_JSON.ps1` -> `agents/pc/windows/GetInfo_JSON.ps1`
 - Move: `ps/OpenHardwareMonitorLib.dll` -> `agents/pc/windows/OpenHardwareMonitorLib.dll`
 - Move: `windows_agent/InspectionHttpService.ps1` -> `agents/server/windows/InspectionHttpService.ps1`
@@ -650,12 +650,12 @@ git commit -m "refactor: organize UI and static assets by feature"
 - Consumes: Stable code and UI layout from Tasks 1-6.
 - Produces: Domain-organized tests, managed-device agents, Linux/Windows deployment assets, and current navigation documentation.
 
-- [ ] **Step 1: Move tests by ownership**
+- [x] **Step 1: Move tests by ownership**
 
 Use these packages:
 
 ```text
-tests/architecture/    compatibility, deployment, admin registry
+tests/architecture/    application contracts, deployment, admin registry
 tests/people/          personnel statistics, directory adapters and sync
 tests/domain/          domain actions, operations, secrets, permissions, worker
 tests/devices/pc/      log import, analysis, scripts, inventory
@@ -665,29 +665,28 @@ tests/devices/security/security API and configuration
 tests/inspections/     task models, queue, schedules, worker, records, task UI
 tests/alerts/          alert models, service, senders, UI
 tests/dashboard/       cards, taskbar, statistics
-tests/api/             upload API behavior
 tests/frontend/        Node tests
 tests/agents/          PowerShell agent tests
 ```
 
 Every directory gets `__init__.py`. Rename phase-numbered files to behavior names only when no test label or cross-import depends on the old name; otherwise update all repository references in the same commit.
 
-- [ ] **Step 2: Move managed-device scripts**
+- [x] **Step 2: Move managed-device scripts**
 
 Keep script content and public download endpoints unchanged. Update generator source paths, PowerShell test paths, and documentation. Preserve `GetInfo_JSON.ps1` and `OpenHardwareMonitorLib.dll` as adjacent files.
 
-- [ ] **Step 3: Organize deployment assets**
+- [x] **Step 3: Organize deployment assets**
 
 Move systemd files under `deploy/linux/systemd/`, update their README commands and project documentation, and leave `deploy.demo` import behavior unchanged. Installed systemd units are unaffected because this changes repository source paths only.
 
-- [ ] **Step 4: Document the final layout**
+- [x] **Step 4: Document the final layout**
 
 `docs/project-layout.md` must explain:
 
 ```text
 - net versus index responsibilities
 - each feature package owner
-- canonical imports versus compatibility facades
+- canonical imports and the absence of redundant compatibility facades
 - source static files versus generated staticfiles
 - runtime data that must not be moved
 - where to add a new device collector, page, task, test, or agent
@@ -695,7 +694,7 @@ Move systemd files under `deploy/linux/systemd/`, update their README commands a
 
 Update README commands to point to new agent, static, test, and Linux deployment paths.
 
-- [ ] **Step 5: Run one final verification pass**
+- [x] **Step 5: Run one final verification pass**
 
 Run each command once:
 
@@ -719,7 +718,7 @@ python manage.py shell -c "from net.models import People, Computer, TaskRun; pri
 
 Expected: checks and suites pass, no migration is generated, agent tests pass, demo preparation succeeds, and existing rows can be counted without modifying them.
 
-- [ ] **Step 6: Confirm generated and runtime files were not added**
+- [x] **Step 6: Confirm generated and runtime files were not added**
 
 ```powershell
 git status --short
@@ -728,7 +727,7 @@ git check-ignore db.sqlite3 demo-runtime staticfiles .venv .task6-artifacts .wor
 
 Expected: runtime/generated paths are ignored or unchanged and only intended source changes remain.
 
-- [ ] **Step 7: Commit and stop for final inspection**
+- [x] **Step 7: Commit and stop for final inspection**
 
 ```powershell
 git add tests agents deploy README.md docs index net static
@@ -737,10 +736,10 @@ git commit -m "refactor: complete project source organization"
 
 ## Self-Review Record
 
-- Spec coverage: all compatibility requirements, seven implementation phases,
+- Spec coverage: all runtime stability requirements, seven implementation phases,
   runtime exclusions, focused validation, full final validation, commits, and review
   pauses map to Tasks 1-7.
 - Placeholder scan: no deferred implementation markers are present.
-- Interface consistency: canonical model, feature, inspection, UI, and facade paths are
-  introduced before downstream tasks consume them.
+- Interface consistency: canonical model, feature, inspection, and UI paths are used
+  directly by downstream code.
 - Testing scope: Tasks 1-6 use focused checks only; Task 7 runs the complete suite once.

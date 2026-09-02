@@ -23,7 +23,7 @@ New-Item -ItemType Directory -Force -Path C:\NetInspectionData\logs,C:\NetInspec
 .\.venv\Scripts\python.exe manage.py run_task_worker --threads $env:WORKER_THREADS --poll-seconds $env:WORKER_POLL_SECONDS --lease-seconds $env:WORKER_LEASE_SECONDS
 ```
 
-Web 使用 Waitress + WhiteNoise，不用 runserver。仅监听 loopback，前置 HTTPS + 认证反向代理；当前应用没有全站访问授权，不能直接暴露在公网。检查 `/`、`/static/css/style.css` 和 `/static/js/table_workspace.js` 的 200 状态和 Content-Type。正式服务安装仅在目标机由管理员执行：
+Web 使用 Waitress + WhiteNoise，不用 runserver。仅监听 loopback，前置 HTTPS + 认证反向代理；当前应用没有全站访问授权，不能直接暴露在公网。检查 `/`、`/static/app/css/style.css` 和 `/static/app/js/common/table_workspace.js` 的 200 状态和 Content-Type。正式服务安装仅在目标机由管理员执行：
 
 ```powershell
 $nssm = 'C:\Tools\nssm\win64\nssm.exe'

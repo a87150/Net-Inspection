@@ -1,1 +1,1 @@
-"""Architecture and compatibility contract tests."""
+"""Application structure, startup, migration, and deployment tests."""

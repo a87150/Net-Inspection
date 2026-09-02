@@ -3,7 +3,7 @@
 import django.core.validators
 import django.db.models.deletion
 import django.utils.timezone
-import net.alert_models
+import net.models.alerts
 import uuid
 from django.db import migrations, models
 
@@ -22,7 +22,7 @@ class Migration(migrations.Migration):
                 ('name', models.CharField(max_length=255, unique=True)),
                 ('channel_type', models.CharField(choices=[('feishu', '飞书'), ('dingtalk', '钉钉'), ('email', '邮件')], max_length=16)),
                 ('is_enabled', models.BooleanField(default=True)),
-                ('settings', models.JSONField(default=dict, validators=[net.alert_models.validate_finite_json])),
+                ('settings', models.JSONField(default=dict, validators=[net.models.alerts.validate_finite_json])),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
             ],
@@ -54,7 +54,7 @@ class Migration(migrations.Migration):
                 ('status', models.CharField(choices=[('pending', '待发送'), ('sending', '发送中'), ('delivered', '已送达'), ('partial', '部分送达'), ('failed', '发送失败')], default='pending', max_length=16)),
                 ('severity', models.CharField(blank=True, max_length=16)),
                 ('summary', models.TextField(blank=True)),
-                ('findings', models.JSONField(default=list, validators=[net.alert_models.validate_finite_json])),
+                ('findings', models.JSONField(default=list, validators=[net.models.alerts.validate_finite_json])),
                 ('occurred_at', models.DateTimeField(default=django.utils.timezone.now)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
@@ -73,7 +73,7 @@ class Migration(migrations.Migration):
                 ('target_id', models.CharField(max_length=64)),
                 ('finding_key', models.CharField(max_length=191)),
                 ('status', models.CharField(choices=[('normal', '正常'), ('abnormal', '异常')], default='normal', max_length=16)),
-                ('finding_snapshot', models.JSONField(blank=True, default=dict, validators=[net.alert_models.validate_finite_json])),
+                ('finding_snapshot', models.JSONField(blank=True, default=dict, validators=[net.models.alerts.validate_finite_json])),
                 ('last_seen_at', models.DateTimeField(default=django.utils.timezone.now)),
                 ('last_abnormal_at', models.DateTimeField(blank=True, null=True)),
                 ('last_normal_at', models.DateTimeField(blank=True, null=True)),

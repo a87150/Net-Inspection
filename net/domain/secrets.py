@@ -8,7 +8,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from net.domain_models import DomainOperationSecret
+from net.models.domain import DomainOperationSecret
 
 
 PASSWORD_ACTIONS = frozenset({'create_user', 'reset_password'})

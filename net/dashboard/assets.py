@@ -39,7 +39,7 @@ from net.models import (
 
 # Keep the historical logger name stable for deployments that route or alert
 # on this category while the implementation lives in its feature package.
-logger = logging.getLogger('net.services.dashboard_summary')
+logger = logging.getLogger('net.dashboard.assets')
 DASHBOARD_SUMMARY_ERROR_MESSAGE = '统计查询失败，请稍后重试。'
 
 INFRASTRUCTURE_ERROR_MODELS = {

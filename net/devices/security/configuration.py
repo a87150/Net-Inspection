@@ -7,7 +7,7 @@ Opaque/encrypted backup formats and unregistered vendor/scope pairs are refused.
 import json
 import re
 
-from net.exports.adapters import MAX_CONFIG_BYTES, UnsupportedConfiguration, readable_text
+from net.data_exchange.adapters import MAX_CONFIG_BYTES, UnsupportedConfiguration, readable_text
 
 
 def security_vendor(value):

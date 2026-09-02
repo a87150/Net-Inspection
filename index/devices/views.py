@@ -116,7 +116,7 @@ def asset_list(request, kind, *, integration_context=None):
         ),
     }
     if kind == 'people':
-        from .integrations import people_modal_context
+        from index.people.integrations import people_modal_context
         modal_context = integration_context if integration_context is not None else people_modal_context(request)
         modal_context['open_import_modal'] = modal_context.get('open_import_modal') or context['open_import_modal']
         context.update(modal_context)

@@ -308,7 +308,7 @@ def _persist_collection(target_run_id, worker_id, collection, lease_guard=None, 
                 if asset_model is not None:
                     asset = asset_model.objects.select_for_update().filter(pk=target.target_id).first()
                     if asset is not None:
-                        from net.services.inventory_refresh import refresh_asset_inventory
+                        from net.devices.inventory import refresh_asset_inventory
 
                         refresh_asset_inventory(asset, collection.data)
             return ExecutionOutcome(

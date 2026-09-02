@@ -26,7 +26,7 @@ from django.utils import timezone
 from net.models import Computer, ComputerAnalysisProfile, ComputerLogFile, ComputerLogArchive
 from net.devices.pc.snapshot import extract_computer_snapshot
 from net.infrastructure.sanitization import sanitize
-from net.tool import parse_local_datetime
+from net.devices.pc.checks import parse_local_datetime
 
 
 MAX_LOG_FILE_BYTES = 16 * 1024 * 1024

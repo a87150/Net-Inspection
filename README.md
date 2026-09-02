@@ -2,6 +2,8 @@
 
 Django 网络与终端监控应用：PowerShell 上报计算机日志，后端做规则**分析**；网络设备、服务器和安防设备做协议**巡检**。包含资产、记录/异常详情、任务队列、定时计划、告警和人员目录预览确认。
 
+源码按业务域组织，新增功能和测试的放置规则见 [项目目录说明](docs/project-layout.md)。
+
 ## 首次体验：独立持久的本地演示
 
 要求 Python **3.12+**（启动时强制检查），本机已验证 `.venv` 的 **3.12.13**。现有环境也须重新安装 requirements（包括 Waitress、WhiteNoise 和新版原生 Dahua 依赖）。
@@ -56,7 +58,7 @@ export DJANGO_SQLITE_PATH="$NET_DATABASE_PATH"
 生产使用 MySQL 8 / utf8mb4、专用低权限账号；两个服务使用同一套 `DB_ENGINE=mysql`、`DB_NAME`、`DB_USER`、`DB_PASSWORD`、`DB_HOST`、`DB_PORT` 和 Django 密钥/主机设置。先 migrate，再 collectstatic，再启动两个进程。
 
 - [Windows / NSSM 服务与环境示例](deploy/windows/README.md)
-- [Linux / systemd 双服务与环境示例](deploy/systemd/README.md)
+- [Linux / systemd 双服务与环境示例](deploy/linux/systemd/README.md)
 - [PC 采集脚本部署、下载与端点要求](docs/deployment.md)
 
 Web：`.venv` Python `-m waitress --listen=127.0.0.1:8000 --threads=4 net.wsgi:application`；WhiteNoise 从 `DJANGO_STATIC_ROOT` 服务 collectstatic 输出，DEBUG 必须 false，不用 runserver。
@@ -124,8 +126,8 @@ Linux/网络设备使用 SSH，Windows 服务器用独立 HTTP JSON 服务，安
 
 ### 终端、Windows Agent、域控与 API
 
-将 `ps/GetInfo_JSON.ps1` 与 `ps/OpenHardwareMonitorLib.dll` 放同一目录，以管理员运行脚本。`NET_INSPECTION_API_URL` 指定上传地址，默认 `http://127.0.0.1:8000/api/computer_inspection/`；失败仍保存 `C:\Software\计算机名.json` 并尝试原共享目录。`MIN_WINDOWS_RELEASE` 默认 23H2。
-Windows 服务器独立 JSON 服务见 [Windows Agent](windows_agent/README.md)，令牌须与资产配置一致，地址留空默认 `http://服务器IP:9180/inspection`。
+将 `agents/pc/windows/GetInfo_JSON.ps1` 与同目录的 `OpenHardwareMonitorLib.dll` 部署到 PC，以管理员运行脚本。`NET_INSPECTION_API_URL` 指定上传地址，默认 `http://127.0.0.1:8000/api/computer_inspection/`；失败仍保存 `C:\Software\计算机名.json` 并尝试原共享目录。`MIN_WINDOWS_RELEASE` 默认 23H2。
+Windows 服务器独立 JSON 服务见 [Windows Agent](agents/server/windows/README.md)，令牌须与资产配置一致，地址留空默认 `http://服务器IP:9180/inspection`。
 “域控管理”配置 LDAP/LDAPS、Base DN 和只读账号，连接测试/同步会访问实际目录，缺失对象停用不删除；本次只浏览界面，不执行真实目录调用。
 `POST /api/computer_inspection/` 返回 **202**（已接收/分析排队），包含 `log_id`、`task_id`、`created`；不是分析结果。相同载荷重试返回 **200** 和原任务回执，不新增分析。任务详情 `/tasks/<task_id>/` 查看结果。上传地址可带 `?profile_id=<分析配置UUID>`；或 Web 设置 `COMPUTER_UPLOAD_PROFILE_ID`。未指定时选最早的启用配置；没有启用配置时自动建立可在页面修改的“PowerShell 上传默认分析”（激活、BitLocker、Defender、补丁），避免搁置上传。指定不存在/停用配置返回 400 且不写入。上传与目录导入使用相同静态提取、脱敏证据、Worker 分析及告警路径。
 
@@ -139,8 +141,8 @@ Windows 服务器独立 JSON 服务见 [Windows Agent](windows_agent/README.md)�
 .\.venv\Scripts\python.exe manage.py check
 .\.venv\Scripts\python.exe manage.py makemigrations --check --dry-run
 .\.venv\Scripts\python.exe manage.py test
-node --test static/js/table_workspace.test.js
-node --test static/js/task_ui.test.js
+node --test tests/frontend/*.test.js
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/agents/test_windows_server_agent.ps1
 ```
 
 使用临时测试库与模拟外部依赖。静态回归实际 collectstatic 并在 DEBUG=False 检查 CSS/JS 内容；启动器回归验证新库、重启保留编辑、拒绝无所有权目录及原始库不变。

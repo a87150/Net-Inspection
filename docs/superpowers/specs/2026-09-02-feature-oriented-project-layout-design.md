@@ -2,7 +2,9 @@
 
 ## Status
 
-Approved on 2026-09-02. Implementation must pause after each phase for user inspection.
+Approved on 2026-09-02 and amended after Phase 6: the project is not deployed, so
+the final structure uses canonical modules directly and removes nonessential legacy
+facades. Implementation must pause after each phase for user inspection.
 
 ## Goal
 
@@ -14,7 +16,7 @@ clear ownership.
 The reorganization must improve maintainability without changing the deployed
 system's database identity or public interface.
 
-## Hard Compatibility Requirements
+## Runtime Stability Requirements
 
 - Keep the existing Django applications and their labels: `net` and `index`.
 - Keep every existing database table name, model identity, relationship, permission,
@@ -25,8 +27,9 @@ system's database identity or public interface.
 - Keep the Django startup paths `net.settings`, `net.urls`, `net.wsgi`, and `net.asgi`.
 - Keep deployment entry points, `deploy.demo`, worker commands, and existing agent
   calls operational.
-- Keep established Python imports such as `net.models`, `net.tasks`, and required
-  historical module paths operational through compatibility exports or facades.
+- Use one canonical Python import path for each feature. Historical aliases are not
+  retained because the project has not been deployed; migration imports point
+  directly to canonical model modules.
 - Do not move, replace, or delete runtime databases, uploaded logs, generated
   configurations, or demo data during the reorganization.
 
@@ -36,10 +39,9 @@ Use feature-oriented packages inside the existing `net` and `index` Django
 applications. This gives each business domain a clear folder without introducing new
 Django application labels.
 
-New modules contain the implementation. Existing public module paths remain as thin
-compatibility facades where callers, deployment code, or historical migrations rely
-on them. Compatibility facades may be removed only when they are proven private and
-unused; paths referenced by historical migrations remain permanently available.
+Feature modules contain the implementation and project code imports them directly.
+After Phase 6 the user explicitly removed the legacy-import requirement, so redundant
+facades are deleted and repository tests/migrations use canonical paths.
 
 A true split into separate Django applications is explicitly out of scope because it
 would change model ownership, content types, permissions, and migration behavior.
@@ -90,7 +92,7 @@ index/
 |-- alerts/
 |-- integrations/
 |-- templates/                  # Namespaced with the same feature structure
-`-- urls.py                     # Stable compatibility URL table
+`-- urls.py                     # Stable application URL table
 
 static/
 |-- app/
@@ -121,9 +123,9 @@ deploy/
 `-- linux/
 ```
 
-The final exact filenames may differ where keeping a compatibility module at its
-existing path is safer. The ownership and dependency rules are authoritative; the
-tree is the target organization, not permission to break a stable import.
+The final exact filenames may differ where Django requires a conventional startup
+module. Implementation code uses canonical feature packages directly; the ownership
+and dependency rules remain authoritative.
 
 ## Dependency Direction
 
@@ -153,22 +155,11 @@ For example, a server inspection flows from the `index` action to inspection
 orchestration, then to the server feature, then to a generic SSH or HTTP adapter. The
 normalized result returns to orchestration for persistence and alert processing.
 
-## Compatibility Facades
+## Canonical Entry Modules
 
-Existing entry modules continue to import and re-export their relocated
-implementations. Important examples include:
-
-- `net.models` exports every current model and the `Computer_Inspection` alias.
-- Historical modules imported by migrations, including `net.task_models`, remain
-  importable.
-- `net.tasks` retains the worker and enqueue API used by management commands and
-  tests.
-- `net.services` paths remain available while implementations move into features.
-- `index.views` and `index.forms` continue to expose the callable names referenced by
-  `index.urls` and existing tests.
-
-Facade modules contain no new business behavior. Their purpose is compatibility and
-they are covered by import-contract tests.
+`net.models` remains Django's model registration surface and `index.views` remains
+the URL callable aggregation surface. All other code imports feature modules
+directly; duplicate legacy service, task, export, form, and view aliases are removed.
 
 ## Runtime and Generated Files
 
@@ -186,17 +177,17 @@ they are covered by import-contract tests.
 Implementation pauses after every phase so the user can inspect the result before the
 next phase begins.
 
-### Phase 1: Structure and Compatibility Contracts
+### Phase 1: Structure and Application Contracts
 
 Create the package skeleton and focused tests that pin app labels, database table
-names, migration state, URL paths/names, startup imports, and important legacy Python
-imports. Do not move business implementations yet.
+names, migration state, URL paths/names, and startup imports. Do not move business
+implementations yet.
 
 ### Phase 2: Models and Admin
 
-Organize model definitions and admin registrations by domain. Keep migration-imported
-modules and `net.models` as compatibility facades. Confirm that Django detects no
-schema changes.
+Organize model definitions and admin registrations by domain. Keep `net.models` as
+the Django model aggregation surface and update migrations to canonical model-module
+imports. Confirm that Django detects no schema changes.
 
 ### Phase 3: Personnel and Active Directory
 
@@ -265,8 +256,8 @@ The reorganization is complete when:
   duplicated;
 - existing databases open directly and Django reports no unintended migrations;
 - existing URLs, URL names, API behavior, script endpoints, and deployment entry
-  points remain compatible;
-- legacy imports required by migrations and operators remain valid;
+  points remain operational;
+- migrations and operators use the documented canonical imports and commands;
 - task workers can process existing task records;
 - source static assets are separate from generated static output;
 - tests and documentation follow the same feature vocabulary as production code;

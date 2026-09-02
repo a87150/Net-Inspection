@@ -1,7 +1,7 @@
 """Known network CLI families; export only complete saved native text."""
 import re
 
-from net.exports.adapters import UnsupportedConfiguration, readable_text
+from net.data_exchange.adapters import UnsupportedConfiguration, readable_text
 
 
 # Scope is the displayed active configuration, not startup/files/certificates.

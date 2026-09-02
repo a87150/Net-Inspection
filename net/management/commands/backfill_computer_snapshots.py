@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 
 from net.models import Computer
-from net.services.computer_snapshot import SNAPSHOT_FIELD_NAMES, update_computer_snapshot
+from net.devices.pc.snapshot import SNAPSHOT_FIELD_NAMES, update_computer_snapshot
 
 
 class Command(BaseCommand):

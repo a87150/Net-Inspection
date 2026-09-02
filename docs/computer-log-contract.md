@@ -25,7 +25,7 @@ their original (sanitized) shape, not a fabricated empty list or healthy status.
 | event_findings | `事件发现` array (legacy `事件日志` only if primary key is absent); rows have known `级别`, `severity` or `Level` | `[]` means no events; info/information/informational, warning, error, critical, verbose and documented Chinese equivalents are recognized. Error/critical are findings. |
 
 Dates accept `YYYY-MM-DD HH:MM:SS` or `YYYY-MM-DD`. The existing supplied
-`ps/GetInfo_JSON.ps1` does **not** collect processes, domain or events: selecting
+`agents/pc/windows/GetInfo_JSON.ps1` does **not** collect processes, domain or events: selecting
 those options on its output explicitly fails with missing-data findings. The
 script is unchanged by the review fix. Singleton objects instead of arrays and
 null collection outputs are not silently treated as valid collections.

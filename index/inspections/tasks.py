@@ -285,7 +285,7 @@ def _save_schedule(profile, form):
         schedule.daily_time = form.cleaned_data['daily_time']
     schedule.full_clean()
     if previous != tuple(getattr(schedule, key) for key in timing_fields):
-        from net.tasks.schedules import next_run_at
+        from net.inspections.schedules import next_run_at
         schedule.next_run_at = next_run_at(schedule, timezone.now())
     schedule.save()
 
@@ -416,7 +416,7 @@ def task_detail(request, pk):
         pk=pk,
     )
     if task.task_type in TaskRun.PEOPLE_TASK_TYPES:
-        from .integrations import require_people_owner
+        from index.people.integrations import require_people_owner
         require_people_owner(request, task)
         return redirect('people_operation', pk=task.pk)
     definition = get_table_definition('task_targets')

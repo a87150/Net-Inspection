@@ -139,7 +139,9 @@ def sanitize_configuration_items(items, *, secrets=()):
     Payload keys/values and errors still use the ordinary recursive sanitizer;
     canonical routing values are application constants, not credential echoes.
     """
-    from net.exports.adapters import network, security, UnsupportedConfiguration
+    from net.data_exchange.adapters import UnsupportedConfiguration
+    from net.devices.network import configuration as network
+    from net.devices.security import configuration as security
 
     if not isinstance(items, dict):
         return {}

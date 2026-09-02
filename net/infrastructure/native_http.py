@@ -28,7 +28,7 @@ class ConfigurationResolver(aiohttp.abc.AbstractResolver):
 
 
 async def read_dahua_network(device, url, budget):
-    from net.exports.adapters import MAX_CONFIG_BYTES
+    from net.data_exchange.adapters import MAX_CONFIG_BYTES
     from net.devices.security.configuration import validate_network
 
     loop = asyncio.get_running_loop()

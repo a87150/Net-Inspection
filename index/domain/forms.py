@@ -2,7 +2,7 @@
 
 from django import forms
 
-from net.forms import DomainControllerConfigForm as _BaseDomainControllerConfigForm
+from index.domain.connection_form import DomainControllerConfigForm as _BaseDomainControllerConfigForm
 
 
 class DomainControllerConfigForm(_BaseDomainControllerConfigForm):

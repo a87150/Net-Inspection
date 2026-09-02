@@ -4,7 +4,7 @@ import django.core.validators
 import django.db.models.deletion
 import django.db.models.expressions
 import django.utils.timezone
-import net.task_models
+import net.models.tasks
 import uuid
 from django.db import migrations, models
 
@@ -22,7 +22,7 @@ class Migration(migrations.Migration):
                 ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
                 ('name', models.CharField(max_length=255, unique=True)),
                 ('is_enabled', models.BooleanField(default=True)),
-                ('scan_directories', models.JSONField(blank=True, default=list, validators=[net.task_models.validate_string_list])),
+                ('scan_directories', models.JSONField(blank=True, default=list, validators=[net.models.tasks.validate_string_list])),
                 ('recursive', models.BooleanField(default=False)),
                 ('processed_directory', models.TextField(blank=True)),
                 ('failed_directory', models.TextField(blank=True)),
@@ -30,7 +30,7 @@ class Migration(migrations.Migration):
                 ('recent_days', models.PositiveSmallIntegerField(blank=True, default=7, null=True, validators=[django.core.validators.MinValueValidator(1), django.core.validators.MaxValueValidator(3650)])),
                 ('range_start_date', models.DateField(blank=True, null=True)),
                 ('range_end_date', models.DateField(blank=True, null=True)),
-                ('analysis_items', models.JSONField(blank=True, default=list, validators=[net.task_models.validate_string_list])),
+                ('analysis_items', models.JSONField(blank=True, default=list, validators=[net.models.tasks.validate_string_list])),
                 ('concurrent_workers', models.PositiveSmallIntegerField(default=4, validators=[django.core.validators.MinValueValidator(1), django.core.validators.MaxValueValidator(64)])),
                 ('alert_policy_mode', models.CharField(choices=[('inherit', '继承默认告警策略'), ('override', '使用项目告警策略')], default='inherit', max_length=16)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
@@ -44,8 +44,8 @@ class Migration(migrations.Migration):
                 ('name', models.CharField(max_length=255)),
                 ('device_type', models.CharField(choices=[('network_device', '网络设备'), ('server', '服务器'), ('monitor', '安防设备')], max_length=32)),
                 ('is_enabled', models.BooleanField(default=True)),
-                ('selected_items', models.JSONField(blank=True, default=list, validators=[net.task_models.validate_string_list])),
-                ('target_selector', models.JSONField(blank=True, default=dict, validators=[net.task_models.validate_json_object])),
+                ('selected_items', models.JSONField(blank=True, default=list, validators=[net.models.tasks.validate_string_list])),
+                ('target_selector', models.JSONField(blank=True, default=dict, validators=[net.models.tasks.validate_json_object])),
                 ('timeout_seconds', models.PositiveIntegerField(default=60, validators=[django.core.validators.MinValueValidator(1), django.core.validators.MaxValueValidator(3600)])),
                 ('concurrent_workers', models.PositiveSmallIntegerField(default=4, validators=[django.core.validators.MinValueValidator(1), django.core.validators.MaxValueValidator(64)])),
                 ('alert_policy_mode', models.CharField(choices=[('inherit', '继承默认告警策略'), ('override', '使用项目告警策略')], default='inherit', max_length=16)),
@@ -88,10 +88,10 @@ class Migration(migrations.Migration):
                 ('worker_id', models.CharField(blank=True, max_length=255)),
                 ('attempt_count', models.PositiveIntegerField(default=0)),
                 ('error_summary', models.TextField(blank=True)),
-                ('profile_snapshot', models.JSONField(blank=True, default=dict, validators=[net.task_models.validate_json_object])),
-                ('parameters_snapshot', models.JSONField(blank=True, default=dict, validators=[net.task_models.validate_json_object])),
-                ('selected_items_snapshot', models.JSONField(blank=True, default=list, validators=[net.task_models.validate_string_list])),
-                ('target_scope_snapshot', models.JSONField(blank=True, default=dict, validators=[net.task_models.validate_json_object])),
+                ('profile_snapshot', models.JSONField(blank=True, default=dict, validators=[net.models.tasks.validate_json_object])),
+                ('parameters_snapshot', models.JSONField(blank=True, default=dict, validators=[net.models.tasks.validate_json_object])),
+                ('selected_items_snapshot', models.JSONField(blank=True, default=list, validators=[net.models.tasks.validate_string_list])),
+                ('target_scope_snapshot', models.JSONField(blank=True, default=dict, validators=[net.models.tasks.validate_json_object])),
                 ('scope_key', models.CharField(max_length=64)),
                 ('active_scope_key', models.CharField(blank=True, editable=False, max_length=64, null=True, unique=True)),
                 ('total_targets', models.PositiveIntegerField(default=0)),
@@ -111,14 +111,14 @@ class Migration(migrations.Migration):
                 ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
                 ('target_type', models.CharField(choices=[('network_device', '网络设备'), ('server', '服务器'), ('monitor', '安防设备'), ('computer_log', '计算机日志')], max_length=32)),
                 ('target_id', models.CharField(max_length=64)),
-                ('target_snapshot', models.JSONField(blank=True, default=dict, validators=[net.task_models.validate_json_object])),
+                ('target_snapshot', models.JSONField(blank=True, default=dict, validators=[net.models.tasks.validate_json_object])),
                 ('status', models.CharField(choices=[('queued', '等待'), ('running', '运行中'), ('success', '成功'), ('partial', '部分成功'), ('failed', '失败'), ('cancelled', '已取消')], default='queued', max_length=16)),
                 ('attempt_count', models.PositiveIntegerField(default=0)),
                 ('started_at', models.DateTimeField(blank=True, null=True)),
                 ('finished_at', models.DateTimeField(blank=True, null=True)),
                 ('result_type', models.CharField(blank=True, max_length=64)),
                 ('result_id', models.CharField(blank=True, max_length=64)),
-                ('result_snapshot', models.JSONField(blank=True, default=dict, validators=[net.task_models.validate_json_object])),
+                ('result_snapshot', models.JSONField(blank=True, default=dict, validators=[net.models.tasks.validate_json_object])),
                 ('error_message', models.TextField(blank=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),

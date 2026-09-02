@@ -1,6 +1,6 @@
 # 部署与 PC 采集脚本
 
-本页补充生产 Web/Worker 部署的 PC 采集脚本部分。基础服务注册和环境变量示例见 [Windows / NSSM](../deploy/windows/README.md) 与 [Linux / systemd](../deploy/systemd/README.md)。
+本页补充生产 Web/Worker 部署的 PC 采集脚本部分。基础服务注册和环境变量示例见 [Windows / NSSM](../deploy/windows/README.md) 与 [Linux / systemd](../deploy/linux/systemd/README.md)。
 
 ## 公共地址与反向代理
 
