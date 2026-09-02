@@ -1,0 +1,19 @@
+{% extends 'common/base.html' %}{% load custom_filters %}
+{% block title %}日志证据详情{% endblock %}
+{% block content %}
+<header class="page-heading"><div><h1>日志证据详情 #{{ log.pk }}</h1><p>重新分析不会扫描目录或移动原始文件。</p></div><a class="btn btn-outline-secondary" href="{% url 'computer_log_list' %}">返回日志证据</a></header>
+<section class="card card-body mb-3"><dl class="row mb-0">
+<dt class="col-sm-3">源路径</dt><dd class="col-sm-9 text-break">{{ log.source_path }}</dd>
+<dt class="col-sm-3">文件时间 / 大小</dt><dd class="col-sm-9">{{ log.modified_at|date:'Y-m-d H:i:s' }} / {{ log.file_size }} bytes</dd>
+<dt class="col-sm-3">内容哈希</dt><dd class="col-sm-9 text-break">{{ log.content_hash }}</dd>
+<dt class="col-sm-3">导入状态</dt><dd class="col-sm-9">{{ log.import_status }}</dd>
+<dt class="col-sm-3">解析错误</dt><dd class="col-sm-9 text-break">{{ log.parse_error|default:'无' }}</dd>
+<dt class="col-sm-3">归档路径</dt><dd class="col-sm-9 text-break">{{ log.archived_path|default:'无（上传或尚未归档）' }}</dd></dl>
+{% for archive in archives %}<p class="text-break">归档 {{ archive.status }}：{{ archive.destination_path }}</p>{% endfor %}</section>
+{% if log.import_status == 'imported' %}<section class="card card-body mb-3"><h2 class="h5">重新分析</h2>
+{% if profile %}<form method="get"><label for="log-profile" class="form-label">分析配置</label><div class="d-flex gap-2"><select class="form-select" id="log-profile" name="profile_id">{% for option in profiles %}<option value="{{ option.pk }}"{% if option.pk == profile.pk %} selected{% endif %}>{{ option.name }}</option>{% endfor %}</select><button class="btn btn-outline-primary">选择配置</button></div></form>
+<form method="post" action="{% url 'computer_log_analyze' log.pk %}" class="mt-3">{% csrf_token %}<input type="hidden" name="profile_id" value="{{ profile.pk }}"><fieldset><legend class="h6">分析项目</legend>{{ form.selected_items }}</fieldset><button class="btn btn-primary" type="submit">排队重新分析</button></form>
+{% else %}<p>请先在<a href="{% url 'computer_analysis_list' %}?task_modal=profile">分析配置</a>创建启用配置。</p>{% endif %}</section>{% else %}<p class="alert alert-warning">导入失败的证据不能分析。</p>{% endif %}
+<section class="card card-body mb-3"><h2 class="h5">分析历史</h2><ul>{% for analysis in analyses %}<li><a href="{% url 'computer_analysis_detail' analysis.pk %}">{{ analysis.created_at|date:'Y-m-d H:i:s' }} · {{ analysis.get_status_display }} · {{ analysis.summary }}</a></li>{% empty %}<li>尚未分析</li>{% endfor %}</ul></section>
+<details class="card card-body"><summary>已脱敏日志内容</summary><pre class="json-view text-wrap text-break">{{ log.payload|pretty_json }}</pre></details>
+{% endblock %}

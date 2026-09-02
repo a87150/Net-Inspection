@@ -54,7 +54,7 @@ def _spreadsheet_safe(value):
 
 
 def export_filtered_csv(request, definition, queryset, filename):
-    from index.table_query import apply_table_filters
+    from index.common.table_query import apply_table_filters
 
     records, _state = apply_table_filters(
         request,

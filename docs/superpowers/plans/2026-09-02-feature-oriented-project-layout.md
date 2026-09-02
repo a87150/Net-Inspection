@@ -555,7 +555,7 @@ git commit -m "refactor: consolidate inspection orchestration"
 - Consumes: Canonical services from Tasks 3-5.
 - Produces: Feature-owned views/forms/templates/static files while preserving every callable exported from `index.views`, every form export, and the complete URL contract.
 
-- [ ] **Step 1: Add template/static compatibility assertions**
+- [x] **Step 1: Add template/static compatibility assertions**
 
 Extend `tests/architecture/test_compatibility_contracts.py` with Django static lookup and representative template rendering:
 
@@ -571,11 +571,11 @@ self.assertIsNotNone(get_template("common/table_workspace.html"))
 
 These assertions should initially fail until the files move.
 
-- [ ] **Step 2: Move Python UI modules and preserve exports**
+- [x] **Step 2: Move Python UI modules and preserve exports**
 
 Keep `index/urls.py` unchanged. Update `index/views/__init__.py` so every current URL callable is imported from its canonical feature module. Keep old `index.views.*`, `index.forms.*`, and table-helper paths as explicit facades.
 
-- [ ] **Step 3: Move templates and update all references atomically**
+- [x] **Step 3: Move templates and update all references atomically**
 
 Use this ownership mapping:
 
@@ -591,7 +591,7 @@ inspection_*/error_records             -> inspections/
 
 Update every render/include/extends reference in the same patch as its move. Do not add URL redirects because URLs do not change.
 
-- [ ] **Step 4: Move static sources and update template paths**
+- [x] **Step 4: Move static sources and update template paths**
 
 Use stable new asset names:
 
@@ -607,7 +607,7 @@ vendor/bootstrap/js/bootstrap.bundle.min.js
 
 Move JavaScript tests temporarily beside their source; Task 7 moves them into `tests/frontend` after all references are stable.
 
-- [ ] **Step 5: Run focused UI and JavaScript checks**
+- [x] **Step 5: Run focused UI and JavaScript checks**
 
 ```powershell
 python manage.py test tests.architecture.test_compatibility_contracts index.test_public_urls index.test_navigation_dropdowns index.test_project_record_workspace index.test_domain_permissions_ui --verbosity 1
@@ -617,7 +617,7 @@ python manage.py check
 
 Expected: selected Django and JavaScript tests pass and URLs remain unchanged.
 
-- [ ] **Step 6: Commit and stop for inspection**
+- [x] **Step 6: Commit and stop for inspection**
 
 ```powershell
 git add index static tests/architecture

@@ -56,7 +56,7 @@ def people_modal_context(request, *, form=None, source=None, provider=None, open
 
 
 def _render_modal(request, **kwargs):
-    from index.views.assets import asset_list
+    from index.devices.views import asset_list
     return asset_list(request, 'people', integration_context=people_modal_context(request, open_modal=True, **kwargs))
 
 
@@ -123,7 +123,7 @@ def people_operation(request, pk, *, error=''):
                     'people_operation_error': error,
                     'people_operation_target': target, 'people_preview': preview,
                     'open_import_modal': False})
-    from index.views.assets import asset_list
+    from index.devices.views import asset_list
     return asset_list(request, 'people', integration_context=context)
 
 

@@ -1,0 +1,14 @@
+{% extends 'common/base.html' %}
+{% load extras %}
+{% block title %}全部异常记录{% endblock %}
+{% block content %}
+<header class="page-heading"><div class="page-heading__copy"><p class="page-heading__eyebrow">异常中心</p><h1 class="page-heading__title">全部异常记录</h1><p class="page-heading__description">所有设备异常的统一入口。</p></div><div class="page-heading__actions"><a href="{% url 'index' %}" class="btn btn-outline-secondary">返回总览</a></div></header>
+<div data-table-workspace data-table-key="{{ table_definition.key }}">
+<div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
+<div class="card surface-card"><div class="table-responsive" role="region" aria-label="全部异常记录数据表" tabindex="0"><table class="table table-hover align-middle mb-0"><thead><tr>
+{% for field in table_definition.fields %}<th data-column-key="{{ field.key }}"{% if field.sortable %} aria-sort="{% if table_state.sort == field.key %}{% if table_state.order == 'asc' %}ascending{% else %}descending{% endif %}{% else %}none{% endif %}"{% endif %}{% if not field.default_visible %} hidden{% endif %}>{% if field.sortable %}{% if table_state.sort == field.key and table_state.order == 'asc' %}{% query_transform request page=None sort=field.key order='desc' page_size=table_state.page_size as sort_query %}<a class="table-sort-link" data-sort-key="{{ field.key }}" href="?{{ sort_query }}" aria-label="按{{ field.label }}降序排列">{{ field.label }}</a>{% else %}{% query_transform request page=None sort=field.key order='asc' page_size=table_state.page_size as sort_query %}<a class="table-sort-link" data-sort-key="{{ field.key }}" href="?{{ sort_query }}" aria-label="按{{ field.label }}升序排列">{{ field.label }}</a>{% endif %}{% else %}{{ field.label }}{% endif %}</th>{% endfor %}<th>操作</th></tr></thead><tbody>
+{% for record in page_obj %}<tr>{% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{% if field.key == 'type' %}<span class="badge text-bg-danger">{{ record.type }}</span>{% else %}{{ record|get_item:field.source|format_table_value:field.kind }}{% endif %}</td>{% endfor %}<td><a href="{{ record.url }}" class="btn btn-outline-dark btn-sm">查看详情</a></td></tr>
+{% empty %}<tr><td colspan="6"><div class="empty-state"><strong>暂无异常记录</strong><span>当前未发现需要处理的设备异常。</span></div></td></tr>{% endfor %}
+</tbody></table></div></div>{% include 'common/pagination.html' %}
+</div>
+{% endblock %}

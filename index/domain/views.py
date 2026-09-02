@@ -7,8 +7,8 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
-from index.table_query import PAGE_SIZES, apply_table_filters, query_without_page
-from index.table_registry import get_table_definition
+from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
+from index.common.table_registry import get_table_definition
 from index.domain.forms import DomainControllerConfigForm
 from net.models import (
     Domain_Account,
@@ -120,7 +120,7 @@ def _domain_controller_settings_mutation(request):
 
 def _render_domain_settings(request, config, form, *, open_domain_modal=False):
     can_manage_domain = request.user.has_perm('net.manage_domain_operations')
-    return render(request, 'domain_controller_settings.html', {
+    return render(request, 'domain/controller_settings.html', {
         'form': form,
         'config': config,
         'open_domain_modal': open_domain_modal,
@@ -151,7 +151,7 @@ def domain_object_list(request, object_type):
     page_obj = Paginator(objects, table_state['page_size']).get_page(
         request.GET.get('page'),
     )
-    return render(request, 'domain_object_list.html', {
+    return render(request, 'domain/object_list.html', {
         'item_key': page.export_key,
         'export_key': page.export_key,
         'item_name': page.title,
@@ -187,7 +187,7 @@ def domain_object_detail(request, object_type, pk):
         if object_type == 'accounts'
         else 'domain_computer_list'
     )
-    return render(request, 'assets/detail.html', {
+    return render(request, 'devices/detail.html', {
         'asset': domain_object,
         'item_name': page.title,
         'detail_fields': detail_fields,

@@ -1,0 +1,69 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-cn">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}网络巡检中心{% endblock %}</title>
+    <link href="{% static 'vendor/bootstrap/css/bootstrap.min.css' %}" rel="stylesheet">
+    <link href="{% static 'app/css/style.css' %}" rel="stylesheet">
+    <script defer src="{% static 'vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+    <script defer src="{% static 'app/js/common/table_tools.js' %}"></script>
+    <script defer src="{% static 'app/js/common/table_workspace.js' %}"></script>
+    <script defer src="{% static 'app/js/inspections/task_ui.js' %}"></script>
+</head>
+<body class="app-shell">
+    <a class="skip-link" href="#main-content">跳至主要内容</a>
+    <nav class="navbar navbar-expand-lg navbar-dark app-navbar" aria-label="主导航">
+        <div class="container-fluid app-navbar__inner">
+            <a class="navbar-brand fw-semibold" href="{% url 'index' %}">网络巡检中心</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="切换主导航">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="mainNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item dropdown" data-nav-menu="people">
+                        <button class="nav-link dropdown-toggle" id="navPeopleToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navPeopleMenu">人员</button>
+                        <ul class="dropdown-menu app-navbar__dropdown-menu" id="navPeopleMenu" aria-labelledby="navPeopleToggle"><li><a class="dropdown-item" href="{% url 'asset_list' 'people' %}">人员列表</a></li><li><a class="dropdown-item" href="{% url 'people_statistics' %}">人员统计</a></li></ul>
+                    </li>
+                    <li class="nav-item dropdown" data-nav-menu="domain">
+                        <button class="nav-link dropdown-toggle" id="navDomainToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navDomainMenu">域控管理</button>
+                        <ul class="dropdown-menu app-navbar__dropdown-menu" id="navDomainMenu" aria-labelledby="navDomainToggle"><li><a class="dropdown-item" href="{% url 'domain_controller_settings' %}">域控管理</a></li><li><a class="dropdown-item" href="{% url 'domain_account_list' %}">域账号</a></li><li><a class="dropdown-item" href="{% url 'domain_computer_list' %}">域计算机</a></li></ul>
+                    </li>
+                    <li class="nav-item dropdown" data-nav-menu="computers">
+                        <button class="nav-link dropdown-toggle" id="navComputersToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navComputersMenu">PC</button>
+                        <ul class="dropdown-menu app-navbar__dropdown-menu" id="navComputersMenu" aria-labelledby="navComputersToggle"><li><a class="dropdown-item" href="{% url 'asset_list' 'computers' %}">PC 列表</a></li><li><a class="dropdown-item" href="{% url 'computer_analysis_list' %}">日志分析记录</a></li></ul>
+                    </li>
+                    <li class="nav-item dropdown" data-nav-menu="networks">
+                        <button class="nav-link dropdown-toggle" id="navNetworksToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navNetworksMenu">网络设备</button>
+                        <ul class="dropdown-menu app-navbar__dropdown-menu" id="navNetworksMenu" aria-labelledby="navNetworksToggle"><li><a class="dropdown-item" href="{% url 'asset_list' 'networks' %}">网络设备列表</a></li><li><a class="dropdown-item" href="{% url 'record_list' 'networks' %}">巡检记录</a></li></ul>
+                    </li>
+                    <li class="nav-item dropdown" data-nav-menu="servers">
+                        <button class="nav-link dropdown-toggle" id="navServersToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navServersMenu">服务器</button>
+                        <ul class="dropdown-menu app-navbar__dropdown-menu" id="navServersMenu" aria-labelledby="navServersToggle"><li><a class="dropdown-item" href="{% url 'asset_list' 'servers' %}">服务器列表</a></li><li><a class="dropdown-item" href="{% url 'record_list' 'servers' %}">巡检记录</a></li></ul>
+                    </li>
+                    <li class="nav-item dropdown" data-nav-menu="monitors">
+                        <button class="nav-link dropdown-toggle" id="navMonitorsToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navMonitorsMenu">安防设备</button>
+                        <ul class="dropdown-menu app-navbar__dropdown-menu" id="navMonitorsMenu" aria-labelledby="navMonitorsToggle"><li><a class="dropdown-item" href="{% url 'asset_list' 'monitors' %}">安防设备列表</a></li><li><a class="dropdown-item" href="{% url 'record_list' 'monitors' %}">巡检记录</a></li></ul>
+                    </li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'task_list' %}">后台任务</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'alert_list' %}">告警记录</a></li>
+                </ul>
+                <span class="navbar-text small">终端与基础设施状态</span>
+            </div>
+        </div>
+    </nav>
+    <main class="container-fluid app-main" id="main-content" tabindex="-1">
+        {% if messages %}
+        {% for message in messages %}
+        <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="关闭"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+    <footer class="app-footer text-center small">Network Inspection Center</footer>
+</body>
+</html>

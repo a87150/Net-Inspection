@@ -38,7 +38,7 @@ _SQLITE_SCHEDULE_POLL_LOCK = Lock()
 
 def target_rule_fields(device_type):
     """Only public registry fields that map directly to non-secret model fields."""
-    from index.table_registry import get_table_definition
+    from index.common.table_registry import get_table_definition
     key = {'server': 'servers', 'network_device': 'networks', 'monitor': 'monitors'}[device_type]
     model = _ASSET_MODELS[device_type]
     concrete = {field.name: field for field in model._meta.concrete_fields}

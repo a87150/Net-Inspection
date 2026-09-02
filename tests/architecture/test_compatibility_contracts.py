@@ -2,6 +2,9 @@ from importlib import import_module
 from importlib.util import find_spec
 
 from django.apps import apps
+from django.contrib.staticfiles import finders
+from django.template import TemplateDoesNotExist
+from django.template.loader import get_template
 from django.test import SimpleTestCase
 from django.urls import reverse
 
@@ -68,3 +71,19 @@ class CompatibilityContractTests(SimpleTestCase):
                 self.assertIs(getattr(legacy_queue, name), getattr(canonical_queue, name))
         self.assertIs(legacy_schedules.enqueue_due_schedules, canonical_schedules.enqueue_due_schedules)
         self.assertIs(legacy_worker.TaskWorker, canonical_worker.TaskWorker)
+
+    def test_feature_template_locations_resolve(self):
+        missing = []
+        for template_name in ("dashboard/index.html", "common/table_workspace.html"):
+            try:
+                get_template(template_name)
+            except TemplateDoesNotExist:
+                missing.append(template_name)
+        self.assertEqual(missing, [])
+
+    def test_feature_static_locations_resolve(self):
+        missing = [
+            path for path in ("app/css/style.css", "app/js/common/table_workspace.js")
+            if finders.find(path) is None
+        ]
+        self.assertEqual(missing, [])

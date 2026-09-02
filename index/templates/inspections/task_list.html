@@ -1,0 +1,7 @@
+{% extends 'common/base.html' %}
+{% load extras %}
+{% block title %}后台任务{% endblock %}
+{% block content %}
+<header class="page-heading"><div class="page-heading__copy"><p class="page-heading__eyebrow">执行中心</p><h1 class="page-heading__title">任务列表</h1><p class="page-heading__description">手动和定时任务均由独立 Worker 执行；本页只展示进度与结果。</p></div><div class="page-heading__actions"><a class="btn btn-outline-secondary" href="{% url 'index' %}">返回总览</a></div></header>
+<div data-table-workspace data-table-key="task-runs"><div class="table-toolbar">{% include 'common/table_workspace.html' %}</div><div class="card surface-card"><div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr>{% for field in table_definition.fields %}<th>{{ field.label }}</th>{% endfor %}<th>操作</th></tr></thead><tbody>{% for task in page_obj %}<tr><td>{{ task.get_task_type_display }}</td><td>{{ task.get_source_display }}</td><td>{{ task.get_status_display }}</td><td>{{ task.progress }}%</td><td>{{ task.created_at|date:'Y-m-d H:i:s' }}</td><td class="text-end"><a class="btn btn-outline-dark btn-sm" href="{% url 'task_detail' task.pk %}">查看进度</a></td></tr>{% empty %}<tr><td colspan="10"><div class="empty-state"><strong>暂无后台任务</strong><span>从资产或日志分析记录页面创建手动执行任务。</span></div></td></tr>{% endfor %}</tbody></table></div></div>{% include 'common/pagination.html' %}</div>
+{% endblock %}

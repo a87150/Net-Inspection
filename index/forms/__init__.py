@@ -1,16 +1,16 @@
-from .tasks import (
+from index.inspections.forms import (
     ComputerAnalysisProfileConfigForm,
     InspectionProfileConfigForm,
     ManualTaskForm,
     analysis_item_choices,
     inspection_item_choices,
 )
-from .alerts import (
+from index.alerts.forms import (
     DingTalkAlertChannelForm,
     EmailAlertChannelForm,
     FeishuAlertChannelForm,
 )
-from .domain import DomainControllerConfigForm, DomainOperationForm
+from index.domain.forms import DomainControllerConfigForm, DomainOperationForm
 
 __all__ = [
     'ComputerAnalysisProfileConfigForm',

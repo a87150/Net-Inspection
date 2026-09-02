@@ -1,4 +1,4 @@
-from .assets import (
+from index.devices.views import (
     ASSET_PAGES,
     asset_detail,
     asset_list,
@@ -7,26 +7,26 @@ from .assets import (
     people_statistics,
     run_infrastructure_inspection,
 )
-from .dashboard import index, with_latest_status
-from .domain import (
+from index.dashboard.views import index, with_latest_status
+from index.domain.views import (
     domain_account_detail,
     domain_computer_detail,
     domain_controller_settings,
     domain_object_detail,
     domain_object_list,
 )
-from .domain_operations import domain_operation_create, domain_operation_retry
-from .imports import (
+from index.domain.operations import domain_operation_create, domain_operation_retry
+from index.common.imports import (
     download_inventory_template,
     import_inventory,
     import_people_api,
 )
-from .exports import table_export
-from .computer_logs import computer_log_list, computer_log_detail, computer_log_analyze
-from .config_exports import configuration_download, configuration_zip
-from .scripts import pc_script_download
-from .integrations import people_source_save, people_test, people_preview, people_apply, people_operation
-from .alerts import (
+from index.common.exports import table_export
+from index.devices.pc.logs import computer_log_list, computer_log_detail, computer_log_analyze
+from index.devices.configuration import configuration_download, configuration_zip
+from index.devices.pc.scripts import pc_script_download
+from index.people.integrations import people_source_save, people_test, people_preview, people_apply, people_operation
+from index.alerts.views import (
     alert_channel_save,
     alert_detail,
     alert_list,
@@ -34,7 +34,7 @@ from .alerts import (
     alert_policy_save,
     alert_test_send,
 )
-from .tasks import (
+from index.inspections.tasks import (
     computer_analysis_profile_configure,
     inspection_profile_configure,
     manual_task_create,
@@ -42,7 +42,7 @@ from .tasks import (
     task_list,
     task_modal_context,
 )
-from .records import (
+from index.inspections.records import (
     RECORD_PAGES,
     _error_records,
     _inspection_records,
