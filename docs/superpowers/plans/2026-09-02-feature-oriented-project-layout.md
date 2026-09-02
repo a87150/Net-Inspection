@@ -331,7 +331,7 @@ git commit -m "refactor: organize models and admin by domain"
 - Consumes: Canonical models from Task 2 and existing directory adapter/domain client interfaces.
 - Produces: `net.people.*` and `net.domain.*` canonical workflows while preserving `net.services.ad_sync`, `net.tasks.domain`, `net.tasks.people`, `net.integrations.people.*`, and public view/form imports.
 
-- [ ] **Step 1: Extend import contracts for personnel and domain paths**
+- [x] **Step 1: Extend import contracts for personnel and domain paths**
 
 Add this assertion table to `tests/architecture/test_compatibility_contracts.py`:
 
@@ -352,19 +352,19 @@ LEGACY_FEATURE_MODULES = (
 
 Loop through the tuple with `import_module()` in a new test method.
 
-- [ ] **Step 2: Move personnel modules and add facades**
+- [x] **Step 2: Move personnel modules and add facades**
 
 Move implementation without changing public function signatures. Each old module imports public names from its new location. `net/people/directory/__init__.py` exports `DirectoryPerson`, adapter lookup, preview, and apply entry points used by the UI and tasks.
 
-- [ ] **Step 3: Move domain workflow modules and add facades**
+- [x] **Step 3: Move domain workflow modules and add facades**
 
 Keep `net/domain/client.py`, `actions.py`, `validation.py`, and `secrets.py` in place. Move sync/task/executor implementation beside them and preserve the old imports with explicit re-exports.
 
-- [ ] **Step 4: Move personnel/domain UI implementation behind current exports**
+- [x] **Step 4: Move personnel/domain UI implementation behind current exports**
 
 `index/views/__init__.py` continues to export every callable referenced by `index/urls.py`. `index/forms/__init__.py` continues to export current form classes. Do not change `index/urls.py` in this task.
 
-- [ ] **Step 5: Run focused personnel and domain checks**
+- [x] **Step 5: Run focused personnel and domain checks**
 
 ```powershell
 python manage.py test tests.architecture.test_compatibility_contracts index.test_people_statistics index.test_phase4_people_contract index.test_phase4_people_sync index.test_phase4_people_ui index.test_domain_actions index.test_domain_operation_models index.test_domain_secrets index.test_domain_permissions_ui --verbosity 1
@@ -373,7 +373,7 @@ python manage.py check
 
 Expected: selected tests and system checks pass. Do not run the large domain worker suite yet.
 
-- [ ] **Step 6: Commit and stop for inspection**
+- [x] **Step 6: Commit and stop for inspection**
 
 ```powershell
 git add net/people net/domain net/services net/integrations/people net/tasks index/people index/domain index/views index/forms tests/architecture

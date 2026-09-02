@@ -2,7 +2,7 @@ from .alerts import AlertChannel, AlertDelivery, AlertEvent, AlertPolicy, AlertS
 from .devices import Computer, Monitor, Network_Device, Server
 from .domain import (
     Domain_Account, Domain_Computer, Domain_Controller_Config,
-    DomainOperation, DomainOperationSecret,
+    DomainOperation,
 )
 from .integrations import PeopleSyncSource
 from .people import People
@@ -18,7 +18,7 @@ Computer_Inspection = ComputerAnalysis
 __all__ = [
     'People', 'Domain_Account', 'Domain_Computer', 'Computer', 'Network_Device',
     'Server', 'Monitor', 'Domain_Controller_Config', 'DomainOperation',
-    'DomainOperationSecret', 'RecordStatus', 'ComputerLogFile',
+    'RecordStatus', 'ComputerLogFile',
     'ComputerLogArchive', 'ComputerAnalysis', 'Computer_Inspection',
     'Network_Device_Inspection', 'Server_Inspection', 'Monitor_Inspection',
     'Error_Computer', 'Error_Network_Device', 'Error_Server', 'Error_Monitor',
