@@ -62,6 +62,15 @@ class TaskProfileContractTests(SimpleTestCase):
                 'range_start_date',
                 'range_end_date',
                 'analysis_items',
+                'software_policy_path',
+                'minimum_windows_release',
+                'defender_update_max_days',
+                'defender_scan_max_days',
+                'patch_max_days',
+                'uptime_max_hours',
+                'cpu_max_percent',
+                'memory_max_percent',
+                'kms_servers',
                 'concurrent_workers',
                 'alert_policy_mode',
             }
@@ -83,6 +92,7 @@ class TaskProfileContractTests(SimpleTestCase):
         self.assertEqual(second.target_selector, {})
         self.assertEqual(analysis_second.scan_directories, [])
         self.assertEqual(analysis_second.analysis_items, [])
+        self.assertEqual(analysis_second.kms_servers, [])
 
     def test_inspection_profile_rejects_duplicate_item_keys(self):
         profile = InspectionProfile(

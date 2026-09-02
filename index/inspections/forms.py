@@ -27,7 +27,8 @@ _ANALYSIS_LABELS = {
     'processes': '运行进程', 'bitlocker': 'BitLocker',
     'defender': 'Defender 信息', 'patches': '系统更新',
     'domain': '域状态', 'resource': '资源使用情况',
-    'event_findings': '事件发现',
+    'event_findings': '事件发现', 'system': '系统版本',
+    'uptime': '连续开机时间',
 }
 
 
@@ -205,6 +206,31 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
         error_messages={'invalid_choice': '不支持的分析项目。'},
         label='分析项目',
     )
+    software_policy_path = forms.CharField(required=False, label='软件策略文件路径')
+    minimum_windows_release = forms.CharField(
+        required=False, max_length=16, label='最低 Windows 版本',
+    )
+    defender_update_max_days = forms.IntegerField(
+        required=False, min_value=1, max_value=3650, label='Defender 病毒库最大间隔（天）',
+    )
+    defender_scan_max_days = forms.IntegerField(
+        required=False, min_value=1, max_value=3650, label='Defender 扫描最大间隔（天）',
+    )
+    patch_max_days = forms.IntegerField(
+        required=False, min_value=1, max_value=3650, label='系统补丁最大间隔（天）',
+    )
+    uptime_max_hours = forms.IntegerField(
+        required=False, min_value=1, max_value=87600, label='最长连续开机时间（小时）',
+    )
+    cpu_max_percent = forms.IntegerField(
+        required=False, min_value=1, max_value=100, label='CPU 报警阈值（%）',
+    )
+    memory_max_percent = forms.IntegerField(
+        required=False, min_value=1, max_value=100, label='内存报警阈值（%）',
+    )
+    kms_servers_text = forms.CharField(
+        required=False, widget=forms.Textarea, label='KMS 服务器',
+    )
     concurrent_workers = forms.IntegerField(min_value=1, max_value=64, label='并发数')
     schedule_enabled = forms.BooleanField(required=False, label='启用定时执行')
     schedule_kind = forms.ChoiceField(required=False, choices=Schedule.Kind.choices, label='执行方式')
@@ -228,6 +254,15 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
                 'range_start_date': instance.range_start_date,
                 'range_end_date': instance.range_end_date,
                 'analysis_items': instance.analysis_items,
+                'software_policy_path': instance.software_policy_path,
+                'minimum_windows_release': instance.minimum_windows_release,
+                'defender_update_max_days': instance.defender_update_max_days,
+                'defender_scan_max_days': instance.defender_scan_max_days,
+                'patch_max_days': instance.patch_max_days,
+                'uptime_max_hours': instance.uptime_max_hours,
+                'cpu_max_percent': instance.cpu_max_percent,
+                'memory_max_percent': instance.memory_max_percent,
+                'kms_servers_text': '\n'.join(instance.kms_servers),
                 'concurrent_workers': instance.concurrent_workers,
             })
         if schedule is not None and not self.is_bound:
@@ -245,6 +280,18 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
             if line.strip()
         ]
         return directories
+
+    def clean_kms_servers_text(self):
+        return [
+            line.strip()
+            for line in self.cleaned_data['kms_servers_text'].splitlines()
+            if line.strip()
+        ]
+
+    def _configured_value(self, name, default):
+        if name in self.data:
+            return self.cleaned_data[name]
+        return getattr(self.instance, name, default) if self.instance is not None else default
 
     def clean(self):
         cleaned = super().clean()
@@ -288,6 +335,19 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
                 if mode == ComputerAnalysisProfile.FileTimeMode.DATE_RANGE else None
             ),
             'analysis_items': cleaned['analysis_items'],
+            'software_policy_path': self._configured_value('software_policy_path', ''),
+            'minimum_windows_release': self._configured_value('minimum_windows_release', '23H2'),
+            'defender_update_max_days': self._configured_value('defender_update_max_days', 7),
+            'defender_scan_max_days': self._configured_value('defender_scan_max_days', 7),
+            'patch_max_days': self._configured_value('patch_max_days', 30),
+            'uptime_max_hours': self._configured_value('uptime_max_hours', 168),
+            'cpu_max_percent': self._configured_value('cpu_max_percent', 90),
+            'memory_max_percent': self._configured_value('memory_max_percent', 90),
+            'kms_servers': (
+                cleaned['kms_servers_text']
+                if 'kms_servers_text' in self.data
+                else list(getattr(self.instance, 'kms_servers', []))
+            ),
             'concurrent_workers': cleaned['concurrent_workers'],
         }
 

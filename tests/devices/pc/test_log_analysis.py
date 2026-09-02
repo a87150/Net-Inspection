@@ -314,6 +314,90 @@ class ComputerLogAnalysisTests(TestCase):
         with self.assertRaises(ValidationError):
             analyze_log(log_file, ['not-a-real-analysis'])
 
+    def test_configured_rules_turn_collected_values_into_actionable_findings(self):
+        policy = self.root / 'software-policy.ini'
+        policy.write_text('[BLACKLIST]\nkeywords = Forbidden Tool\n', encoding='utf-8')
+        log_file, _path = self._import_payload()
+        log_file.modified_at = datetime(2026, 9, 1, 12, tzinfo=SHANGHAI)
+        log_file.payload.update({
+            '系统信息概览': {
+                '计算机名': 'PC-ANALYSIS-01',
+                '系统主要版本名': '22H2',
+                '开机时间': '2026-08-01 08:00:00',
+            },
+            'Windows激活信息': {
+                '许可证状态': '已授权',
+                '描述': 'VOLUME_KMSCLIENT channel',
+                'KMS 计算机 IP 地址': '192.0.2.99',
+            },
+            'WindowsDefender状态': {
+                '当前病毒库版本': '1.2.3',
+                '上次更新时间': '2026-08-01 08:00:00',
+                '扫描信息': {'时间': '2026-08-02 08:00:00'},
+            },
+            '系统更新历史': [{'日期': '2026-08-01', '补丁名称': 'KB5000001'}],
+            '计算机硬件资源情况': {
+                '当前CPU占用率': '95%', '当前内存使用率': '91%',
+            },
+            '已安装软件列表': [{'软件名': 'Forbidden Tool Pro'}],
+        })
+        log_file.save(update_fields=['modified_at', 'payload'])
+
+        analysis = analyze_log(
+            log_file,
+            ['activation', 'software', 'defender', 'patches', 'system', 'uptime', 'resource'],
+            rules={
+                'software_policy_path': str(policy),
+                'minimum_windows_release': '23H2',
+                'defender_update_max_days': 7,
+                'defender_scan_max_days': 7,
+                'patch_max_days': 30,
+                'uptime_max_hours': 168,
+                'cpu_max_percent': 90,
+                'memory_max_percent': 90,
+                'kms_servers': ['192.0.2.10'],
+            },
+        )
+
+        self.assertEqual(analysis.status, RecordStatus.FAILED)
+        self.assertEqual(
+            {issue['问题类型'] for issue in analysis.exceptions},
+            {
+                '系统激活问题', '软件问题', 'WindowsDefender问题',
+                '系统更新历史问题', '系统版本过旧', '长时间未关机',
+                '资源使用问题',
+            },
+        )
+
+    def test_missing_software_policy_is_a_finding_instead_of_a_worker_error(self):
+        log_file, _path = self._import_payload()
+
+        analysis = analyze_log(
+            log_file,
+            ['software'],
+            rules={'software_policy_path': str(self.root / 'missing.ini')},
+        )
+
+        self.assertEqual(analysis.status, RecordStatus.FAILED)
+        self.assertEqual(analysis.exceptions[0]['问题类型'], '软件策略问题')
+
+    def test_domain_prefix_is_removed_before_matching_special_software_whitelist(self):
+        policy = self.root / 'software-policy.ini'
+        policy.write_text('[SPECIAL_WHITELIST]\nAdminTool = H1\n', encoding='utf-8')
+        log_file, _path = self._import_payload()
+        log_file.payload['系统信息概览']['当前登录用户工号'] = 'DOMAIN\\H1'
+        log_file.payload['已安装软件列表'] = [{'软件名': 'AdminTool'}]
+        log_file.save(update_fields=['payload'])
+
+        analysis = analyze_log(
+            log_file,
+            ['software'],
+            rules={'software_policy_path': str(policy)},
+        )
+
+        self.assertEqual(analysis.status, RecordStatus.SUCCESS)
+        self.assertEqual(analysis.exceptions, [])
+
 
 class ComputerAnalysisWorkerTests(TransactionTestCase):
     def setUp(self):
@@ -357,6 +441,30 @@ class ComputerAnalysisWorkerTests(TransactionTestCase):
         self.assertEqual(target.result_type, 'computer_analysis')
         self.assertEqual(target.result_id, str(analysis.pk))
         self.assertEqual(target.result_snapshot['details'], analysis.details)
+
+    def test_worker_uses_the_queued_rule_snapshot_after_profile_changes(self):
+        self.profile.kms_servers = ['kms-approved-when-queued.example.test']
+        self.profile.save(update_fields=['kms_servers'])
+        payload = dict(self.log_file.payload)
+        payload['Windows激活信息'] = {
+            '许可证状态': '已授权',
+            '描述': 'VOLUME_KMSCLIENT channel',
+            '已注册的 KMS 计算机名称': 'kms-current.example.test:1688',
+        }
+        payload['KMS服务器连通情况'] = '正常通讯'
+        self.log_file.payload = payload
+        self.log_file.save(update_fields=['payload'])
+        task = enqueue_task(self.profile, [self.log_file.pk], TaskRun.Source.MANUAL)
+        self.profile.kms_servers = ['kms-current.example.test']
+        self.profile.save(update_fields=['kms_servers'])
+
+        self.assertTrue(TaskWorker(
+            worker_id='snapshot-rules-worker', threads=1, lease_seconds=30,
+        ).run_once())
+
+        analysis = ComputerAnalysis.objects.get()
+        self.assertEqual(analysis.status, RecordStatus.FAILED)
+        self.assertIn('KMS', analysis.exceptions[0]['详细问题'])
 
     def test_expired_owner_cannot_persist_a_computer_analysis_result(self):
         task = enqueue_task(self.profile, [self.log_file.pk], TaskRun.Source.MANUAL)

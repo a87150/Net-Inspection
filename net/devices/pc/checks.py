@@ -2,6 +2,10 @@ import configparser
 import os
 import re
 from datetime import datetime
+from pathlib import Path
+
+from django.conf import settings
+from django.utils import timezone
 
 
 DATETIME_FORMATS = ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d')
@@ -9,11 +13,15 @@ DATETIME_FORMATS = ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d')
 
 def load_config_as_dict(file_path: str) -> dict:
     """读取软件策略 INI，返回 section -> key -> list。"""
-    if not file_path or not os.path.exists(file_path):
-        raise FileNotFoundError(f'软件策略文件不存在：{file_path}')
+    path = Path(file_path)
+    if not path.is_absolute():
+        path = Path(settings.BASE_DIR) / path
+    if not file_path or not path.is_file():
+        raise FileNotFoundError(f'软件策略文件不存在：{path}')
     config = configparser.ConfigParser()
     config.optionxform = str
-    config.read(file_path, encoding='utf-8-sig')
+    with path.open(encoding='utf-8-sig') as source:
+        config.read_file(source)
     return {
         section: {
             key: [item.strip() for item in value.split(',') if item.strip()]
@@ -85,7 +93,18 @@ def check_bitlocker(data, current_issues):
         add_issue(current_issues, 'BitLocker问题', '，'.join(problem_details))
 
 
-def check_defender(data, current_issues, collected_at):
+def _local_naive(value):
+    if value is None:
+        return None
+    if timezone.is_aware(value):
+        return timezone.localtime(value).replace(tzinfo=None)
+    return value
+
+
+def check_defender(
+    data, current_issues, collected_at,
+    update_max_days=7, scan_max_days=7,
+):
     defender = data.get('WindowsDefender状态') or {}
     if not defender:
         add_issue(current_issues, 'WindowsDefender数据缺失', '未采集到 Defender 状态')
@@ -96,22 +115,22 @@ def check_defender(data, current_issues, collected_at):
     if not update_time:
         problems.append('病毒库更新时间缺失或格式错误')
     else:
-        days = (collected_at - update_time).days
-        if days > 7:
+        days = (_local_naive(collected_at) - _local_naive(update_time)).days
+        if days > update_max_days:
             problems.append(f'病毒库最后更新时间为 {update_value}，已过 {days} 天')
     scan_info = defender.get('扫描信息') or {}
     scan_time = parse_local_datetime(scan_info.get('时间'))
     if not scan_time:
         problems.append('未发现有效的病毒扫描记录')
     else:
-        days = (collected_at - scan_time).days
-        if days > 7:
+        days = (_local_naive(collected_at) - _local_naive(scan_time)).days
+        if days > scan_max_days:
             problems.append(f"上次扫描时间为 {scan_info.get('时间')}，已过 {days} 天")
     if problems:
         add_issue(current_issues, 'WindowsDefender问题', '；'.join(problems))
 
 
-def check_update_history(data, current_issues, collected_at):
+def check_update_history(data, current_issues, collected_at, max_age_days=30):
     dates = [
         parsed
         for item in (data.get('系统更新历史') or [])
@@ -123,8 +142,8 @@ def check_update_history(data, current_issues, collected_at):
         add_issue(current_issues, '系统更新数据缺失', '未采集到有效的系统更新记录')
         return
     latest = max(dates)
-    days = (collected_at - latest).days
-    if days >= 7:
+    days = (_local_naive(collected_at) - _local_naive(latest)).days
+    if days > max_age_days:
         add_issue(current_issues, '系统更新历史问题', f'上次更新日期为 {latest:%Y-%m-%d}，距今 {days} 天')
 
 
@@ -144,7 +163,7 @@ def check_system_version(data, current_issues, minimum_release=None):
         add_issue(current_issues, '系统版本过旧', f'系统版本为 {version}，最低要求为 {minimum_release}')
 
 
-def check_activation(data, current_issues):
+def check_activation(data, current_issues, expected_kms_servers=()):
     activation = data.get('Windows激活信息') or {}
     if not activation:
         add_issue(current_issues, '系统激活数据缺失', '未采集到 Windows 激活信息')
@@ -160,9 +179,10 @@ def check_activation(data, current_issues):
             problems.append(f'KMS服务器通讯状态：{kms_status or "未知"}')
         kms_ip = activation.get('KMS 计算机 IP 地址', '')
         kms_name = activation.get('已注册的 KMS 计算机名称', '')
-        expected_ip = os.getenv('KMS_SERVER_IP', '10.14.1.111')
-        if expected_ip not in {kms_ip, str(kms_name).split(':')[0]}:
-            problems.append('未使用指定的 KMS 服务器激活')
+        expected = {str(value).strip().casefold() for value in expected_kms_servers if str(value).strip()}
+        actual = {str(kms_ip).strip().casefold(), str(kms_name).split(':')[0].strip().casefold()}
+        if expected and not expected.intersection(actual):
+            problems.append('未使用配置中允许的 KMS 服务器激活')
     if problems:
         add_issue(current_issues, '系统激活问题', '；'.join(problems))
 
@@ -173,9 +193,27 @@ def check_uptime(data, current_issues, collected_at, threshold_hours=168):
     if not boot_time:
         add_issue(current_issues, '开机时间数据缺失', '开机时间缺失或格式错误')
         return
-    uptime_hours = (collected_at - boot_time).total_seconds() / 3600
+    uptime_hours = (_local_naive(collected_at) - _local_naive(boot_time)).total_seconds() / 3600
     if uptime_hours >= threshold_hours:
         add_issue(current_issues, '长时间未关机', f'开机时间：{boot_value}，距今 {int(uptime_hours)} 小时')
+
+
+def check_resource(data, current_issues, cpu_max_percent=90, memory_max_percent=90):
+    resource = data.get('计算机硬件资源情况') or {}
+    problems = []
+    for key, label, threshold in (
+        ('当前CPU占用率', 'CPU', cpu_max_percent),
+        ('当前内存使用率', '内存', memory_max_percent),
+    ):
+        value = str(resource.get(key) or '').strip()
+        try:
+            percent = float(value.removesuffix('%'))
+        except ValueError:
+            continue
+        if percent > threshold:
+            problems.append(f'{label}占用率 {percent:g}% 超过阈值 {threshold}%')
+    if problems:
+        add_issue(current_issues, '资源使用问题', '；'.join(problems))
 
 
 def evaluate_computer(data, config, collected_at):

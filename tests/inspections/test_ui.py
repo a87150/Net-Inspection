@@ -72,6 +72,10 @@ class TaskUiTestCase(TestCase):
                 self.assertContains(response, '扫描目录')
                 self.assertContains(response, '最近 N 天')
                 self.assertContains(response, '指定起止日期')
+                self.assertContains(response, '最低 Windows 版本')
+                self.assertContains(response, 'Defender 病毒库最大间隔')
+                self.assertContains(response, 'CPU 报警阈值')
+                self.assertContains(response, 'KMS 服务器')
 
     def test_manual_selected_enqueue_snapshots_filtered_targets_items_and_concurrency(self):
         """Dropping UI scope validation could inspect an unfiltered asset or live profile setting."""

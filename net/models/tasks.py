@@ -148,6 +148,31 @@ class ComputerAnalysisProfile(models.Model):
         blank=True,
         validators=[validate_string_list],
     )
+    software_policy_path = models.TextField(blank=True)
+    minimum_windows_release = models.CharField(max_length=16, blank=True, default='23H2')
+    defender_update_max_days = models.PositiveSmallIntegerField(
+        default=7, validators=[MinValueValidator(1), MaxValueValidator(3650)],
+    )
+    defender_scan_max_days = models.PositiveSmallIntegerField(
+        default=7, validators=[MinValueValidator(1), MaxValueValidator(3650)],
+    )
+    patch_max_days = models.PositiveSmallIntegerField(
+        default=30, validators=[MinValueValidator(1), MaxValueValidator(3650)],
+    )
+    uptime_max_hours = models.PositiveIntegerField(
+        default=168, validators=[MinValueValidator(1), MaxValueValidator(87600)],
+    )
+    cpu_max_percent = models.PositiveSmallIntegerField(
+        default=90, validators=[MinValueValidator(1), MaxValueValidator(100)],
+    )
+    memory_max_percent = models.PositiveSmallIntegerField(
+        default=90, validators=[MinValueValidator(1), MaxValueValidator(100)],
+    )
+    kms_servers = models.JSONField(
+        default=list,
+        blank=True,
+        validators=[validate_string_list],
+    )
     concurrent_workers = models.PositiveSmallIntegerField(
         default=4,
         validators=POSITIVE_WORKER_VALIDATORS,
@@ -163,7 +188,7 @@ class ComputerAnalysisProfile(models.Model):
     def clean(self):
         super().clean()
         errors = {}
-        for field_name in ('scan_directories', 'analysis_items'):
+        for field_name in ('scan_directories', 'analysis_items', 'kms_servers'):
             try:
                 validate_string_list(getattr(self, field_name))
             except ValidationError as exc:

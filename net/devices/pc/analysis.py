@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import configparser
 import re
 
 from django.core.exceptions import ValidationError
@@ -11,7 +12,18 @@ from django.utils import timezone
 
 from net.models import Computer, ComputerAnalysis, ComputerLogFile, Error_Computer, RecordStatus
 from net.infrastructure.sanitization import sanitize
-from net.devices.pc.checks import check_bitlocker, parse_local_datetime
+from net.devices.pc.checks import (
+    check_activation,
+    check_bitlocker,
+    check_defender,
+    check_resource,
+    check_software,
+    check_system_version,
+    check_update_history,
+    check_uptime,
+    load_config_as_dict,
+    parse_local_datetime,
+)
 
 
 ANALYSIS_ITEMS = frozenset({
@@ -24,6 +36,8 @@ ANALYSIS_ITEMS = frozenset({
     'domain',
     'resource',
     'event_findings',
+    'system',
+    'uptime',
 })
 
 # A present empty collection means collected/no entries. Missing keys, null,
@@ -40,6 +54,8 @@ ITEM_FIELDS = {
     'domain': ('已应用策略', '当前与域服务器通讯情况'),
     'resource': ('计算机硬件资源情况',),
     'event_findings': ('事件发现',),
+    'system': ('系统信息概览',),
+    'uptime': ('系统信息概览',),
 }
 MISSING_LABELS = {
     'activation': '系统激活问题', 'bitlocker': 'BitLocker数据缺失',
@@ -100,6 +116,10 @@ def _schema_state(item, payload):
             0 <= float(value[key][:-1]) <= 100
             for key in ('当前CPU占用率', '当前内存使用率')
         )
+    elif item == 'system':
+        valid = _known_text(value.get('系统主要版本名'))
+    elif item == 'uptime':
+        valid = bool(parse_local_datetime(value.get('开机时间')))
     else:
         valid = False
     return 'known' if valid else 'unknown'
@@ -127,12 +147,9 @@ def _issue(issues, issue_type, detail):
     issues.append({'问题类型': issue_type, '详细问题': detail})
 
 
-def _activation(payload, issues):
+def _activation(payload, issues, rules):
     activation = _as_dict(payload.get('Windows激活信息'))
-    if not activation:
-        _issue(issues, '系统激活问题', '未采集到 Windows 激活信息')
-    elif activation.get('许可证状态') != '已授权':
-        _issue(issues, '系统激活问题', f"许可证状态为：{activation.get('许可证状态') or '未知'}")
+    check_activation(payload, issues, rules['kms_servers'])
     return {
         'Windows激活信息': activation,
         'KMS服务器连通情况': payload.get('KMS服务器连通情况', ''),
@@ -153,7 +170,7 @@ def _event_findings(payload, issues):
     return findings
 
 
-def _details_for_item(item, payload, issues):
+def _details_for_item(item, payload, issues, rules, collected_at):
     state = _schema_state(item, payload)
     if state != 'known':
         issues.append({
@@ -164,8 +181,22 @@ def _details_for_item(item, payload, issues):
         # Retain null/empty/malformed shapes in selected details as evidence.
         return {key: payload.get(key) for key in ITEM_FIELDS[item]}
     if item == 'activation':
-        return _activation(payload, issues)
+        return _activation(payload, issues, rules)
     if item == 'software':
+        policy_path = rules['software_policy_path']
+        if policy_path:
+            try:
+                identity = str(
+                    _as_dict(payload.get('系统信息概览')).get('当前登录用户工号') or '',
+                ).rsplit('\\', 1)[-1]
+                check_software(
+                    payload,
+                    identity,
+                    issues,
+                    load_config_as_dict(policy_path),
+                )
+            except (OSError, configparser.Error) as exc:
+                _issue(issues, '软件策略问题', f'软件策略文件无法读取：{exc}')
         return _as_list(payload.get('已安装软件列表'))
     if item == 'processes':
         return _as_list(payload.get('当前运行进程清单'))
@@ -174,11 +205,16 @@ def _details_for_item(item, payload, issues):
         return _as_dict(payload.get('BitLocker状态'))
     if item == 'defender':
         defender = _as_dict(payload.get('WindowsDefender状态'))
-        if not defender:
-            _issue(issues, 'WindowsDefender数据缺失', '未采集到 Defender 状态')
+        if rules['configured']:
+            check_defender(
+                payload, issues, collected_at,
+                rules['defender_update_max_days'], rules['defender_scan_max_days'],
+            )
         return defender
     if item == 'patches':
         patches = _as_list(payload.get('系统更新历史'))
+        if rules['configured']:
+            check_update_history(payload, issues, collected_at, rules['patch_max_days'])
         return patches
     if item == 'domain':
         if payload['当前与域服务器通讯情况'] == '无法访问':
@@ -188,9 +224,19 @@ def _details_for_item(item, payload, issues):
             '当前与域服务器通讯情况': payload.get('当前与域服务器通讯情况', ''),
         }
     if item == 'resource':
+        if rules['configured']:
+            check_resource(
+                payload, issues, rules['cpu_max_percent'], rules['memory_max_percent'],
+            )
         return _as_dict(payload.get('计算机硬件资源情况'))
     if item == 'event_findings':
         return _event_findings(payload, issues)
+    if item == 'system':
+        check_system_version(payload, issues, rules['minimum_windows_release'])
+        return _as_dict(payload.get('系统信息概览'))
+    if item == 'uptime':
+        check_uptime(payload, issues, collected_at, rules['uptime_max_hours'])
+        return _as_dict(payload.get('系统信息概览'))
     raise AssertionError(f'未注册的分析项目：{item}')
 
 
@@ -205,7 +251,25 @@ def _computer_for_payload(payload):
         raise ValidationError({'log_file': '日志尚未生成计算机静态资产。'}) from exc
 
 
-def analyze_log(log_file, analysis_items, *, task_target=None, started_at=None) -> ComputerAnalysis:
+def _analysis_rules(value):
+    supplied = value if isinstance(value, Mapping) else {}
+    return {
+        'configured': value is not None,
+        'software_policy_path': str(supplied.get('software_policy_path') or ''),
+        'minimum_windows_release': str(supplied.get('minimum_windows_release') or ''),
+        'defender_update_max_days': supplied.get('defender_update_max_days', 7),
+        'defender_scan_max_days': supplied.get('defender_scan_max_days', 7),
+        'patch_max_days': supplied.get('patch_max_days', 30),
+        'uptime_max_hours': supplied.get('uptime_max_hours', 168),
+        'cpu_max_percent': supplied.get('cpu_max_percent', 90),
+        'memory_max_percent': supplied.get('memory_max_percent', 90),
+        'kms_servers': list(supplied.get('kms_servers') or []),
+    }
+
+
+def analyze_log(
+    log_file, analysis_items, *, rules=None, task_target=None, started_at=None,
+) -> ComputerAnalysis:
     """Create a new immutable analysis from an already imported local log.
 
     The source file is never read or moved here. Calling this method repeatedly
@@ -214,6 +278,7 @@ def analyze_log(log_file, analysis_items, *, task_target=None, started_at=None) 
     if not isinstance(log_file, ComputerLogFile):
         raise ValidationError({'log_file': '必须提供已导入的日志文件。'})
     selected_items = _items(analysis_items)
+    configured_rules = _analysis_rules(rules)
     payload = log_file.payload
     if log_file.import_status != 'imported' or not isinstance(payload, dict):
         raise ValidationError({'log_file': '日志导入失败，不能执行分析。'})
@@ -223,7 +288,9 @@ def analyze_log(log_file, analysis_items, *, task_target=None, started_at=None) 
     details = {}
     for item in selected_items:
         item_issues = []
-        details[item] = _details_for_item(item, payload, item_issues)
+        details[item] = _details_for_item(
+            item, payload, item_issues, configured_rules, log_file.modified_at,
+        )
         issues.extend({**issue, 'analysis_item': item} for issue in item_issues)
     status = RecordStatus.FAILED if issues else RecordStatus.SUCCESS
     summary = f'发现 {len(issues)} 项异常' if issues else '分析正常'

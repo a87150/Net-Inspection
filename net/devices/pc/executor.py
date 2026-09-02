@@ -48,6 +48,15 @@ def _snapshot_profile(task):
     profile.range_start_date = _snapshot_date(snapshot.get('range_start_date'))
     profile.range_end_date = _snapshot_date(snapshot.get('range_end_date'))
     profile.analysis_items = list(snapshot.get('analysis_items') or [])
+    profile.software_policy_path = str(snapshot.get('software_policy_path') or '')
+    profile.minimum_windows_release = str(snapshot.get('minimum_windows_release') or '')
+    profile.defender_update_max_days = snapshot.get('defender_update_max_days', 7)
+    profile.defender_scan_max_days = snapshot.get('defender_scan_max_days', 7)
+    profile.patch_max_days = snapshot.get('patch_max_days', 30)
+    profile.uptime_max_hours = snapshot.get('uptime_max_hours', 168)
+    profile.cpu_max_percent = snapshot.get('cpu_max_percent', 90)
+    profile.memory_max_percent = snapshot.get('memory_max_percent', 90)
+    profile.kms_servers = list(snapshot.get('kms_servers') or [])
     profile.concurrent_workers = snapshot.get('concurrent_workers', 1)
     profile.alert_policy_mode = snapshot.get('alert_policy_mode', 'inherit')
     profile.full_clean()
@@ -272,6 +281,7 @@ def _persist_analysis(target_run_id, worker_id, lease_guard=None):
                 analysis = analyze_log(
                     log_file,
                     list(task.selected_items_snapshot),
+                    rules=task.profile_snapshot,
                     task_target=target,
                     started_at=target.started_at or now,
                 )

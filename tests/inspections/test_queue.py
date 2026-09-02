@@ -228,6 +228,15 @@ class ComputerAnalysisEnqueueTests(TestCase):
             name='计算机日志分析',
             scan_directories=['C:/inspection-logs'],
             analysis_items=['patches', 'defender'],
+            software_policy_path='config/software-policy.ini',
+            minimum_windows_release='24H2',
+            defender_update_max_days=3,
+            defender_scan_max_days=5,
+            patch_max_days=14,
+            uptime_max_hours=72,
+            cpu_max_percent=85,
+            memory_max_percent=80,
+            kms_servers=['kms1.example.test', '192.0.2.10'],
         )
         log = ComputerLogFile.objects.create(
             source_path='C:/inspection-logs/PC-01.json',
@@ -245,6 +254,11 @@ class ComputerAnalysisEnqueueTests(TestCase):
         self.assertEqual(target.target_id, str(log.pk))
         self.assertEqual(target.target_snapshot['content_hash'], 'a' * 64)
         self.assertNotIn('payload', target.target_snapshot)
+        self.assertEqual(task.profile_snapshot['minimum_windows_release'], '24H2')
+        self.assertEqual(task.profile_snapshot['patch_max_days'], 14)
+        self.assertEqual(task.profile_snapshot['kms_servers'], [
+            'kms1.example.test', '192.0.2.10',
+        ])
 
 
 class LeaseQueueTests(TestCase):
