@@ -1,18 +1,12 @@
-from collections import defaultdict
 import logging
 
 from django.core.paginator import Paginator
 from django.db import DatabaseError
-from django.db.models import Q
 from django.shortcuts import render
 from django.urls import reverse
-from django.utils.timezone import localdate, timedelta
 
 from net.models import (
-    ComputerAnalysis,
-    Error_Computer,
     People,
-    RecordStatus,
 )
 from net.services.dashboard_summary import (
     DASHBOARD_SUMMARY_ERROR_MESSAGE,
@@ -111,8 +105,7 @@ def index(request):
             'bad_label': '异常设备',
             'list_url': reverse('asset_list', args=['computers']),
             'record_url': reverse('computer_analysis_list'),
-            'record_label': '分析日志',
-            'stats_url': reverse('detail', args=['computers']),
+            'record_label': '日志分析记录',
             'manual_action_label': '手动执行分析',
         },
         {
@@ -171,63 +164,4 @@ def index(request):
     return render(request, 'index.html', {
         'items': items,
         'task_page': task_page,
-    })
-
-
-def detail(request, item):
-    if item != 'computers':
-        from django.http import Http404
-
-        raise Http404('该类型尚未接入分析详情')
-
-    today = localdate()
-    start_date = today - timedelta(days=6)
-    last_7_days = [start_date + timedelta(days=index) for index in range(7)]
-    today_queryset = ComputerAnalysis.objects.filter(created_at__date=today)
-    total_devices = today_queryset.values('computer_id').distinct().count()
-    error_devices = today_queryset.filter(
-        Q(errors__isnull=False) | ~Q(status=RecordStatus.SUCCESS),
-    ).values('computer_id').distinct().count()
-
-    daily_error_summary = defaultdict(lambda: defaultdict(int))
-    errors = Error_Computer.objects.select_related('inspection').filter(
-        inspection__created_at__date__gte=start_date,
-        inspection__created_at__date__lte=today,
-    )
-    for error in errors:
-        day = error.inspection.created_at.astimezone().date()
-        daily_error_summary[day][error.error_type] += 1
-
-    error_types = sorted({
-        error_type
-        for values in daily_error_summary.values()
-        for error_type in values
-    })
-    daily_summary_list = []
-    for day in last_7_days:
-        day_queryset = ComputerAnalysis.objects.filter(created_at__date=day)
-        daily_summary_list.append({
-            'date': day,
-            'values': [
-                daily_error_summary[day].get(error_type, 0)
-                for error_type in error_types
-            ],
-            'total_devices': day_queryset.values(
-                'computer_id',
-            ).distinct().count(),
-            'error_devices': day_queryset.filter(
-                Q(errors__isnull=False) | ~Q(status=RecordStatus.SUCCESS),
-            ).values('computer_id').distinct().count(),
-        })
-
-    return render(request, 'detail.html', {
-        'item': item,
-        'total_devices': total_devices,
-        'error_devices': error_devices,
-        'normal_devices': total_devices - error_devices,
-        'latest_time': ComputerAnalysis.objects.order_by(
-            '-created_at',
-        ).values_list('created_at', flat=True).first(),
-        'error_types': error_types,
-        'daily_summary_list': daily_summary_list,
     })

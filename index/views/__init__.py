@@ -6,7 +6,7 @@ from .assets import (
     person_detail,
     run_infrastructure_inspection,
 )
-from .dashboard import detail, index, with_latest_status
+from .dashboard import index, with_latest_status
 from .domain import (
     domain_account_detail,
     domain_computer_detail,
@@ -70,7 +70,6 @@ __all__ = [
     'computer_error_list',
     'computer_inspection_detail',
     'computer_inspection_list',
-    'detail',
     'domain_account_detail',
     'domain_computer_detail',
     'domain_controller_settings',

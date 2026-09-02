@@ -22,6 +22,11 @@ from net.models import (
     RecordStatus,
     Server_Inspection,
 )
+from net.services.task_summary import (
+    build_project_task_metrics,
+    project_task_queryset,
+    summarize_task,
+)
 from .tasks import task_modal_context
 from .alerts import alert_modal_context
 
@@ -64,9 +69,17 @@ def _record_row(kind, page, inspection):
     }
 
 
-def _infrastructure_records(kind, *, target=''):
+def _latest_project_task(kind):
+    return project_task_queryset(kind).first()
+
+
+def _infrastructure_records(kind, *, target='', latest_only=True):
     page = _record_page(kind)
     queryset = page.model.objects.select_related(page.asset_field)
+    if latest_only:
+        latest_task = _latest_project_task(kind)
+        if latest_task:
+            queryset = queryset.filter(task_target__task=latest_task)
     if target:
         try:
             queryset = queryset.filter(**{f'{page.asset_field}_id': target})
@@ -76,6 +89,46 @@ def _infrastructure_records(kind, *, target=''):
         _record_row(kind, page, inspection)
         for inspection in queryset.order_by('-created_at')
     ]
+
+
+def _computer_analysis_records(target=''):
+    error_exists = Error_Computer.objects.filter(inspection_id=OuterRef('pk'))
+    analyses = ComputerAnalysis.objects.select_related(
+        'computer', 'log_file',
+    ).annotate(
+        has_errors=Exists(error_exists),
+        ok=Case(
+            When(status=RecordStatus.SUCCESS, has_errors=False, then=Value(True)),
+            default=Value(False),
+            output_field=BooleanField(),
+        ),
+    )
+    latest_task = _latest_project_task('computers')
+    if latest_task:
+        analyses = analyses.filter(task_target__task=latest_task)
+    if target:
+        try:
+            analyses = analyses.filter(computer_id=target)
+        except (ValidationError, ValueError):
+            analyses = analyses.none()
+    return analyses
+
+
+def _project_workspace_context(request, kind):
+    tasks = list(project_task_queryset(kind))
+    task_page = Paginator(tasks, 7).get_page(request.GET.get('task_page'))
+    task_page.object_list = [summarize_task(task) for task in task_page.object_list]
+    return {
+        'task_metrics': build_project_task_metrics(tasks),
+        'task_page': task_page,
+        'latest_task': tasks[0] if tasks else None,
+        'task_section_title': (
+            '日志分析任务' if kind == 'computers' else '巡检任务'
+        ),
+        'task_empty_title': (
+            '暂无日志分析任务' if kind == 'computers' else '暂无巡检任务'
+        ),
+    }
 
 
 def record_list(request, kind):
@@ -105,6 +158,7 @@ def record_list(request, kind):
         ),
         'pagination_query': query_without_page(request),
     }
+    context.update(_project_workspace_context(request, kind))
     context.update(task_modal_context(request, kind, target_source='records'))
     context.update(alert_modal_context(request, profile=context['task_default_profile']))
     return render(request, 'records/list.html', context)
@@ -135,23 +189,8 @@ def record_detail(request, kind, pk):
 
 
 def computer_analysis_list(request):
-    error_exists = Error_Computer.objects.filter(inspection_id=OuterRef('pk'))
-    analyses = ComputerAnalysis.objects.select_related(
-        'computer', 'log_file',
-    ).annotate(
-        has_errors=Exists(error_exists),
-        ok=Case(
-            When(status=RecordStatus.SUCCESS, has_errors=False, then=Value(True)),
-            default=Value(False),
-            output_field=BooleanField(),
-        ),
-    )
     target = request.GET.get('target', '').strip()
-    if target:
-        try:
-            analyses = analyses.filter(computer_id=target)
-        except (ValidationError, ValueError):
-            analyses = analyses.none()
+    analyses = _computer_analysis_records(target)
     table_definition = get_table_definition('computer_inspections')
     analyses, table_state = apply_table_filters(
         request, analyses, table_definition, include_legacy_status=False,
@@ -172,6 +211,7 @@ def computer_analysis_list(request):
         ),
         'pagination_query': query_without_page(request),
     }
+    context.update(_project_workspace_context(request, 'computers'))
     context.update(task_modal_context(request, 'computers'))
     context.update(alert_modal_context(request, profile=context['task_default_profile']))
     return render(request, 'records/list.html', context)

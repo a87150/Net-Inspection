@@ -10,7 +10,7 @@
     </div>
     <div class="page-heading__actions">
         {% if item_key == 'networks' or item_key == 'monitors' %}<a class="btn btn-outline-success" href="{% url 'configuration_download' item_key asset.pk %}">下载最近成功配置</a>{% endif %}
-        {% if history_url %}<a class="btn btn-primary" href="{{ history_url }}">{% if item_key == 'computers' %}查看分析日志{% else %}查看巡检记录{% endif %}</a>{% endif %}
+        {% if history_url %}<a class="btn btn-primary" href="{{ history_url }}">{% if item_key == 'computers' %}查看日志分析记录{% else %}查看巡检记录{% endif %}</a>{% endif %}
         {% if manual_action_label %}<a class="btn btn-primary" href="{{ back_url }}?task_modal=run&amp;task_mode=selected&amp;task_targets={{ asset.pk }}">{{ manual_action_label }}</a>{% endif %}
         <a class="btn btn-outline-secondary" href="{{ back_url }}">返回列表</a>
     </div>

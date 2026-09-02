@@ -1,5 +1,4 @@
 from django.core.exceptions import ValidationError
-from django.db.models import BooleanField, Case, Exists, OuterRef, Value, When
 from django.http import Http404
 
 from index.table_registry import get_table_definition
@@ -7,21 +6,25 @@ from net.exports import export_filtered_csv
 from net.models import (
     Computer,
     ComputerLogFile,
-    ComputerAnalysis,
     Domain_Account,
     Domain_Computer,
     Error_Computer,
     Monitor,
     Network_Device,
     People,
-    RecordStatus,
     Server,
     TaskRun,
     TaskTargetRun,
     AlertEvent,
 )
 
-from .records import RECORD_PAGES, _error_records, _infrastructure_records, _inspection_records
+from .records import (
+    RECORD_PAGES,
+    _computer_analysis_records,
+    _error_records,
+    _infrastructure_records,
+    _inspection_records,
+)
 
 
 MODEL_TABLES = {
@@ -39,23 +42,7 @@ MODEL_TABLES = {
 
 
 def _computer_analyses(target):
-    error_exists = Error_Computer.objects.filter(inspection_id=OuterRef('pk'))
-    analyses = ComputerAnalysis.objects.select_related(
-        'computer', 'log_file',
-    ).annotate(
-        has_errors=Exists(error_exists),
-        ok=Case(
-            When(status=RecordStatus.SUCCESS, has_errors=False, then=Value(True)),
-            default=Value(False),
-            output_field=BooleanField(),
-        ),
-    )
-    if target:
-        try:
-            analyses = analyses.filter(computer_id=target)
-        except (ValidationError, ValueError):
-            analyses = analyses.none()
-    return analyses
+    return _computer_analysis_records(target)
 
 
 def _table_source(request, table_key, scope):

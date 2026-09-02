@@ -26,9 +26,8 @@
     <div class="card-footer metric-card__footer metric-card__actions metric-card__actions--end px-4 pb-4 d-flex gap-2 flex-wrap">
         {% if item.target_url %}<a href="{{ item.target_url }}" class="btn btn-outline-secondary btn-sm">进入管理</a>{% endif %}
         {% if item.list_url %}<a href="{{ item.list_url }}" class="btn btn-outline-secondary btn-sm">{{ item.name }}列表</a>{% endif %}
-        {% if item.record_url %}<a href="{{ item.record_url }}" class="btn {% if item.key == 'computers' %}btn-primary metric-card__primary-action{% else %}btn-outline-dark{% endif %} btn-sm">{{ item.record_label }}</a>{% endif %}
+        {% if item.record_url %}<a href="{{ item.record_url }}" class="btn btn-outline-dark btn-sm">{{ item.record_label }}</a>{% endif %}
         {% if item.detail_url %}<a href="{{ item.detail_url }}" class="btn btn-outline-dark btn-sm">{{ item.detail_label }}</a>{% endif %}
-        {% if item.stats_url %}<a href="{{ item.stats_url }}" class="btn btn-outline-dark btn-sm">统计详情</a>{% endif %}
         {% if item.manual_action_label %}<a class="btn btn-primary btn-sm metric-card__primary-action" href="{{ item.list_url }}?task_modal=run">{{ item.manual_action_label }}</a>{% endif %}
     </div>
 </section>

@@ -182,7 +182,7 @@ TABLE_DEFINITIONS = {
         ), 'time', 'desc', ('category', 'asset', 'type', 'message'), 20,
     ),
     'computer_inspections': TableDefinition(
-        'computer_inspections', 'PC 分析日志', (
+        'computer_inspections', 'PC 日志分析记录', (
             _field('execution_status', '执行状态', filterable=False, sortable=False),
             _field('task_source', '任务来源', filterable=False, sortable=False),
             _field('error_count', '异常数', filterable=False, sortable=False),

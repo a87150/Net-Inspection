@@ -207,12 +207,12 @@ class DetailRouteTests(TestCase):
                 self.assertContains(list_response, detail_url)
                 self.assertEqual(self.client.get(detail_url).status_code, 200)
 
-    def test_computer_record_copy_uses_analysis_log_wording(self):
+    def test_computer_record_copy_uses_log_analysis_record_wording(self):
         list_response = self.client.get(reverse('computer_analysis_list'))
         detail_url = reverse('computer_analysis_detail', args=[self.analysis.pk])
 
         self.assertEqual(list_response.status_code, 200)
-        self.assertContains(list_response, '分析日志')
+        self.assertContains(list_response, '日志分析记录')
         self.assertNotContains(list_response, '计算机巡检')
         self.assertContains(list_response, detail_url)
 
@@ -221,13 +221,8 @@ class DetailRouteTests(TestCase):
         self.assertContains(detail_response, '分析详情')
         self.assertNotContains(detail_response, '巡检详情')
 
-    def test_computer_statistics_uses_analysis_wording(self):
-        response = self.client.get(reverse('detail', args=['computers']))
-
-        self.assertContains(response, 'PC 分析统计数据')
-        self.assertNotContains(response, '设备巡检统计数据')
-        self.assertNotContains(response, '巡检设备总数')
-        self.assertNotContains(response, '最新巡检时间')
+    def test_old_computer_statistics_route_is_deleted(self):
+        self.assertEqual(self.client.get('/detail/computers/').status_code, 404)
 
     def test_homepage_project_cards_expose_separate_workspace_entries(self):
         response = self.client.get(reverse('index'))

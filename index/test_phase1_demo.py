@@ -61,7 +61,7 @@ class DashboardActionTests(TestCase):
         items = {item['key']: item for item in response.context['items']}
 
         self.assertContains(response, 'PC列表')
-        self.assertContains(response, '分析日志')
+        self.assertContains(response, '日志分析记录')
         self.assertContains(response, '手动执行巡检', count=3)
         self.assertEqual(
             items['computers']['list_url'],
@@ -730,8 +730,12 @@ class DeterministicDemoSeedTests(TestCase):
                 record = model.objects.get(summary=summary)
                 detail_url = reverse('record_detail', args=[kind, record.pk])
                 listing = self.client.get(reverse('record_list', args=[kind]))
-                self.assertContains(listing, summary)
-                self.assertContains(listing, detail_url)
+                if kind in {'networks', 'servers'}:
+                    # These records predate the newest seeded task for the project.
+                    self.assertNotContains(listing, summary)
+                else:
+                    self.assertContains(listing, summary)
+                    self.assertContains(listing, detail_url)
                 detail = self.client.get(detail_url)
                 self.assertContains(detail, summary)
                 self.assertContains(detail, '设备在线，但数据采集未完整成功')

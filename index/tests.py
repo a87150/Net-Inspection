@@ -344,12 +344,12 @@ class ComputerSnapshotTests(TestCase):
 
 
 class DashboardTests(TestCase):
-    def test_empty_dashboard_and_detail_do_not_crash(self):
+    def test_empty_dashboard_and_record_workspace_do_not_crash(self):
         response = self.client.get(reverse('index'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '后台任务')
         self.assertContains(response, '安防设备')
-        self.assertEqual(self.client.get(reverse('detail', args=['computers'])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('computer_analysis_list')).status_code, 200)
 
     def test_multiple_errors_count_as_one_abnormal_computer(self):
         computer = Computer.objects.create(computer_name='PC-COUNT')
@@ -364,7 +364,7 @@ class DashboardTests(TestCase):
         self.assertEqual(computers['checked'], 1)
         self.assertEqual(computers['bad'], 1)
 
-    def test_computer_detail_summarizes_error_children_by_type(self):
+    def test_computer_record_workspace_exposes_task_statistics(self):
         analysis = create_computer_analysis('PC-DETAIL-ERROR')
         Error_Computer.objects.create(
             inspection=analysis,
@@ -372,9 +372,10 @@ class DashboardTests(TestCase):
             error_message='空间不足',
         )
 
-        response = self.client.get(reverse('detail', args=['computers']))
+        response = self.client.get(reverse('computer_analysis_list'))
 
-        self.assertEqual(response.context['error_types'], ['磁盘异常'])
+        self.assertEqual(response.context['task_metrics']['task_count'], 0)
+        self.assertContains(response, '总体统计')
 
 
 class PeopleUploadTests(TestCase):
@@ -967,7 +968,7 @@ class VisualStructureTests(TestCase):
         responses = [
             self.client.get(reverse('index')),
             self.client.get(reverse('item_list', args=['people'])),
-            self.client.get(reverse('detail', args=['computers'])),
+            self.client.get(reverse('computer_analysis_list')),
             self.client.get(reverse('domain_controller_settings')),
             self.client.get(reverse('domain_account_list')),
             self.client.get(reverse('inspection_records')),

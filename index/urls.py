@@ -9,7 +9,6 @@ urlpatterns = [
     path('assets/<str:kind>/<uuid:pk>/', views.asset_detail, name='asset_detail'),
     path('people/<uuid:pk>/', views.person_detail, name='person_detail'),
     path('item/<str:item>/', views.item_list, name='item_list'),
-    path('detail/<str:item>/', views.detail, name='detail'),
     path('computers/analyses/', views.computer_analysis_list, name='computer_analysis_list'),
     path('computers/logs/', views.computer_log_list, name='computer_log_list'),
     path('computers/logs/<int:pk>/', views.computer_log_detail, name='computer_log_detail'),

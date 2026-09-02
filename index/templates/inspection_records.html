@@ -2,7 +2,7 @@
 {% load extras %}
 {% block title %}巡检与分析记录{% endblock %}
 {% block content %}
-<header class="page-heading"><div class="page-heading__copy"><p class="page-heading__eyebrow">执行记录</p><h1 class="page-heading__title">巡检与分析记录</h1><p class="page-heading__description">PC 分析日志与网络设备、服务器、安防设备巡检统一展示。</p></div><div class="page-heading__actions"><a href="{% url 'index' %}" class="btn btn-outline-secondary">返回总览</a></div></header>
+<header class="page-heading"><div class="page-heading__copy"><p class="page-heading__eyebrow">执行记录</p><h1 class="page-heading__title">巡检与分析记录</h1><p class="page-heading__description">PC 日志分析记录与网络设备、服务器、安防设备巡检统一展示。</p></div><div class="page-heading__actions"><a href="{% url 'index' %}" class="btn btn-outline-secondary">返回总览</a></div></header>
 <div data-table-workspace data-table-key="{{ table_preference_key|default:table_definition.key }}">
 <div class="table-toolbar">{% include 'table_workspace.html' %}</div>
 <div class="card surface-card"><div class="table-responsive" role="region" aria-label="巡检与分析记录数据表" tabindex="0"><table class="table table-hover align-middle mb-0"><thead><tr>
