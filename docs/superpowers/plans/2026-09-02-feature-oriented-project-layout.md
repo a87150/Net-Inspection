@@ -407,7 +407,7 @@ git commit -m "refactor: consolidate people and domain features"
 - Consumes: Device models from Task 2 and generic `CollectionResult`/HTTP primitives.
 - Produces: Device-specific collector and parser modules plus unchanged collector functions `collect_linux_ssh`, `collect_network_ssh`, `collect_windows_http`, and `collect_security_api` at their legacy paths.
 
-- [ ] **Step 1: Pin collector and export import contracts**
+- [x] **Step 1: Pin collector and export import contracts**
 
 Add focused imports to the compatibility test:
 
@@ -422,11 +422,11 @@ from net.exports.configuration import build_configuration_zip, latest_configurat
 
 Assert all imported functions are callable and `CollectionResult.__name__ == "CollectionResult"`.
 
-- [ ] **Step 2: Move PC implementation and add facades**
+- [x] **Step 2: Move PC implementation and add facades**
 
 Preserve `ANALYSIS_ITEMS`, log scanning/import behavior, upload processing, snapshot extraction/update functions, and task executor signatures. Update internal imports to canonical `net.devices.pc.*` paths.
 
-- [ ] **Step 3: Split collectors by device ownership**
+- [x] **Step 3: Split collectors by device ownership**
 
 Move generic result/deadline helpers to infrastructure. Keep server and network SSH parsing separate even though they share transport primitives. `net/services/collectors/ssh.py` re-exports both canonical functions:
 
@@ -437,11 +437,11 @@ from net.devices.server.linux_ssh import collect_linux_ssh
 __all__ = ["collect_linux_ssh", "collect_network_ssh"]
 ```
 
-- [ ] **Step 4: Move inventory and export behavior**
+- [x] **Step 4: Move inventory and export behavior**
 
 Place CSV behavior under `net.data_exchange`, device configuration adapters beside their device features, and orchestration under `net.data_exchange.configuration`. Preserve current view imports through old export/service facades.
 
-- [ ] **Step 5: Run focused device checks**
+- [x] **Step 5: Run focused device checks**
 
 ```powershell
 python manage.py test tests.architecture.test_compatibility_contracts index.test_asset_inventory_extension index.test_phase2_computer_logs index.test_phase4_config_export index.test_phase4_native_deadline index.test_windows_network_evidence --verbosity 1
@@ -450,7 +450,7 @@ python manage.py check
 
 Expected: selected tests and checks pass without contacting real devices.
 
-- [ ] **Step 6: Commit and stop for inspection**
+- [x] **Step 6: Commit and stop for inspection**
 
 ```powershell
 git add net/devices net/infrastructure net/data_exchange net/services net/exports net/tasks tests/architecture

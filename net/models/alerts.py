@@ -485,7 +485,7 @@ class AlertEvent(models.Model):
             raise ValidationError(errors)
 
     def _validate_scope(self, using=None):
-        from .task_models import TaskTargetRun
+        from net.models.tasks import TaskTargetRun
 
         alias = using or self._state.db or 'default'
         target = TaskTargetRun.objects.using(alias).select_related('task').filter(pk=self.target_run_id).first()
