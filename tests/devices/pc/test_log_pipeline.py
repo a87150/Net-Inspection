@@ -160,7 +160,7 @@ class FinalPipelineTests(TestCase):
         self.assertEqual(child.parameters_snapshot['concurrent_workers'], 8)
         self.assertEqual(child.total_targets, 1)
 
-    def test_legacy_people_post_is_gone_and_never_writes(self):
+    def test_removed_people_post_is_not_routed_and_never_writes(self):
         person = People.objects.create(employee_id='protected', name='original')
         from net.models import PeopleSyncSource
         for name, kind in [('a', 'feishu'), ('b', 'feishu'), ('c', 'dingtalk')]:
@@ -169,7 +169,7 @@ class FinalPipelineTests(TestCase):
         People.objects.create(employee_id='csv', source='csv')
         original = list(People.objects.order_by('pk').values())
         response = self.client.post('/api/upload_people/', json.dumps([{'工号': 'new', '姓名': 'new'}]), content_type='application/json')
-        self.assertEqual(response.status_code, 410)
+        self.assertEqual(response.status_code, 404)
         person.refresh_from_db()
         self.assertTrue(person.is_active)
         self.assertEqual(list(People.objects.order_by('pk').values()), original)

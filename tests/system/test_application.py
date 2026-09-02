@@ -381,10 +381,10 @@ class DashboardTests(TestCase):
 
 
 class PeopleUploadTests(TestCase):
-    def test_empty_upload_does_not_deactivate_people(self):
+    def test_removed_upload_endpoint_does_not_deactivate_people(self):
         person = People.objects.create(employee_id='H1', is_active=True)
-        response = APIClient().post(reverse('upload_people'), [], format='json')
-        self.assertEqual(response.status_code, 410)
+        response = APIClient().post('/api/upload_people/', [], format='json')
+        self.assertEqual(response.status_code, 404)
         person.refresh_from_db()
         self.assertTrue(person.is_active)
 

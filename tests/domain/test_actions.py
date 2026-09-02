@@ -13,7 +13,7 @@ from net.domain.validation import (
     validate_dn_within_base,
     validate_domain_action,
 )
-from net.domain.client import DomainClient
+from net.domain.client import DomainClient, effective_bind_username
 from net.domain import sync as ad_sync
 
 
@@ -550,20 +550,20 @@ class DomainClientTests(SimpleTestCase):
         """A connection refactor must not alter saved LDAP ports or recognized bind identities."""
         self.assertEqual(DomainClient(self.config).config.port, ['636'])
         self.assertEqual(
-            ad_sync._effective_bind_username(SimpleNamespace(
+            effective_bind_username(SimpleNamespace(
                 bind_username='sync', base_dn='DC=example,DC=test',
             )),
             'sync@example.test',
         )
         self.assertEqual(
-            ad_sync._effective_bind_username(SimpleNamespace(
+            effective_bind_username(SimpleNamespace(
                 bind_username='CN=Sync,OU=Svc,DC=example,DC=test',
                 base_dn='DC=example,DC=test',
             )),
             'CN=Sync,OU=Svc,DC=example,DC=test',
         )
         self.assertEqual(
-            ad_sync._effective_bind_username(SimpleNamespace(
+            effective_bind_username(SimpleNamespace(
                 bind_username='EXAMPLE\\sync', base_dn='DC=example,DC=test',
             )),
             'EXAMPLE\\sync',

@@ -58,9 +58,3 @@ class ComputerInspectionView(APIView):
             return _isolated_retry(receive)
         except (ValidationError, ValueError, TypeError) as exc:
             return Response({'detail': sanitize(str(exc))}, status=400)
-
-
-class UploadPeopleView(APIView):
-    def post(self, request):
-        return Response({'detail': '此接口已退役，不会写入数据。请使用人员 CSV 导入或来源隔离的预览/确认同步。',
-                         'code': 'upload_people_retired'}, status=410)

@@ -29,13 +29,6 @@ from net.inspections.executor import (
     _has_live_lease,
     _target_id,
 )
-
-
-def scan_profile_logs(profile, now=None):
-    """Compatibility wrapper for Worker-owned scan execution only."""
-    return scan_log_directory(profile, now=now)
-
-
 def _snapshot_profile(task):
     """Rebuild the scan configuration from the immutable task snapshot."""
     snapshot = task.profile_snapshot if isinstance(task.profile_snapshot, dict) else {}

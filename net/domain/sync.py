@@ -5,14 +5,8 @@ from django.db import transaction
 from ldap3.core.exceptions import LDAPInvalidDnError
 from ldap3.utils.dn import parse_dn
 
-from net.domain.client import DomainClient, effective_bind_username
+from net.domain.client import DomainClient
 from net.models import Domain_Account, Domain_Computer
-
-
-def _effective_bind_username(config):
-    return effective_bind_username(config)
-
-
 def _connect(config):
     return DomainClient(config).connect()
 
