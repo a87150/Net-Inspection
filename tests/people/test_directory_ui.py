@@ -102,6 +102,8 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
         self.assertNotContains(response, '来源名称')
         self.assertNotContains(response, '稳定来源标识')
         self.assertNotContains(response, 'name="source_id"')
+        self.assertContains(response, 'data-people-task-notifications')
+        self.assertContains(response, reverse('people_task_status'))
 
     def test_provider_tabs_are_import_only_and_credentials_are_write_only(self):
         response = self.client.get('/assets/people/')
@@ -169,7 +171,7 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
         self.assertContains(response, '仅停用当前 API 来源')
         self.assertContains(response, 'OLD')
         self.assertContains(response, '确认应用')
-        self.assertContains(response, '第 3 步：执行导入')
+        self.assertContains(response, '导入数据')
         token = target.result_snapshot['preview']['token']
         self.assertEqual(self.apply(task, token, confirm='').status_code, 400)
         with patch('requests.sessions.Session.request', side_effect=AssertionError('Web outbound I/O')):

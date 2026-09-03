@@ -27,6 +27,7 @@
 {% if item_key == 'computers' and not task_default_profile.scan_directories %}<div class="alert alert-warning">请先配置扫描目录，再下载 PC 采集脚本。<a href="{% url 'computer_analysis_list' %}?task_modal=profile">前往分析配置</a></div>{% endif %}
 {% if import_enabled %}{% include 'common/import_modal.html' %}{% endif %}
 {% if people_operation %}{% include 'integrations/preview_modal.html' %}{% endif %}
+{% if personnel_api_import %}{% include 'integrations/task_notifications.html' %}{% endif %}
 {% if task_project_kind %}{% include 'inspections/profile_modal.html' %}{% include 'inspections/run_modal.html' %}{% include 'alerts/policy_modal.html' %}{% endif %}
 
 <div data-table-workspace data-table-key="{{ table_definition.key }}">

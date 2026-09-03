@@ -313,7 +313,7 @@
 - Consumes: Task 2 status payload and acknowledgement endpoint.
 - Produces: `createPeopleTaskController({document, window, fetchImpl, pollIntervalMs})` with `start()`, `stop()`, `poll()`, `dismissRunning(taskId)`, and `acknowledgeTerminal(taskId)` methods.
 
-- [ ] **Step 1: Write failing JavaScript controller tests**
+- [x] **Step 1: Write failing JavaScript controller tests**
 
   In `tests/frontend/people_import_tasks.test.js`, use small DOM/fetch/bootstrap fakes and assert:
 
@@ -336,7 +336,7 @@
 
   Also test failed fetch stops only the current polling timer, terminal confirmation posts `kind=terminal`, and jump uses the returned same-origin `jump_url`.
 
-- [ ] **Step 2: Run JavaScript tests and verify the controller is missing**
+- [x] **Step 2: Run JavaScript tests and verify the controller is missing**
 
   Run:
 
@@ -346,23 +346,23 @@
 
   Expected: FAIL because `static/app/js/people/import_tasks.js` does not exist.
 
-- [ ] **Step 3: Implement the browser controller without full-page refresh**
+- [x] **Step 3: Implement the browser controller without full-page refresh**
 
   Export the controller under CommonJS for Node tests, then auto-start it only when `[data-people-task-notifications]` exists. Use one `setTimeout` after each successful poll rather than overlapping `setInterval` requests. Render running notices with a per-task “知道了，本次不再显示” button. Cache terminal task IDs in the controller so repeated identical payloads cannot reopen a modal before acknowledgement finishes.
 
-- [ ] **Step 4: Add notification regions and completion modal**
+- [x] **Step 4: Add notification regions and completion modal**
 
   Render a lightweight status region containing `data-status-url` and CSRF token, plus one Bootstrap modal with message, “关闭” and “查看结果”. Include it on the people list only. Add the script to `base.html` with `defer`; the controller must remain inert on all other pages.
 
-- [ ] **Step 5: Make preview result the only place that offers import**
+- [x] **Step 5: Make preview result the only place that offers import**
 
   Keep `people_operation` as the jump target. For a successful valid preview, render counts, bounded samples, signed preview token, confirmation checkbox, and “导入数据”. For failed/invalid preview, render the categorized validation reason and no import form. After successful `people_apply`, redirect to the people list with exact created/updated/deactivated/skipped counts; if apply fails, return the same result modal with status 400 and no partial writes.
 
-- [ ] **Step 6: Add focused Django rendering tests**
+- [x] **Step 6: Add focused Django rendering tests**
 
   Assert the people page contains the notification status URL and JS hook, direct queued operation responses have no `Refresh`, valid preview contains exactly one `people_apply` form, invalid preview contains none, and another browser session cannot view or apply it.
 
-- [ ] **Step 7: Run Task 3 tests**
+- [x] **Step 7: Run Task 3 tests**
 
   Run:
 
@@ -373,7 +373,7 @@
 
   Expected: PASS.
 
-- [ ] **Step 8: Commit and stop for user inspection**
+- [x] **Step 8: Commit and stop for user inspection**
 
   ```powershell
   git add static/app/js/people/import_tasks.js tests/frontend/people_import_tasks.test.js index/templates/integrations/task_notifications.html index/templates/common/base.html index/templates/common/import_modal.html index/templates/integrations/preview_modal.html index/templates/devices/list.html index/people/integrations.py static/app/css/style.css tests/people/test_directory_ui.py
