@@ -275,7 +275,7 @@ def people_task_acknowledge(request, pk):
 
 def people_operation(request, pk, *, error=''):
     task = get_object_or_404(
-        TaskRun, pk=pk, task_type__in=TaskRun.PEOPLE_TASK_TYPES,
+        TaskRun, pk=pk, task_type__in=TaskRun.PEOPLE_INTERACTIVE_TASK_TYPES,
     )
     require_people_owner(request, task)
     source = _source(task.people_source_id)
@@ -310,7 +310,7 @@ def people_apply(request):
     try:
         task = TaskRun.objects.get(
             pk=request.POST.get('task_id'),
-            task_type__in=TaskRun.PEOPLE_TASK_TYPES,
+            task_type=TaskRun.TaskType.PEOPLE_PREVIEW,
         )
     except (TaskRun.DoesNotExist, ValidationError, ValueError):
         raise Http404('人员目录操作不存在。') from None

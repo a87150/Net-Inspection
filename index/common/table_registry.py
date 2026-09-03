@@ -272,6 +272,7 @@ TABLE_DEFINITIONS = {
                 ('monitor', '安防设备'), ('computer_log', 'PC 日志'),
                 ('computer_scan', 'PC 日志扫描'),
                 ('domain_account', '域账号'), ('domain_computer', '域计算机'),
+                ('people_source', '人员 API 平台'),
             )),
             _field('target_id', '目标标识'),
             _field('status', '执行状态', 'choice', choices=(

@@ -13,6 +13,7 @@ from net.models import (
     ComputerAnalysisProfile,
     ComputerLogFile,
     InspectionProfile,
+    PeopleSyncSource,
     SecurityDevice,
     Network_Device,
     Schedule,
@@ -182,7 +183,7 @@ def _is_due(schedule, now):
 
 
 def _schedule_profile(schedule):
-    profile = schedule.inspection_profile or schedule.analysis_profile
+    profile = schedule.inspection_profile or schedule.analysis_profile or schedule.people_source
     if profile is None:
         raise ValidationError({'schedule': '计划必须关联配置。'})
     return profile
@@ -202,7 +203,7 @@ def _enqueue_due_schedules(now):
             with transaction.atomic():
                 schedule = (
                     Schedule.objects.select_for_update()
-                    .select_related('inspection_profile', 'analysis_profile')
+                    .select_related('inspection_profile', 'analysis_profile', 'people_source')
                     .filter(pk=schedule_id)
                     .first()
                 )
@@ -211,7 +212,10 @@ def _enqueue_due_schedules(now):
 
                 profile = _schedule_profile(schedule)
                 overrides = {'available_at': now, 'schedule': schedule}
-                if isinstance(profile, ComputerAnalysisProfile):
+                if isinstance(profile, PeopleSyncSource):
+                    from net.people.tasks import enqueue_people_sync_task
+                    task = enqueue_people_sync_task(schedule, available_at=now)
+                elif isinstance(profile, ComputerAnalysisProfile):
                     task = enqueue_computer_scan_task(
                         profile, TaskRun.Source.SCHEDULED, overrides=overrides,
                     )

@@ -554,7 +554,7 @@
 - Consumes: canonical source configuration identity, `preview_people_sync(source, adapter)`, `apply_people_sync(source, preview)`, existing task lease fencing and schedule polling.
 - Produces: `enqueue_people_sync_task(schedule: Schedule, *, available_at: datetime) -> TaskRun` and `execute_people_sync(source, adapter) -> PeopleSyncResult` through the existing `execute_people_target` dispatch.
 
-- [ ] **Step 1: Write failing enqueue and scheduler eligibility tests**
+- [x] **Step 1: Write failing enqueue and scheduler eligibility tests**
 
   In `tests/people/test_scheduled_sync.py`, assert a due tested source produces one scheduled task with one `people_source` target and immutable snapshots:
 
@@ -570,7 +570,7 @@
 
   Add tests that disabled source, disabled plan, never-tested source, and source modified after test remain due but enqueue nothing; after a successful retest the same plan enqueues. Concurrent/double scheduler polls must create at most one active task.
 
-- [ ] **Step 2: Run scheduled enqueue tests and verify they fail**
+- [x] **Step 2: Run scheduled enqueue tests and verify they fail**
 
   Run:
 
@@ -580,13 +580,13 @@
 
   Expected: FAIL because scheduler profile resolution cannot handle `people_source`.
 
-- [ ] **Step 3: Implement immutable scheduled enqueue**
+- [x] **Step 3: Implement immutable scheduled enqueue**
 
   `enqueue_people_sync_task` must lock/refetch source and schedule, verify canonical key, enabled state, current connection test, matching relation, and schedule eligibility. Build `profile_snapshot` only from `source.public_data()`, add a non-secret configuration digest and schedule timing snapshot to `parameters_snapshot`, build a unique scope from task type plus source ID, and create one target with `target_type='people_source'`.
 
   Update `_schedule_profile`/`_enqueue_due_schedules` to select `people_source`, dispatch to this function, and advance `last_enqueued_at`/`next_run_at` only after successful enqueue. An ineligible changed source remains due for retry after retest.
 
-- [ ] **Step 4: Write failing transactional Worker tests**
+- [x] **Step 4: Write failing transactional Worker tests**
 
   Add three tests using `SnapshotAdapter`:
 
@@ -610,7 +610,7 @@
 
   Also assert persisted result counts include created, updated, unchanged, deactivated, and skipped; scheduled tasks contain no browser session owner and are excluded from browser status JSON.
 
-- [ ] **Step 5: Implement scheduled execution and categorized safe errors**
+- [x] **Step 5: Implement scheduled execution and categorized safe errors**
 
   In `execute_people_target`, branch `PEOPLE_SYNC` to:
 
@@ -632,11 +632,11 @@
 
   Re-check source configuration identity and task lease immediately before apply. Map known adapter/sync exceptions to fixed categories `authentication`, `permission`, `rate_limit`, `connection`, `payload`, or `validation`; map unexpected exceptions to a generic safe message containing only the exception class name. Do not persist raw remote URLs, response bodies, tokens, secrets, or personnel samples in error text.
 
-- [ ] **Step 6: Integrate task detail, export and alert exclusions**
+- [x] **Step 6: Integrate task detail, export and alert exclusions**
 
   Change `index/inspections/tasks.py` so only `PEOPLE_INTERACTIVE_TASK_TYPES` redirect to the private operation modal; scheduled `people_sync` uses the standard task detail page. Keep every `PEOPLE_TASK_TYPES` member excluded from device alert reconciliation. Allow normal task-list filtering/detail/export for scheduled sync counts while preserving browser ownership checks for interactive test/preview exports.
 
-- [ ] **Step 7: Run Task 6 tests**
+- [x] **Step 7: Run Task 6 tests**
 
   Run:
 
@@ -646,7 +646,7 @@
 
   Expected: PASS; all remote calls are mocked adapters.
 
-- [ ] **Step 8: Commit and stop for user inspection**
+- [x] **Step 8: Commit and stop for user inspection**
 
   ```powershell
   git add net/people/tasks.py net/people/executor.py net/inspections/schedules.py net/inspections/worker.py index/inspections/tasks.py index/common/exports.py net/alerts/service.py tests/people/test_directory_ui.py tests/people/test_scheduled_sync.py tests/inspections/test_worker.py tests/dashboard/test_taskbar.py

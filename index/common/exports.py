@@ -80,7 +80,7 @@ def _table_source(request, table_key, scope):
             task = TaskRun.objects.get(pk=scope)
         except (TaskRun.DoesNotExist, ValidationError, ValueError) as exc:
             raise Http404('未知的任务') from exc
-        if task.task_type in TaskRun.PEOPLE_TASK_TYPES:
+        if task.task_type in TaskRun.PEOPLE_INTERACTIVE_TASK_TYPES:
             from index.people.integrations import require_people_owner
             require_people_owner(request, task)
         return TaskTargetRun.objects.filter(task=task)

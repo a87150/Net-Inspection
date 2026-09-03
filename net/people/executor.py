@@ -3,10 +3,21 @@
 from django.db import transaction
 from django.utils import timezone
 
-from net.people.directory.base import DirectoryAdapterError
+from net.people.directory.base import (
+    DirectoryAdapterError,
+    DirectoryAuthenticationError,
+    DirectoryPayloadError,
+    DirectoryRateLimitError,
+)
 from net.people.directory.dingtalk import DingTalkDirectoryAdapter
 from net.people.directory.feishu import FeishuDirectoryAdapter
-from net.people.directory.sync import PeopleSyncError, preview_people_sync
+from net.people.directory.sync import (
+    PeopleSyncApplyError,
+    PeopleSyncError,
+    PeopleSyncPreviewError,
+    apply_people_sync,
+    preview_people_sync,
+)
 from net.models import PeopleSyncSource, TaskRun, TaskTargetRun
 from net.people.tasks import source_matches_task
 from net.inspections.state import save_target
@@ -76,13 +87,47 @@ def execute_people_target(target_run, *, worker_id, lease_guard=None):
                 result = {'validation_messages': list(preview.validation_messages)}
             else:
                 result = {'preview': preview.to_dict()}
+        elif started.task.task_type == TaskRun.TaskType.PEOPLE_SYNC:
+            preview = preview_people_sync(source, adapter)
+            if not preview.is_valid or not preview.token:
+                error = '人员目录数据校验失败，本次同步未写入人员数据。'
+                result = {
+                    'error_category': 'validation',
+                    'validation_messages': list(preview.validation_messages),
+                }
+            else:
+                current_source = PeopleSyncSource.objects.get(pk=source.pk)
+                if not source_matches_task(current_source, started.task):
+                    raise PeopleSyncApplyError()
+                if lease_guard is not None and lease_guard.is_set():
+                    return ExecutionOutcome(str(started.pk), started.status, stale=True)
+                applied = apply_people_sync(current_source, preview)
+                result = {
+                    'counts': {
+                        'created': applied.created,
+                        'updated': applied.updated,
+                        'unchanged': applied.unchanged,
+                        'deactivated': applied.deactivated,
+                        'skipped': len(preview.skipped),
+                    },
+                    'validation_messages': [],
+                }
         else:
             raise ValueError('unsupported operation')
-    except (DirectoryAdapterError, PeopleSyncError):
-        error = '人员目录接口调用或预览失败，请检查配置后重试。'
-    except Exception:
+    except DirectoryAuthenticationError:
+        result, error = {'error_category': 'authentication'}, '人员目录认证失败，请检查 API 密钥。'
+    except DirectoryRateLimitError:
+        result, error = {'error_category': 'rate_limit'}, '人员目录接口请求过于频繁，请稍后重试。'
+    except DirectoryPayloadError:
+        result, error = {'error_category': 'payload'}, '人员目录返回的数据格式无效。'
+    except DirectoryAdapterError:
+        result, error = {'error_category': 'connection'}, '人员目录连接失败，请检查网络和平台接口。'
+    except (PeopleSyncApplyError, PeopleSyncPreviewError, PeopleSyncError):
+        result, error = {'error_category': 'validation'}, '人员目录数据校验失败，本次同步未写入人员数据。'
+    except Exception as exc:
         # Provider exception details may include credentials, tokens, or URLs.
-        error = '人员目录操作失败，请检查来源配置后重试。'
+        result = {'error_category': 'unexpected'}
+        error = f'人员目录操作失败（{type(exc).__name__}）。'
     return _publish(started, worker_id, result, error, lease_guard)
 
 

@@ -415,7 +415,7 @@ def task_detail(request, pk):
         TaskRun.objects.select_related('inspection_profile', 'analysis_profile', 'schedule'),
         pk=pk,
     )
-    if task.task_type in TaskRun.PEOPLE_TASK_TYPES:
+    if task.task_type in TaskRun.PEOPLE_INTERACTIVE_TASK_TYPES:
         from index.people.integrations import require_people_owner
         require_people_owner(request, task)
         return redirect('people_operation', pk=task.pk)
@@ -451,6 +451,9 @@ def task_detail(request, pk):
     )
     for target in page_obj:
         target.result_url = _target_result_url(target)
+        if task.task_type == TaskRun.TaskType.PEOPLE_SYNC:
+            snapshot = target.result_snapshot if isinstance(target.result_snapshot, dict) else {}
+            target.people_sync_counts = snapshot.get('counts', {})
         if domain_operation:
             snapshot = target.target_snapshot if isinstance(target.target_snapshot, dict) else {}
             target.domain_name = snapshot.get('name') or target.target_id

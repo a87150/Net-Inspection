@@ -11,6 +11,7 @@ from net.people.directory.base import directory_source_configuration_identity
 from net.people.directory.sync import PeopleSyncApplyError, SyncPreview, apply_people_sync
 from net.models import PeopleSyncSource, TaskRun, TaskTargetRun
 from net.inspections.state import save_task
+from net.people.providers import get_provider_definition
 
 
 PEOPLE_SESSION_TASKS = 'people_directory_task_ids'
@@ -121,6 +122,80 @@ def enqueue_people_task(source_id, task_type, session_key):
         raise ValidationError('人员目录来源无效。') from None
     except IntegrityError:
         raise ValidationError('当前来源已有相同的活动操作，请等待完成。') from None
+
+
+def enqueue_people_sync_task(schedule, *, available_at):
+    """Create one immutable, non-browser scheduled directory synchronization."""
+    try:
+        with transaction.atomic():
+            locked_schedule = type(schedule).objects.select_for_update().select_related(
+                'people_source',
+            ).get(pk=schedule.pk)
+            source = PeopleSyncSource.objects.select_for_update().get(
+                pk=locked_schedule.people_source_id,
+            )
+            definition = get_provider_definition(source.source_type)
+            if (
+                not locked_schedule.is_enabled
+                or locked_schedule.people_source_id != source.pk
+                or not source.is_enabled
+                or source.source_key != definition.source_key
+                or not source.public_data()['connection_test_current']
+            ):
+                raise ValidationError('人员自动同步计划尚不具备执行条件。')
+            source.full_clean()
+            scope = {
+                'targets': [{
+                    'target_type': TaskTargetRun.TargetType.PEOPLE_SOURCE,
+                    'target_id': str(source.pk),
+                }],
+            }
+            task = TaskRun(
+                task_type=TaskRun.TaskType.PEOPLE_SYNC,
+                source=TaskRun.Source.SCHEDULED,
+                people_source=source,
+                schedule=locked_schedule,
+                total_targets=1,
+                available_at=available_at,
+                profile_snapshot=source.public_data(),
+                parameters_snapshot={
+                    'concurrent_workers': 1,
+                    'fetch_configuration_identity': directory_source_configuration_identity(source),
+                    'schedule': {
+                        'kind': locked_schedule.kind,
+                        'interval_value': locked_schedule.interval_value,
+                        'interval_unit': locked_schedule.interval_unit,
+                        'daily_time': (
+                            locked_schedule.daily_time.isoformat()
+                            if locked_schedule.daily_time else None
+                        ),
+                    },
+                },
+                target_scope_snapshot=scope,
+            )
+            task.scope_key = TaskRun.build_scope_key(
+                task_type=task.task_type,
+                profile_id=source.pk,
+                target_scope_snapshot=scope,
+            )
+            task.active_scope_key = task.scope_key
+            if TaskRun.objects.filter(active_scope_key=task.scope_key).exists():
+                raise ValidationError('当前平台已有活动的自动同步任务。')
+            task.full_clean()
+            task.save()
+            target = TaskTargetRun(
+                task=task,
+                target_type=TaskTargetRun.TargetType.PEOPLE_SOURCE,
+                target_id=str(source.pk),
+                target_snapshot=source.public_data(),
+            )
+            target.full_clean()
+            target.save()
+            return task
+    except (PeopleSyncSource.DoesNotExist, ValueError, TypeError, AttributeError):
+        raise ValidationError('人员自动同步计划无效。') from None
+    except IntegrityError:
+        raise ValidationError('当前平台已有活动的自动同步任务。') from None
 
 
 def apply_people_task(task_id, session_key, token):
