@@ -52,6 +52,10 @@ function workspaceFixture({selectedPageSize = '20'} = {}) {
         element({dataset: {filterKey: 'name'}, value: '当前查询', name: 'filter_name'}),
         element({dataset: {filterKey: 'department'}, value: '技术部', name: 'filter_department'}),
     ];
+    const suggestionSelect = element({
+        dataset: {filterInput: 'people-department-filter-input'},
+        options: ['', '研发部', '运维部'],
+    });
     const pageSize = element({
         dataset: {defaultPageSize: '20'},
         value: selectedPageSize,
@@ -87,6 +91,7 @@ function workspaceFixture({selectedPageSize = '20'} = {}) {
                 '[data-filter-toggle]': filterToggles,
                 '[data-filter-field][data-filter-key]': filterFields,
                 '[data-filtered-export]': [exportLink, configExportLink],
+                '[data-filter-suggestion-select]': [suggestionSelect],
             }[selector] || [];
         },
         querySelector(selector) {
@@ -95,12 +100,13 @@ function workspaceFixture({selectedPageSize = '20'} = {}) {
                 '[data-table-reset]': reset,
                 '[data-more-filters]': moreFilters,
                 '[data-filtered-export]': exportLink,
+                '#people-department-filter-input': filterFields[1],
             }[selector] || null;
         },
     };
     return {
         workspace, columnToggles, columnCells, filterToggles, filterFields,
-        pageSize, reset, moreFilters, exportLink, configExportLink,
+        pageSize, reset, moreFilters, exportLink, configExportLink, suggestionSelect,
     };
 }
 
@@ -202,6 +208,24 @@ test('keeps compact filter preferences and suggestion values after reload', () =
     );
     assert.equal(fixture.filterFields[1].value, '技术部');
     assert.equal(fixture.moreFilters.open, true);
+});
+
+test('copies a dropdown suggestion into the editable filter and keeps all choices reusable', () => {
+    const fixture = workspaceFixture();
+    controller.initializeWorkspace(fixture.workspace, memoryStorage());
+
+    fixture.suggestionSelect.value = '研发部';
+    fixture.suggestionSelect.dispatch('change');
+
+    assert.equal(fixture.filterFields[1].value, '研发部');
+    assert.equal(fixture.suggestionSelect.value, '');
+    assert.deepEqual(
+        fixture.suggestionSelect.options.map((option) => option.value),
+        ['', '研发部', '运维部'],
+    );
+
+    fixture.filterFields[1].value = '自定义部门';
+    assert.equal(fixture.filterFields[1].value, '自定义部门');
 });
 
 test('hiding an active filter clears it from controls URL and export state', () => {

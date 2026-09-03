@@ -194,6 +194,7 @@
             reset: workspace.querySelector('[data-table-reset]'),
             moreFilters: workspace.querySelector('[data-more-filters]'),
             exportLinks: Array.from(workspace.querySelectorAll('[data-filtered-export]')),
+            suggestionSelects: Array.from(workspace.querySelectorAll('[data-filter-suggestion-select]')),
         };
         elements.moreFilterFields = elements.moreFilters
             ? Array.from(elements.moreFilters.querySelectorAll(
@@ -242,6 +243,16 @@
                 }
                 applyPreferences(elements, currentPreferences(elements, defaults));
                 save();
+            });
+        });
+        elements.suggestionSelects.forEach((select) => {
+            select.addEventListener('change', () => {
+                const inputId = select.dataset.filterInput;
+                const input = inputId ? workspace.querySelector(`#${inputId}`) : null;
+                if (!input || !select.value) return;
+                input.value = select.value;
+                select.value = '';
+                input.focus?.();
             });
         });
         elements.pageSize?.addEventListener('change', () => {

@@ -257,6 +257,15 @@ a.metric-card:hover {
     flex-basis: 15rem;
 }
 
+.table-filter-field--editable-options {
+    flex-basis: 16rem;
+}
+
+.table-filter-suggestion-select {
+    flex: 0 0 5.25rem !important;
+    max-width: 5.25rem;
+}
+
 .table-filter-field .form-label {
     margin-bottom: .2rem;
 }

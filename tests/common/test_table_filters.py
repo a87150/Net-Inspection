@@ -104,14 +104,22 @@ class CompactFilterWorkspaceTests(TestCase):
             ),
         ])
 
-    def test_workspace_renders_compact_defaults_and_stable_option_selects(self):
+    def test_workspace_renders_editable_filters_with_stable_option_selects(self):
         response = self.client.get(reverse('asset_list', args=['people']))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'class="table-filter-bar"')
         self.assertContains(response, '<summary>更多筛选</summary>', html=True)
         self.assertContains(response, '<summary>自定义表格</summary>', html=True)
-        self.assertContains(response, '<select class="form-select" name="filter_name">')
+        self.assertContains(
+            response,
+            '<input class="form-control" id="people-name-filter-input" name="filter_name" value="" autocomplete="off">',
+            html=True,
+        )
+        self.assertContains(
+            response,
+            'data-filter-suggestion-select data-filter-input="people-name-filter-input"',
+        )
         self.assertContains(response, '<option value="张三">张三</option>', html=True)
         self.assertContains(response, '<option value="李四">李四</option>', html=True)
         self.assertNotContains(response, 'list="people-name-options"')
@@ -127,11 +135,8 @@ class CompactFilterWorkspaceTests(TestCase):
             'filter_name': '张三',
         })
 
-        self.assertContains(
-            response,
-            '<option value="张三" selected>张三</option>',
-            html=True,
-        )
+        self.assertContains(response, 'name="filter_name" value="张三"')
+        self.assertContains(response, '<option value="张三">张三</option>', html=True)
         self.assertContains(response, '<option value="李四">李四</option>', html=True)
 
     def test_non_default_filter_still_uses_allowlisted_backend_filter(self):
@@ -240,7 +245,7 @@ class CompactFilterWorkspaceTests(TestCase):
         self.assertIn('data-filter-active', parser.filter_toggles['email'])
         self.assertIn('open', parser.more_filters[0])
 
-    def test_stale_distinct_value_is_visible_as_selected_current_filter(self):
+    def test_stale_distinct_value_stays_editable_and_available_as_a_candidate(self):
         response = self.client.get(reverse('asset_list', args=['people']), {
             'filter_department': '已撤销部门',
         })
@@ -248,9 +253,10 @@ class CompactFilterWorkspaceTests(TestCase):
         parser.feed(response.content.decode())
 
         self.assertNotIn('hidden', parser.filter_fields['department'])
+        self.assertContains(response, 'name="filter_department" value="已撤销部门"')
         self.assertContains(
             response,
-            '<option value="已撤销部门" selected>已撤销部门（当前筛选）</option>',
+            '<option value="已撤销部门">已撤销部门（当前筛选）</option>',
             html=True,
         )
 
