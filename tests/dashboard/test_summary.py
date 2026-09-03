@@ -320,6 +320,11 @@ class DashboardSummaryTests(TestCase):
         self.assertContains(response, 'class="metric-card__domain-status"', count=6)
         self.assertContains(
             response,
+            'class="metric-card__domain-breakdown justify-content-center"',
+            count=3,
+        )
+        self.assertContains(
+            response,
             'class="metric-card__last-run text-secondary mb-0 text-end"',
             count=4,
         )

@@ -432,24 +432,21 @@ th[aria-sort="descending"] .table-sort-link::after { color: var(--color-primary)
     white-space: nowrap;
 }
 
-.metric-card__domain-columns .col-4 + .col-4 {
-    border-inline-start: 1px solid var(--color-border);
-}
-
 .metric-card__domain-breakdown {
-    display: grid;
-    gap: .2rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem .8rem;
     margin-top: .5rem;
 }
 
 .metric-card__domain-status {
-    display: grid;
-    grid-template-columns: minmax(3rem, 1fr) auto;
+    display: inline-flex;
     align-items: baseline;
-    gap: .4rem;
+    justify-content: center;
+    gap: .25rem;
     color: var(--color-text-muted);
     font-size: .8rem;
-    text-align: left;
+    text-align: center;
 }
 
 .metric-card__domain-status strong {
