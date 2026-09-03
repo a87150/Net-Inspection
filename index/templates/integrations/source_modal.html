@@ -21,4 +21,20 @@
         {% elif tab.selected.connection_test_current %}<div class="small text-success mt-2">当前配置已通过连接测试，可以预览数据。</div>
         {% else %}<div class="small text-danger mt-2">当前配置尚未通过连接测试，请先完成第 1 步。</div>{% endif %}
     </div>
+    {% if tab.selected %}
+    <form method="post" action="{% url 'people_schedule_save' tab.provider %}" class="border-top mt-3 pt-3 d-grid gap-2">
+        {% csrf_token %}
+        <h4 class="h6 mb-1">自动定时同步</h4>
+        <label class="form-check"><input class="form-check-input" type="checkbox" name="is_enabled"{% if tab.schedule and tab.schedule.is_enabled %} checked{% endif %}><span class="form-check-label">启用自动同步</span></label>
+        <div class="row g-2">
+            <div class="col-md-4"><label class="form-label small">执行方式</label><select class="form-select form-select-sm" name="kind" data-schedule-kind><option value="interval"{% if not tab.schedule or tab.schedule.kind == 'interval' %} selected{% endif %}>每隔 N 分钟/小时</option><option value="daily"{% if tab.schedule.kind == 'daily' %} selected{% endif %}>每天指定时间</option></select></div>
+            <div class="col-md-2" data-schedule-interval><label class="form-label small">间隔</label><input class="form-control form-control-sm" type="number" min="1" name="interval_value" value="{{ tab.schedule.interval_value|default:30 }}"></div>
+            <div class="col-md-3" data-schedule-interval><label class="form-label small">单位</label><select class="form-select form-select-sm" name="interval_unit"><option value="minutes"{% if not tab.schedule or tab.schedule.interval_unit == 'minutes' %} selected{% endif %}>分钟</option><option value="hours"{% if tab.schedule.interval_unit == 'hours' %} selected{% endif %}>小时</option></select></div>
+            <div class="col-md-3" data-schedule-daily><label class="form-label small">执行时间</label><input class="form-control form-control-sm" type="time" name="daily_time" value="{{ tab.schedule.daily_time|time:'H:i' }}"></div>
+        </div>
+        {% if tab.schedule %}<div class="small text-secondary">最近入队：{{ tab.schedule.last_enqueued_at|date:'Y-m-d H:i'|default:'暂无' }}；下次执行：{{ tab.schedule.next_run_at|date:'Y-m-d H:i'|default:'待计算' }}；最近结果：{% if tab.latest_sync_task %}{{ tab.latest_sync_task.get_status_display }}{% else %}暂无{% endif %}。</div>{% endif %}
+        {% if tab.schedule and tab.schedule.is_enabled and not tab.selected.connection_test_current %}<div class="small text-danger">配置已变化，自动同步计划将等待重新测试。</div>{% endif %}
+        <button class="btn btn-outline-dark btn-sm justify-self-start" type="submit">保存自动同步计划</button>
+    </form>
+    {% endif %}
 </section>

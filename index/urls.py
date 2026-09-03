@@ -35,6 +35,7 @@ urlpatterns = [
     path('data/<str:entity>/import/', views.import_inventory, name='import_inventory'),
     path('data/people/api/<str:provider>/', views.import_people_api, name='import_people_from_api'),
     path('integrations/people/providers/<str:provider>/save/', views.people_provider_save, name='people_provider_save'),
+    path('integrations/people/providers/<str:provider>/schedule/', views.people_schedule_save, name='people_schedule_save'),
     path('integrations/people/sources/save/', views.people_source_save, name='people_source_save'),
     path('integrations/people/test/', views.people_test, name='people_test'),
     path('integrations/people/preview/', views.people_preview, name='people_preview'),

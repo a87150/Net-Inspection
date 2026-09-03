@@ -12,8 +12,8 @@ from django.urls import reverse
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_GET, require_POST
 
-from index.people.forms import PeopleProviderForm
-from net.models import PeopleSyncSource, TaskRun
+from index.people.forms import PeopleProviderForm, PeopleScheduleForm
+from net.models import PeopleSyncSource, Schedule, TaskRun
 from net.people.directory.sync import PeopleSyncError, SyncPreview
 from net.people.providers import PROVIDERS, get_provider_source
 from net.people.tasks import (
@@ -67,6 +67,7 @@ def people_modal_context(
     tabs = []
     for key, definition in PROVIDERS.items():
         current = get_provider_source(key)
+        schedule = Schedule.objects.filter(people_source=current).first() if current else None
         tab_form = form if form is not None and key == provider else None
         if tab_form is None and feedback and feedback.get('provider') == key:
             tab_form = PeopleProviderForm(
@@ -85,6 +86,14 @@ def people_modal_context(
             'label': definition.label,
             'selected': current.public_data() if current else None,
             'form': tab_form.public_form(),
+            'schedule': schedule,
+            'schedule_form': PeopleScheduleForm(
+                source=current, schedule=schedule,
+            ) if current else None,
+            'latest_sync_task': TaskRun.objects.filter(
+                task_type=TaskRun.TaskType.PEOPLE_SYNC,
+                people_source=current,
+            ).order_by('-created_at').first() if current else None,
             'active': provider == key,
         })
 
@@ -156,6 +165,27 @@ def people_provider_save(request, provider):
 def people_source_save(request):
     """Temporary fixed-provider bridge for the old route."""
     return people_provider_save(request, request.POST.get('source_type', ''))
+
+
+@require_POST
+def people_schedule_save(request, provider):
+    source = _provider_source(provider)
+    if source is None:
+        messages.error(request, f'请先保存{PROVIDERS[provider].label} API 设置。')
+        return redirect(_provider_redirect(provider))
+    schedule = Schedule.objects.filter(people_source=source).first()
+    form = PeopleScheduleForm(request.POST, source=source, schedule=schedule)
+    if form.is_valid():
+        form.save()
+        messages.success(request, f'{PROVIDERS[provider].label}自动同步计划已保存。')
+    else:
+        messages.error(
+            request,
+            '自动同步计划保存失败：' + ' '.join(
+                str(message) for errors in form.errors.values() for message in errors
+            ),
+        )
+    return redirect(_provider_redirect(provider))
 
 
 def _queue_operation(request, task_type):

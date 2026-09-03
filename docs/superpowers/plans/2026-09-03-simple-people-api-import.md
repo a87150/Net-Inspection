@@ -484,7 +484,7 @@
 - Consumes: `Schedule.people_source`, `next_run_at(schedule, after)`, canonical provider service from Task 1.
 - Produces: `PeopleScheduleForm(data=None, *, source: PeopleSyncSource, schedule: Schedule | None)` and `save_people_schedule(source: PeopleSyncSource, cleaned_data: dict) -> Schedule`.
 
-- [ ] **Step 1: Write failing schedule form/UI tests**
+- [x] **Step 1: Write failing schedule form/UI tests**
 
   Test both providers and both schedule modes:
 
@@ -502,7 +502,7 @@
 
   Add daily-time, pause/resume, invalid mixed fields, untested source cannot enable, changed config preserves schedule but renders “等待重新测试”, and status text for last/next run.
 
-- [ ] **Step 2: Run the focused UI tests and verify schedule controls are absent**
+- [x] **Step 2: Run the focused UI tests and verify schedule controls are absent**
 
   Run:
 
@@ -512,21 +512,21 @@
 
   Expected: FAIL on the missing schedule endpoint/form.
 
-- [ ] **Step 3: Implement strict plan parsing and atomic save**
+- [x] **Step 3: Implement strict plan parsing and atomic save**
 
   `PeopleScheduleForm.clean()` must normalize the inactive mode to `None`/empty string and reject enablement unless `source.is_enabled` and `source.public_data()['connection_test_current']` are true. In an atomic save, lock the source and existing schedule, call `full_clean()`, calculate `next_run_at` from `timezone.now()` when enabled, and set `next_run_at=None` when disabled.
 
-- [ ] **Step 4: Render compact schedule controls under each fixed platform**
+- [x] **Step 4: Render compact schedule controls under each fixed platform**
 
   Add enabled checkbox, mode, interval value/unit, daily time, save button, and read-only last enqueue/last result/next run summary. Reuse the existing `data-schedule-kind` behavior in `task_ui.js`. When configuration changed after test, keep the saved schedule visible but show that it is not eligible to execute.
 
-- [ ] **Step 5: Run Task 5 tests**
+- [x] **Step 5: Run Task 5 tests**
 
   Run the command from Step 2.
 
   Expected: PASS.
 
-- [ ] **Step 6: Commit and stop for user inspection**
+- [x] **Step 6: Commit and stop for user inspection**
 
   ```powershell
   git add index/people/forms.py index/people/integrations.py index/templates/integrations/source_modal.html tests/people/test_directory_ui.py

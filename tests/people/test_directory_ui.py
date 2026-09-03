@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from tests.people.test_directory_sync import SnapshotAdapter
 from net.people.directory import DirectoryPerson
-from net.models import People, PeopleSyncSource, TaskRun, TaskTargetRun
+from net.models import People, PeopleSyncSource, Schedule, TaskRun, TaskTargetRun
 from net.inspections.queue import claim_next_task, finish_task, recover_expired_tasks
 
 
@@ -77,6 +77,51 @@ class PeopleFlowMixin:
 
 
 class PeopleImportUITests(PeopleFlowMixin, TestCase):
+    def test_fixed_provider_can_save_interval_and_daily_schedule(self):
+        response = self.client.post('/integrations/people/providers/feishu/schedule/', {
+            'is_enabled': 'on', 'kind': 'interval',
+            'interval_value': '2', 'interval_unit': 'hours', 'daily_time': '',
+        })
+        self.assertEqual(response.status_code, 302)
+        schedule = Schedule.objects.get(people_source=self.source)
+        self.assertEqual(
+            (schedule.kind, schedule.interval_value, schedule.interval_unit),
+            ('interval', 2, 'hours'),
+        )
+        self.assertIsNotNone(schedule.next_run_at)
+
+        response = self.client.post('/integrations/people/providers/feishu/schedule/', {
+            'is_enabled': 'on', 'kind': 'daily',
+            'interval_value': '', 'interval_unit': '', 'daily_time': '08:30',
+        })
+        self.assertEqual(response.status_code, 302)
+        schedule.refresh_from_db()
+        self.assertEqual(schedule.kind, 'daily')
+        self.assertEqual(schedule.daily_time.strftime('%H:%M'), '08:30')
+        self.assertIsNone(schedule.interval_value)
+
+    def test_schedule_requires_current_connection_test_and_survives_config_change(self):
+        PeopleSyncSource.objects.filter(pk=self.source.pk).update(last_tested_at=None)
+        response = self.client.post('/integrations/people/providers/feishu/schedule/', {
+            'is_enabled': 'on', 'kind': 'interval',
+            'interval_value': '30', 'interval_unit': 'minutes', 'daily_time': '',
+        }, follow=True)
+        self.assertContains(response, '必须先通过当前配置的连接测试')
+        self.assertFalse(Schedule.objects.exists())
+
+        PeopleSyncSource.objects.filter(pk=self.source.pk).update(last_tested_at=timezone.now())
+        self.client.post('/integrations/people/providers/feishu/schedule/', {
+            'is_enabled': 'on', 'kind': 'interval',
+            'interval_value': '30', 'interval_unit': 'minutes', 'daily_time': '',
+        })
+        self.client.post('/integrations/people/providers/feishu/save/', {
+            'root_department_ids': 'changed', 'is_enabled': 'on',
+            'app_id': '', 'app_secret': '',
+        })
+        schedule = Schedule.objects.get(people_source=self.source)
+        self.assertTrue(schedule.is_enabled)
+        response = self.client.get('/assets/people/?import=people&provider=feishu')
+        self.assertContains(response, '等待重新测试')
     def test_preview_requires_a_successful_connection_test_for_current_source(self):
         PeopleSyncSource.objects.filter(pk=self.source.pk).update(last_tested_at=None)
 
