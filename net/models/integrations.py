@@ -103,6 +103,10 @@ class PeopleSyncSource(models.Model):
             'has_credentials': bool(self.credentials),
             'last_tested_at': self.last_tested_at.isoformat() if self.last_tested_at else None,
             'last_synced_at': self.last_synced_at.isoformat() if self.last_synced_at else None,
+            'connection_test_current': bool(
+                self.last_tested_at and self.updated_at
+                and self.last_tested_at >= self.updated_at
+            ),
         }
 
     def __str__(self):

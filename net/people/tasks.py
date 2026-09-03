@@ -39,6 +39,11 @@ def enqueue_people_task(source_id, task_type, session_key):
             if not source.is_enabled:
                 raise ValidationError('已停用的来源不能创建任务。')
             source.full_clean()
+            if (
+                task_type == TaskRun.TaskType.PEOPLE_PREVIEW
+                and not source.public_data()['connection_test_current']
+            ):
+                raise ValidationError('请先完成第 1 步“测试连接”，再预览数据。')
             scope = {'targets': [{'target_type': 'people_source', 'target_id': str(source.pk)}]}
             task = TaskRun(
                 task_type=task_type, people_source=source, total_targets=1,

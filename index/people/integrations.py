@@ -75,7 +75,7 @@ def people_source_save(request):
                 if source:
                     form._source = PeopleSyncSource.objects.select_for_update().get(pk=source.pk)
                 saved = form.save()
-            messages.success(request, '人员目录来源已保存；请生成预览并明确确认后应用。')
+            messages.success(request, '人员目录来源已保存；请先测试连接，再预览数据并执行导入。')
             return redirect(f"{reverse('asset_list', args=['people'])}?import=api&provider={provider}&source_id={saved.pk}")
         except (ValidationError, IntegrityError):
             form.add_error(None, '来源配置无效或稳定来源标识已被使用。')

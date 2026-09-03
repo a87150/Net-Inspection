@@ -36,6 +36,11 @@ class PeopleFlowMixin:
             name='分部目录', source_key='branch', source_type='feishu',
             credentials={'app_id': 'branch-app', 'app_secret': 'branch-secret'},
         )
+        PeopleSyncSource.objects.filter(pk__in=[self.source.pk, self.other.pk]).update(
+            last_tested_at=timezone.now(),
+        )
+        self.source.refresh_from_db()
+        self.other.refresh_from_db()
         self.factory = patch('net.people.executor.build_directory_adapter', FixtureDirectory)
         # Start only once the public entry exists: RED is missing UI behavior, not import errors.
 
@@ -65,6 +70,27 @@ class PeopleFlowMixin:
 
 
 class PeopleImportUITests(PeopleFlowMixin, TestCase):
+    def test_preview_requires_a_successful_connection_test_for_current_source(self):
+        PeopleSyncSource.objects.filter(pk=self.source.pk).update(last_tested_at=None)
+
+        response = self.client.post(
+            '/integrations/people/preview/', {'source_id': self.source.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '请先完成第 1 步“测试连接”')
+        self.assertEqual(TaskRun.objects.count(), 0)
+
+    def test_people_source_page_presents_three_ordered_import_stages(self):
+        response = self.client.get(
+            f'/assets/people/?import=api&provider=feishu&source_id={self.source.pk}',
+        )
+
+        self.assertContains(response, '第 1 步：测试连接')
+        self.assertContains(response, '第 2 步：预览数据')
+        self.assertContains(response, '第 3 步：执行导入')
+        self.assertNotContains(response, '测试连接（可选）')
+
     def test_provider_tabs_are_import_only_and_credentials_are_write_only(self):
         response = self.client.get('/assets/people/')
         document = response.content.decode(response.charset)
@@ -130,6 +156,7 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
         self.assertContains(response, '仅停用当前来源')
         self.assertContains(response, 'OLD')
         self.assertContains(response, '确认应用')
+        self.assertContains(response, '第 3 步：执行导入')
         token = target.result_snapshot['preview']['token']
         self.assertEqual(self.apply(task, token, confirm='').status_code, 400)
         with patch('requests.sessions.Session.request', side_effect=AssertionError('Web outbound I/O')):
@@ -230,6 +257,8 @@ class PeopleQueueTests(PeopleFlowMixin, TestCase):
         target = self.execute(task)
         self.assertEqual(task.status, 'failed')
         self.assertNotIn('preview', target.result_snapshot)
+        PeopleSyncSource.objects.filter(pk=self.source.pk).update(last_tested_at=timezone.now())
+        self.source.refresh_from_db()
         task, _ = self.enqueue()
         self.factory = patch('net.people.executor.build_directory_adapter',
                              lambda source: SnapshotAdapter(source, [], complete=False))
@@ -239,6 +268,8 @@ class PeopleQueueTests(PeopleFlowMixin, TestCase):
         self.assertFalse(People.objects.exists())
 
     def test_lost_lease_cannot_publish_preview_or_test_timestamp(self):
+        PeopleSyncSource.objects.filter(pk=self.source.pk).update(last_tested_at=None)
+        self.source.refresh_from_db()
         task, _ = self.enqueue('test')
         def lose_lease(source):
             adapter = FixtureDirectory(source)

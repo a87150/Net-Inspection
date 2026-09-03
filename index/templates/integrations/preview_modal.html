@@ -25,7 +25,7 @@
             <form method="post" action="{% url 'people_apply' %}" class="d-grid gap-3">{% csrf_token %}
                 <input type="hidden" name="task_id" value="{{ people_operation.pk }}"><input type="hidden" name="preview_token" value="{{ people_preview.token }}">
                 <label class="form-check"><input class="form-check-input" type="checkbox" name="confirm" value="yes" required><span class="form-check-label">我已核对新增、更新和停用，确认应用此已保存预览。</span></label>
-                <button class="btn btn-primary" type="submit">确认应用</button>
+                <button class="btn btn-primary" type="submit">第 3 步：执行导入</button>
             </form>
             {% endif %}
             <a class="btn btn-outline-secondary" href="{% url 'asset_list' 'people' %}?import=api&amp;provider={{ people_operation_source.source_type }}&amp;source_id={{ people_operation_source.id }}">返回来源配置 / 重新预览</a>

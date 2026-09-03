@@ -50,7 +50,10 @@ class FeishuDirectoryAdapter:
 
     def test_connection(self):
         self._validate_source()
-        self._tenant_access_token()
+        access_token = self._tenant_access_token()
+        root_department_id = (self.source.root_department_ids or ['0'])[0]
+        self._read_department_people(access_token, root_department_id, {})
+        self._read_child_departments(access_token, root_department_id)
 
     def iter_people(self):
         self.last_snapshot_complete = False
@@ -164,7 +167,9 @@ class FeishuDirectoryAdapter:
             for item in items:
                 if not isinstance(item, Mapping):
                     raise DirectoryPayloadError()
-                children.append(self._required_text(item.get('department_id')))
+                children.append(self._required_text(
+                    item.get('open_department_id', item.get('department_id')),
+                ))
             if not isinstance(data.get('has_more'), bool):
                 raise DirectoryPayloadError()
             if not data['has_more']:
