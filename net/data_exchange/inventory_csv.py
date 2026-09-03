@@ -389,6 +389,7 @@ def import_csv(entity, uploaded_file):
 
         prepared = []
         errors = []
+        blank_people_employee_id_rows = []
         seen_keys = {}
         for row_number, row in enumerate(reader, start=2):
             if row_number > MAX_CSV_ROWS + 1:
@@ -424,7 +425,10 @@ def import_csv(entity, uploaded_file):
                     errors.append(f'第 {row_number} 行“{original_header}”：{exc}')
             key_value = values.get(spec['key'])
             if not key_value:
-                errors.append(f'第 {row_number} 行主键不能为空')
+                if entity == 'people':
+                    blank_people_employee_id_rows.append(row_number)
+                else:
+                    errors.append(f'第 {row_number} 行主键不能为空')
             elif key_value in seen_keys:
                 errors.append(
                     f'第 {row_number} 行主键重复'
@@ -436,6 +440,18 @@ def import_csv(entity, uploaded_file):
     except csv.Error as exc:
         raise ValueError(f'CSV 格式错误：{exc}') from exc
 
+    if blank_people_employee_id_rows:
+        displayed_rows = '、'.join(
+            str(row_number) for row_number in blank_people_employee_id_rows[:20]
+        )
+        remaining_count = len(blank_people_employee_id_rows) - 20
+        remaining_text = f'，另有 {remaining_count} 行' if remaining_count > 0 else ''
+        errors.insert(
+            0,
+            f'发现 {len(blank_people_employee_id_rows)} 条人员记录的“工号”为空'
+            f'（第 {displayed_rows} 行{remaining_text}），请补充后重新导入；'
+            '本次未写入任何数据',
+        )
     if errors:
         raise ValueError('；'.join(errors[:20]))
     if not prepared:

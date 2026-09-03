@@ -12,7 +12,8 @@ from django.urls import reverse
 from index.common.table_registry import get_table_definition
 from net.models import Computer, Network_Device, People, Server
 from net.devices.pc.snapshot import extract_computer_snapshot, update_computer_snapshot
-from net.data_exchange.inventory_csv import export_csv, import_csv
+from net.data_exchange.inventory_csv import export_csv, import_csv, import_file
+from net.data_exchange.xlsx import build_xlsx
 
 
 class AssetInventoryFieldTests(TestCase):
@@ -63,6 +64,41 @@ class AssetInventoryFieldTests(TestCase):
 
 
 class AssetInventoryImportExportTests(TestCase):
+    def test_people_import_reports_all_blank_employee_id_rows_without_writes(self):
+        rows = (
+            ('姓名', '工号', '邮箱'),
+            ('空工号甲', '', 'first@example.test'),
+            ('有效人员', 'P-VALID', 'valid@example.test'),
+            ('空工号乙', '   ', 'second@example.test'),
+        )
+        uploads = (
+            SimpleUploadedFile(
+                'people.csv',
+                ('姓名,工号,邮箱\n'
+                 '空工号甲,,first@example.test\n'
+                 '有效人员,P-VALID,valid@example.test\n'
+                 '空工号乙,   ,second@example.test\n').encode('utf-8-sig'),
+                content_type='text/csv',
+            ),
+            SimpleUploadedFile(
+                'people.xlsx',
+                build_xlsx(rows, sheet_name='人员'),
+                content_type=(
+                    'application/vnd.openxmlformats-officedocument.'
+                    'spreadsheetml.sheet'
+                ),
+            ),
+        )
+
+        for upload in uploads:
+            with self.subTest(filename=upload.name):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    '发现 2 条人员记录的“工号”为空（第 2、4 行）',
+                ):
+                    import_file('people', upload)
+                self.assertEqual(People.objects.count(), 0)
+
     def test_pc_export_has_static_configuration_but_not_enabled_state(self):
         Computer.objects.create(
             computer_name='PC-EXPORT', login_account='EXAMPLE\\alice',

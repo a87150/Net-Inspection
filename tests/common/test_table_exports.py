@@ -136,7 +136,7 @@ class FilteredExportContractTests(TestCase):
                 self.assertEqual(len(parsed.find(
                     'button', **{'data-bs-target': '#importModal'},
                 )), 1)
-                button_label = '导入人员' if entity == 'people' else '导入'
+                button_label = '导入人员' if entity == 'people' else '导入设备'
                 self.assertIn(f'>{button_label}</button>', document)
                 self.assertIn(
                     f'action="{reverse("import_inventory", args=[entity])}"', modal,
