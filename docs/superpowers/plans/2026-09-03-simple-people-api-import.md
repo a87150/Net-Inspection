@@ -397,7 +397,7 @@
 - Consumes: existing `Schedule.Kind`, `Schedule.IntervalUnit`, `TaskRun.Source.SCHEDULED`, and `PeopleSyncSource`.
 - Produces: `Schedule.people_source: ForeignKey[PeopleSyncSource] | None`, `TaskRun.TaskType.PEOPLE_SYNC = 'people_sync'`, and expanded `TaskRun.PEOPLE_TASK_TYPES` while retaining Task 2's `PEOPLE_INTERACTIVE_TASK_TYPES`.
 
-- [ ] **Step 1: Write failing model constraint tests**
+- [x] **Step 1: Write failing model constraint tests**
 
   Add tests proving:
 
@@ -414,7 +414,7 @@
 
   Also assert one schedule per source, interval/daily field shape, and task binding rules: manual test/preview have no schedule; scheduled `people_sync` requires both matching `people_source` and `schedule`; `people_sync` cannot use manual source.
 
-- [ ] **Step 2: Run model tests and verify the fields/type are absent**
+- [x] **Step 2: Run model tests and verify the fields/type are absent**
 
   Run:
 
@@ -424,7 +424,7 @@
 
   Expected: FAIL on missing `Schedule.people_source` and `people_sync` choice.
 
-- [ ] **Step 3: Extend models and separate interactive from all people task types**
+- [x] **Step 3: Extend models and separate interactive from all people task types**
 
   Add:
 
@@ -435,7 +435,7 @@
 
   Update `Schedule.clean()` to require exactly one of `inspection_profile_id`, `analysis_profile_id`, and `people_source_id`. Update `Schedule.__str__()` to use the first non-null relation. Expand database constraints and uniqueness for `people_source`. Update `TaskRun.clean()` to verify a scheduled task's `schedule.people_source_id == people_source_id`; update database shape constraints so scheduled people sync has no inspection/analysis profile, has both schedule/source, and cannot carry `people_applied_at` before completion.
 
-- [ ] **Step 4: Create and inspect the explicit migration**
+- [x] **Step 4: Create and inspect the explicit migration**
 
   Generate `0021_people_sync_schedules.py`, then ensure it performs only:
 
@@ -453,17 +453,17 @@
 
   Expected: `No changes detected` after the migration exists.
 
-- [ ] **Step 5: Expose the new relation safely in Django admin and task tables**
+- [x] **Step 5: Expose the new relation safely in Django admin and task tables**
 
   Add `people_source` to `ScheduleAdmin.list_display`, `search_fields`, and `raw_id_fields`. Add “人员自动同步” to task table choices. Keep task run and target run histories read-only.
 
-- [ ] **Step 6: Run Task 4 tests**
+- [x] **Step 6: Run Task 4 tests**
 
   Run the command from Step 2 plus migration drift check from Step 4.
 
   Expected: PASS.
 
-- [ ] **Step 7: Commit and stop for user inspection**
+- [x] **Step 7: Commit and stop for user inspection**
 
   ```powershell
   git add net/models/tasks.py net/migrations/0021_people_sync_schedules.py net/admin/tasks.py index/common/table_registry.py tests/people/test_directory_ui.py tests/inspections/test_queue.py tests/architecture/test_admin_registry.py

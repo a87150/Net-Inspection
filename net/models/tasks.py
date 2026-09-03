@@ -245,6 +245,13 @@ class Schedule(models.Model):
         on_delete=models.PROTECT,
         related_name='schedules',
     )
+    people_source = models.ForeignKey(
+        'PeopleSyncSource',
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name='schedules',
+    )
     kind = models.CharField(max_length=16, choices=Kind.choices)
     interval_value = models.PositiveIntegerField(
         null=True,
@@ -271,10 +278,17 @@ class Schedule(models.Model):
                     models.Q(
                         inspection_profile__isnull=False,
                         analysis_profile__isnull=True,
+                        people_source__isnull=True,
                     )
                     | models.Q(
                         inspection_profile__isnull=True,
                         analysis_profile__isnull=False,
+                        people_source__isnull=True,
+                    )
+                    | models.Q(
+                        inspection_profile__isnull=True,
+                        analysis_profile__isnull=True,
+                        people_source__isnull=False,
                     )
                 ),
                 name='net_schedule_one_profile_ck',
@@ -299,6 +313,7 @@ class Schedule(models.Model):
             ),
             models.UniqueConstraint(fields=['inspection_profile'], name='net_schedule_inspection_uniq'),
             models.UniqueConstraint(fields=['analysis_profile'], name='net_schedule_analysis_uniq'),
+            models.UniqueConstraint(fields=['people_source'], name='net_schedule_people_source_uniq'),
         ]
 
     def clean(self):
@@ -306,9 +321,11 @@ class Schedule(models.Model):
         errors = {}
         has_inspection = self.inspection_profile_id is not None
         has_analysis = self.analysis_profile_id is not None
-        if has_inspection == has_analysis:
+        has_people = self.people_source_id is not None
+        if sum((has_inspection, has_analysis, has_people)) != 1:
             errors['inspection_profile'] = '必须且只能选择一个配置。'
             errors['analysis_profile'] = '必须且只能选择一个配置。'
+            errors['people_source'] = '必须且只能选择一个配置。'
 
         if self.kind == self.Kind.INTERVAL:
             if self.interval_value is None:
@@ -329,7 +346,7 @@ class Schedule(models.Model):
             raise ValidationError(errors)
 
     def __str__(self):
-        profile = self.inspection_profile or self.analysis_profile
+        profile = self.inspection_profile or self.analysis_profile or self.people_source
         return f'{profile} - {self.get_kind_display()}'
 
 
@@ -340,6 +357,7 @@ class TaskRun(models.Model):
         COMPUTER_SCAN = 'computer_scan', '计算机日志扫描'
         PEOPLE_TEST = 'people_test', '人员目录连接测试'
         PEOPLE_PREVIEW = 'people_preview', '人员目录同步预览'
+        PEOPLE_SYNC = 'people_sync', '人员自动同步'
         DOMAIN_OPERATION = 'domain_operation', '域控操作'
 
     class Source(models.TextChoices):
@@ -358,7 +376,9 @@ class TaskRun(models.Model):
     PEOPLE_INTERACTIVE_TASK_TYPES = frozenset({
         TaskType.PEOPLE_TEST, TaskType.PEOPLE_PREVIEW,
     })
-    PEOPLE_TASK_TYPES = PEOPLE_INTERACTIVE_TASK_TYPES
+    PEOPLE_TASK_TYPES = frozenset({
+        *PEOPLE_INTERACTIVE_TASK_TYPES, TaskType.PEOPLE_SYNC,
+    })
     TERMINAL_STATUSES = frozenset(
         {Status.SUCCESS, Status.PARTIAL, Status.FAILED, Status.CANCELLED}
     )
@@ -487,6 +507,10 @@ class TaskRun(models.Model):
                     models.Q(task_type__in=('people_test', 'people_preview'),
                              people_source__isnull=False, inspection_profile__isnull=True,
                              analysis_profile__isnull=True, schedule__isnull=True, source='manual')
+                    | models.Q(task_type='people_sync', people_source__isnull=False,
+                               inspection_profile__isnull=True, analysis_profile__isnull=True,
+                               schedule__isnull=False, source='scheduled',
+                               people_applied_at__isnull=True)
                     | models.Q(task_type='inspection', people_source__isnull=True,
                                inspection_profile__isnull=False, analysis_profile__isnull=True,
                                people_applied_at__isnull=True)
@@ -616,7 +640,7 @@ class TaskRun(models.Model):
 
         has_inspection = self.inspection_profile_id is not None
         has_analysis = self.analysis_profile_id is not None
-        if self.task_type in self.PEOPLE_TASK_TYPES:
+        if self.task_type in self.PEOPLE_INTERACTIVE_TASK_TYPES:
             if not self.people_source_id or has_inspection or has_analysis:
                 errors['people_source'] = '人员目录任务必须且只能关联一个目录来源。'
             if self.schedule_id or self.source != self.Source.MANUAL:
@@ -627,6 +651,13 @@ class TaskRun(models.Model):
                 errors['parameters_snapshot'] = '人员目录操作必须绑定发起会话。'
             if self.selected_items_snapshot or self.total_targets != 1:
                 errors['total_targets'] = '人员目录操作必须且只能包含当前来源目标。'
+        elif self.task_type == self.TaskType.PEOPLE_SYNC:
+            if not self.people_source_id or has_inspection or has_analysis:
+                errors['people_source'] = '人员自动同步必须且只能关联一个目录配置。'
+            if not self.schedule_id or self.source != self.Source.SCHEDULED:
+                errors['schedule'] = '人员自动同步必须关联定时计划。'
+            if self.selected_items_snapshot or self.total_targets != 1:
+                errors['total_targets'] = '人员自动同步必须且只能包含当前平台目标。'
         elif self.people_source_id or self.people_applied_at:
             errors['people_source'] = '其他任务不能关联人员目录来源或确认状态。'
         if self.task_type == self.TaskType.DOMAIN_OPERATION:
@@ -675,6 +706,11 @@ class TaskRun(models.Model):
                 self.TaskType.COMPUTER_SCAN,
             } and schedule.analysis_profile_id != self.analysis_profile_id:
                 errors['schedule'] = '定时任务必须使用计划关联的分析配置。'
+            if (
+                self.task_type == self.TaskType.PEOPLE_SYNC
+                and schedule.people_source_id != self.people_source_id
+            ):
+                errors['schedule'] = '定时任务必须使用计划关联的人员 API 配置。'
         for field_name in (
             'profile_snapshot',
             'parameters_snapshot',

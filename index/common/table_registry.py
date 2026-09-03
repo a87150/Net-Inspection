@@ -248,6 +248,7 @@ TABLE_DEFINITIONS = {
                 ('inspection', '设备巡检'),
                 ('computer_analysis', 'PC 日志分析'),
                 ('computer_scan', 'PC 日志扫描'),
+                ('people_sync', '人员自动同步'),
                 ('domain_operation', '域控操作'),
             )),
             _field('source', '来源', 'choice', choices=(

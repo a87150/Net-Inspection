@@ -25,10 +25,10 @@ class ComputerAnalysisProfileAdmin(admin.ModelAdmin):
 
 @admin.register(Schedule)
 class ScheduleAdmin(admin.ModelAdmin):
-    list_display = ('id', 'inspection_profile', 'analysis_profile', 'kind', 'is_enabled', 'next_run_at', 'last_enqueued_at')
+    list_display = ('id', 'inspection_profile', 'analysis_profile', 'people_source', 'kind', 'is_enabled', 'next_run_at', 'last_enqueued_at')
     list_filter = ('kind', 'is_enabled')
-    search_fields = ('inspection_profile__name', 'analysis_profile__name')
-    raw_id_fields = ('inspection_profile', 'analysis_profile')
+    search_fields = ('inspection_profile__name', 'analysis_profile__name', 'people_source__name')
+    raw_id_fields = ('inspection_profile', 'analysis_profile', 'people_source')
     readonly_fields = ('next_run_at', 'last_enqueued_at', 'created_at', 'updated_at')
     date_hierarchy = 'next_run_at'
 
