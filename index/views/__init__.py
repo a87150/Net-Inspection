@@ -11,11 +11,12 @@ from index.dashboard.views import index, with_latest_status
 from index.domain.views import (
     domain_account_detail,
     domain_computer_detail,
+    domain_group_detail,
     domain_controller_settings,
     domain_object_detail,
     domain_object_list,
 )
-from index.domain.operations import domain_operation_create, domain_operation_retry
+from index.domain.operations import domain_account_import, domain_account_import_template, domain_operation_create, domain_operation_retry
 from index.common.imports import (
     download_inventory_template,
     import_inventory,
@@ -73,11 +74,14 @@ __all__ = [
     'computer_inspection_list',
     'domain_account_detail',
     'domain_computer_detail',
+    'domain_group_detail',
     'domain_controller_settings',
     'domain_object_detail',
     'domain_object_list',
     'domain_operation_create',
     'domain_operation_retry',
+    'domain_account_import',
+    'domain_account_import_template',
     'download_inventory_template',
     'error_records',
     'import_inventory',

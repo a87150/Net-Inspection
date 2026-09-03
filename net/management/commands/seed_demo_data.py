@@ -14,6 +14,7 @@ from net.models import (
     Domain_Account,
     Domain_Computer,
     Domain_Controller_Config,
+    Domain_Group,
     DomainOperation,
     Error_Computer,
     Error_Monitor,
@@ -63,6 +64,11 @@ DEMO_DOMAIN_COMPUTERS = (
     'DEMO-DOMAIN-PC-01',
     'DEMO-DOMAIN-PC-02',
     'DEMO-DOMAIN-PC-OLD',
+)
+DEMO_DOMAIN_GROUPS = (
+    'DEMO-IT-ADMINS',
+    'DEMO-NOTICES',
+    'DEMO-PC-OPERATORS',
 )
 
 
@@ -225,6 +231,8 @@ FIXED_ASSET_OWNERS = (
       for login in DEMO_DOMAIN_LOGINS),
     *((Domain_Computer, f'domain-computer:{name}', {'computer_name': name})
       for name in DEMO_DOMAIN_COMPUTERS),
+    *((Domain_Group, f'domain-group:{name}', {'login_name': name})
+      for name in DEMO_DOMAIN_GROUPS),
 )
 FIXED_RECORD_OWNERS = (
     (ComputerAnalysis, 'computer-analysis-1', {
@@ -414,7 +422,7 @@ class Command(BaseCommand):
         networks = self._seed_networks(anchor)
         servers = self._seed_servers(anchor)
         monitors = self._seed_monitors(anchor)
-        domain_accounts, domain_computers = self._seed_domain(anchor)
+        domain_accounts, domain_computers, domain_groups = self._seed_domain(anchor)
         self._seed_domain_operations(anchor, domain_accounts, domain_computers)
         self._seed_alerts(anchor, servers)
         self._seed_sources(anchor, people)
@@ -425,7 +433,8 @@ class Command(BaseCommand):
             f'人员 {len(people)}、计算机 {len(computers)}、'
             f'网络设备 {len(networks)}、服务器 {len(servers)}、'
             f'安防设备 {len(monitors)}、域账号 {len(domain_accounts)}、'
-            f'域计算机 {len(domain_computers)}、目录来源 2、计划 2（停用）、'
+            f'域计算机 {len(domain_computers)}、域分组 {len(domain_groups)}、'
+            '目录来源 2、计划 2（停用）、'
             '任务 10（含域操作 2）、分析 4、告警事件 2、投递结果 3、可下载配置 3。',
         ))
 
@@ -1266,7 +1275,33 @@ class Command(BaseCommand):
                 },
                 f'domain-computer:{name}',
             ))
-        return accounts, domain_computers
+
+        group_specs = (
+            ('DEMO-IT-ADMINS', '演示-IT 管理员', 'security', 'global', 4,
+             'OU=Security Groups,DC=demo,DC=invalid'),
+            ('DEMO-NOTICES', '演示-通知邮件组', 'distribution', 'universal', 18,
+             'OU=Distribution Groups,DC=demo,DC=invalid'),
+            ('DEMO-PC-OPERATORS', '演示-PC 运维组', 'security', 'domain_local', 7,
+             'OU=Security Groups,DC=demo,DC=invalid'),
+        )
+        domain_groups = []
+        for login_name, group_name, category, scope, member_count, ou in group_specs:
+            domain_groups.append(_upsert_asset(
+                Domain_Group,
+                {'login_name': login_name},
+                {
+                    'group_name': group_name,
+                    'object_guid': _demo_uuid(f'domain-group-guid:{login_name}'),
+                    'distinguished_name': f'CN={group_name},{ou}',
+                    'description': '域控同步演示分组',
+                    'ou': ou,
+                    'group_scope': scope,
+                    'group_category': category,
+                    'member_count': member_count,
+                },
+                f'domain-group:{login_name}',
+            ))
+        return accounts, domain_computers, domain_groups
 
     def _seed_domain_operations(self, anchor, accounts, domain_computers):
         """Create offline audit examples without credentials or LDAP activity."""

@@ -23,6 +23,7 @@ class AssetDashboardUiTests(TestCase):
         self.assertContains(response, '>域控管理<')
         self.assertContains(response, '域账号')
         self.assertContains(response, '域计算机')
+        self.assertContains(response, '域分组')
 
     def test_pc_detail_exposes_inventory_but_not_enabled(self):
         """PC details must retain static inventory while hiding collection-only enabled state."""

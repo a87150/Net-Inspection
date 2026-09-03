@@ -121,7 +121,7 @@ class DomainOperationForm(forms.Form):
             }
         if action == 'move_ou':
             return {'destination_dn': cleaned.get('destination_dn', '').strip()}
-        if action in {'add_group', 'remove_group'}:
+        if action == 'add_group':
             return {'group_dn': cleaned.get('group_dn', '').strip()}
         if action in {'must_change_password', 'password_never_expires'}:
             return {'enabled': cleaned.get('enabled', False)}
@@ -133,3 +133,27 @@ class DomainOperationForm(forms.Form):
             if self.cleaned_data.get('action') == 'create_user'
             else self.cleaned_data.get('password')
         )
+
+
+class DomainAccountImportForm(forms.Form):
+    file = forms.FileField()
+    initial_password = forms.CharField(strip=False, widget=forms.PasswordInput())
+    initial_password_confirm = forms.CharField(strip=False, widget=forms.PasswordInput())
+
+    def clean_file(self):
+        upload = self.cleaned_data['file']
+        if upload.size > 5 * 1024 * 1024:
+            raise forms.ValidationError('导入文件不能超过 5 MB。')
+        if not str(upload.name or '').casefold().endswith(('.csv', '.xlsx')):
+            raise forms.ValidationError('仅支持 CSV 或 Excel (.xlsx) 文件。')
+        return upload
+
+    def clean(self):
+        cleaned = super().clean()
+        if (
+            cleaned.get('initial_password')
+            and cleaned.get('initial_password_confirm')
+            and cleaned['initial_password'] != cleaned['initial_password_confirm']
+        ):
+            self.add_error('initial_password_confirm', '两次输入的初始密码不一致。')
+        return cleaned

@@ -83,7 +83,7 @@ class DomainPermissionUiTests(TestCase):
                 )
 
     @patch('index.domain.views.test_domain_connection', return_value='连接成功')
-    @patch('index.domain.views.sync_domain', return_value=(1, 1))
+    @patch('index.domain.views.sync_domain', return_value=(1, 1, 0))
     def test_connection_mutations_require_domain_permission_for_all_four_roles(
         self, sync_domain, test_connection,
     ):
@@ -94,6 +94,7 @@ class DomainPermissionUiTests(TestCase):
             'bind_password': 'Submitted-Bind-Password-Must-Not-Render',
             'user_filter': '(objectCategory=person)',
             'computer_filter': '(objectCategory=computer)',
+            'group_filter': '(objectCategory=group)',
         }
         roles = (
             ('anonymous', None, 403),
@@ -179,8 +180,9 @@ class DomainPermissionUiTests(TestCase):
         response = self.client.get(reverse('domain_computer_list'))
 
         self.assertEqual(response.status_code, 200)
-        for action in ('move_ou', 'add_group', 'remove_group', 'enable', 'disable', 'unlock'):
+        for action in ('move_ou', 'add_group', 'enable', 'disable', 'unlock'):
             self.assertContains(response, f'value="{action}"')
+        self.assertNotContains(response, 'value="remove_group"')
         for action in ('create_user', 'reset_password', 'must_change_password', 'password_never_expires'):
             self.assertNotContains(response, f'value="{action}"')
         self.assertContains(response, str(self.computer.pk))
@@ -214,7 +216,8 @@ class DomainPermissionUiTests(TestCase):
             'initial_password', 'initial_password_confirm',
         ):
             self.assertContains(response, f'name="{field_name}"')
-        self.assertContains(response, 'autocomplete="new-password"', count=2)
+        # 创建单个账号和批量导入各自提供一组密码与确认字段。
+        self.assertContains(response, 'autocomplete="new-password"', count=4)
 
     @override_settings(
         DOMAIN_OPERATION_ENCRYPTION_KEY='V6NyMLdzoMKswUV33psN2GpZlkAhw4y8ao_0J2lCp7E=',

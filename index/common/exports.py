@@ -8,6 +8,7 @@ from net.models import (
     ComputerLogFile,
     Domain_Account,
     Domain_Computer,
+    Domain_Group,
     Error_Computer,
     Monitor,
     Network_Device,
@@ -36,6 +37,7 @@ MODEL_TABLES = {
     'monitors': Monitor,
     'domain_accounts': Domain_Account,
     'domain_computers': Domain_Computer,
+    'domain_groups': Domain_Group,
     'task_runs': TaskRun,
     'alert_events': AlertEvent,
 }

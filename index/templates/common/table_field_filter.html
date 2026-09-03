@@ -23,10 +23,10 @@
         {% for value, label in field_options %}<option value="{{ value }}"{% if filter_value == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
     </select>
     {% elif option_mode == 'suggest' %}
-    <input class="form-control" name="{{ filter_name }}" value="{{ filter_value|default:'' }}" list="{{ table_definition.key }}-{{ field.key }}-options" autocomplete="off">
-    <datalist id="{{ table_definition.key }}-{{ field.key }}-options">
-        {% for value, label in field_options %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
-    </datalist>
+    <select class="form-select" name="{{ filter_name }}">
+        <option value="">全部</option>
+        {% for value, label in field_options %}<option value="{{ value }}"{% if filter_value == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
     {% else %}
     <input class="form-control" name="{{ filter_name }}" value="{{ filter_value|default:'' }}">
     {% endif %}

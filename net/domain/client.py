@@ -3,7 +3,7 @@ import ssl
 
 import ldap3
 from django.core.exceptions import ValidationError
-from ldap3 import BASE, MODIFY_ADD, MODIFY_DELETE, MODIFY_REPLACE
+from ldap3 import BASE, MODIFY_ADD, MODIFY_REPLACE
 from ldap3.core.exceptions import LDAPAssertionFailedResult, LDAPException, LDAPInvalidDnError
 from ldap3.operation.search import compile_filter, parse_filter
 from ldap3.utils.dn import parse_dn
@@ -201,8 +201,8 @@ class DomainClient:
                 'distinguished_name': f'{relative_dn},{parameters["destination_dn"]}',
                 'ou': parameters['destination_dn'],
             })
-        if action in {'add_group', 'remove_group'}:
-            operation = MODIFY_ADD if action == 'add_group' else MODIFY_DELETE
+        if action == 'add_group':
+            operation = MODIFY_ADD
             return self._modify(
                 connection, parameters['group_dn'],
                 {'member': [(operation, [target_dn])]},

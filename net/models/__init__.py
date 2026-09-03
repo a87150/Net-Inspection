@@ -1,7 +1,7 @@
 from .alerts import AlertChannel, AlertDelivery, AlertEvent, AlertPolicy, AlertState, AlertTestSend
 from .devices import Computer, Monitor, Network_Device, Server
 from .domain import (
-    Domain_Account, Domain_Computer, Domain_Controller_Config,
+    Domain_Account, Domain_Computer, Domain_Group, Domain_Controller_Config,
     DomainOperation,
 )
 from .integrations import PeopleSyncSource
@@ -16,7 +16,7 @@ from .tasks import ComputerAnalysisProfile, InspectionProfile, Schedule, TaskRun
 Computer_Inspection = ComputerAnalysis
 
 __all__ = [
-    'People', 'Domain_Account', 'Domain_Computer', 'Computer', 'Network_Device',
+    'People', 'Domain_Account', 'Domain_Computer', 'Domain_Group', 'Computer', 'Network_Device',
     'Server', 'Monitor', 'Domain_Controller_Config', 'DomainOperation',
     'RecordStatus', 'ComputerLogFile',
     'ComputerLogArchive', 'ComputerAnalysis', 'Computer_Inspection',

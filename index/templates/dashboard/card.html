@@ -11,8 +11,9 @@
         </div>
         {% elif item.key == 'domain' %}
         <div class="row text-center g-2 metric-card__domain-columns">
-            <div class="col-6"><div class="metric">{{ item.account_total }}</div><div class="metric-label">域账号</div><div class="small text-secondary mt-1">启用 {{ item.account_normal }} · 停用 {{ item.account_abnormal }}</div></div>
-            <div class="col-6"><div class="metric">{{ item.computer_total }}</div><div class="metric-label">域计算机</div><div class="small text-secondary mt-1">启用 {{ item.computer_normal }} · 停用 {{ item.computer_abnormal }}</div></div>
+            <div class="col-4"><div class="metric">{{ item.account_total }}</div><div class="metric-label">域账号</div><div class="small text-secondary mt-1">启用 {{ item.account_normal }} · 停用 {{ item.account_abnormal }}</div></div>
+            <div class="col-4"><div class="metric">{{ item.computer_total }}</div><div class="metric-label">域计算机</div><div class="small text-secondary mt-1">启用 {{ item.computer_normal }} · 停用 {{ item.computer_abnormal }}</div></div>
+            <div class="col-4"><div class="metric">{{ item.group_total }}</div><div class="metric-label">域分组</div><div class="small text-secondary mt-1">安全组 {{ item.security_group_total }} · 通讯组 {{ item.distribution_group_total }}</div></div>
         </div>
         {% else %}
         <div class="row text-center g-2">

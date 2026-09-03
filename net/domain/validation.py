@@ -12,7 +12,6 @@ _ACTION_PARAMETERS = {
         'create_user': frozenset({'user_dn', 'login_name', 'display_name'}),
         'move_ou': frozenset({'destination_dn'}),
         'add_group': frozenset({'group_dn'}),
-        'remove_group': frozenset({'group_dn'}),
         'reset_password': frozenset(),
         'must_change_password': frozenset({'enabled'}),
         'password_never_expires': frozenset({'enabled'}),
@@ -23,7 +22,6 @@ _ACTION_PARAMETERS = {
     'computer': {
         'move_ou': frozenset({'destination_dn'}),
         'add_group': frozenset({'group_dn'}),
-        'remove_group': frozenset({'group_dn'}),
         'unlock': frozenset(),
         'enable': frozenset(),
         'disable': frozenset(),

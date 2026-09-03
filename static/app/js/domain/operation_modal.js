@@ -14,7 +14,6 @@ function refreshDomainOperationSummary(doc, actionSelect, form) {
     const scope = {
         move_ou: ['destination_dn', '目标 OU'],
         add_group: ['group_dn', '安全组'],
-        remove_group: ['group_dn', '安全组'],
     }[action];
     const scopeRow = form.querySelector('[data-domain-confirm-scope-row]');
     scopeRow.hidden = !scope;

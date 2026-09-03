@@ -38,7 +38,7 @@ macOS 下载文件名为 `getinfo_upload_macos.sh`，是无 BOM 的 UTF-8 POSIX 
 
 ## 域控操作
 
-域账号和域计算机的写操作由权限 `net.manage_domain_operations` 保护。超级管理员自动拥有该权限；建议创建一个专用组并授予权限，而不是向日常账号逐一赋权：
+域账号、域计算机写操作以及域账号表格导入由权限 `net.manage_domain_operations` 保护。域分组仅从域控同步展示。超级管理员自动拥有该权限；建议创建一个专用组并授予权限，而不是向日常账号逐一赋权：
 
 ```powershell
 .\.venv\Scripts\python.exe manage.py shell -c "from django.contrib.auth.models import Group, Permission; group, _ = Group.objects.get_or_create(name='Domain Operators'); group.permissions.add(Permission.objects.get(content_type__app_label='net', codename='manage_domain_operations'))"

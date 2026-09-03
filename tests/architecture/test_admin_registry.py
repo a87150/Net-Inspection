@@ -23,6 +23,7 @@ from net.models import (
     DomainOperation,
     Domain_Account,
     Domain_Computer,
+    Domain_Group,
     Domain_Controller_Config,
     Error_Computer,
     Error_Monitor,
@@ -47,6 +48,7 @@ REQUIRED_ADMIN_MODELS = (
     People,
     Domain_Account,
     Domain_Computer,
+    Domain_Group,
     Computer,
     Network_Device,
     Server,
@@ -149,6 +151,7 @@ class AdminRegistryTests(TestCase):
             'bind_username': 'svc-domain', 'bind_password': '',
             'user_filter': '(&(objectCategory=person)(objectClass=user))',
             'computer_filter': '(objectCategory=computer)',
+            'group_filter': '(objectCategory=group)',
         }, instance=config)
         self.assertTrue(bound.is_valid(), bound.errors)
         saved = bound.save()

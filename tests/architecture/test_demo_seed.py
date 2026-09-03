@@ -18,6 +18,7 @@ from net.models import (
     Domain_Account,
     Domain_Computer,
     Domain_Controller_Config,
+    Domain_Group,
     Error_Computer,
     Error_Monitor,
     Error_Network_Device,
@@ -46,6 +47,7 @@ BUSINESS_MODELS = (
     Domain_Account,
     Domain_Computer,
     Domain_Controller_Config,
+    Domain_Group,
     Error_Computer,
     Error_Network_Device,
     Error_Server,
@@ -611,6 +613,8 @@ class DeterministicDemoSeedTests(TestCase):
         self.assertTrue(Domain_Account.objects.filter(is_active=False).exists())
         self.assertTrue(Domain_Computer.objects.filter(is_active=True).exists())
         self.assertTrue(Domain_Computer.objects.filter(is_active=False).exists())
+        self.assertTrue(Domain_Group.objects.filter(group_category='security').exists())
+        self.assertTrue(Domain_Group.objects.filter(group_category='distribution').exists())
 
         for asset_model, record_model in (
             (Network_Device, Network_Device_Inspection),

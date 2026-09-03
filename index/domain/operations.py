@@ -3,10 +3,16 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.core.exceptions import ValidationError
+from django.http import Http404, HttpResponse
 from django.shortcuts import redirect
+from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_POST
 
-from index.domain.forms import DomainOperationForm
+from index.domain.forms import DomainAccountImportForm, DomainOperationForm
+from net.domain.user_import import (
+    csv_template_bytes, enqueue_imported_accounts, parse_account_upload,
+    xlsx_template_bytes,
+)
 from net.domain.tasks import enqueue_domain_operation, retry_failed_domain_operation
 
 
@@ -57,3 +63,43 @@ def domain_operation_retry(request, pk):
         return redirect('task_list')
     messages.success(request, '失败目标已重新加入后台队列。')
     return redirect('task_detail', pk=operation.task_id)
+
+
+@permission_required('net.manage_domain_operations', raise_exception=True)
+@require_POST
+def domain_account_import(request):
+    form = DomainAccountImportForm(request.POST, request.FILES)
+    if form.is_valid():
+        try:
+            rows = parse_account_upload(form.cleaned_data['file'])
+            operations = enqueue_imported_accounts(
+                requested_by=request.user,
+                rows=rows,
+                password=form.cleaned_data['initial_password'],
+            )
+        except ValidationError:
+            messages.error(request, '域账号表格校验失败，未创建任务。')
+        else:
+            messages.success(request, f'已创建 {len(operations)} 个域账号任务。')
+            return redirect('task_list')
+    else:
+        messages.error(request, '域账号表格校验失败，未创建任务。')
+    return redirect('domain_account_list')
+
+
+@permission_required('net.manage_domain_operations', raise_exception=True)
+@require_GET
+def domain_account_import_template(request, file_format):
+    if file_format == 'csv':
+        response = HttpResponse(csv_template_bytes(), content_type='text/csv; charset=utf-8')
+        filename = 'domain-accounts-template.csv'
+    elif file_format == 'xlsx':
+        response = HttpResponse(
+            xlsx_template_bytes(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        filename = 'domain-accounts-template.xlsx'
+    else:
+        raise Http404('不支持的模板格式')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response

@@ -3,7 +3,7 @@
 from django import forms
 from django.contrib import admin
 
-from net.models import Computer, Domain_Account, Domain_Computer, Domain_Controller_Config, Monitor, Network_Device, People, Server
+from net.models import Computer, Domain_Account, Domain_Computer, Domain_Group, Domain_Controller_Config, Monitor, Network_Device, People, Server
 
 
 class DomainControllerConfigAdminForm(forms.ModelForm):
@@ -102,6 +102,13 @@ class DomainComputerAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'os', 'ou')
     search_fields = ('computer_name', 'object_guid', 'distinguished_name', 'os', 'ou')
     date_hierarchy = 'last_login_date'
+
+
+@admin.register(Domain_Group)
+class DomainGroupAdmin(admin.ModelAdmin):
+    list_display = ('group_name', 'login_name', 'group_category', 'group_scope', 'member_count', 'ou')
+    list_filter = ('group_category', 'group_scope', 'ou')
+    search_fields = ('group_name', 'login_name', 'object_guid', 'distinguished_name', 'description', 'ou')
 
 
 @admin.register(Computer)

@@ -29,8 +29,10 @@ def _card_summary_values(summary, *, static=False, waiting_label=''):
     return values
 
 
-def _domain_summary_values(account_summary, computer_summary):
-    if account_summary.get('error') or computer_summary.get('error'):
+def _domain_summary_values(account_summary, computer_summary, group_summary):
+    if any(summary.get('error') for summary in (
+        account_summary, computer_summary, group_summary,
+    )):
         return {'error': DASHBOARD_SUMMARY_ERROR_MESSAGE}
     return {
         'account_total': account_summary['total'],
@@ -39,6 +41,9 @@ def _domain_summary_values(account_summary, computer_summary):
         'computer_total': computer_summary['total'],
         'computer_normal': computer_summary['normal'],
         'computer_abnormal': computer_summary['abnormal'],
+        'group_total': group_summary['total'],
+        'security_group_total': group_summary['normal'],
+        'distribution_group_total': group_summary['abnormal'],
     }
 
 
@@ -65,6 +70,7 @@ def index(request):
             'name': '域控管理',
             **_domain_summary_values(
                 summaries['domain_accounts'], summaries['domain_computers'],
+                summaries['domain_groups'],
             ),
             'target_url': reverse('domain_controller_settings'),
         },

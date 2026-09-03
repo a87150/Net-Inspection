@@ -157,6 +157,25 @@ TABLE_DEFINITIONS = {
             _field('last_login_date', '最后登录日期', 'date', default_filter=False),
         ), 'computer_name', 'asc', ('computer_name', 'os', 'ou'), 20,
     ),
+    'domain_groups': TableDefinition(
+        'domain_groups', '域分组', (
+            _field('group_name', '组名称'),
+            _field('login_name', '登录名'),
+            _field('group_category', '组类型', 'choice', choices=(
+                ('security', '安全组'), ('distribution', '通讯组'),
+            )),
+            _field('group_scope', '组范围', 'choice', choices=(
+                ('domain_local', '域本地'), ('global', '全局'),
+                ('universal', '通用'), ('unknown', '未知'),
+            )),
+            _field('ou', '组织单位'),
+            _field('member_count', '成员数量', 'number'),
+            _field('description', '描述', default_filter=False),
+            _field('distinguished_name', 'DN', visible=False, default_filter=False),
+        ), 'group_name', 'asc', (
+            'group_name', 'login_name', 'ou', 'description', 'distinguished_name',
+        ), 20,
+    ),
     'inspection_records': TableDefinition(
         'inspection_records', '巡检与分析记录', (
             _field('category', '执行类型', 'choice'), _field('asset', '设备名称'),

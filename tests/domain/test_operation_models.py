@@ -36,7 +36,7 @@ class DomainOperationModelTests(SimpleTestCase):
         self.assertEqual(
             {value for value, _label in operation.Action.choices},
             {
-                'create_user', 'move_ou', 'add_group', 'remove_group',
+                'create_user', 'move_ou', 'add_group',
                 'reset_password', 'must_change_password',
                 'password_never_expires', 'unlock', 'enable', 'disable',
             },
@@ -442,14 +442,16 @@ class DomainOperationPersistenceTests(TestCase):
                     'objectGUID': str(computer_guid), 'lastLogonTimestamp': 0,
                 },
             }]),
+            iter([]),
         ]
         config = SimpleNamespace(
             base_dn='DC=example,DC=test',
             user_filter='(objectCategory=user)',
             computer_filter='(objectCategory=computer)',
+            group_filter='(objectCategory=group)',
         )
 
-        self.assertEqual(sync_domain(config), (1, 1))
+        self.assertEqual(sync_domain(config), (1, 1, 0))
         account.refresh_from_db()
         computer.refresh_from_db()
         self.assertEqual(models.Domain_Account.objects.count(), 1)
@@ -485,13 +487,15 @@ class DomainOperationPersistenceTests(TestCase):
                 'userAccountControl': 0, 'objectGUID': 'not-a-guid',
                 'distinguishedName': 'not-a-dn', 'lastLogonTimestamp': 0,
             }}]),
+            iter([]),
         ]
         config = SimpleNamespace(
             base_dn='DC=example,DC=test', user_filter='(objectCategory=user)',
             computer_filter='(objectCategory=computer)',
+            group_filter='(objectCategory=group)',
         )
 
-        self.assertEqual(sync_domain(config), (1, 1))
+        self.assertEqual(sync_domain(config), (1, 1, 0))
         account.refresh_from_db()
         computer.refresh_from_db()
         self.assertEqual(account.object_guid, account_guid)
@@ -530,13 +534,15 @@ class DomainOperationPersistenceTests(TestCase):
                 'distinguishedName': 'CN=GUID-PC,OU=Computers,DC=example,DC=test',
                 'lastLogonTimestamp': 0,
             }}]),
+            iter([]),
         ]
         config = SimpleNamespace(
             base_dn='DC=example,DC=test', user_filter='(objectCategory=user)',
             computer_filter='(objectCategory=computer)',
+            group_filter='(objectCategory=group)',
         )
 
-        self.assertEqual(sync_domain(config), (1, 1))
+        self.assertEqual(sync_domain(config), (1, 1, 0))
         account.refresh_from_db()
         account_conflict.refresh_from_db()
         computer.refresh_from_db()

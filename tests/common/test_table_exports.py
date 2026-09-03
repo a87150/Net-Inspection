@@ -110,8 +110,8 @@ class FilteredExportContractTests(TestCase):
     def test_automatic_source_pages_have_filtered_export_without_import_modal(self):
         pages = (
             (reverse('asset_list', args=['computers']), 'computers'),
-            (reverse('domain_account_list'), 'domain_accounts'),
             (reverse('domain_computer_list'), 'domain_computers'),
+            (reverse('domain_group_list'), 'domain_groups'),
         )
         for url, table_key in pages:
             with self.subTest(url=url):

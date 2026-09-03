@@ -36,7 +36,7 @@ function fixture(initialAction = 'move_ou') {
     const group = eventTarget({dataset: {domainSummaryInput: 'group_dn'}});
     const parameterFields = [
         eventTarget({dataset: {domainParameterFor: 'move_ou'}}),
-        eventTarget({dataset: {domainParameterFor: 'add_group remove_group'}}),
+        eventTarget({dataset: {domainParameterFor: 'add_group'}}),
     ];
     const formMap = new Map([
         ['[data-domain-operation-action-value]', actionValue],
@@ -60,7 +60,6 @@ function fixture(initialAction = 'move_ou') {
     const options = [
         {value: 'move_ou', textContent: '移动到 OU'},
         {value: 'add_group', textContent: '加入安全组'},
-        {value: 'remove_group', textContent: '移出安全组'},
     ];
     const actionSelect = eventTarget({options});
     Object.defineProperty(actionSelect, 'selectedIndex', {
@@ -107,20 +106,18 @@ test('destination OU input and change refresh the visible impact summary immedia
     assert.equal(view.scopeText.textContent, 'OU=Archive,DC=example,DC=test');
 });
 
-test('group DN input and change refresh add/remove group scope without submit', () => {
-    for (const action of ['add_group', 'remove_group']) {
-        const view = fixture(action);
-        modal.bindDomainOperationModal(view.doc);
+test('group DN input and change refresh add group scope without submit', () => {
+    const view = fixture('add_group');
+    modal.bindDomainOperationModal(view.doc);
 
-        assert.deepEqual(view.group.listenerNames(), ['change', 'input']);
-        view.group.value = 'CN=Operators,OU=Groups,DC=example,DC=test';
-        view.group.dispatch('input');
-        assert.equal(view.scopeRow.hidden, false);
-        assert.equal(view.scopeLabel.textContent, '安全组');
-        assert.equal(view.scopeText.textContent, 'CN=Operators,OU=Groups,DC=example,DC=test');
+    assert.deepEqual(view.group.listenerNames(), ['change', 'input']);
+    view.group.value = 'CN=Operators,OU=Groups,DC=example,DC=test';
+    view.group.dispatch('input');
+    assert.equal(view.scopeRow.hidden, false);
+    assert.equal(view.scopeLabel.textContent, '安全组');
+    assert.equal(view.scopeText.textContent, 'CN=Operators,OU=Groups,DC=example,DC=test');
 
-        view.group.value = 'CN=Auditors,OU=Groups,DC=example,DC=test';
-        view.group.dispatch('change');
-        assert.equal(view.scopeText.textContent, 'CN=Auditors,OU=Groups,DC=example,DC=test');
-    }
+    view.group.value = 'CN=Auditors,OU=Groups,DC=example,DC=test';
+    view.group.dispatch('change');
+    assert.equal(view.scopeText.textContent, 'CN=Auditors,OU=Groups,DC=example,DC=test');
 });

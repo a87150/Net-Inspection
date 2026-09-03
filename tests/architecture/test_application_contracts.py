@@ -48,6 +48,7 @@ class ApplicationContractTests(SimpleTestCase):
         self.assertEqual(reverse("people_statistics"), "/people/statistics/")
         self.assertEqual(reverse("domain_account_list"), "/domain/accounts/")
         self.assertEqual(reverse("domain_computer_list"), "/domain/computers/")
+        self.assertEqual(reverse("domain_group_list"), "/domain/groups/")
         self.assertEqual(reverse("computer_analysis_list"), "/computers/analyses/")
         self.assertEqual(reverse("task_list"), "/tasks/")
         self.assertEqual(reverse("alert_list"), "/alerts/")

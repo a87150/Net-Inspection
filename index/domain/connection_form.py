@@ -9,6 +9,7 @@ class DomainControllerConfigForm(forms.ModelForm):
         fields = [
             'name', 'host', 'port', 'use_ssl', 'base_dn', 'bind_username',
             'bind_password', 'user_filter', 'computer_filter',
+            'group_filter',
         ]
         widgets = {
             'bind_password': forms.PasswordInput(
@@ -17,12 +18,14 @@ class DomainControllerConfigForm(forms.ModelForm):
             ),
             'user_filter': forms.TextInput(),
             'computer_filter': forms.TextInput(),
+            'group_filter': forms.TextInput(),
         }
         labels = {
             'name': '配置名称', 'host': '域控服务器', 'port': 'LDAP 端口',
             'use_ssl': '使用 LDAPS', 'base_dn': '搜索根目录',
             'bind_username': '连接账号', 'bind_password': '连接密码',
             'user_filter': '账号过滤器', 'computer_filter': '计算机过滤器',
+            'group_filter': '分组过滤器',
         }
         help_texts = {
             'port': '普通 LDAP 通常使用 389；勾选 LDAPS 时通常使用 636。',

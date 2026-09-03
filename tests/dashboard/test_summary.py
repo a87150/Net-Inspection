@@ -259,13 +259,14 @@ class DashboardSummaryTests(TestCase):
                 device_name=f'SW-QUERY-{number}', ip=f'192.0.2.{number + 20}',
             )
 
-        with self.assertNumQueries(7):
+        # 人员、域账号、域计算机、域分组及四类设备各使用一条固定汇总查询。
+        with self.assertNumQueries(8):
             summaries = build_asset_card_summaries()
 
         self.assertEqual(
             {summary['key'] for summary in summaries},
             {
-                'people', 'domain_accounts', 'domain_computers', 'computers',
+                'people', 'domain_accounts', 'domain_computers', 'domain_groups', 'computers',
                 'networks', 'servers', 'monitors',
             },
         )
@@ -308,3 +309,4 @@ class DashboardSummaryTests(TestCase):
         self.assertEqual(domain['name'], '域控管理')
         self.assertEqual(domain['account_total'], 0)
         self.assertEqual(domain['computer_total'], 0)
+        self.assertEqual(domain['group_total'], 0)

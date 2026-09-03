@@ -590,18 +590,19 @@ class ImportModalTests(TestCase):
         self.assertContains(response, 'PC 数据由 PowerShell 自动采集上报。')
         self.assertContains(response, '导出筛选结果')
 
-    def test_domain_child_pages_offer_filtered_export_without_import_modal(self):
+    def test_domain_child_pages_offer_filtered_export_and_only_accounts_allow_import(self):
         for route_name, table_key in (
             ('domain_account_list', 'domain_accounts'),
             ('domain_computer_list', 'domain_computers'),
+            ('domain_group_list', 'domain_groups'),
         ):
             with self.subTest(route_name=route_name):
                 response = self.client.get(reverse(route_name))
                 document = response.content.decode(response.charset)
 
-                self.assertNotIn('id="importModal"', document)
                 self.assertIn(reverse('table_export', args=[table_key]), document)
-                self.assertNotIn('/import/', document)
+                self.assertEqual('id="domainAccountImportModal"' in document,
+                                 route_name == 'domain_account_list')
                 self.assertNotIn('download_inventory_template', document)
 
 
@@ -632,6 +633,7 @@ class DomainControllerSettingsTests(TestCase):
             'base_dn': 'DC=example,DC=com', 'bind_username': 'sync', 'bind_password': 'password',
             'user_filter': '(&(objectCategory=person)(objectClass=user))',
             'computer_filter': '(objectCategory=computer)',
+            'group_filter': '(objectCategory=group)',
         })
         self.assertFalse(form.is_valid())
         self.assertIn('port', form.errors)
@@ -661,19 +663,21 @@ class DomainControllerSettingsTests(TestCase):
             'name': '公司域控', 'host': 'dc.example.com', 'port': 389,
             'base_dn': 'DC=example,DC=com', 'bind_username': 'EXAMPLE\\sync',
             'bind_password': 'password', 'user_filter': '(&(objectCategory=person)(objectClass=user))',
-            'computer_filter': '(objectCategory=computer)', 'action': 'test',
+            'computer_filter': '(objectCategory=computer)',
+            'group_filter': '(objectCategory=group)', 'action': 'test',
         })
         self.assertRedirects(response, reverse('domain_controller_settings'))
         self.assertTrue(Domain_Controller_Config.objects.filter(host='dc.example.com').exists())
         connection_mock.assert_called_once()
 
-    @patch('index.domain.views.sync_domain', return_value=(12, 8))
+    @patch('index.domain.views.sync_domain', return_value=(12, 8, 4))
     def test_domain_sync_action_calls_sync_service(self, sync_mock):
         response = self.client.post(reverse('domain_controller_settings'), {
             'name': '公司域控', 'host': 'dc.example.com', 'port': 389,
             'base_dn': 'DC=example,DC=com', 'bind_username': 'EXAMPLE\\sync',
             'bind_password': 'password', 'user_filter': '(&(objectCategory=person)(objectClass=user))',
-            'computer_filter': '(objectCategory=computer)', 'action': 'sync',
+            'computer_filter': '(objectCategory=computer)',
+            'group_filter': '(objectCategory=group)', 'action': 'sync',
         })
         self.assertEqual(response.status_code, 302)
         sync_mock.assert_called_once()
@@ -692,13 +696,14 @@ class DomainControllerSettingsTests(TestCase):
                 'userAccountControl': ['4096'], 'distinguishedName': ['CN=PC-AD,OU=Computers,DC=example,DC=com'],
                 'lastLogonTimestamp': ['0'],
             }}]),
+            iter([]),
         ]
         config = Domain_Controller_Config(
             host='dc.example.com', base_dn='DC=example,DC=com',
             bind_username='EXAMPLE\\sync', bind_password='password',
         )
         counts = sync_domain(config)
-        self.assertEqual(counts, (1, 1))
+        self.assertEqual(counts, (1, 1, 0))
         self.assertTrue(Domain_Account.objects.filter(login_name='domain.user', ou__contains='OU=Users').exists())
         self.assertTrue(Domain_Computer.objects.filter(computer_name='PC-AD', os='Windows 11').exists())
         connection.unbind.assert_called_once()
@@ -719,6 +724,7 @@ class DomainWorkspaceTests(TestCase):
         self.assertNotContains(response, '<table', html=False)
         self.assertContains(response, reverse('domain_account_list'))
         self.assertContains(response, reverse('domain_computer_list'))
+        self.assertContains(response, reverse('domain_group_list'))
         self.assertContains(response, 'id="domainConfigModal"')
 
     def test_domain_account_and_computer_routes_are_separate(self):
@@ -767,7 +773,7 @@ class DomainWorkspaceTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
-    @patch('index.domain.views.sync_domain', return_value=(1, 1))
+    @patch('index.domain.views.sync_domain', return_value=(1, 1, 0))
     def test_overview_sync_uses_saved_config_without_reopening_modal(self, sync_mock):
         response = self.client.post(reverse('domain_controller_settings'), {'action': 'sync'})
 

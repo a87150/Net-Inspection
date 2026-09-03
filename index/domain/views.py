@@ -13,6 +13,7 @@ from index.domain.forms import DomainControllerConfigForm
 from net.models import (
     Domain_Account,
     Domain_Computer,
+    Domain_Group,
     Domain_Controller_Config,
 )
 from net.domain.sync import sync_domain, test_domain_connection
@@ -42,6 +43,13 @@ DOMAIN_OBJECT_PAGES = {
         '域计算机',
         'domain_computer_detail',
     ),
+    'groups': DomainObjectPage(
+        Domain_Group,
+        'domain_groups',
+        'domain_groups',
+        '域分组',
+        'domain_group_detail',
+    ),
 }
 
 DOMAIN_OPERATION_ACTIONS = {
@@ -49,7 +57,6 @@ DOMAIN_OPERATION_ACTIONS = {
         ('create_user', '新增用户'),
         ('move_ou', '移动到 OU'),
         ('add_group', '加入安全组'),
-        ('remove_group', '移出安全组'),
         ('reset_password', '重置密码'),
         ('must_change_password', '下次登录修改密码'),
         ('password_never_expires', '密码永不过期'),
@@ -60,7 +67,6 @@ DOMAIN_OPERATION_ACTIONS = {
     'computer': (
         ('move_ou', '移动到 OU'),
         ('add_group', '加入安全组'),
-        ('remove_group', '移出安全组'),
         ('enable', '启用'),
         ('disable', '停用'),
         ('unlock', '解锁'),
@@ -88,10 +94,10 @@ def _domain_controller_settings_mutation(request):
     form_fields = DomainControllerConfigForm.base_fields
     if action == 'sync' and not any(field in request.POST for field in form_fields):
         try:
-            account_count, computer_count = sync_domain(config)
+            account_count, computer_count, group_count = sync_domain(config)
             messages.success(
                 request,
-                f'域控同步完成：{account_count} 个账号，{computer_count} 台域计算机。',
+                f'域控同步完成：{account_count} 个账号，{computer_count} 台域计算机，{group_count} 个分组。',
             )
         except Exception:
             messages.error(request, '域控操作失败。')
@@ -104,10 +110,10 @@ def _domain_controller_settings_mutation(request):
             if action == 'test':
                 messages.success(request, test_domain_connection(config))
             elif action == 'sync':
-                account_count, computer_count = sync_domain(config)
+                account_count, computer_count, group_count = sync_domain(config)
                 messages.success(
                     request,
-                    f'域控同步完成：{account_count} 个账号，{computer_count} 台域计算机。',
+                    f'域控同步完成：{account_count} 个账号，{computer_count} 台域计算机，{group_count} 个分组。',
                 )
             else:
                 messages.success(request, '域控配置已保存。')
@@ -126,11 +132,14 @@ def _render_domain_settings(request, config, form, *, open_domain_modal=False):
         'open_domain_modal': open_domain_modal,
         'can_manage_domain': can_manage_domain,
         'account_total': Domain_Account.objects.count(),
+        'account_active': Domain_Account.objects.filter(is_active=True).count(),
+        'account_inactive': Domain_Account.objects.filter(is_active=False).count(),
         'computer_total': Domain_Computer.objects.count(),
-        'inactive_total': (
-            Domain_Account.objects.filter(is_active=False).count()
-            + Domain_Computer.objects.filter(is_active=False).count()
-        ),
+        'computer_active': Domain_Computer.objects.filter(is_active=True).count(),
+        'computer_inactive': Domain_Computer.objects.filter(is_active=False).count(),
+        'group_total': Domain_Group.objects.count(),
+        'security_group_total': Domain_Group.objects.filter(group_category='security').count(),
+        'distribution_group_total': Domain_Group.objects.filter(group_category='distribution').count(),
     })
 
 
@@ -162,11 +171,17 @@ def domain_object_list(request, object_type):
         'table_export_path': reverse('table_export', args=[page.table_key]),
         'pagination_query': query_without_page(request),
         'detail_route': page.detail_route,
-        'can_manage_domain': request.user.has_perm('net.manage_domain_operations'),
-        'domain_object_type': 'account' if object_type == 'accounts' else 'computer',
-        'domain_operation_actions': DOMAIN_OPERATION_ACTIONS[
-            'account' if object_type == 'accounts' else 'computer'
-        ],
+        'can_manage_domain': (
+            object_type != 'groups'
+            and request.user.has_perm('net.manage_domain_operations')
+        ),
+        'domain_object_type': {
+            'accounts': 'account', 'computers': 'computer', 'groups': 'group',
+        }[object_type],
+        'domain_operation_actions': DOMAIN_OPERATION_ACTIONS.get(
+            {'accounts': 'account', 'computers': 'computer'}.get(object_type),
+            (),
+        ),
     })
 
 
@@ -182,11 +197,11 @@ def domain_object_detail(request, object_type, pk):
         }
         for field in table_definition.fields
     ]
-    list_route = (
-        'domain_account_list'
-        if object_type == 'accounts'
-        else 'domain_computer_list'
-    )
+    list_route = {
+        'accounts': 'domain_account_list',
+        'computers': 'domain_computer_list',
+        'groups': 'domain_group_list',
+    }[object_type]
     return render(request, 'devices/detail.html', {
         'asset': domain_object,
         'item_name': page.title,
@@ -204,3 +219,7 @@ def domain_account_detail(request, pk):
 
 def domain_computer_detail(request, pk):
     return domain_object_detail(request, 'computers', pk)
+
+
+def domain_group_detail(request, pk):
+    return domain_object_detail(request, 'groups', pk)

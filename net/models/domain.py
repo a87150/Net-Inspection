@@ -73,6 +73,34 @@ class Domain_Computer(models.Model):
         return self.computer_name
 
 
+class Domain_Group(models.Model):
+    class Scope(models.TextChoices):
+        DOMAIN_LOCAL = 'domain_local', '域本地'
+        GLOBAL = 'global', '全局'
+        UNIVERSAL = 'universal', '通用'
+        UNKNOWN = 'unknown', '未知'
+
+    class Category(models.TextChoices):
+        SECURITY = 'security', '安全组'
+        DISTRIBUTION = 'distribution', '通讯组'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    object_guid = models.UUIDField(null=True, blank=True, unique=True)
+    distinguished_name = models.CharField(max_length=1024, unique=True, db_index=True)
+    group_name = models.CharField(max_length=255)
+    login_name = models.CharField(max_length=255, blank=True, db_index=True)
+    description = models.TextField(blank=True)
+    ou = models.CharField(max_length=255, blank=True)
+    group_scope = models.CharField(max_length=16, choices=Scope.choices, default=Scope.UNKNOWN)
+    group_category = models.CharField(
+        max_length=16, choices=Category.choices, default=Category.SECURITY,
+    )
+    member_count = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return self.group_name
+
+
 class Domain_Controller_Config(models.Model):
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     name = models.CharField(max_length=100, default='主域控')
@@ -84,6 +112,7 @@ class Domain_Controller_Config(models.Model):
     bind_password = models.CharField(max_length=255, blank=True)
     user_filter = models.CharField(max_length=500, default='(&(objectCategory=person)(objectClass=user))')
     computer_filter = models.CharField(max_length=500, default='(objectCategory=computer)')
+    group_filter = models.CharField(max_length=500, default='(objectCategory=group)')
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
@@ -105,7 +134,6 @@ class DomainOperation(models.Model):
         CREATE_USER = 'create_user', '添加用户'
         MOVE_OU = 'move_ou', '移动到 OU'
         ADD_GROUP = 'add_group', '加入安全组'
-        REMOVE_GROUP = 'remove_group', '移出安全组'
         RESET_PASSWORD = 'reset_password', '重置密码'
         MUST_CHANGE_PASSWORD = 'must_change_password', '下次登录修改密码'
         PASSWORD_NEVER_EXPIRES = 'password_never_expires', '密码永不过期'

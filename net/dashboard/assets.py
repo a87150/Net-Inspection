@@ -22,6 +22,7 @@ from net.models import (
     ComputerAnalysis,
     Domain_Account,
     Domain_Computer,
+    Domain_Group,
     Error_Computer,
     Error_Monitor,
     Error_Network_Device,
@@ -60,6 +61,17 @@ def _static_summary(model, key):
         **values,
         'unchecked': 0,
         'last_run_at': None,
+    }
+
+
+def _domain_group_summary():
+    values = Domain_Group.objects.aggregate(
+        total=Count('pk'),
+        normal=Count('pk', filter=Q(group_category=Domain_Group.Category.SECURITY)),
+        abnormal=Count('pk', filter=Q(group_category=Domain_Group.Category.DISTRIBUTION)),
+    )
+    return {
+        'key': 'domain_groups', **values, 'unchecked': 0, 'last_run_at': None,
     }
 
 
@@ -167,6 +179,7 @@ def build_asset_card_summaries() -> list[dict]:
             'domain_computers',
             lambda: _static_summary(Domain_Computer, 'domain_computers'),
         ),
+        _safe_summary('domain_groups', _domain_group_summary),
         _safe_summary('computers', _computer_summary),
         _safe_summary(
             'networks',

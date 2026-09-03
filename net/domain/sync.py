@@ -6,7 +6,7 @@ from ldap3.core.exceptions import LDAPInvalidDnError
 from ldap3.utils.dn import parse_dn
 
 from net.domain.client import DomainClient
-from net.models import Domain_Account, Domain_Computer
+from net.models import Domain_Account, Domain_Computer, Domain_Group
 def _connect(config):
     return DomainClient(config).connect()
 
@@ -83,6 +83,33 @@ def _distinguished_name(value):
     return normalized if parsed else None
 
 
+def _group_classification(value):
+    try:
+        flags = int(value or 0)
+    except (TypeError, ValueError):
+        flags = 0
+    if flags & 0x00000008:
+        scope = Domain_Group.Scope.UNIVERSAL
+    elif flags & 0x00000004:
+        scope = Domain_Group.Scope.DOMAIN_LOCAL
+    elif flags & 0x00000002:
+        scope = Domain_Group.Scope.GLOBAL
+    else:
+        scope = Domain_Group.Scope.UNKNOWN
+    category = (
+        Domain_Group.Category.SECURITY
+        if flags & 0x80000000
+        else Domain_Group.Category.DISTRIBUTION
+    )
+    return scope, category
+
+
+def _member_count(value):
+    if value in (None, ''):
+        return 0
+    return len(value) if isinstance(value, (list, tuple)) else 1
+
+
 def _update_or_create_domain_object(model, identity_field, identity, object_guid, defaults):
     existing_by_identity = model.objects.filter(
         **{identity_field: identity},
@@ -125,6 +152,21 @@ def sync_domain(config):
             generator=True,
         )
         computers = [_entry_attributes(entry) for entry in computer_entries if entry.get('type') == 'searchResEntry']
+        group_entries = connection.extend.standard.paged_search(
+            search_base=config.base_dn,
+            search_filter=config.group_filter,
+            attributes=[
+                'name', 'sAMAccountName', 'description', 'distinguishedName',
+                'objectGUID', 'groupType', 'member',
+            ],
+            paged_size=500,
+            generator=True,
+        )
+        groups = [
+            _entry_attributes(entry)
+            for entry in group_entries
+            if entry.get('type') == 'searchResEntry'
+        ]
     finally:
         connection.unbind()
 
@@ -132,6 +174,7 @@ def sync_domain(config):
     seen_computers = set()
     reported_accounts = set()
     reported_computers = set()
+    reported_groups = set()
     with transaction.atomic():
         for attrs in users:
             login_name = str(attrs.get('sAMAccountName') or '').strip()
@@ -188,9 +231,38 @@ def sync_domain(config):
             seen_computers.update({computer_name, computer.computer_name})
             reported_computers.add(computer_name)
 
+        for attrs in groups:
+            distinguished_name = _distinguished_name(attrs.get('distinguishedName'))
+            if not distinguished_name:
+                continue
+            group_name = str(attrs.get('name') or '').strip()
+            if not group_name:
+                continue
+            object_guid = _object_guid(attrs.get('objectGUID'))
+            scope, category = _group_classification(attrs.get('groupType'))
+            defaults = {
+                'group_name': group_name,
+                'login_name': str(attrs.get('sAMAccountName') or '').strip(),
+                'description': str(attrs.get('description') or '').strip(),
+                'ou': _ou_from_dn(distinguished_name),
+                'group_scope': scope,
+                'group_category': category,
+                'member_count': _member_count(attrs.get('member')),
+            }
+            if object_guid is not None:
+                defaults['object_guid'] = object_guid
+            _update_or_create_domain_object(
+                Domain_Group,
+                'distinguished_name',
+                distinguished_name,
+                object_guid,
+                defaults,
+            )
+            reported_groups.add(distinguished_name)
+
         if seen_accounts:
             Domain_Account.objects.exclude(login_name__in=seen_accounts).update(is_active=False)
         if seen_computers:
             Domain_Computer.objects.exclude(computer_name__in=seen_computers).update(is_active=False)
 
-    return len(reported_accounts), len(reported_computers)
+    return len(reported_accounts), len(reported_computers), len(reported_groups)
