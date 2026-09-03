@@ -170,7 +170,7 @@ def preview_people_sync(source: PeopleSyncSource, adapter) -> SyncPreview:
         existing = local_by_employee.get(employee_id)
         if existing is None:
             creates.append(record)
-        elif _owned_by_source(existing, source):
+        elif _owned_by_source(existing, source) or _claimable_by_source(existing):
             if _person_matches_record(existing, record):
                 unchanged.append({'employee_id': employee_id})
             else:
@@ -237,7 +237,9 @@ def _apply_locked_preview(source, locked_people, preview) -> SyncResult:
     for record in preview.updates:
         _validate_record_shape(record)
         person = local_by_employee.get(record['employee_id'])
-        if person is None or not _owned_by_source(person, source):
+        if person is None or not (
+            _owned_by_source(person, source) or _claimable_by_source(person)
+        ):
             raise PeopleSyncApplyError()
         _set_person_record(person, source, record, now)
         _validate_person(person)
@@ -373,6 +375,13 @@ def _validate_source(source):
 
 def _owned_by_source(person, source):
     return person.sync_source_id == source.pk and person.source == source.source_type
+
+
+def _claimable_by_source(person):
+    return (
+        person.sync_source_id is None
+        and person.source in {People.Source.MANUAL, People.Source.CSV}
+    )
 
 
 def _person_matches_record(person, record):

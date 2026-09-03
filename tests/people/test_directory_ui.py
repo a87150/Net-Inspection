@@ -161,7 +161,7 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
         self.assertEqual(task.status, 'success')
         response = self.client.get(url)
         self.assertContains(response, '预览员工')
-        self.assertContains(response, '仅停用当前来源')
+        self.assertContains(response, '仅停用当前 API 来源')
         self.assertContains(response, 'OLD')
         self.assertContains(response, '确认应用')
         self.assertContains(response, '第 3 步：执行导入')
@@ -257,6 +257,16 @@ class PeopleQueueTests(PeopleFlowMixin, TestCase):
         self.assertNotIn('branch-secret', snapshots)
         self.assertNotIn(self.client.session.session_key, snapshots)
         self.assertFalse(People.objects.exists())
+
+    def test_successful_connection_offers_preview_as_the_next_step(self):
+        task, url = self.enqueue('test')
+        self.execute(task)
+
+        response = self.client.get(url)
+
+        self.assertContains(response, '第 2 步：预览数据')
+        self.assertContains(response, reverse('people_preview'))
+        self.assertContains(response, f'name="source_id" value="{self.source.pk}"')
 
     def test_changed_source_before_worker_and_incomplete_snapshot_fail_closed(self):
         task, _ = self.enqueue()

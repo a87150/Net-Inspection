@@ -229,13 +229,42 @@ class PeopleSyncPreviewTests(TestCase):
             sync.apply_people_sync(source, preview)
         self.assertEqual(People.objects.count(), 0)
 
-    def test_protected_manual_or_other_source_employee_conflict_never_transfers_ownership(self):
-        """Would fail if a matching employee ID overwrote CSV, manual, or another API row."""
+    def test_file_imported_employee_is_adopted_by_api_source_using_employee_number(self):
+        """Would fail if an earlier CSV import prevented switching to API synchronization."""
         sync = _sync_module()
         source = self.source()
-        protected = People.objects.create(employee_id='EMP-500', name='手工姓名', source='manual')
+        person = People.objects.create(
+            employee_id='EMP-500', name='文件姓名', department='旧部门', source='csv',
+        )
+
         preview = sync.preview_people_sync(source, SnapshotAdapter(source, [
-            DirectoryPerson(employee_id='EMP-500', name='目录姓名', external_user_id='ou-500'),
+            DirectoryPerson(
+                employee_id='EMP-500', name='目录姓名', department='新部门',
+                external_user_id='ou-500',
+            ),
+        ]))
+
+        self.assertTrue(preview.is_valid)
+        self.assertEqual([row['employee_id'] for row in preview.updates], ['EMP-500'])
+        result = sync.apply_people_sync(source, preview)
+        person.refresh_from_db()
+        self.assertEqual((result.created, result.updated), (0, 1))
+        self.assertEqual(
+            (person.name, person.department, person.source, person.sync_source_id),
+            ('目录姓名', '新部门', 'feishu', source.pk),
+        )
+
+    def test_employee_owned_by_another_api_source_never_transfers_ownership(self):
+        """Would fail if a matching employee ID overwrote another API source."""
+        sync = _sync_module()
+        source = self.source()
+        other_source = self.source(name='分部目录', source_key='feishu-branch')
+        protected = People.objects.create(
+            employee_id='EMP-501', name='分部姓名', source='feishu',
+            sync_source=other_source,
+        )
+        preview = sync.preview_people_sync(source, SnapshotAdapter(source, [
+            DirectoryPerson(employee_id='EMP-501', name='总部姓名', external_user_id='ou-501'),
         ]))
 
         self.assertFalse(preview.is_valid)
@@ -243,7 +272,7 @@ class PeopleSyncPreviewTests(TestCase):
             sync.apply_people_sync(source, preview)
         protected.refresh_from_db()
         self.assertEqual((protected.name, protected.source, protected.sync_source_id),
-                         ('手工姓名', 'manual', None))
+                         ('分部姓名', 'feishu', other_source.pk))
 
     def test_incomplete_or_wrong_source_snapshot_never_proposes_deactivations(self):
         """Would fail if an untrusted snapshot were interpreted as people leaving."""

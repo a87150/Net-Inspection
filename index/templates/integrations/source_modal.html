@@ -1,6 +1,6 @@
 <section class="tab-pane fade {% if tab.active %}show active{% endif %}" id="people-panel-{{ tab.provider }}" role="tabpanel" aria-labelledby="people-tab-{{ tab.provider }}">
     <h3 class="h6">从 API 导入 · {{ tab.label }}</h3>
-    <p class="text-secondary small">按顺序完成三个阶段。只有第 3 步明确确认后才会修改人员；不同来源不会转移人员归属。</p>
+    <p class="text-secondary small">按顺序完成三个阶段。只有第 3 步明确确认后才会修改人员；CSV/手工人员可按工号纳入当前 API 来源，其他 API 来源的人员不会被转移。</p>
     <ol class="small text-secondary ps-3">
         <li><strong>第 1 步：测试连接</strong>——验证凭据和通讯录接口。</li>
         <li><strong>第 2 步：预览数据</strong>——读取目录并计算新增、更新、停用和跳过，不写数据库。</li>
