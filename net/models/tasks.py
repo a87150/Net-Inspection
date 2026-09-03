@@ -355,7 +355,10 @@ class TaskRun(models.Model):
         CANCELLED = 'cancelled', '已取消'
 
     ACTIVE_STATUSES = frozenset({Status.QUEUED, Status.RUNNING})
-    PEOPLE_TASK_TYPES = frozenset({TaskType.PEOPLE_TEST, TaskType.PEOPLE_PREVIEW})
+    PEOPLE_INTERACTIVE_TASK_TYPES = frozenset({
+        TaskType.PEOPLE_TEST, TaskType.PEOPLE_PREVIEW,
+    })
+    PEOPLE_TASK_TYPES = PEOPLE_INTERACTIVE_TASK_TYPES
     TERMINAL_STATUSES = frozenset(
         {Status.SUCCESS, Status.PARTIAL, Status.FAILED, Status.CANCELLED}
     )

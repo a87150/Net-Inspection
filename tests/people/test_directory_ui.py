@@ -45,14 +45,19 @@ class PeopleFlowMixin:
         # Start only once the public entry exists: RED is missing UI behavior, not import errors.
 
     def enqueue(self, operation='preview', source=None, client=None):
+        source = source or self.source
         response = (client or self.client).post(
             f'/integrations/people/{operation}/', {
-                'provider': (source or self.source).source_type,
+                'provider': source.source_type,
             },
         )
         self.assertEqual(response.status_code, 302, response.content[:500])
         task = TaskRun.objects.latest('created_at')
-        return task, response['Location']
+        self.assertEqual(
+            response['Location'],
+            f'/assets/people/?import=people&provider={source.source_type}',
+        )
+        return task, reverse('people_operation', args=[task.pk])
 
     def execute(self, task):
         from net.people.executor import execute_people_target
@@ -180,12 +185,55 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
         self.assertEqual(person.name, '预览员工')
         self.assertEqual(self.apply(task, token).status_code, 400)
 
-    def test_queued_people_operation_refreshes_automatically(self):
+    def test_queued_people_operation_does_not_refresh_the_page(self):
         _task, url = self.enqueue()
 
         response = self.client.get(url)
 
-        self.assertEqual(response.headers['Refresh'], f'2;url={url}')
+        self.assertNotIn('Refresh', response.headers)
+
+    def test_status_returns_only_tasks_created_by_current_session(self):
+        own, _ = self.enqueue('test')
+        other_client = Client()
+        other, _ = self.enqueue('preview', source=self.other, client=other_client)
+
+        response = self.client.get('/integrations/people/tasks/status/')
+
+        self.assertEqual(response.status_code, 200)
+        task_ids = {item['id'] for item in response.json()['tasks']}
+        self.assertIn(str(own.pk), task_ids)
+        self.assertNotIn(str(other.pk), task_ids)
+        self.assertNotIn('parameters_snapshot', response.content.decode())
+        self.assertNotIn('private-app', response.content.decode())
+
+    def test_running_and_terminal_acknowledgements_are_independent(self):
+        task, _ = self.enqueue('test')
+        ack_url = reverse('people_task_acknowledge', args=[task.pk])
+
+        response = self.client.post(ack_url, {'kind': 'running'})
+        self.assertEqual(response.status_code, 200)
+        running = self.client.get('/integrations/people/tasks/status/').json()['tasks'][0]
+        self.assertFalse(running['show_running'])
+        self.assertFalse(running['show_terminal'])
+
+        self.execute(task)
+        terminal = self.client.get('/integrations/people/tasks/status/').json()['tasks'][0]
+        self.assertFalse(terminal['show_running'])
+        self.assertTrue(terminal['show_terminal'])
+        self.assertEqual(terminal['jump_url'], reverse('people_operation', args=[task.pk]))
+
+        self.client.post(ack_url, {'kind': 'terminal'})
+        self.assertEqual(
+            self.client.get('/integrations/people/tasks/status/').json()['tasks'],
+            [],
+        )
+
+    def test_task_acknowledgement_rejects_invalid_kind_and_other_session(self):
+        task, _ = self.enqueue('test')
+        ack_url = reverse('people_task_acknowledge', args=[task.pk])
+
+        self.assertEqual(self.client.post(ack_url, {'kind': 'unknown'}).status_code, 400)
+        self.assertEqual(Client().post(ack_url, {'kind': 'running'}).status_code, 404)
 
     def test_another_session_cannot_view_export_or_apply_even_with_valid_token(self):
         task, url = self.enqueue()

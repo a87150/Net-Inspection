@@ -1,5 +1,7 @@
 """Database-only directory enqueue and session-owned preview confirmation."""
 
+import uuid
+
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -9,6 +11,12 @@ from net.people.directory.base import directory_source_configuration_identity
 from net.people.directory.sync import PeopleSyncApplyError, SyncPreview, apply_people_sync
 from net.models import PeopleSyncSource, TaskRun, TaskTargetRun
 from net.inspections.state import save_task
+
+
+PEOPLE_SESSION_TASKS = 'people_directory_task_ids'
+PEOPLE_RUNNING_ACKS = 'people_directory_running_acks'
+PEOPLE_TERMINAL_ACKS = 'people_directory_terminal_acks'
+MAX_SESSION_TASKS = 20
 
 
 def session_digest(session_key):
@@ -21,6 +29,48 @@ def owns_people_task(task, session_key):
     digest = session_digest(session_key)
     owner = task.parameters_snapshot.get('owner_session_digest', '')
     return bool(digest and owner and constant_time_compare(owner, digest))
+
+
+def remember_people_task(session, task_id):
+    task_id = str(task_id)
+    task_ids = [value for value in session.get(PEOPLE_SESSION_TASKS, []) if value != task_id]
+    session[PEOPLE_SESSION_TASKS] = (task_ids + [task_id])[-MAX_SESSION_TASKS:]
+    session.modified = True
+
+
+def pending_people_tasks(session):
+    valid_ids = []
+    for value in session.get(PEOPLE_SESSION_TASKS, []):
+        try:
+            valid_ids.append(str(uuid.UUID(str(value))))
+        except (TypeError, ValueError, AttributeError):
+            continue
+    tasks_by_id = {
+        str(task.pk): task
+        for task in TaskRun.objects.filter(
+            pk__in=valid_ids,
+            task_type__in=TaskRun.PEOPLE_INTERACTIVE_TASK_TYPES,
+        ).select_related('people_source')
+    }
+    owned = [
+        tasks_by_id[task_id]
+        for task_id in valid_ids
+        if task_id in tasks_by_id
+        and owns_people_task(tasks_by_id[task_id], session.session_key)
+    ]
+    normalized_ids = [str(task.pk) for task in owned]
+    if normalized_ids != session.get(PEOPLE_SESSION_TASKS, []):
+        session[PEOPLE_SESSION_TASKS] = normalized_ids
+        session.modified = True
+    return owned
+
+
+def acknowledge_people_task(session, task_id, *, kind):
+    task_id = str(task_id)
+    key = PEOPLE_RUNNING_ACKS if kind == 'running' else PEOPLE_TERMINAL_ACKS
+    values = [str(value) for value in session.get(key, []) if str(value) != task_id]
+    session[key] = (values + [task_id])[-MAX_SESSION_TASKS:]
+    session.modified = True
 
 
 def source_matches_task(source, task):

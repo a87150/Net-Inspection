@@ -202,7 +202,7 @@
 - Consumes: `get_provider_source(provider: str)`, existing `enqueue_people_task(source_id, task_type, session_key)` and `owns_people_task(task, session_key)`.
 - Produces: `TaskRun.PEOPLE_INTERACTIVE_TASK_TYPES`, `remember_people_task(session, task_id: UUID) -> None`, `pending_people_tasks(session) -> QuerySet[TaskRun]`, `acknowledge_people_task(session, task_id: UUID, *, kind: str) -> None`; JSON routes `people_task_status` and `people_task_acknowledge`.
 
-- [ ] **Step 1: Write failing ownership, status and acknowledgement tests**
+- [x] **Step 1: Write failing ownership, status and acknowledgement tests**
 
   Add tests with two Django clients:
 
@@ -230,7 +230,7 @@
 
   Assert POST-only acknowledgement, CSRF protection, UUID validation, bounded session task history, and safe JSON fields only.
 
-- [ ] **Step 2: Run the status tests and verify endpoints are missing**
+- [x] **Step 2: Run the status tests and verify endpoints are missing**
 
   Run:
 
@@ -240,7 +240,7 @@
 
   Expected: FAIL with route-not-found or missing session-task behavior.
 
-- [ ] **Step 3: Implement bounded session task tracking**
+- [x] **Step 3: Implement bounded session task tracking**
 
   First define `TaskRun.PEOPLE_INTERACTIVE_TASK_TYPES` as the existing test/preview pair and make `PEOPLE_TASK_TYPES` an alias of it until Task 4 adds scheduled sync. Store only string UUIDs and acknowledgement sets under namespaced keys:
 
@@ -253,7 +253,7 @@
 
   `remember_people_task` appends/deduplicates and truncates to the newest 20. `pending_people_tasks` parses valid UUIDs, queries `TaskRun.PEOPLE_INTERACTIVE_TASK_TYPES`, and additionally applies the existing hashed-session ownership check before serialization. Invalid/deleted IDs are removed from the session.
 
-- [ ] **Step 4: Add safe JSON status and POST acknowledgement views**
+- [x] **Step 4: Add safe JSON status and POST acknowledgement views**
 
   Return only:
 
@@ -276,17 +276,17 @@
 
   Never serialize snapshots, request URLs, credentials, raw exception strings, employee rows, or another session's task. Accept only `kind=running|terminal`; return 404 for unowned tasks and 400 for unsupported acknowledgement kinds.
 
-- [ ] **Step 5: Redirect test and preview enqueue back to the provider tab**
+- [x] **Step 5: Redirect test and preview enqueue back to the provider tab**
 
   After `enqueue_people_task`, call `remember_people_task`, add a one-time Django message saying the task is running in the background, and redirect to the fixed provider tab. Remove the `Refresh` response header from `people_operation`; retain an explicit manual refresh link on direct operation pages.
 
-- [ ] **Step 6: Run Task 2 tests**
+- [x] **Step 6: Run Task 2 tests**
 
   Run the command from Step 2.
 
   Expected: PASS; no tested response contains a `Refresh` header.
 
-- [ ] **Step 7: Commit and stop for user inspection**
+- [x] **Step 7: Commit and stop for user inspection**
 
   ```powershell
   git add net/people/tasks.py net/models/tasks.py index/people/integrations.py index/urls.py index/views/__init__.py tests/people/test_directory_ui.py

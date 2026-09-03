@@ -6,11 +6,11 @@ from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.forms.utils import ErrorDict, ErrorList
-from django.http import Http404, HttpResponseBadRequest
+from django.http import Http404, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views.decorators.debug import sensitive_post_parameters
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from index.people.forms import PeopleProviderForm
 from net.models import PeopleSyncSource, TaskRun
@@ -19,7 +19,10 @@ from net.people.providers import PROVIDERS, get_provider_source
 from net.people.tasks import (
     apply_people_task,
     enqueue_people_task,
+    acknowledge_people_task,
     owns_people_task,
+    pending_people_tasks,
+    remember_people_task,
     session_digest,
 )
 
@@ -170,7 +173,12 @@ def _queue_operation(request, task_type):
         task = enqueue_people_task(source.pk, task_type, request.session.session_key)
     except ValidationError as exc:
         return _render_modal(request, source=source, error=' '.join(exc.messages))
-    return redirect('people_operation', pk=task.pk)
+    remember_people_task(request.session, task.pk)
+    messages.info(
+        request,
+        f'{source.get_source_type_display()}{task.get_task_type_display()}正在后台运行。',
+    )
+    return redirect(_provider_redirect(provider))
 
 
 @require_POST
@@ -181,6 +189,58 @@ def people_test(request):
 @require_POST
 def people_preview(request):
     return _queue_operation(request, TaskRun.TaskType.PEOPLE_PREVIEW)
+
+
+def _task_status_message(task):
+    if task.status in TaskRun.ACTIVE_STATUSES:
+        return f'{task.people_source.get_source_type_display()}{task.get_task_type_display()}正在后台运行。'
+    if task.status == TaskRun.Status.SUCCESS:
+        return f'{task.get_task_type_display()}已完成。'
+    if task.status == TaskRun.Status.CANCELLED:
+        return f'{task.get_task_type_display()}已取消。'
+    return f'{task.get_task_type_display()}失败，请查看结果。'
+
+
+@require_GET
+def people_task_status(request):
+    running_acks = {str(value) for value in request.session.get('people_directory_running_acks', [])}
+    terminal_acks = {str(value) for value in request.session.get('people_directory_terminal_acks', [])}
+    tasks = []
+    for task in pending_people_tasks(request.session):
+        task_id = str(task.pk)
+        is_terminal = task.status in TaskRun.TERMINAL_STATUSES
+        if is_terminal and task_id in terminal_acks:
+            continue
+        tasks.append({
+            'id': task_id,
+            'provider': task.people_source.source_type,
+            'provider_label': task.people_source.get_source_type_display(),
+            'operation': task.task_type,
+            'operation_label': task.get_task_type_display(),
+            'status': task.status,
+            'status_label': task.get_status_display(),
+            'show_running': not is_terminal and task_id not in running_acks,
+            'show_terminal': is_terminal and task_id not in terminal_acks,
+            'message': _task_status_message(task),
+            'jump_url': reverse('people_operation', args=[task.pk]),
+            'ack_url': reverse('people_task_acknowledge', args=[task.pk]),
+        })
+    return JsonResponse({'tasks': tasks})
+
+
+@require_POST
+def people_task_acknowledge(request, pk):
+    task = get_object_or_404(
+        TaskRun,
+        pk=pk,
+        task_type__in=TaskRun.PEOPLE_INTERACTIVE_TASK_TYPES,
+    )
+    require_people_owner(request, task)
+    kind = request.POST.get('kind', '')
+    if kind not in {'running', 'terminal'}:
+        return HttpResponseBadRequest('未知确认类型。')
+    acknowledge_people_task(request.session, task.pk, kind=kind)
+    return JsonResponse({'acknowledged': True})
 
 
 def people_operation(request, pk, *, error=''):
@@ -212,10 +272,7 @@ def people_operation(request, pk, *, error=''):
         'open_import_modal': False,
     })
     from index.devices.views import asset_list
-    response = asset_list(request, 'people', integration_context=context)
-    if task.status in {TaskRun.Status.QUEUED, TaskRun.Status.RUNNING}:
-        response['Refresh'] = f'2;url={request.get_full_path()}'
-    return response
+    return asset_list(request, 'people', integration_context=context)
 
 
 @require_POST
