@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from index.inspections.forms import inspection_item_choices
 from net.models import (AlertChannel, Domain_Controller_Config, InspectionProfile,
-                        Monitor, Network_Device, PeopleSyncSource, Server)
+                        SecurityDevice, Network_Device, PeopleSyncSource, Server)
 from net.infrastructure.http_collectors import collect_security_api
 from net.devices.security.payload import collect_native_configuration
 from net.infrastructure.ssh_collectors import collect_network_ssh
@@ -126,7 +126,7 @@ class ConfigurationTests(TestCase):
         self.device = Network_Device.objects.create(
             ip='192.0.2.10', device_name='edge', vendor='Cisco',
             username='ssh-user-private', password='ssh-pass-private')
-        self.camera = Monitor.objects.create(
+        self.camera = SecurityDevice.objects.create(
             ip='192.0.2.20', device_name='camera', vendor='大华',
             api_url='https://192.0.2.20/status?token=URL-token-private',
             api_username='api-user-private', api_password='api-pass-private',
@@ -331,7 +331,7 @@ class ConfigurationTests(TestCase):
         self.assertEqual(result.status, 'success')
         self.assertEqual(json.loads(result.content)['configuration'], native)
         self.assertEqual(json.loads(result.content)['scope'], 'Network')
-        other = Monitor.objects.create(ip='192.0.2.30', vendor='unknown')
+        other = SecurityDevice.objects.create(ip='192.0.2.30', vendor='unknown')
         other.inspections.create(details={'config_info': snapshot({'status': 'online'}, vendor='unknown', fmt='json')})
         self.assertEqual(self.exports().latest_configuration(other).status, 'unsupported')
 

@@ -6,7 +6,7 @@ from unittest.mock import patch
 import requests
 from django.test import TestCase
 
-from net.models import Error_Monitor, InspectionProfile, Monitor
+from net.models import Error_Monitor, InspectionProfile, SecurityDevice
 from net.devices.security.api import collect_security_api
 from net.inspections.queue import claim_next_task, enqueue_task, finish_task
 from net.inspections.executor import execute_target
@@ -31,7 +31,7 @@ def response(body):
 
 class SecurityStatusTests(TestCase):
     def setUp(self):
-        self.device = Monitor.objects.create(ip='192.0.2.245', vendor='hikvision', api_url='http://192.0.2.245/status')
+        self.device = SecurityDevice.objects.create(ip='192.0.2.245', vendor='hikvision', api_url='http://192.0.2.245/status')
 
     def assert_status_roundtrip(self, body, expected):
         with patch('net.infrastructure.http_collectors.requests.get', return_value=response(body)):

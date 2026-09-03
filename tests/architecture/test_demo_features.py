@@ -14,7 +14,7 @@ from net.data_exchange.configuration import build_configuration_zip, latest_conf
 from net.models.domain import DomainOperationSecret
 from net.management.commands.seed_demo_data import _demo_uuid
 from net.models import (AlertDelivery, AlertEvent, ComputerAnalysis,
-                        ComputerAnalysisProfile, InspectionProfile, Monitor,
+                        ComputerAnalysisProfile, InspectionProfile, SecurityDevice,
                         Network_Device, People, PeopleSyncSource, Schedule,
                         Network_Device_Inspection, DomainOperation, TaskRun,
                         TaskTargetRun)
@@ -133,9 +133,9 @@ class FinalDemoTests(TestCase):
             (Network_Device, '192.0.2.11', 'unsupported', b''),
             (Network_Device, '192.0.2.12', 'success', b'return'),
             (Network_Device, '192.0.2.13', 'success', b'end'),
-            (Monitor, '203.0.113.31', 'unsupported', b''),
-            (Monitor, '203.0.113.32', 'success', b'table.Network.'),
-            (Monitor, '203.0.113.33', 'missing', b''),
+            (SecurityDevice, '203.0.113.31', 'unsupported', b''),
+            (SecurityDevice, '203.0.113.32', 'success', b'table.Network.'),
+            (SecurityDevice, '203.0.113.33', 'missing', b''),
         ):
             with self.subTest(ip=ip):
                 result = latest_configuration(model.objects.get(ip=ip))

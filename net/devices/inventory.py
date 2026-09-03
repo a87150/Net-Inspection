@@ -2,25 +2,30 @@
 
 from decimal import Decimal, InvalidOperation
 
-from net.models import Computer, Monitor, Network_Device, Server
+from net.models import Computer, Network_Device, SecurityDevice, Server
 
 
 _SOURCE_FIELD_ALLOWLIST = {
     Computer: (
         'manufacturer', 'model', 'serial_number', 'architecture', 'cpu_model',
         'cpu_physical_core_count', 'cpu_logical_processor_count',
-        'memory_total_gb', 'disk_total_gb', 'disk_summary',
+        'memory_total_gb', 'disk_total_gb',
     ),
     Network_Device: (
         'cpu_model', 'memory_total_gb', 'disk_total_gb',
-        'port_count', 'active_port_count', 'vlan_count',
+        'port_count', 'vlan_count',
     ),
-    Server: ('cpu_model', 'memory_total_gb', 'disk_total_gb'),
-    Monitor: ('cpu_model', 'memory_total_gb', 'disk_total_gb'),
+    Server: (
+        'os_version', 'os_build', 'system_installed_at', 'manufacturer',
+        'model', 'serial_number', 'architecture', 'cpu_model',
+        'cpu_physical_core_count', 'cpu_logical_processor_count',
+        'memory_total_gb', 'disk_total_gb',
+    ),
+    SecurityDevice: ('cpu_model', 'memory_total_gb', 'disk_total_gb'),
 }
 _COUNT_FIELDS = {
     'cpu_physical_core_count', 'cpu_logical_processor_count',
-    'port_count', 'active_port_count', 'vlan_count',
+    'port_count', 'vlan_count',
 }
 _CAPACITY_FIELDS = {'memory_total_gb', 'disk_total_gb'}
 

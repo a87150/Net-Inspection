@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from io import BytesIO, StringIO
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from net.models import Monitor, Network_Device
+from net.models import Network_Device, SecurityDevice
 from net.infrastructure.sanitization import configuration_secrets, sanitize_configuration
 from net.devices.network import configuration as network
 from net.devices.security import configuration as security
@@ -39,7 +39,7 @@ def _safe_name(value):
 
 
 def _latest_configuration(asset, secrets):
-    adapter = network.adapt if isinstance(asset, Network_Device) else security.adapt if isinstance(asset, Monitor) else None
+    adapter = network.adapt if isinstance(asset, Network_Device) else security.adapt if isinstance(asset, SecurityDevice) else None
     if adapter is None:
         return ConfigurationResult('unsupported', message=MESSAGES['unsupported'])
     evidence = None

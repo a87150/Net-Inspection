@@ -222,7 +222,7 @@ def _legacy_definition(search_fields, default_sort, model_name):
         (('name', 'employee_id', 'department', 'email', 'leader'), 'name', 'People'): 'people',
         (('computer_name', 'os', 'user_name'), 'computer_name', 'Computer'): 'computers',
         (('device_name', 'ip', 'device_type', 'vendor'), 'device_name', 'Network_Device'): 'networks',
-        (('device_name', 'ip', 'device_type', 'vendor'), 'device_name', 'Monitor'): 'monitors',
+        (('device_name', 'ip', 'device_type', 'vendor'), 'device_name', 'SecurityDevice'): 'monitors',
         (('name', 'ip', 'server_type', 'os'), 'name', 'Server'): 'servers',
         (('account_name', 'login_name', 'ou', 'allowed_workstations'), 'login_name', 'Domain_Account'): 'domain_accounts',
         (('computer_name', 'os', 'ou'), 'computer_name', 'Domain_Computer'): 'domain_computers',

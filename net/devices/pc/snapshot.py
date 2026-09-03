@@ -21,7 +21,6 @@ SNAPSHOT_FIELD_NAMES = (
     'cpu_logical_processor_count',
     'memory_total_gb',
     'disk_total_gb',
-    'disk_summary',
 )
 
 
@@ -116,7 +115,6 @@ def extract_computer_snapshot(
         )),
         'memory_total_gb': _gib(_first_text(hardware, '当前内存容量', '内存总量', 'memory_total_gb')),
         'disk_total_gb': _gib(_first_text(hardware, '磁盘总量', '磁盘总容量', 'disk_total_gb')),
-        'disk_summary': _first_text(hardware, '磁盘摘要', 'disk_summary'),
     }
     snapshot.update({key: value for key, value in inventory.items() if not _is_blank(value)})
     return snapshot

@@ -29,7 +29,7 @@ from net.models import (
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
-    Monitor,
+    SecurityDevice,
     Monitor_Inspection,
     Network_Device,
     Network_Device_Inspection,
@@ -52,7 +52,7 @@ REQUIRED_ADMIN_MODELS = (
     Computer,
     Network_Device,
     Server,
-    Monitor,
+    SecurityDevice,
     Domain_Controller_Config,
     DomainOperation,
     ComputerLogFile,
@@ -123,7 +123,7 @@ class AdminRegistryTests(TestCase):
         credential_fields = {
             Network_Device: {'username', 'password'},
             Server: {'username', 'password', 'api_token'},
-            Monitor: {'api_username', 'api_password', 'api_token'},
+            SecurityDevice: {'api_username', 'api_password', 'api_token'},
         }
         for model, forbidden in credential_fields.items():
             with self.subTest(model=model.__name__):
@@ -182,7 +182,7 @@ class AdminSecretFormTests(TestCase):
                     'model': '', 'vendor': '', 'connection_type': '', 'port': '22',
                     'username': 'network-user', 'password': '', 'cpu_model': '',
                     'memory_total_gb': '', 'disk_total_gb': '', 'port_count': '',
-                    'active_port_count': '', 'vlan_count': '',
+                    'vlan_count': '',
                 },
             ),
             (
@@ -199,7 +199,7 @@ class AdminSecretFormTests(TestCase):
                 },
             ),
             (
-                Monitor.objects.create(
+                SecurityDevice.objects.create(
                     device_name='admin-monitor', ip='192.0.2.43', api_username='monitor-user',
                     api_password='monitor-password-private', api_token='monitor-token-private',
                 ),

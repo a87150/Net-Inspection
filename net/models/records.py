@@ -2,7 +2,7 @@ import uuid
 
 from django.db import models
 
-from .devices import Computer, Monitor, Network_Device, Server
+from .devices import Computer, Network_Device, SecurityDevice, Server
 
 
 class RecordStatus(models.TextChoices):
@@ -129,7 +129,7 @@ class Server_Inspection(InfrastructureRecord):
 
 class Monitor_Inspection(InfrastructureRecord):
     monitor = models.ForeignKey(
-        Monitor,
+        SecurityDevice,
         on_delete=models.CASCADE,
         related_name='inspections',
     )

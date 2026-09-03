@@ -3,7 +3,7 @@
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand
 
-from net.models import InspectionProfile, Monitor, Network_Device, Server, TaskRun
+from net.models import InspectionProfile, Network_Device, SecurityDevice, Server, TaskRun
 from net.inspections.queue import enqueue_task
 
 
@@ -22,7 +22,7 @@ _ASSET_TYPES = {
     ),
     'monitors': (
         InspectionProfile.DeviceType.MONITOR,
-        Monitor,
+        SecurityDevice,
         ['device_info', 'status_data', 'channel_status', 'storage_status'],
         '命令行安防设备巡检',
     ),

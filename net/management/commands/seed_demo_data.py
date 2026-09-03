@@ -20,7 +20,7 @@ from net.models import (
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
-    Monitor,
+    SecurityDevice,
     Monitor_Inspection,
     Network_Device,
     Network_Device_Inspection,
@@ -54,7 +54,10 @@ DEMO_COMPUTER_NAMES = (
 )
 DEMO_NETWORK_IPS = ('192.0.2.11', '192.0.2.12', '192.0.2.13')
 DEMO_SERVER_IPS = ('198.51.100.21', '198.51.100.22', '198.51.100.23')
-DEMO_MONITOR_IPS = ('203.0.113.31', '203.0.113.32', '203.0.113.33')
+DEMO_MONITOR_IPS = (
+    '203.0.113.31', '203.0.113.32', '203.0.113.33',
+    '203.0.113.34', '203.0.113.35',
+)
 DEMO_DOMAIN_LOGINS = (
     'demo.zhang@demo.invalid',
     'demo.li@demo.invalid',
@@ -226,7 +229,7 @@ FIXED_ASSET_OWNERS = (
       for name in DEMO_COMPUTER_NAMES[:3]),
     *((Network_Device, f'network:{ip}', {'ip': ip}) for ip in DEMO_NETWORK_IPS),
     *((Server, f'server:{ip}', {'ip': ip}) for ip in DEMO_SERVER_IPS),
-    *((Monitor, f'monitor:{ip}', {'ip': ip}) for ip in DEMO_MONITOR_IPS),
+    *((SecurityDevice, f'monitor:{ip}', {'ip': ip}) for ip in DEMO_MONITOR_IPS),
     *((Domain_Account, f'domain-account:{login}', {'login_name': login})
       for login in DEMO_DOMAIN_LOGINS),
     *((Domain_Computer, f'domain-computer:{name}', {'computer_name': name})
@@ -780,7 +783,7 @@ class Command(BaseCommand):
                 server.delete()
 
         for spec in LEGACY_MONITOR_SPECS:
-            monitor = Monitor.objects.filter(
+            monitor = SecurityDevice.objects.filter(
                 ip=spec['ip'], device_name=spec['name'],
             ).first()
             if monitor is None:
@@ -859,7 +862,6 @@ class Command(BaseCommand):
                 'architecture': 'x64', 'cpu_model': 'Intel Core Ultra 7 165U',
                 'cpu_physical_core_count': 12, 'cpu_logical_processor_count': 14,
                 'memory_total_gb': 32, 'disk_total_gb': 1024,
-                'disk_summary': 'C: 1024 GB NVMe',
             },
             {
                 'computer_name': 'DEMO-PC-DEV-02',
@@ -877,7 +879,6 @@ class Command(BaseCommand):
                 'architecture': 'x64', 'cpu_model': 'AMD Ryzen 7 PRO 8840U',
                 'cpu_physical_core_count': 8, 'cpu_logical_processor_count': 16,
                 'memory_total_gb': 16, 'disk_total_gb': 512,
-                'disk_summary': 'C: 512 GB NVMe',
             },
             {
                 'computer_name': 'DEMO-PC-OFFLINE',
@@ -895,7 +896,6 @@ class Command(BaseCommand):
                 'architecture': 'x64', 'cpu_model': 'Intel Core i5-1135G7',
                 'cpu_physical_core_count': 4, 'cpu_logical_processor_count': 8,
                 'memory_total_gb': 16, 'disk_total_gb': 512,
-                'disk_summary': 'C: 512 GB NVMe',
             },
         )
         computers = {
@@ -1002,7 +1002,6 @@ class Command(BaseCommand):
                     'memory_total_gb': 8,
                     'disk_total_gb': 64,
                     'port_count': 48 if ip == '192.0.2.11' else 24,
-                    'active_port_count': 40 if ip == '192.0.2.11' else 18,
                     'vlan_count': 12 if ip != '192.0.2.13' else 4,
                 },
                 f'network:{ip}',
@@ -1063,7 +1062,11 @@ class Command(BaseCommand):
                 'server_type': 'linux', 'os': 'Ubuntu Server 24.04 LTS',
                 'port': 22, 'username': 'demo-inspector', 'password': DEMO_SECRET,
                 'api_url': '', 'api_token': '', 'verify_ssl': True,
-                'cpu_model': 'AMD EPYC 7313P', 'memory_total_gb': 128, 'disk_total_gb': 2048,
+                'os_version': '24.04', 'os_build': '6.8.0', 'system_installed_at': '2025-05-10',
+                'manufacturer': 'Dell', 'model': 'PowerEdge R7525', 'serial_number': 'DEMO-SRV-001',
+                'architecture': 'x86_64', 'cpu_model': 'AMD EPYC 7313P',
+                'cpu_physical_core_count': 16, 'cpu_logical_processor_count': 32,
+                'memory_total_gb': 128, 'disk_total_gb': 2048,
             },
             {
                 'ip': '198.51.100.22', 'name': '演示-Windows文件服务器',
@@ -1071,14 +1074,22 @@ class Command(BaseCommand):
                 'port': 9443, 'username': '', 'password': '',
                 'api_url': 'https://windows-server.demo.invalid/api/v1/health',
                 'api_token': DEMO_SECRET, 'verify_ssl': True,
-                'cpu_model': 'Intel Xeon Silver 4310', 'memory_total_gb': 64, 'disk_total_gb': 4096,
+                'os_version': '21H2', 'os_build': '20348', 'system_installed_at': '2024-11-18',
+                'manufacturer': 'HPE', 'model': 'ProLiant DL380 Gen10', 'serial_number': 'DEMO-SRV-002',
+                'architecture': 'x86_64', 'cpu_model': 'Intel Xeon Silver 4310',
+                'cpu_physical_core_count': 24, 'cpu_logical_processor_count': 48,
+                'memory_total_gb': 64, 'disk_total_gb': 4096,
             },
             {
                 'ip': '198.51.100.23', 'name': '演示-数据库服务器',
                 'server_type': 'linux', 'os': 'Rocky Linux 9.4',
                 'port': 22, 'username': 'demo-inspector', 'password': DEMO_SECRET,
                 'api_url': '', 'api_token': '', 'verify_ssl': True,
-                'cpu_model': 'AMD EPYC 7232P', 'memory_total_gb': 64, 'disk_total_gb': 8192,
+                'os_version': '9.4', 'os_build': '5.14.0', 'system_installed_at': '2025-02-08',
+                'manufacturer': 'Lenovo', 'model': 'ThinkSystem SR650', 'serial_number': 'DEMO-SRV-003',
+                'architecture': 'x86_64', 'cpu_model': 'AMD EPYC 7232P',
+                'cpu_physical_core_count': 8, 'cpu_logical_processor_count': 16,
+                'memory_total_gb': 64, 'disk_total_gb': 8192,
             },
         )
         servers = {
@@ -1141,11 +1152,13 @@ class Command(BaseCommand):
             ('203.0.113.31', '演示-大厅摄像机', '摄像机', 'Hikvision', 'DS-2CD3T47EWD-L', 'camera-lobby'),
             ('203.0.113.32', '演示-NVR录像机', 'NVR', 'Dahua', 'NVR5216-4KS2', 'nvr-main'),
             ('203.0.113.33', '演示-仓库摄像机', '摄像机', 'Hikvision', 'DS-2CD2T46WDV3', 'camera-warehouse'),
+            ('203.0.113.34', '演示-办公区门禁', '门禁', 'Hikvision', 'DS-K2604', 'access-office'),
+            ('203.0.113.35', '演示-园区入口闸机', '闸机', 'Dahua', 'ASGB8XXY', 'gate-entrance'),
         )
         monitors = {}
         for ip, name, device_type, vendor, model, host in specs:
             monitors[ip] = _upsert_asset(
-                Monitor,
+                SecurityDevice,
                 {'ip': ip},
                 {
                     'device_name': name,
@@ -1158,8 +1171,8 @@ class Command(BaseCommand):
                     'api_token': DEMO_SECRET,
                     'verify_ssl': True,
                     'cpu_model': 'Ambarella CV25',
-                    'memory_total_gb': 4 if device_type == '摄像机' else 16,
-                    'disk_total_gb': 64 if device_type == '摄像机' else 4096,
+                    'memory_total_gb': 4 if device_type == '摄像机' else 16 if device_type == 'NVR' else 2,
+                    'disk_total_gb': 64 if device_type == '摄像机' else 4096 if device_type == 'NVR' else 16,
                 },
                 f'monitor:{ip}',
             )

@@ -14,7 +14,7 @@ from django.db import close_old_connections, connections
 from django.core.management import call_command
 from django.utils import timezone
 
-from net.models import InspectionProfile, Monitor, Network_Device, Server, Error_Server, TaskRun, Server_Inspection
+from net.models import InspectionProfile, SecurityDevice, Network_Device, Server, Error_Server, TaskRun, Server_Inspection
 from net.inspections.queue import enqueue_task, claim_next_task, finish_task, recover_expired_tasks
 from net.inspections.executor import execute_target
 from net.infrastructure.collection import CollectionResult
@@ -308,7 +308,7 @@ class SelectedCollectionTests(TestCase):
             'storage': [{'status': 'normal'}], 'channels': ['PRIVATE CHANNEL'], 'logs': ['PRIVATE LOG'],
         }
         get.return_value = response
-        asset = Monitor.objects.create(ip='192.0.2.204', api_url='http://192.0.2.204/status')
+        asset = SecurityDevice.objects.create(ip='192.0.2.204', api_url='http://192.0.2.204/status')
         record = self.execute(asset, 'monitor', ['storage_status'])
         self.assertEqual(get.call_args.kwargs.get('params'), {'fields': 'storage_status'})
         self.assertEqual(record.raw_output, {'storage': [{'status': 'normal'}]})

@@ -27,7 +27,7 @@ from net.models import (
     ComputerAnalysisProfile,
     ComputerLogFile,
     InspectionProfile,
-    Monitor,
+    SecurityDevice,
     Network_Device,
     Schedule,
     Server,
@@ -41,7 +41,7 @@ from net.inspections.queue import enqueue_computer_scan_task, enqueue_task
 PROJECTS = {
     'networks': (InspectionProfile.DeviceType.NETWORK_DEVICE, Network_Device, 'networks'),
     'servers': (InspectionProfile.DeviceType.SERVER, Server, 'servers'),
-    'monitors': (InspectionProfile.DeviceType.MONITOR, Monitor, 'monitors'),
+    'monitors': (InspectionProfile.DeviceType.MONITOR, SecurityDevice, 'monitors'),
 }
 
 

@@ -7,7 +7,7 @@ from datetime import datetime
 from django.core.exceptions import ValidationError
 from django.db import DatabaseError, transaction
 
-from net.models import Computer, Domain_Account, Domain_Computer, Monitor, Network_Device, People, Server
+from net.models import Computer, Domain_Account, Domain_Computer, Network_Device, People, SecurityDevice, Server
 
 
 IMPORTABLE_ENTITIES = {'people', 'networks', 'servers', 'monitors'}
@@ -118,7 +118,6 @@ ENTITY_SPECS = {
             ('CPU 物理核心数', 'cpu_physical_core_count', _non_negative_integer),
             ('CPU 逻辑处理器数', 'cpu_logical_processor_count', _non_negative_integer),
             ('内存总量', 'memory_total_gb', _gib), ('磁盘总量', 'disk_total_gb', _gib),
-            ('磁盘摘要', 'disk_summary', _text),
         ],
     },
     'domain_computers': {
@@ -142,7 +141,6 @@ ENTITY_SPECS = {
             ('型号', 'model', _text), ('CPU 型号', 'cpu_model', _text),
             ('内存总量', 'memory_total_gb', _gib), ('磁盘总量', 'disk_total_gb', _gib),
             ('端口总数', 'port_count', _non_negative_integer),
-            ('活跃端口数', 'active_port_count', _non_negative_integer),
             ('VLAN 数量', 'vlan_count', _non_negative_integer),
             ('SSH账号', 'username', _text), ('SSH密码', 'password', _text),
         ],
@@ -158,14 +156,20 @@ ENTITY_SPECS = {
             ('管理端口', 'port', _integer), ('SSH账号', 'username', _text),
             ('SSH密码', 'password', _text), ('Windows API地址', 'api_url', _text),
             ('API令牌', 'api_token', _text), ('校验HTTPS证书', 'verify_ssl', _boolean),
+            ('系统版本', 'os_version', _text), ('系统构建号', 'os_build', _text),
+            ('系统安装时间', 'system_installed_at', _text),
+            ('制造商', 'manufacturer', _text), ('型号', 'model', _text),
+            ('序列号', 'serial_number', _text), ('系统架构', 'architecture', _text),
             ('CPU 型号', 'cpu_model', _text), ('内存总量', 'memory_total_gb', _gib),
+            ('CPU 物理核心数', 'cpu_physical_core_count', _non_negative_integer),
+            ('CPU 逻辑处理器数', 'cpu_logical_processor_count', _non_negative_integer),
             ('磁盘总量', 'disk_total_gb', _gib),
         ],
         'secret_fields': {'password', 'api_token'},
     },
     'monitors': {
         'name': '安防设备',
-        'model': Monitor,
+        'model': SecurityDevice,
         'key': 'ip',
         'columns': [
             ('设备名称', 'device_name', _text), ('IP地址', 'ip', _ip),

@@ -15,7 +15,7 @@ from net.models import (
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
-    Monitor,
+    SecurityDevice,
     Monitor_Inspection,
     Network_Device,
     Network_Device_Inspection,
@@ -185,8 +185,8 @@ class DashboardSummaryTests(TestCase):
         self.assertEqual(summary['abnormal'], 1)
 
     def test_monitor_success_with_linked_error_is_abnormal(self):
-        """Monitor health must include linked inspection errors."""
-        monitor = Monitor.objects.create(device_name='CAMERA-ERROR', ip='192.0.2.16')
+        """Security device health must include linked inspection errors."""
+        monitor = SecurityDevice.objects.create(device_name='CAMERA-ERROR', ip='192.0.2.16')
         inspection = Monitor_Inspection.objects.create(
             monitor=monitor,
             status=RecordStatus.SUCCESS,
@@ -219,8 +219,8 @@ class DashboardSummaryTests(TestCase):
         Server.objects.create(name='SERVER-WAITING', ip='192.0.2.24')
         Server_Inspection.objects.create(server=server, status=RecordStatus.SUCCESS)
 
-        monitor = Monitor.objects.create(device_name='CAMERA-CHECKED', ip='192.0.2.25')
-        Monitor.objects.create(device_name='CAMERA-WAITING', ip='192.0.2.26')
+        monitor = SecurityDevice.objects.create(device_name='CAMERA-CHECKED', ip='192.0.2.25')
+        SecurityDevice.objects.create(device_name='CAMERA-WAITING', ip='192.0.2.26')
         Monitor_Inspection.objects.create(monitor=monitor, status=RecordStatus.SUCCESS)
 
         response = self.client.get(reverse('index'))

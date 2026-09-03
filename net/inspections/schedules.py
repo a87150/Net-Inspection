@@ -13,7 +13,7 @@ from net.models import (
     ComputerAnalysisProfile,
     ComputerLogFile,
     InspectionProfile,
-    Monitor,
+    SecurityDevice,
     Network_Device,
     Schedule,
     Server,
@@ -26,7 +26,7 @@ from .queue import enqueue_computer_scan_task, enqueue_task
 _ASSET_MODELS = {
     InspectionProfile.DeviceType.NETWORK_DEVICE: Network_Device,
     InspectionProfile.DeviceType.SERVER: Server,
-    InspectionProfile.DeviceType.MONITOR: Monitor,
+    InspectionProfile.DeviceType.MONITOR: SecurityDevice,
 }
 
 # SQLite has no row-level ``SELECT ... FOR UPDATE`` semantics and concurrent

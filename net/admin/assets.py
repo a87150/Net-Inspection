@@ -3,7 +3,7 @@
 from django import forms
 from django.contrib import admin
 
-from net.models import Computer, Domain_Account, Domain_Computer, Domain_Group, Domain_Controller_Config, Monitor, Network_Device, People, Server
+from net.models import Computer, Domain_Account, Domain_Computer, Domain_Group, Domain_Controller_Config, Network_Device, People, SecurityDevice, Server
 
 
 class DomainControllerConfigAdminForm(forms.ModelForm):
@@ -75,7 +75,7 @@ class MonitorAdminForm(SecretPreservingModelForm):
     secret_fields = ('api_password', 'api_token')
 
     class Meta:
-        model = Monitor
+        model = SecurityDevice
         fields = '__all__'
 
 
@@ -135,7 +135,7 @@ class ServerAdmin(admin.ModelAdmin):
     search_fields = ('name', 'ip', 'server_type', 'os')
 
 
-@admin.register(Monitor)
+@admin.register(SecurityDevice)
 class MonitorAdmin(admin.ModelAdmin):
     form = MonitorAdminForm
     list_display = ('device_name', 'ip', 'device_type', 'vendor', 'model', 'verify_ssl')

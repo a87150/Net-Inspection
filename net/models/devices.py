@@ -27,7 +27,6 @@ class Computer(models.Model):
     cpu_logical_processor_count = models.PositiveIntegerField(null=True, blank=True)
     memory_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     disk_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
-    disk_summary = models.TextField(blank=True, null=True)
 
     def __str__(self):
         return self.computer_name
@@ -48,7 +47,6 @@ class Network_Device(models.Model):
     memory_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     disk_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     port_count = models.PositiveIntegerField(null=True, blank=True)
-    active_port_count = models.PositiveIntegerField(null=True, blank=True)
     vlan_count = models.PositiveIntegerField(null=True, blank=True)
 
     def __str__(self):
@@ -69,7 +67,16 @@ class Server(models.Model):
     api_url = models.URLField(max_length=500, blank=True, null=True)
     api_token = models.CharField(max_length=500, blank=True, null=True)
     verify_ssl = models.BooleanField(default=True)
+    os_version = models.CharField(max_length=255, blank=True, null=True)
+    os_build = models.CharField(max_length=255, blank=True, null=True)
+    system_installed_at = models.CharField(max_length=255, blank=True, null=True)
+    manufacturer = models.CharField(max_length=255, blank=True, null=True)
+    model = models.CharField(max_length=255, blank=True, null=True)
+    serial_number = models.CharField(max_length=255, blank=True, null=True)
+    architecture = models.CharField(max_length=255, blank=True, null=True)
     cpu_model = models.CharField(max_length=255, blank=True, null=True)
+    cpu_physical_core_count = models.PositiveIntegerField(null=True, blank=True)
+    cpu_logical_processor_count = models.PositiveIntegerField(null=True, blank=True)
     memory_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     disk_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
 
@@ -81,7 +88,7 @@ class Server(models.Model):
         return f'{self.name or self.get_server_type_display()} ({self.ip})'
 
 
-class Monitor(models.Model):
+class SecurityDevice(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     device_name = models.CharField(max_length=255, blank=True, null=True)
     ip = models.CharField(max_length=255, unique=True)

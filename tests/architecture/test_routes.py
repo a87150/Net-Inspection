@@ -12,7 +12,7 @@ from net.models import (
     ComputerLogFile,
     Domain_Account,
     Domain_Computer,
-    Monitor,
+    SecurityDevice,
     Monitor_Inspection,
     Network_Device,
     Network_Device_Inspection,
@@ -55,7 +55,7 @@ class DetailRouteTests(TestCase):
         self.server = Server.objects.create(
             name='SRV-ROUTE-01', ip='192.0.2.31', server_type='linux',
         )
-        self.monitor = Monitor.objects.create(
+        self.monitor = SecurityDevice.objects.create(
             device_name='CAM-ROUTE-01', ip='192.0.2.41', vendor='Hikvision',
         )
         self.domain_account = Domain_Account.objects.create(

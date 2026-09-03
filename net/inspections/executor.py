@@ -14,7 +14,7 @@ from net.models import (
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
-    Monitor,
+    SecurityDevice,
     Monitor_Inspection,
     Network_Device,
     Network_Device_Inspection,
@@ -112,7 +112,7 @@ def _asset_context(target):
     elif target_type == TaskTargetRun.TargetType.SERVER:
         model, secret_fields = Server, ('username', 'password', 'api_token')
     elif target_type == TaskTargetRun.TargetType.MONITOR:
-        model, secret_fields = Monitor, ('api_username', 'api_password', 'api_token')
+        model, secret_fields = SecurityDevice, ('api_username', 'api_password', 'api_token')
     else:
         raise ValueError(f'当前 Worker 不支持目标类型：{target_type}')
 
@@ -303,7 +303,7 @@ def _persist_collection(target_run_id, worker_id, collection, lease_guard=None, 
                 asset_model = {
                     TaskTargetRun.TargetType.NETWORK_DEVICE: Network_Device,
                     TaskTargetRun.TargetType.SERVER: Server,
-                    TaskTargetRun.TargetType.MONITOR: Monitor,
+                    TaskTargetRun.TargetType.MONITOR: SecurityDevice,
                 }.get(target.target_type)
                 if asset_model is not None:
                     asset = asset_model.objects.select_for_update().filter(pk=target.target_id).first()

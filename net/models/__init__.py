@@ -1,5 +1,5 @@
 from .alerts import AlertChannel, AlertDelivery, AlertEvent, AlertPolicy, AlertState, AlertTestSend
-from .devices import Computer, Monitor, Network_Device, Server
+from .devices import Computer, Network_Device, SecurityDevice, Server
 from .domain import (
     Domain_Account, Domain_Computer, Domain_Group, Domain_Controller_Config,
     DomainOperation,
@@ -17,7 +17,7 @@ Computer_Inspection = ComputerAnalysis
 
 __all__ = [
     'People', 'Domain_Account', 'Domain_Computer', 'Domain_Group', 'Computer', 'Network_Device',
-    'Server', 'Monitor', 'Domain_Controller_Config', 'DomainOperation',
+    'Server', 'SecurityDevice', 'Domain_Controller_Config', 'DomainOperation',
     'RecordStatus', 'ComputerLogFile',
     'ComputerLogArchive', 'ComputerAnalysis', 'Computer_Inspection',
     'Network_Device_Inspection', 'Server_Inspection', 'Monitor_Inspection',

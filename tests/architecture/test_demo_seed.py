@@ -23,7 +23,7 @@ from net.models import (
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
-    Monitor,
+    SecurityDevice,
     Monitor_Inspection,
     Network_Device,
     Network_Device_Inspection,
@@ -42,7 +42,7 @@ BUSINESS_MODELS = (
     Network_Device_Inspection,
     Server,
     Server_Inspection,
-    Monitor,
+    SecurityDevice,
     Monitor_Inspection,
     Domain_Account,
     Domain_Computer,
@@ -187,7 +187,7 @@ class DeterministicDemoSeedTests(TestCase):
             ('192.0.2.32', '演示-NVR录像机', 'NVR', 'Dahua', 'success', True, '巡检成功'),
             ('192.0.2.33', '演示-仓库摄像机', '摄像机', 'Hikvision', 'failed', False, '摄像机离线（演示）'),
         ):
-            monitor = Monitor.objects.create(
+            monitor = SecurityDevice.objects.create(
                 device_name=name,
                 ip=ip,
                 device_type=device_type,
@@ -236,7 +236,7 @@ class DeterministicDemoSeedTests(TestCase):
                     Server.objects.order_by('ip').values_list('ip', 'pk')
                 ),
                 'monitors': tuple(
-                    Monitor.objects.order_by('ip').values_list('ip', 'pk')
+                    SecurityDevice.objects.order_by('ip').values_list('ip', 'pk')
                 ),
             },
             'record_ids': {
@@ -461,7 +461,7 @@ class DeterministicDemoSeedTests(TestCase):
         call_command('seed_demo_data', reset=True, stdout=StringIO())
 
         self.assertFalse(Server.objects.filter(pk__in=legacy_asset_ids).exists())
-        self.assertFalse(Monitor.objects.filter(pk__in=legacy_asset_ids).exists())
+        self.assertFalse(SecurityDevice.objects.filter(pk__in=legacy_asset_ids).exists())
         self.assertFalse(
             Server_Inspection.objects.filter(pk__in=legacy_record_ids).exists()
         )
@@ -469,7 +469,7 @@ class DeterministicDemoSeedTests(TestCase):
             Monitor_Inspection.objects.filter(pk__in=legacy_record_ids).exists()
         )
         self.assertEqual(Server.objects.count(), 3)
-        self.assertEqual(Monitor.objects.count(), 3)
+        self.assertEqual(SecurityDevice.objects.count(), 5)
         self.assertEqual(Error_Server.objects.count(), 2)
         self.assertEqual(Error_Monitor.objects.count(), 2)
 
@@ -619,10 +619,13 @@ class DeterministicDemoSeedTests(TestCase):
         for asset_model, record_model in (
             (Network_Device, Network_Device_Inspection),
             (Server, Server_Inspection),
-            (Monitor, Monitor_Inspection),
+            (SecurityDevice, Monitor_Inspection),
         ):
             with self.subTest(model=asset_model._meta.label):
-                self.assertEqual(asset_model.objects.count(), 3)
+                self.assertEqual(
+                    asset_model.objects.count(),
+                    5 if asset_model is SecurityDevice else 3,
+                )
                 self.assertEqual(record_model.objects.count(), 5 if asset_model is Network_Device else 4)
                 self.assertEqual(
                     set(record_model.objects.values_list('status', flat=True)),
@@ -681,8 +684,8 @@ class DeterministicDemoSeedTests(TestCase):
                     list(Network_Device.objects.values_list('password', flat=True))
                     + list(Server.objects.values_list('password', flat=True))
                     + list(Server.objects.values_list('api_token', flat=True))
-                    + list(Monitor.objects.values_list('api_password', flat=True))
-                    + list(Monitor.objects.values_list('api_token', flat=True))
+                    + list(SecurityDevice.objects.values_list('api_password', flat=True))
+                    + list(SecurityDevice.objects.values_list('api_token', flat=True))
                 )
             )
         )
@@ -699,7 +702,7 @@ class DeterministicDemoSeedTests(TestCase):
             ('computers', Computer, {'computer_name': 'DEMO-PC-DEV-02'}, 'DEMO-PC-DEV-02', '02-00-00-00-01-02'),
             ('networks', Network_Device, {'ip': '192.0.2.11'}, '演示-核心交换机', 'CloudEngine S5735-L'),
             ('servers', Server, {'ip': '198.51.100.22'}, '演示-Windows文件服务器', 'Windows Server 2022'),
-            ('monitors', Monitor, {'ip': '203.0.113.32'}, '演示-NVR录像机', 'NVR5216-4KS2'),
+            ('monitors', SecurityDevice, {'ip': '203.0.113.32'}, '演示-NVR录像机', 'NVR5216-4KS2'),
         ):
             with self.subTest(kind=kind):
                 asset = model.objects.get(**lookup)

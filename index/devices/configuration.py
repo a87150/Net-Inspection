@@ -8,11 +8,11 @@ from django.views.decorators.http import require_GET
 from index.common.table_query import apply_table_filters
 from index.common.table_registry import get_table_definition
 from net.data_exchange.configuration import build_configuration_zip, latest_configuration
-from net.models import Monitor, Network_Device
+from net.models import Network_Device, SecurityDevice
 
 
 def _model(kind):
-    model = {'networks': Network_Device, 'monitors': Monitor}.get(kind)
+    model = {'networks': Network_Device, 'monitors': SecurityDevice}.get(kind)
     if model is None:
         raise Http404('不支持此资产类型的配置导出。')
     return model

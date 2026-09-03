@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from index.common.table_registry import get_table_definition
-from net.models import Computer, Network_Device, People
+from net.models import Computer, Network_Device, People, Server
 from net.devices.pc.snapshot import extract_computer_snapshot, update_computer_snapshot
 from net.data_exchange.inventory_csv import export_csv, import_csv
 
@@ -34,7 +34,8 @@ class AssetInventoryFieldTests(TestCase):
         self.assertIn('CPU 逻辑处理器数', labels)
         self.assertIn('内存总量', labels)
         self.assertIn('磁盘总量', labels)
-        self.assertIn('磁盘摘要', labels)
+        self.assertNotIn('磁盘摘要', labels)
+        self.assertNotIn('disk_summary', {field.name for field in Computer._meta.get_fields()})
 
     def test_pc_inventory_distinguishes_physical_cores_and_logical_processors(self):
         """Collapsing both CPU counts into cpu_core_count loses inventory meaning."""
@@ -42,12 +43,10 @@ class AssetInventoryFieldTests(TestCase):
             computer_name='PC-CPU-TOPOLOGY',
             cpu_physical_core_count=8,
             cpu_logical_processor_count=16,
-            disk_summary='C: 476 GB NVMe; D: 931 GB SSD',
         )
 
         self.assertEqual(pc.cpu_physical_core_count, 8)
         self.assertEqual(pc.cpu_logical_processor_count, 16)
-        self.assertEqual(pc.disk_summary, 'C: 476 GB NVMe; D: 931 GB SSD')
         self.assertNotIn(
             'cpu_core_count',
             {field.name for field in Computer._meta.get_fields()},
@@ -69,7 +68,6 @@ class AssetInventoryImportExportTests(TestCase):
             computer_name='PC-EXPORT', login_account='EXAMPLE\\alice',
             cpu_model='Core i7', memory_total_gb=32, disk_total_gb=512,
             cpu_physical_core_count=8, cpu_logical_processor_count=16,
-            disk_summary='C: 476 GB NVMe',
             is_active=False,
         )
 
@@ -80,14 +78,44 @@ class AssetInventoryImportExportTests(TestCase):
         self.assertIn('CPU 逻辑处理器数', headers)
         self.assertIn('内存总量', headers)
         self.assertIn('磁盘总量', headers)
-        self.assertIn('磁盘摘要', headers)
+        self.assertNotIn('磁盘摘要', headers)
         self.assertNotIn('是否启用', headers)
         self.assertNotIn('登录账户', headers)
         self.assertNotIn('EXAMPLE\\alice', row)
         self.assertEqual(row[headers.index('CPU 型号')], 'Core i7')
         self.assertEqual(row[headers.index('CPU 物理核心数')], '8')
         self.assertEqual(row[headers.index('CPU 逻辑处理器数')], '16')
-        self.assertEqual(row[headers.index('磁盘摘要')], 'C: 476 GB NVMe')
+
+    def test_network_inventory_omits_dynamic_active_port_count(self):
+        labels = [field.label for field in get_table_definition('networks').fields]
+        headers = next(csv.reader(StringIO(export_csv('networks').lstrip('\ufeff'))))
+
+        self.assertNotIn('活跃端口数', labels)
+        self.assertNotIn('活跃端口数', headers)
+        self.assertNotIn('active_port_count', {
+            field.name for field in Network_Device._meta.get_fields()
+        })
+
+    def test_server_inventory_matches_pc_static_configuration_detail(self):
+        server = Server.objects.create(
+            name='SRV-INVENTORY', ip='192.0.2.120', os='Windows Server 2025',
+            os_version='24H2', os_build='26100', system_installed_at='2026-01-02',
+            manufacturer='Dell', model='PowerEdge R760', serial_number='SRV-SN-01',
+            architecture='x86_64', cpu_model='Xeon Gold',
+            cpu_physical_core_count=24, cpu_logical_processor_count=48,
+            memory_total_gb=128, disk_total_gb=4096,
+        )
+        labels = [field.label for field in get_table_definition('servers').fields]
+        rows = list(csv.DictReader(StringIO(export_csv('servers').lstrip('\ufeff'))))
+
+        for label in (
+            '系统版本', '系统构建号', '系统安装时间', '制造商', '型号', '序列号',
+            '系统架构', 'CPU 型号', 'CPU 物理核心数', 'CPU 逻辑处理器数',
+            '内存总量', '磁盘总量',
+        ):
+            self.assertIn(label, labels)
+            self.assertIn(label, rows[0])
+        self.assertEqual(rows[0]['序列号'], server.serial_number)
 
     def test_filtered_pc_export_omits_login_account_header_and_data(self):
         Computer.objects.create(
@@ -111,15 +139,15 @@ class AssetInventoryImportExportTests(TestCase):
     def test_import_accepts_blank_inventory_values_and_rejects_negative_counts_atomically(self):
         import_csv('networks', SimpleUploadedFile(
             'network.csv',
-            'IP地址,CPU 型号,内存总量,磁盘总量,端口总数,活跃端口数,VLAN 数量\n'
-            '192.0.2.91,Switch CPU,,,48,32,12\n'.encode('utf-8-sig'),
+            'IP地址,CPU 型号,内存总量,磁盘总量,端口总数,VLAN 数量\n'
+            '192.0.2.91,Switch CPU,,,48,12\n'.encode('utf-8-sig'),
             content_type='text/csv',
         ))
         network = Network_Device.objects.get(ip='192.0.2.91')
         self.assertEqual(network.cpu_model, 'Switch CPU')
         self.assertIsNone(network.memory_total_gb)
         self.assertIsNone(network.disk_total_gb)
-        self.assertEqual((network.port_count, network.active_port_count, network.vlan_count), (48, 32, 12))
+        self.assertEqual((network.port_count, network.vlan_count), (48, 12))
 
         with self.assertRaisesRegex(ValueError, '端口总数'):
             import_csv('networks', SimpleUploadedFile(
@@ -178,8 +206,8 @@ class ComputerSnapshotInventoryTests(TestCase):
         self.assertNotIn('cpu_usage_percent', snapshot)
         self.assertNotIn('manufacturer', extract_computer_snapshot({}, [], {}))
 
-    def test_snapshot_extracts_distinct_cpu_counts_and_disk_summary(self):
-        """Mapping both topology values to one field would discard hardware detail."""
+    def test_snapshot_extracts_distinct_cpu_counts_without_dynamic_disk_summary(self):
+        """Static topology belongs in inventory while disk layout stays in analyses."""
         snapshot = extract_computer_snapshot({}, [], {
             'CPU物理核心数': 8,
             'CPU逻辑处理器数': 16,
@@ -188,10 +216,7 @@ class ComputerSnapshotInventoryTests(TestCase):
 
         self.assertEqual(snapshot['cpu_physical_core_count'], 8)
         self.assertEqual(snapshot['cpu_logical_processor_count'], 16)
-        self.assertEqual(
-            snapshot['disk_summary'],
-            'C: 476 GB NVMe; D: 931 GB SSD',
-        )
+        self.assertNotIn('disk_summary', snapshot)
 
 
 class ComputerInventoryDemoSeedTests(TestCase):
@@ -202,7 +227,6 @@ class ComputerInventoryDemoSeedTests(TestCase):
         pc = Computer.objects.get(computer_name='DEMO-PC-OPS-01')
         self.assertEqual(pc.cpu_physical_core_count, 12)
         self.assertEqual(pc.cpu_logical_processor_count, 14)
-        self.assertEqual(pc.disk_summary, 'C: 1024 GB NVMe')
 
 
 class AssetInventoryRefreshTests(TestCase):
@@ -223,9 +247,10 @@ class AssetInventoryRefreshTests(TestCase):
 
         self.assertEqual(changed, {
             'cpu_model', 'memory_total_gb', 'disk_total_gb',
-            'port_count', 'active_port_count', 'vlan_count',
+            'port_count', 'vlan_count',
         })
         self.assertEqual(network.cpu_model, 'Switch ASIC')
+        self.assertFalse(hasattr(network, 'active_port_count'))
         self.assertFalse(hasattr(network, 'cpu_usage_percent'))
 
 

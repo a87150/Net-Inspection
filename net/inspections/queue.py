@@ -12,7 +12,7 @@ from net.models import (
     ComputerAnalysisProfile,
     ComputerLogFile,
     InspectionProfile,
-    Monitor,
+    SecurityDevice,
     Network_Device,
     Server,
     TaskRun,
@@ -43,7 +43,7 @@ _ASSET_SPECS = {
         ('name', 'ip', 'server_type', 'os', 'port', 'api_url', 'verify_ssl'),
     ),
     TaskTargetRun.TargetType.MONITOR: (
-        Monitor,
+        SecurityDevice,
         (
             'device_name', 'ip', 'device_type', 'model', 'vendor',
             'api_url', 'verify_ssl',

@@ -13,7 +13,7 @@ from django.views.decorators.http import require_POST
 
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition
-from net.models import Computer, Monitor, Network_Device, People, Server
+from net.models import Computer, Network_Device, People, SecurityDevice, Server
 from net.data_exchange.inventory_csv import IMPORTABLE_ENTITIES
 from index.alerts.views import alert_modal_context
 from index.inspections.tasks import task_modal_context
@@ -46,7 +46,7 @@ ASSET_PAGES = {
         'Linux 服务器通过 SSH 采集；Windows 服务器访问专用 HTTP JSON 服务。',
     ),
     'monitors': AssetPage(
-        Monitor,
+        SecurityDevice,
         'monitors',
         '安防设备',
         'monitors',

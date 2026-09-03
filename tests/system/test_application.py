@@ -28,7 +28,7 @@ from net.models import (
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
-    Monitor,
+    SecurityDevice,
     Monitor_Inspection,
     Network_Device,
     Network_Device_Inspection,
@@ -393,7 +393,7 @@ class NetworkCheckCommandTests(TestCase):
     def test_command_enqueues_all_asset_types_without_collecting(self):
         Network_Device.objects.create(device_name='SW-1', ip='192.0.2.1')
         Server.objects.create(ip='192.0.2.2')
-        Monitor.objects.create(device_name='CAM-1', ip='192.0.2.3')
+        SecurityDevice.objects.create(device_name='CAM-1', ip='192.0.2.3')
 
         output = StringIO()
         call_command('run_network_checks', stdout=output)
@@ -461,7 +461,7 @@ class ProtocolCollectorTests(TestCase):
         }
         response.raise_for_status.return_value = None
         get_mock.return_value = response
-        device = Monitor(ip='192.0.2.50', vendor='generic', api_url='http://192.0.2.50/api/status')
+        device = SecurityDevice(ip='192.0.2.50', vendor='generic', api_url='http://192.0.2.50/api/status')
         result = collect_security_api(device)
         self.assertEqual(result.status, 'success')
         self.assertTrue(result.data['channel_status'][0]['online'])
@@ -813,7 +813,7 @@ class TableFilteringAndSortingTests(TestCase):
                 'name', '192.0.2.81',
             ),
             (
-                'monitors', Monitor, Monitor_Inspection, 'monitor',
+                'monitors', SecurityDevice, Monitor_Inspection, 'monitor',
                 'device_name', '192.0.2.91',
             ),
         )
@@ -1450,8 +1450,8 @@ class DynamicTableQueryTests(TestCase):
         )
 
     def test_monitor_verify_ssl_is_visible_and_filters_as_boolean(self):
-        secure = Monitor.objects.create(device_name='安全监控', ip='192.0.2.203', verify_ssl=True)
-        Monitor.objects.create(device_name='非安全监控', ip='192.0.2.204', verify_ssl=False)
+        secure = SecurityDevice.objects.create(device_name='安全监控', ip='192.0.2.203', verify_ssl=True)
+        SecurityDevice.objects.create(device_name='非安全监控', ip='192.0.2.204', verify_ssl=False)
 
         response = self.client.get(reverse('item_list', args=['monitors']), {
             'filter_verify_ssl': 'true',
@@ -1912,13 +1912,13 @@ class DemoDataCommandTests(TestCase):
         first_counts = {
             'people': People.objects.count(), 'computers': Computer.objects.count(),
             'networks': Network_Device.objects.count(), 'servers': Server.objects.count(),
-            'monitors': Monitor.objects.count(),
+            'monitors': SecurityDevice.objects.count(),
         }
         call_command('seed_demo_data', stdout=StringIO())
         second_counts = {
             'people': People.objects.count(), 'computers': Computer.objects.count(),
             'networks': Network_Device.objects.count(), 'servers': Server.objects.count(),
-            'monitors': Monitor.objects.count(),
+            'monitors': SecurityDevice.objects.count(),
         }
         self.assertEqual(first_counts, second_counts)
         self.assertEqual(People.objects.get(pk=existing.pk).name, '真实人员')

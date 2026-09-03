@@ -74,14 +74,14 @@ def configuration_secrets():
     Read local stores only, once per ZIP/execution. Do not resolve remote secrets.
     """
     from django.conf import settings
-    from net.models import (AlertChannel, Domain_Controller_Config, Monitor,
+    from net.models import (AlertChannel, Domain_Controller_Config, SecurityDevice,
                             Network_Device, PeopleSyncSource, Server)
 
     values = []
     for model, fields in (
         (Network_Device, ('username', 'password')),
         (Server, ('username', 'password', 'api_token', 'api_url')),
-        (Monitor, ('api_username', 'api_password', 'api_token', 'api_url')),
+        (SecurityDevice, ('api_username', 'api_password', 'api_token', 'api_url')),
         (Domain_Controller_Config, ('bind_username', 'bind_password')),
     ):
         for row in model.objects.values_list(*fields).iterator():
