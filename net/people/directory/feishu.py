@@ -59,7 +59,8 @@ class FeishuDirectoryAdapter:
             self._validate_source()
             access_token = self._tenant_access_token()
             records = {}
-            pending, visited = list(self.source.root_department_ids), set()
+            pending = list(self.source.root_department_ids or ['0'])
+            visited = set()
             while pending:
                 department_id = pending.pop(0)
                 if department_id in visited:
@@ -96,8 +97,9 @@ class FeishuDirectoryAdapter:
             raise DirectoryPayloadError()
         if any(not isinstance(value, str) or not value.strip() for value in credentials.values()):
             raise DirectoryPayloadError()
-        if not isinstance(roots, (list, tuple)) or not roots or any(not isinstance(item, str) or not item.strip()
-                                                                    for item in roots):
+        if not isinstance(roots, (list, tuple)) or any(
+            not isinstance(item, str) or not item.strip() for item in roots
+        ):
             raise DirectoryPayloadError()
 
     def _tenant_access_token(self):

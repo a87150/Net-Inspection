@@ -145,6 +145,13 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
         self.assertEqual(person.name, '预览员工')
         self.assertEqual(self.apply(task, token).status_code, 400)
 
+    def test_queued_people_operation_refreshes_automatically(self):
+        _task, url = self.enqueue()
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.headers['Refresh'], f'2;url={url}')
+
     def test_another_session_cannot_view_export_or_apply_even_with_valid_token(self):
         task, url = self.enqueue()
         target = self.execute(task)

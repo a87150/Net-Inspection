@@ -156,6 +156,35 @@ def _source(provider, **overrides):
 
 
 class FeishuDirectoryAdapterTests(SimpleTestCase):
+    def test_feishu_uses_tenant_root_when_no_root_department_is_configured(self):
+        from net.people.directory.feishu import FeishuDirectoryAdapter
+
+        visited_departments = []
+
+        def handler(method, url, kwargs):
+            if url.endswith('/tenant_access_token/internal'):
+                return FixtureResponse({'code': 0, 'tenant_access_token': 'tenant-token'})
+            if url.endswith('/users/find_by_department'):
+                visited_departments.append(kwargs['params']['department_id'])
+                return FixtureResponse({'code': 0, 'data': {
+                    'items': [{'employee_no': 'EMP-ROOT', 'name': '根部门人员',
+                               'open_id': 'ou-root'}],
+                    'has_more': False, 'page_token': '',
+                }})
+            if url.endswith('/departments/0/children'):
+                return FixtureResponse({'code': 0, 'data': {
+                    'items': [], 'has_more': False, 'page_token': '',
+                }})
+            self.fail(f'unexpected fixture request: {method} {url}')
+
+        people = list(FeishuDirectoryAdapter(
+            _source('feishu', root_department_ids=[]),
+            session=RoutingSession(handler),
+        ).iter_people())
+
+        self.assertEqual(visited_departments, ['0'])
+        self.assertEqual([person.employee_id for person in people], ['EMP-ROOT'])
+
     def test_feishu_traverses_departments_pages_and_merges_one_user_context(self):
         from net.people.directory.feishu import FeishuDirectoryAdapter
 

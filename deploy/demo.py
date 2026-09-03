@@ -2,11 +2,14 @@ r"""Launch the persistent, loopback-only demo without touching db.sqlite3.
 
 Windows: .\.venv\Scripts\python.exe -m deploy.demo
 Linux:   ./.venv/bin/python -m deploy.demo
-Never starts a Worker or contacts providers/devices. This is not a production DB.
+Starts the task Worker by default. Use --no-worker for an offline display-only demo.
+This is not a production DB.
 """
 import argparse
 import os
 from pathlib import Path
+import subprocess
+import sys
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -41,14 +44,51 @@ def prepare(runtime):
     call_command('collectstatic', interactive=False, verbosity=0)
     print(f'Demo database: {runtime / "demo.sqlite3"}', flush=True)
     print(f'DEBUG=False; static root: {runtime / "staticfiles"}', flush=True)
-    print('Offline seeded records only. No Worker started; do not run a real Worker against this demo.', flush=True)
 
 
-def main():
+def build_argument_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--runtime-dir', type=Path, default=BASE_DIR / 'demo-runtime')
     parser.add_argument('--port', type=int, default=8000)
     parser.add_argument('--prepare-only', action='store_true')
+    parser.add_argument(
+        '--no-worker', dest='with_worker', action='store_false', default=True,
+        help='只启动 Web，不执行巡检、分析或人员目录任务',
+    )
+    return parser
+
+
+def run_services(application, *, port, with_worker=True, web_server=None, process_factory=None):
+    if web_server is None:
+        from waitress import serve as web_server
+    process_factory = process_factory or subprocess.Popen
+    worker = None
+    if with_worker:
+        worker = process_factory(
+            [
+                sys.executable, str(BASE_DIR / 'manage.py'), 'run_task_worker',
+                '--threads', '4', '--poll-seconds', '5', '--lease-seconds', '60',
+            ],
+            cwd=BASE_DIR,
+            env=os.environ.copy(),
+        )
+        print(f'Worker process started: PID {getattr(worker, "pid", "unknown")}', flush=True)
+    else:
+        print('Worker disabled; queued tasks will not execute.', flush=True)
+    try:
+        web_server(application, host='127.0.0.1', port=port, threads=4)
+    finally:
+        if worker is not None and worker.poll() is None:
+            worker.terminate()
+            try:
+                worker.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                worker.kill()
+                worker.wait(timeout=5)
+
+
+def main():
+    parser = build_argument_parser()
     options = parser.parse_args()
     if not 1 <= options.port <= 65535:
         parser.error('port must be between 1 and 65535')
@@ -57,10 +97,9 @@ def main():
     except ValueError as exc:
         parser.error(str(exc))
     if not options.prepare_only:
-        from waitress import serve
         from net.wsgi import application
         print(f'Open http://127.0.0.1:{options.port}/ (Ctrl+C to stop)', flush=True)
-        serve(application, host='127.0.0.1', port=options.port, threads=4)
+        run_services(application, port=options.port, with_worker=options.with_worker)
 
 
 if __name__ == '__main__':

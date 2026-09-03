@@ -124,7 +124,10 @@ def people_operation(request, pk, *, error=''):
                     'people_operation_target': target, 'people_preview': preview,
                     'open_import_modal': False})
     from index.devices.views import asset_list
-    return asset_list(request, 'people', integration_context=context)
+    response = asset_list(request, 'people', integration_context=context)
+    if task.status in {TaskRun.Status.QUEUED, TaskRun.Status.RUNNING}:
+        response['Refresh'] = f'2;url={request.get_full_path()}'
+    return response
 
 
 @require_POST

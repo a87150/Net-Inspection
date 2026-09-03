@@ -9,6 +9,8 @@ import sqlite3
 import subprocess
 import sys
 
+from deploy import demo
+
 from django.conf import settings
 from django.core.management import call_command
 from django.test import Client, SimpleTestCase, override_settings
@@ -33,6 +35,48 @@ class ProductionStaticTests(SimpleTestCase):
 
 
 class DemoLauncherTests(SimpleTestCase):
+    def test_service_runner_starts_and_stops_a_separate_worker_process(self):
+        events = []
+
+        class WorkerProcess:
+            def poll(self):
+                return None
+
+            def terminate(self):
+                events.append('worker-stopped')
+
+            def wait(self, timeout=None):
+                events.append(('worker-waited', timeout))
+                return 0
+
+        def process_factory(command, **kwargs):
+            events.append(('worker-started', command, kwargs))
+            return WorkerProcess()
+
+        def web_server(_application, **kwargs):
+            events.append(('web-served', kwargs))
+
+        runner = getattr(demo, 'run_services', None)
+        self.assertIsNotNone(runner)
+        runner(
+            object(), port=8123, web_server=web_server,
+            process_factory=process_factory,
+        )
+
+        self.assertEqual(events[0][0], 'worker-started')
+        self.assertIn('run_task_worker', events[0][1])
+        self.assertEqual(events[1], (
+            'web-served', {'host': '127.0.0.1', 'port': 8123, 'threads': 4},
+        ))
+        self.assertEqual(events[2:], ['worker-stopped', ('worker-waited', 10)])
+
+    def test_demo_cli_runs_worker_by_default_and_can_disable_it(self):
+        parser_factory = getattr(demo, 'build_argument_parser', None)
+        self.assertIsNotNone(parser_factory)
+
+        self.assertTrue(parser_factory().parse_args([]).with_worker)
+        self.assertFalse(parser_factory().parse_args(['--no-worker']).with_worker)
+
     def test_prepare_creates_isolated_persistent_database_and_keeps_user_changes(self):
         with TemporaryDirectory() as directory:
             root = Path(directory) / 'isolated-demo'

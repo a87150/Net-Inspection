@@ -24,12 +24,12 @@ python3.12 -m venv .venv
 ./.venv/bin/python -m deploy.demo
 ```
 
-打开 `http://127.0.0.1:8000/`，Ctrl+C 停止。`--port 8766` 可换端口；`--prepare-only` 仅准备数据和静态文件。
-启动器明确使用 `demo-runtime/demo.sqlite3`，自动迁移、首次离线 seed、collectstatic，然后用 **DEBUG=False + Waitress + WhiteNoise** 启动 Web。原始 `db.sqlite3` 不动，也不继承 MySQL/旧 SQLite 环境路径。再次启动保留演示编辑，不自动重置。`--runtime-dir` 可指定另一个空目录；非空且无演示所有权标记的目录会被拒绝。
+打开 `http://127.0.0.1:8000/`，Ctrl+C 同时停止 Web 和 Worker。`--port 8766` 可换端口；`--prepare-only` 仅准备数据和静态文件；`--no-worker` 只启动 Web，用于离线展示。
+启动器明确使用 `demo-runtime/demo.sqlite3`，自动迁移、首次离线 seed、collectstatic，然后用 **DEBUG=False + Waitress + WhiteNoise** 启动 Web，并启动使用同一演示库的独立 Worker 子进程。原始 `db.sqlite3` 不动，也不继承 MySQL/旧 SQLite 环境路径。再次启动保留演示编辑，不自动重置。`--runtime-dir` 可指定另一个空目录；非空且无演示所有权标记的目录会被拒绝。
 
 持久演示：7 人（两种目录各有在职/停用人员）、3 计算机、每类基础设施各 3 台、域账号/域计算机/域分组各 3、2 个停用目录来源、2 个停用计划、10 个覆盖全部状态的任务（含 2 个离线、非敏感且终态的域操作审计：移动 OU/启用）、4 个分析、异常/恢复事件及成功/失败投递、3 份可下载脱敏配置。地址为 `.invalid`/文档保留 IP，凭据为 `DEMO-ONLY-NOT-A-SECRET`，目录来源及告警渠道停用。
 
-等待/运行中任务是远期停放的离线展示，不是真实 Worker。启动器**不启动 Worker**；不要把真实 Worker 指向演示库。演示中的手动任务只会排队，验收使用 fixture/mock，真实采集需在配置好的生产环境执行。
+等待/运行中的内置演示任务使用远期时间停放，不会被 Worker 自动领取。页面新建的手动任务会由启动器附带的 Worker 执行，因此只有在配置了可访问的真实人员目录或设备后才应操作；需要纯离线展示时使用 `--no-worker`。自动化验收仍只使用 fixture/mock，不连接真实提供商或设备。
 
 需要重建 seed，先停演示 Web 并显式指定演示库：
 

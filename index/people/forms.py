@@ -24,6 +24,10 @@ class PeopleSourceForm(forms.Form):
         self._source = source
         self._provider = provider
         self.fields.pop('app_key' if provider == 'feishu' else 'app_id')
+        if provider == 'feishu':
+            self.fields['root_department_ids'].help_text = (
+                '留空表示从飞书租户根部门 0 开始递归同步全部子部门。'
+            )
         for name, field in self.fields.items():
             field.widget.attrs['class'] = 'form-check-input' if name == 'is_enabled' else 'form-control'
             if name in {'app_id', 'app_key', 'app_secret'}:
