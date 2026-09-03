@@ -561,6 +561,28 @@ details > summary {
     gap: .5rem;
 }
 
+#profileConfigModal .modal-content {
+    max-height: calc(100vh - 2rem);
+}
+
+#profileConfigModal form {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+}
+
+#profileConfigModal .modal-header,
+#profileConfigModal .modal-footer {
+    flex: 0 0 auto;
+}
+
+#profileConfigModal .modal-body {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
 .list-group-item {
     border-color: var(--color-border);
 }

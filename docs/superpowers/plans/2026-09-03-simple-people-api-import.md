@@ -666,7 +666,7 @@
 - Consumes: Bootstrap `.modal-dialog-scrollable` structure and existing bottom submit button.
 - Produces: `#profileConfigModal .modal-content` viewport height constraint and independently scrolling `.modal-body`.
 
-- [ ] **Step 1: Replace the old top-save assertion with failing scroll assertions**
+- [x] **Step 1: Replace the old top-save assertion with failing scroll assertions**
 
   Update `tests/inspections/test_ui.py`:
 
@@ -682,7 +682,7 @@
       self.assertIn('overflow-y: auto', css)
   ```
 
-- [ ] **Step 2: Run the focused UI test and verify it fails**
+- [x] **Step 2: Run the focused UI test and verify it fails**
 
   Run:
 
@@ -692,7 +692,7 @@
 
   Expected: FAIL because two save buttons exist and no modal-specific overflow rule exists.
 
-- [ ] **Step 3: Remove the duplicate button and constrain the modal body**
+- [x] **Step 3: Remove the duplicate button and constrain the modal body**
 
   Remove `.profile-config-save-top`. Add CSS scoped to the profile modal:
 
@@ -717,13 +717,13 @@
 
   Keep the header and footer as non-growing flex children and retain the existing small-screen stacked footer behavior.
 
-- [ ] **Step 4: Run Task 7 test**
+- [x] **Step 4: Run Task 7 test**
 
   Run the command from Step 2.
 
   Expected: PASS.
 
-- [ ] **Step 5: Commit and stop for user inspection**
+- [x] **Step 5: Commit and stop for user inspection**
 
   ```powershell
   git add index/templates/inspections/profile_modal.html static/app/css/style.css tests/inspections/test_ui.py

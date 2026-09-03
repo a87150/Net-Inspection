@@ -1,8 +1,10 @@
 """HTTP contracts for configuring and following Phase 2 background tasks."""
 
 from datetime import time
+from pathlib import Path
 from urllib.parse import urlsplit
 
+from django.conf import settings
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -76,7 +78,13 @@ class TaskUiTestCase(TestCase):
                 self.assertContains(response, 'Defender 病毒库最大间隔')
                 self.assertContains(response, 'CPU 报警阈值')
                 self.assertContains(response, 'KMS 服务器')
-                self.assertContains(response, 'profile-config-save-top')
+                html = response.content.decode()
+                self.assertEqual(html.count('>保存配置</button>'), 1)
+                self.assertNotIn('profile-config-save-top', html)
+                self.assertContains(response, 'id="profileConfigModal"')
+        css = Path(settings.BASE_DIR, 'static/app/css/style.css').read_text(encoding='utf-8')
+        self.assertIn('#profileConfigModal .modal-body', css)
+        self.assertIn('overflow-y: auto', css)
 
     def test_manual_selected_enqueue_snapshots_filtered_targets_items_and_concurrency(self):
         """Dropping UI scope validation could inspect an unfiltered asset or live profile setting."""
