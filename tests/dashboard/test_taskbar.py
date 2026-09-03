@@ -100,6 +100,11 @@ class HomeTaskbarTests(TestCase):
         self.assertContains(response, '巡检任务栏')
         self.assertEqual(len(response.context['task_page'].object_list), 10)
         self.assertContains(response, '?task_page=2')
+        self.assertContains(
+            response,
+            '<span class="page-link text-white">1 / 2</span>',
+            html=True,
+        )
 
     def test_task_page_two_preserves_unrelated_query_parameters(self):
         """Characterize task pagination as independent from other dashboard queries."""

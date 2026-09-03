@@ -1264,6 +1264,11 @@ class TableWorkspaceTemplateTests(TestCase):
             'page': ['2'],
             'page_size': ['20'],
         })
+        self.assertContains(
+            response,
+            '<span class="page-link text-white">1 / 2</span>',
+            html=True,
+        )
 
     def test_workspace_reports_total_and_current_result_range(self):
         People.objects.bulk_create([
