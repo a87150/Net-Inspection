@@ -14,7 +14,10 @@ class DomainControllerConfigForm(_BaseDomainControllerConfigForm):
         password_field.required = False
         password_field.widget = forms.PasswordInput(
             render_value=False,
-            attrs={'autocomplete': 'new-password'},
+            attrs={
+                'autocomplete': 'new-password',
+                'class': 'form-control',
+            },
         )
         if not self.is_bound:
             self.initial['bind_password'] = ''

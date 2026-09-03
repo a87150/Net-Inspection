@@ -82,6 +82,17 @@ class DomainPermissionUiTests(TestCase):
                     can_manage,
                 )
 
+    def test_domain_connection_password_uses_the_standard_input_style(self):
+        """Replacing the write-only widget must not drop the shared form styling."""
+        self.client.force_login(self.permitted_user)
+
+        response = self.client.get(reverse('domain_controller_settings'))
+
+        self.assertContains(
+            response,
+            'name="bind_password" autocomplete="new-password" class="form-control"',
+        )
+
     @patch('index.domain.views.test_domain_connection', return_value='连接成功')
     @patch('index.domain.views.sync_domain', return_value=(1, 1, 0))
     def test_connection_mutations_require_domain_permission_for_all_four_roles(
