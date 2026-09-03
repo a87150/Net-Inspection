@@ -127,9 +127,12 @@ class FeishuDirectoryAdapter:
                                          headers={'Authorization': f'Bearer {access_token}'})
             self._require_success(payload)
             data = payload.get('data')
-            if not isinstance(data, Mapping) or not isinstance(data.get('items'), list):
+            if not isinstance(data, Mapping):
                 raise DirectoryPayloadError()
-            for item in data['items']:
+            items = data.get('items', [])
+            if not isinstance(items, list):
+                raise DirectoryPayloadError()
+            for item in items:
                 self._merge_person_record(item, department_id, records)
             if not isinstance(data.get('has_more'), bool):
                 raise DirectoryPayloadError()
@@ -153,9 +156,12 @@ class FeishuDirectoryAdapter:
             )
             self._require_success(payload)
             data = payload.get('data')
-            if not isinstance(data, Mapping) or not isinstance(data.get('items'), list):
+            if not isinstance(data, Mapping):
                 raise DirectoryPayloadError()
-            for item in data['items']:
+            items = data.get('items', [])
+            if not isinstance(items, list):
+                raise DirectoryPayloadError()
+            for item in items:
                 if not isinstance(item, Mapping):
                     raise DirectoryPayloadError()
                 children.append(self._required_text(item.get('department_id')))

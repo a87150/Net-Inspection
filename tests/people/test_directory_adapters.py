@@ -156,6 +156,37 @@ def _source(provider, **overrides):
 
 
 class FeishuDirectoryAdapterTests(SimpleTestCase):
+    def test_feishu_treats_omitted_items_as_empty_on_successful_pages(self):
+        from net.people.directory.feishu import FeishuDirectoryAdapter
+
+        def handler(method, url, kwargs):
+            if url.endswith('/tenant_access_token/internal'):
+                return FixtureResponse({'code': 0, 'tenant_access_token': 'tenant-token'})
+            if url.endswith('/users/find_by_department'):
+                department_id = kwargs['params']['department_id']
+                if department_id == '0':
+                    return FixtureResponse({'code': 0, 'data': {'has_more': False}})
+                return FixtureResponse({'code': 0, 'data': {
+                    'items': [{'employee_no': 'EMP-CHILD', 'name': '子部门人员',
+                               'open_id': 'ou-child'}],
+                    'has_more': False,
+                }})
+            if url.endswith('/departments/0/children'):
+                return FixtureResponse({'code': 0, 'data': {
+                    'items': [{'department_id': 'dept-child'}],
+                    'has_more': False,
+                }})
+            if url.endswith('/departments/dept-child/children'):
+                return FixtureResponse({'code': 0, 'data': {'has_more': False}})
+            self.fail(f'unexpected fixture request: {method} {url}')
+
+        people = list(FeishuDirectoryAdapter(
+            _source('feishu', root_department_ids=[]),
+            session=RoutingSession(handler),
+        ).iter_people())
+
+        self.assertEqual([person.employee_id for person in people], ['EMP-CHILD'])
+
     def test_feishu_uses_tenant_root_when_no_root_department_is_configured(self):
         from net.people.directory.feishu import FeishuDirectoryAdapter
 
