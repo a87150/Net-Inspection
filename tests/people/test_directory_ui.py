@@ -107,14 +107,21 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
         self.assertContains(response, 'type="password"')
         self.assertNotContains(self.client.get('/assets/networks/'), 'people-tab-feishu')
 
-    def test_invalid_source_save_reopens_tab_without_echoing_or_storing_secrets(self):
-        response = self.client.post('/integrations/people/sources/save/', {
+    def test_invalid_source_save_redirects_to_people_list_and_reopens_without_secrets(self):
+        response = self.client.post('/integrations/people/sources/save/?page_size=500', {
             'source_type': 'feishu', 'name': '保留名称', 'source_key': 'invalid key',
             'app_id': 'input-private-id', 'app_secret': 'input-private-secret',
             'root_department_ids': 'root', 'is_enabled': 'on',
         })
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith('/assets/people/?'))
+        self.assertIn('import=api', response.url)
+        self.assertIn('provider=feishu', response.url)
+
+        response = self.client.get(response.url)
+
         self.assertContains(response, '保留名称')
+        self.assertContains(response, '请检查来源配置')
         self.assertContains(response, 'data-auto-open="true"')
         self.assertNotContains(response, 'input-private')
         self.assertNotIn('input-private', str(dict(self.client.session)))
@@ -136,7 +143,8 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
             'source_id': self.other.pk, 'source_type': 'dingtalk', 'source_key': 'hq',
             'name': 'hijack', 'app_key': 'key', 'app_secret': 'secret',
         })
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith('/assets/people/?'))
         self.other.refresh_from_db()
         self.assertEqual((self.other.source_type, self.other.source_key), ('feishu', 'branch'))
 

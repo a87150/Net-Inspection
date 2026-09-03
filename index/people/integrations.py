@@ -1,8 +1,11 @@
 """Personnel import HTTP orchestration. External I/O belongs to the Worker."""
 
+from urllib.parse import urlencode
+
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.forms.utils import ErrorDict, ErrorList
 from django.http import Http404, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -13,6 +16,12 @@ from index.people.forms import PeopleSourceForm
 from net.people.directory.sync import PeopleSyncError, SyncPreview
 from net.models import PeopleSyncSource, TaskRun
 from net.people.tasks import apply_people_task, enqueue_people_task, owns_people_task, session_digest
+
+
+SOURCE_FORM_FEEDBACK_SESSION_KEY = 'people_source_form_feedback'
+SOURCE_FORM_PUBLIC_FIELDS = (
+    'source_type', 'name', 'source_key', 'root_department_ids', 'is_enabled',
+)
 
 
 def _source(source_id):
@@ -30,13 +39,26 @@ def require_people_owner(request, task):
 
 
 def people_modal_context(request, *, form=None, source=None, provider=None, open_modal=False, error=''):
+    feedback = request.session.pop(SOURCE_FORM_FEEDBACK_SESSION_KEY, None)
     remembered_provider = request.session.pop('people_import_provider', 'csv')
-    provider = provider or request.GET.get('provider', remembered_provider)
+    provider = provider or request.GET.get('provider') or (
+        feedback.get('provider') if feedback else None
+    ) or remembered_provider
     if provider not in {'csv', 'feishu', 'dingtalk'}:
         provider = 'csv'
-    selected = source or _source(request.GET.get('source_id'))
+    selected = source or _source(
+        request.GET.get('source_id') or (feedback.get('source_id') if feedback else None),
+    )
     if selected:
         provider = selected.source_type
+    if form is None and feedback and feedback.get('provider') == provider:
+        form = PeopleSourceForm(feedback.get('data', {}), source=selected, provider=provider)
+        form.is_valid()
+        restored_errors = ErrorDict()
+        for field_name, field_errors in feedback.get('errors', {}).items():
+            restored_errors[field_name] = ErrorList(field_errors)
+        form._errors = restored_errors
+        form.cleaned_data = {}
     sources = [value.public_data() for value in PeopleSyncSource.objects.order_by('name', 'pk')]
     tabs = []
     for key, label in PeopleSyncSource.SourceType.choices:
@@ -60,6 +82,26 @@ def _render_modal(request, **kwargs):
     return asset_list(request, 'people', integration_context=people_modal_context(request, open_modal=True, **kwargs))
 
 
+def _redirect_invalid_source_form(request, form, source, provider):
+    request.session[SOURCE_FORM_FEEDBACK_SESSION_KEY] = {
+        'provider': provider,
+        'source_id': str(source.pk) if source else '',
+        'data': {
+            field: form.data.get(field, '')
+            for field in SOURCE_FORM_PUBLIC_FIELDS
+            if field in form.data
+        },
+        'errors': {
+            field: [str(message) for message in field_errors]
+            for field, field_errors in form.errors.items()
+        },
+    }
+    query = {'import': 'api', 'provider': provider}
+    if source:
+        query['source_id'] = source.pk
+    return redirect(f"{reverse('asset_list', args=['people'])}?{urlencode(query)}")
+
+
 @sensitive_post_parameters('app_id', 'app_key', 'app_secret')
 @require_POST
 def people_source_save(request):
@@ -79,7 +121,7 @@ def people_source_save(request):
             return redirect(f"{reverse('asset_list', args=['people'])}?import=api&provider={provider}&source_id={saved.pk}")
         except (ValidationError, IntegrityError):
             form.add_error(None, '来源配置无效或稳定来源标识已被使用。')
-    return _render_modal(request, form=form, source=source, provider=provider)
+    return _redirect_invalid_source_form(request, form, source, provider)
 
 
 def _queue_operation(request, task_type):
