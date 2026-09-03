@@ -13,7 +13,7 @@ from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_GET, require_POST
 
 from index.people.forms import PeopleProviderForm, PeopleScheduleForm
-from net.models import PeopleSyncSource, Schedule, TaskRun
+from net.models import Schedule, TaskRun
 from net.people.directory.sync import PeopleSyncError, SyncPreview
 from net.people.providers import PROVIDERS, get_provider_source
 from net.people.tasks import (
@@ -31,15 +31,6 @@ PROVIDER_FORM_FEEDBACK_SESSION_KEY = 'people_provider_form_feedback'
 PROVIDER_FORM_PUBLIC_FIELDS = ('root_department_ids', 'is_enabled')
 
 
-def _source(source_id):
-    if not source_id:
-        return None
-    try:
-        return PeopleSyncSource.objects.get(pk=source_id)
-    except (PeopleSyncSource.DoesNotExist, ValidationError, ValueError):
-        raise Http404('人员目录配置不存在。') from None
-
-
 def _provider_source(provider):
     if provider not in PROVIDERS:
         raise Http404('未知人员 API 平台。')
@@ -55,10 +46,9 @@ def people_modal_context(
     request, *, form=None, source=None, provider=None, open_modal=False, error='',
 ):
     feedback = request.session.pop(PROVIDER_FORM_FEEDBACK_SESSION_KEY, None)
-    remembered_provider = request.session.pop('people_import_provider', 'csv')
     provider = provider or request.GET.get('provider') or (
         feedback.get('provider') if feedback else None
-    ) or remembered_provider
+    ) or 'csv'
     if source is not None:
         provider = source.source_type
     if provider not in {'csv', *PROVIDERS}:
@@ -158,13 +148,6 @@ def people_provider_save(request, provider):
         except (ValidationError, IntegrityError):
             form.add_error(None, '平台配置无效，请检查后重试。')
     return _redirect_invalid_provider_form(request, form, provider)
-
-
-@sensitive_post_parameters('app_id', 'app_key', 'app_secret')
-@require_POST
-def people_source_save(request):
-    """Temporary fixed-provider bridge for the old route."""
-    return people_provider_save(request, request.POST.get('source_type', ''))
 
 
 @require_POST
@@ -275,10 +258,11 @@ def people_task_acknowledge(request, pk):
 
 def people_operation(request, pk, *, error=''):
     task = get_object_or_404(
-        TaskRun, pk=pk, task_type__in=TaskRun.PEOPLE_INTERACTIVE_TASK_TYPES,
+        TaskRun.objects.select_related('people_source'),
+        pk=pk, task_type__in=TaskRun.PEOPLE_INTERACTIVE_TASK_TYPES,
     )
     require_people_owner(request, task)
-    source = _source(task.people_source_id)
+    source = task.people_source
     target = task.target_runs.first()
     preview = None
     if (

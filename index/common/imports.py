@@ -12,7 +12,6 @@ from net.data_exchange.inventory_csv import (
     get_spec,
     import_file,
 )
-from net.people.importing import get_personnel_provider_label
 
 
 def download_inventory_template(request, entity, file_format='csv'):
@@ -60,16 +59,3 @@ def import_inventory(request, entity):
         messages.error(request, f'导入失败：{exc}')
         request.session['open_import_modal'] = entity
     return redirect('item_list', item=entity)
-
-
-@require_POST
-def import_people_api(request, provider):
-    try:
-        label = get_personnel_provider_label(provider)
-    except ValueError as exc:
-        raise Http404(str(exc)) from exc
-
-    messages.info(request, f'请保存{label} API 设置，然后测试连接并预览数据。')
-    request.session['open_import_modal'] = 'people'
-    request.session['people_import_provider'] = provider
-    return redirect(f'/assets/people/?import=people&provider={provider}')

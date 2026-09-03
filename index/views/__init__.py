@@ -20,13 +20,12 @@ from index.domain.operations import domain_account_import, domain_account_import
 from index.common.imports import (
     download_inventory_template,
     import_inventory,
-    import_people_api,
 )
 from index.common.exports import table_export
 from index.devices.pc.logs import computer_log_list, computer_log_detail, computer_log_analyze
 from index.devices.configuration import configuration_download, configuration_zip
 from index.devices.pc.scripts import pc_script_download
-from index.people.integrations import people_provider_save, people_schedule_save, people_source_save, people_test, people_preview, people_apply, people_operation, people_task_status, people_task_acknowledge
+from index.people.integrations import people_provider_save, people_schedule_save, people_test, people_preview, people_apply, people_operation, people_task_status, people_task_acknowledge
 from index.alerts.views import (
     alert_channel_save,
     alert_detail,
@@ -85,7 +84,6 @@ __all__ = [
     'download_inventory_template',
     'error_records',
     'import_inventory',
-    'import_people_api',
     'index',
     'infrastructure_inspection_detail',
     'inspection_records',
@@ -99,7 +97,6 @@ __all__ = [
     'configuration_download',
     'configuration_zip',
     'pc_script_download',
-    'people_source_save',
     'people_provider_save',
     'people_schedule_save',
     'people_test',

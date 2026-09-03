@@ -89,9 +89,6 @@ class PeopleProviderForm(forms.Form):
 
 
 # Temporary compatibility name until the old public workflow is removed.
-PeopleSourceForm = PeopleProviderForm
-
-
 class PeopleScheduleForm(forms.Form):
     is_enabled = forms.BooleanField(label='启用自动同步', required=False)
     kind = forms.ChoiceField(label='执行方式', choices=Schedule.Kind.choices)

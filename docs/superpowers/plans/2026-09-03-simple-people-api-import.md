@@ -751,7 +751,7 @@
 - Consumes: all fixed-provider routes and services produced in Tasks 1–7.
 - Produces: one documented fixed-provider personnel import workflow with no routable legacy multi-source save/new-source behavior.
 
-- [ ] **Step 1: Write failing route and secret-regression tests**
+- [x] **Step 1: Write failing route and secret-regression tests**
 
   Assert old generic save and legacy API POST paths return 404/405 as appropriate, fixed provider paths reverse correctly, and response/session serialization never contains known test secrets:
 
@@ -765,7 +765,7 @@
 
   Add an architecture assertion that `PeopleSourceForm` and `people_source_save` are no longer public entry points.
 
-- [ ] **Step 2: Run route tests and verify legacy paths still exist**
+- [x] **Step 2: Run route tests and verify legacy paths still exist**
 
   Run:
 
@@ -775,15 +775,15 @@
 
   Expected: FAIL until old routes/imports are removed.
 
-- [ ] **Step 3: Remove obsolete routes, imports and dead multi-source branches**
+- [x] **Step 3: Remove obsolete routes, imports and dead multi-source branches**
 
   Delete the generic `people_source_save` route/view/export and the legacy `data/people/api/<provider>/` POST endpoint if no current template references it. Remove query parameters `source_id`, source selector handling, “new source” session state, and old auto-refresh-specific branches. Keep the database model and existing noncanonical rows untouched but invisible.
 
-- [ ] **Step 4: Update operator documentation**
+- [x] **Step 4: Update operator documentation**
 
   In `README.md`, document the three manual stages, Worker requirement, per-provider schedule modes, current-test requirement after config changes, background notification behavior, and where scheduled sync results are viewed. State explicitly that verification uses mocked adapters and does not contact production APIs.
 
-- [ ] **Step 5: Run the agreed focused final verification**
+- [x] **Step 5: Run the agreed focused final verification**
 
   Run only:
 
@@ -796,7 +796,7 @@
 
   Expected: all selected tests PASS, JavaScript tests PASS, Django reports no issues, and no migration drift exists. Do not run the full suite, demo deployment, real provider connection, or real personnel import in this task.
 
-- [ ] **Step 6: Commit and stop for final user inspection**
+- [x] **Step 6: Commit and stop for final user inspection**
 
   ```powershell
   git add index/urls.py index/views/__init__.py index/common/imports.py index/people/integrations.py tests/architecture/test_people_domain_boundaries.py tests/architecture/test_application_contracts.py tests/common/test_table_exports.py README.md tests/people/test_directory_ui.py tests/people/test_scheduled_sync.py tests/frontend/people_import_tasks.test.js

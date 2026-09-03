@@ -5,7 +5,6 @@ from django.test import SimpleTestCase
 
 class PeopleDomainBoundaryTests(SimpleTestCase):
     ENTRY_POINTS = (
-        ("net.people.importing", "import_people_from_provider"),
         ("net.people.directory.base", "DirectoryPerson"),
         ("net.people.directory.feishu", "FeishuDirectoryAdapter"),
         ("net.people.directory.dingtalk", "DingTalkDirectoryAdapter"),
@@ -15,10 +14,8 @@ class PeopleDomainBoundaryTests(SimpleTestCase):
         ("net.domain.sync", "sync_domain"),
         ("net.domain.tasks", "enqueue_domain_operation"),
         ("net.domain.executor", "execute_domain_target"),
-        ("index.people.integrations", "people_source_save"),
         ("index.domain.views", "domain_object_list"),
         ("index.domain.operations", "domain_operation_create"),
-        ("index.people.forms", "PeopleSourceForm"),
         ("index.domain.forms", "DomainOperationForm"),
     )
 
@@ -30,3 +27,9 @@ class PeopleDomainBoundaryTests(SimpleTestCase):
                 except ModuleNotFoundError:
                     self.fail(f"feature module is missing: {module_name}")
                 self.assertTrue(callable(getattr(module, attribute)))
+
+    def test_legacy_multi_source_entry_points_are_absent(self):
+        integrations = import_module('index.people.integrations')
+        forms = import_module('index.people.forms')
+        self.assertFalse(hasattr(integrations, 'people_source_save'))
+        self.assertFalse(hasattr(forms, 'PeopleSourceForm'))

@@ -327,15 +327,18 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(TaskRun.objects.count(), 1)
 
-    def test_post_and_csrf_required_for_every_write_including_legacy_api_entry(self):
+    def test_post_and_csrf_required_for_every_current_write(self):
         paths = ['/integrations/people/providers/feishu/save/', '/integrations/people/test/',
-                 '/integrations/people/preview/', '/integrations/people/apply/',
-                 '/data/people/api/feishu/']
+                 '/integrations/people/preview/', '/integrations/people/apply/']
         csrf_client = Client(enforce_csrf_checks=True)
         for path in paths:
             with self.subTest(path=path):
                 self.assertEqual(self.client.get(path).status_code, 405)
                 self.assertEqual(csrf_client.post(path, {}).status_code, 403)
+
+    def test_legacy_multi_source_routes_are_not_routable(self):
+        self.assertEqual(self.client.post('/integrations/people/sources/save/').status_code, 404)
+        self.assertEqual(self.client.post('/data/people/api/feishu/').status_code, 404)
 
 
 class PeopleQueueTests(PeopleFlowMixin, TestCase):

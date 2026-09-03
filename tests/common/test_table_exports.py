@@ -202,29 +202,25 @@ class PersonnelApiImportContractTests(TestCase):
         self.assertNotIn('稳定来源标识', modal)
         self.assertNotIn('name="source_id"', modal)
 
-    def test_unconfigured_provider_is_explicit_and_reopens_people_import(self):
-        response = self.client.post(
-            reverse('import_people_from_api', args=['feishu']),
-            follow=True,
+    def test_provider_query_reopens_people_import_without_a_legacy_post_bridge(self):
+        response = self.client.get(
+            f'{reverse("asset_list", args=["people"])}?import=people&provider=feishu',
         )
         document = response.content.decode(response.charset)
 
-        self.assertEqual(
-            response.redirect_chain[-1][0],
-            f'{reverse("asset_list", args=["people"])}?import=people&provider=feishu',
-        )
-        self.assertContains(response, '请保存飞书 API 设置')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '飞书 API 设置')
         self.assertEqual(People.objects.count(), 0)
         self.assertIn('id="importModal"', document)
         self.assertIn('data-auto-open="true"', extract_div(document, 'importModal'))
 
-    def test_unknown_provider_is_rejected_without_mutation(self):
-        response = self.client.post(
-            reverse('import_people_from_api', args=['unknown-provider']),
-        )
-
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(People.objects.count(), 0)
+    def test_known_secret_is_never_rendered_or_stored_in_session(self):
+        response = self.client.post(reverse('people_provider_save', args=['feishu']), {
+            'app_id': 'cli-test', 'app_secret': 'super-secret',
+            'root_department_ids': '0', 'is_enabled': 'on',
+        }, follow=True)
+        self.assertNotIn(b'super-secret', response.content)
+        self.assertNotIn('super-secret', str(dict(self.client.session)))
 
 
 class CsvImportIsolationTests(TestCase):

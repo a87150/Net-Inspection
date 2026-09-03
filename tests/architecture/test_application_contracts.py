@@ -6,7 +6,7 @@ from django.contrib.staticfiles import finders
 from django.template import TemplateDoesNotExist
 from django.template.loader import get_template
 from django.test import SimpleTestCase
-from django.urls import reverse
+from django.urls import Resolver404, resolve, reverse
 
 
 class ApplicationContractTests(SimpleTestCase):
@@ -52,6 +52,13 @@ class ApplicationContractTests(SimpleTestCase):
         self.assertEqual(reverse("computer_analysis_list"), "/computers/analyses/")
         self.assertEqual(reverse("task_list"), "/tasks/")
         self.assertEqual(reverse("alert_list"), "/alerts/")
+        self.assertEqual(
+            reverse('people_provider_save', args=['feishu']),
+            '/integrations/people/providers/feishu/save/',
+        )
+        for path in ('/integrations/people/sources/save/', '/data/people/api/feishu/'):
+            with self.assertRaises(Resolver404):
+                resolve(path)
 
     def test_inspection_orchestration_entry_points_are_available(self):
         module_names = (
