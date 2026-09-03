@@ -28,6 +28,7 @@ from net.models import (
     Network_Device,
     Network_Device_Inspection,
     People,
+    PeopleSyncSource,
     Server,
     Server_Inspection,
 )
@@ -602,6 +603,14 @@ class DeterministicDemoSeedTests(TestCase):
         self.assertEqual(
             set(People.objects.values_list('source', flat=True)),
             {'manual', 'csv', 'feishu', 'dingtalk'},
+        )
+        self.assertEqual(
+            set(PeopleSyncSource.objects.values_list('source_key', flat=True)),
+            {'people-provider-feishu', 'people-provider-dingtalk'},
+        )
+        self.assertEqual(
+            set(PeopleSyncSource.objects.values_list('name', flat=True)),
+            {'飞书', '钉钉'},
         )
         self.assertEqual(Computer.objects.count(), 3)
         self.assertTrue(

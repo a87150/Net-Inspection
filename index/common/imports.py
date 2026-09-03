@@ -69,7 +69,7 @@ def import_people_api(request, provider):
     except ValueError as exc:
         raise Http404(str(exc)) from exc
 
-    messages.info(request, f'{label}人员接口尚未配置或尚未选择来源，请配置后生成预览并确认。')
+    messages.info(request, f'请保存{label} API 设置，然后测试连接并预览数据。')
     request.session['open_import_modal'] = 'people'
     request.session['people_import_provider'] = provider
-    return redirect('asset_list', kind='people')
+    return redirect(f'/assets/people/?import=people&provider={provider}')

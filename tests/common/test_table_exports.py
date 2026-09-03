@@ -184,23 +184,23 @@ class FilteredExportContractTests(TestCase):
 
 
 class PersonnelApiImportContractTests(TestCase):
-    def test_people_import_modal_offers_post_entry_points_for_both_providers(self):
+    def test_people_import_modal_offers_fixed_settings_for_both_providers(self):
         response = self.client.get(reverse('asset_list', args=['people']))
         document = response.content.decode(response.charset)
         modal = extract_div(document, 'importModal')
 
-        self.assertIn('从 API 导入', modal)
-        self.assertIn('飞书', modal)
-        self.assertIn('钉钉', modal)
+        self.assertIn('飞书 API 设置', modal)
+        self.assertIn('钉钉 API 设置', modal)
         self.assertIn(
-            f'action="{reverse("import_people_from_api", args=["feishu"])}"', modal,
+            f'action="{reverse("people_provider_save", args=["feishu"])}"', modal,
         )
         self.assertIn(
-            f'action="{reverse("import_people_from_api", args=["dingtalk"])}"', modal,
+            f'action="{reverse("people_provider_save", args=["dingtalk"])}"', modal,
         )
-        # CSV + two legacy provider entries remain, with two new source-save forms.
-        self.assertEqual(modal.count('method="post"'), 5)
-        self.assertEqual(modal.count(f'action="{reverse("people_source_save")}"'), 2)
+        self.assertNotIn('新建来源', modal)
+        self.assertNotIn('来源名称', modal)
+        self.assertNotIn('稳定来源标识', modal)
+        self.assertNotIn('name="source_id"', modal)
 
     def test_unconfigured_provider_is_explicit_and_reopens_people_import(self):
         response = self.client.post(
@@ -209,8 +209,11 @@ class PersonnelApiImportContractTests(TestCase):
         )
         document = response.content.decode(response.charset)
 
-        self.assertEqual(response.redirect_chain[-1][0], reverse('asset_list', args=['people']))
-        self.assertContains(response, '飞书人员接口尚未配置')
+        self.assertEqual(
+            response.redirect_chain[-1][0],
+            f'{reverse("asset_list", args=["people"])}?import=people&provider=feishu',
+        )
+        self.assertContains(response, '请保存飞书 API 设置')
         self.assertEqual(People.objects.count(), 0)
         self.assertIn('id="importModal"', document)
         self.assertIn('data-auto-open="true"', extract_div(document, 'importModal'))

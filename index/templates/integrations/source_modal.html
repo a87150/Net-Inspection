@@ -1,33 +1,24 @@
 <section class="tab-pane fade {% if tab.active %}show active{% endif %}" id="people-panel-{{ tab.provider }}" role="tabpanel" aria-labelledby="people-tab-{{ tab.provider }}">
-    <h3 class="h6">从 API 导入 · {{ tab.label }}</h3>
-    <p class="text-secondary small">按顺序完成三个阶段。只有第 3 步明确确认后才会修改人员；CSV/手工人员可按工号纳入当前 API 来源，其他 API 来源的人员不会被转移。</p>
+    <h3 class="h6">{{ tab.label }} API 设置</h3>
+    <p class="text-secondary small">按顺序完成三个阶段。只有核对预览并确认导入后才会修改人员数据。</p>
     <ol class="small text-secondary ps-3">
-        <li><strong>第 1 步：测试连接</strong>——验证凭据和通讯录接口。</li>
+        <li><strong>第 1 步：测试连接</strong>——验证 API 凭据和通讯录接口。</li>
         <li><strong>第 2 步：预览数据</strong>——读取目录并计算新增、更新、停用和跳过，不写数据库。</li>
         <li><strong>第 3 步：执行导入</strong>——核对预览后确认写入。</li>
     </ol>
-    <form method="get" action="{% url 'asset_list' 'people' %}" class="d-flex flex-column flex-sm-row gap-2 mb-3">
-        <input type="hidden" name="import" value="api"><input type="hidden" name="provider" value="{{ tab.provider }}">
-        <label class="visually-hidden" for="source-select-{{ tab.provider }}">选择{{ tab.label }}来源</label>
-        <select class="form-select" id="source-select-{{ tab.provider }}" name="source_id"><option value="">新建来源</option>{% for source in tab.sources %}<option value="{{ source.id }}" {% if source.id == tab.selected.id %}selected{% endif %}>{{ source.name }} · {{ source.source_key }}{% if not source.is_enabled %}（已停用）{% endif %}</option>{% endfor %}</select>
-        <button type="submit" class="btn btn-outline-secondary text-nowrap">选择来源</button>
-    </form>
-    <form method="post" action="{% url 'people_source_save' %}" class="d-grid gap-3">
-        {% csrf_token %}<input type="hidden" name="source_id" value="{{ tab.selected.id|default:'' }}">
-        {{ tab.form.source_type }}
-        {% if tab.form.errors %}<div class="alert alert-danger mb-0" role="alert">请检查来源配置。{{ tab.form.non_field_errors }}</div>{% endif %}
+    <form method="post" action="{% url 'people_provider_save' tab.provider %}" class="d-grid gap-3">
+        {% csrf_token %}
+        {% if tab.form.errors %}<div class="alert alert-danger mb-0" role="alert">请检查 API 设置。{{ tab.form.non_field_errors }}</div>{% endif %}
         {% for field in tab.form.visible_fields %}<div><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}{% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}</div>{% endfor %}
-        <button class="btn btn-dark" type="submit">保存{{ tab.label }}来源</button>
+        <button class="btn btn-dark" type="submit">保存设置</button>
     </form>
-    {% if tab.selected %}
-    <div class="border-top mt-3 pt-3"><p class="small">当前来源：{{ tab.selected.name }} · {{ tab.selected.source_key }}{% if not tab.selected.is_enabled %} · 已停用{% endif %}</p>
+    <div class="border-top mt-3 pt-3">
         <div class="d-flex flex-wrap gap-2">
-            <form method="post" action="{% url 'people_test' %}">{% csrf_token %}<input type="hidden" name="source_id" value="{{ tab.selected.id }}"><button type="submit" class="btn btn-outline-primary" {% if not tab.selected.is_enabled %}disabled{% endif %}>第 1 步：测试连接</button></form>
-            <form method="post" action="{% url 'people_preview' %}">{% csrf_token %}<input type="hidden" name="source_id" value="{{ tab.selected.id }}"><button type="submit" class="btn btn-primary" {% if not tab.selected.is_enabled or not tab.selected.connection_test_current %}disabled{% endif %}>第 2 步：预览数据</button></form>
+            <form method="post" action="{% url 'people_test' %}">{% csrf_token %}<input type="hidden" name="provider" value="{{ tab.provider }}"><button type="submit" class="btn btn-outline-primary" {% if not tab.selected or not tab.selected.is_enabled %}disabled{% endif %}>第 1 步：测试连接</button></form>
+            <form method="post" action="{% url 'people_preview' %}">{% csrf_token %}<input type="hidden" name="provider" value="{{ tab.provider }}"><button type="submit" class="btn btn-primary" {% if not tab.selected or not tab.selected.is_enabled or not tab.selected.connection_test_current %}disabled{% endif %}>第 2 步：预览数据</button></form>
         </div>
-        {% if tab.selected.connection_test_current %}<div class="small text-success mt-2">当前配置已通过连接测试，可以预览数据。</div>{% else %}<div class="small text-danger mt-2">当前配置尚未通过连接测试，请先完成第 1 步。</div>{% endif %}
+        {% if not tab.selected %}<div class="small text-secondary mt-2">请先保存{{ tab.label }} API 设置。</div>
+        {% elif tab.selected.connection_test_current %}<div class="small text-success mt-2">当前配置已通过连接测试，可以预览数据。</div>
+        {% else %}<div class="small text-danger mt-2">当前配置尚未通过连接测试，请先完成第 1 步。</div>{% endif %}
     </div>
-    {% else %}
-    <form method="post" action="{% url 'import_people_from_api' tab.provider %}" class="mt-3">{% csrf_token %}<button type="submit" class="btn btn-outline-secondary">配置{{ tab.label }}导入</button></form>
-    {% endif %}
 </section>

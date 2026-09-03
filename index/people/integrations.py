@@ -4,7 +4,7 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError
 from django.forms.utils import ErrorDict, ErrorList
 from django.http import Http404, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect
@@ -12,16 +12,20 @@ from django.urls import reverse
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_POST
 
-from index.people.forms import PeopleSourceForm
-from net.people.directory.sync import PeopleSyncError, SyncPreview
+from index.people.forms import PeopleProviderForm
 from net.models import PeopleSyncSource, TaskRun
-from net.people.tasks import apply_people_task, enqueue_people_task, owns_people_task, session_digest
-
-
-SOURCE_FORM_FEEDBACK_SESSION_KEY = 'people_source_form_feedback'
-SOURCE_FORM_PUBLIC_FIELDS = (
-    'source_type', 'name', 'source_key', 'root_department_ids', 'is_enabled',
+from net.people.directory.sync import PeopleSyncError, SyncPreview
+from net.people.providers import PROVIDERS, get_provider_source
+from net.people.tasks import (
+    apply_people_task,
+    enqueue_people_task,
+    owns_people_task,
+    session_digest,
 )
+
+
+PROVIDER_FORM_FEEDBACK_SESSION_KEY = 'people_provider_form_feedback'
+PROVIDER_FORM_PUBLIC_FIELDS = ('root_department_ids', 'is_enabled')
 
 
 def _source(source_id):
@@ -30,7 +34,13 @@ def _source(source_id):
     try:
         return PeopleSyncSource.objects.get(pk=source_id)
     except (PeopleSyncSource.DoesNotExist, ValidationError, ValueError):
-        raise Http404('人员目录来源不存在。') from None
+        raise Http404('人员目录配置不存在。') from None
+
+
+def _provider_source(provider):
+    if provider not in PROVIDERS:
+        raise Http404('未知人员 API 平台。')
+    return get_provider_source(provider)
 
 
 def require_people_owner(request, task):
@@ -38,57 +48,78 @@ def require_people_owner(request, task):
         raise Http404('人员目录操作不存在或不属于当前会话。')
 
 
-def people_modal_context(request, *, form=None, source=None, provider=None, open_modal=False, error=''):
-    feedback = request.session.pop(SOURCE_FORM_FEEDBACK_SESSION_KEY, None)
+def people_modal_context(
+    request, *, form=None, source=None, provider=None, open_modal=False, error='',
+):
+    feedback = request.session.pop(PROVIDER_FORM_FEEDBACK_SESSION_KEY, None)
     remembered_provider = request.session.pop('people_import_provider', 'csv')
     provider = provider or request.GET.get('provider') or (
         feedback.get('provider') if feedback else None
     ) or remembered_provider
-    if provider not in {'csv', 'feishu', 'dingtalk'}:
+    if source is not None:
+        provider = source.source_type
+    if provider not in {'csv', *PROVIDERS}:
         provider = 'csv'
-    selected = source or _source(
-        request.GET.get('source_id') or (feedback.get('source_id') if feedback else None),
-    )
-    if selected:
-        provider = selected.source_type
-    if form is None and feedback and feedback.get('provider') == provider:
-        form = PeopleSourceForm(feedback.get('data', {}), source=selected, provider=provider)
-        form.is_valid()
-        restored_errors = ErrorDict()
-        for field_name, field_errors in feedback.get('errors', {}).items():
-            restored_errors[field_name] = ErrorList(field_errors)
-        form._errors = restored_errors
-        form.cleaned_data = {}
-    sources = [value.public_data() for value in PeopleSyncSource.objects.order_by('name', 'pk')]
+
     tabs = []
-    for key, label in PeopleSyncSource.SourceType.choices:
-        current = selected if selected and selected.source_type == key else None
-        tab_form = form if form is not None and key == provider else PeopleSourceForm(source=current, provider=key)
-        tabs.append({'provider': key, 'label': label,
-                     'sources': [value for value in sources if value['source_type'] == key],
-                     'selected': current.public_data() if current else None,
-                     'form': tab_form.public_form(), 'active': provider == key})
-    return {'people_provider_tabs': tabs, 'people_active_tab': provider,
-            'people_import_error': error,
-            'open_import_modal': open_modal or request.GET.get('import') == 'api',
-            'people_recent_tasks': list(TaskRun.objects.filter(
-                task_type__in=TaskRun.PEOPLE_TASK_TYPES,
-                parameters_snapshot__owner_session_digest=session_digest(request.session.session_key),
-            ).order_by('-created_at')[:5]) if request.session.session_key else []}
+    for key, definition in PROVIDERS.items():
+        current = get_provider_source(key)
+        tab_form = form if form is not None and key == provider else None
+        if tab_form is None and feedback and feedback.get('provider') == key:
+            tab_form = PeopleProviderForm(
+                feedback.get('data', {}), source=current, provider=key,
+            )
+            tab_form.is_valid()
+            restored_errors = ErrorDict()
+            for field_name, field_errors in feedback.get('errors', {}).items():
+                restored_errors[field_name] = ErrorList(field_errors)
+            tab_form._errors = restored_errors
+            tab_form.cleaned_data = {}
+        if tab_form is None:
+            tab_form = PeopleProviderForm(source=current, provider=key)
+        tabs.append({
+            'provider': key,
+            'label': definition.label,
+            'selected': current.public_data() if current else None,
+            'form': tab_form.public_form(),
+            'active': provider == key,
+        })
+
+    return {
+        'people_provider_tabs': tabs,
+        'people_active_tab': provider,
+        'people_import_error': error,
+        'open_import_modal': (
+            open_modal or request.GET.get('import') in {'api', 'people'}
+        ),
+        'people_recent_tasks': list(TaskRun.objects.filter(
+            task_type__in=TaskRun.PEOPLE_TASK_TYPES,
+            parameters_snapshot__owner_session_digest=session_digest(
+                request.session.session_key,
+            ),
+        ).order_by('-created_at')[:5]) if request.session.session_key else [],
+    }
 
 
 def _render_modal(request, **kwargs):
     from index.devices.views import asset_list
-    return asset_list(request, 'people', integration_context=people_modal_context(request, open_modal=True, **kwargs))
+    return asset_list(
+        request, 'people',
+        integration_context=people_modal_context(request, open_modal=True, **kwargs),
+    )
 
 
-def _redirect_invalid_source_form(request, form, source, provider):
-    request.session[SOURCE_FORM_FEEDBACK_SESSION_KEY] = {
+def _provider_redirect(provider):
+    query = urlencode({'import': 'people', 'provider': provider})
+    return f"{reverse('asset_list', args=['people'])}?{query}"
+
+
+def _redirect_invalid_provider_form(request, form, provider):
+    request.session[PROVIDER_FORM_FEEDBACK_SESSION_KEY] = {
         'provider': provider,
-        'source_id': str(source.pk) if source else '',
         'data': {
             field: form.data.get(field, '')
-            for field in SOURCE_FORM_PUBLIC_FIELDS
+            for field in PROVIDER_FORM_PUBLIC_FIELDS
             if field in form.data
         },
         'errors': {
@@ -96,39 +127,43 @@ def _redirect_invalid_source_form(request, form, source, provider):
             for field, field_errors in form.errors.items()
         },
     }
-    query = {'import': 'api', 'provider': provider}
-    if source:
-        query['source_id'] = source.pk
-    return redirect(f"{reverse('asset_list', args=['people'])}?{urlencode(query)}")
+    return redirect(_provider_redirect(provider))
+
+
+@sensitive_post_parameters('app_id', 'app_key', 'app_secret')
+@require_POST
+def people_provider_save(request, provider):
+    source = _provider_source(provider)
+    form = PeopleProviderForm(request.POST, source=source, provider=provider)
+    if form.is_valid():
+        try:
+            form.save()
+            messages.success(
+                request,
+                f'{PROVIDERS[provider].label} API 设置已保存，请先测试连接。',
+            )
+            return redirect(_provider_redirect(provider))
+        except (ValidationError, IntegrityError):
+            form.add_error(None, '平台配置无效，请检查后重试。')
+    return _redirect_invalid_provider_form(request, form, provider)
 
 
 @sensitive_post_parameters('app_id', 'app_key', 'app_secret')
 @require_POST
 def people_source_save(request):
-    source = _source(request.POST.get('source_id'))
-    provider = request.POST.get('source_type', '')
-    if provider not in PeopleSyncSource.SourceType.values:
-        raise Http404('未知人员目录平台。')
-    form = PeopleSourceForm(request.POST, source=source, provider=provider)
-    if form.is_valid():
-        try:
-            with transaction.atomic():
-                # Rebind under lock so a blank secret never overwrites a concurrent rotation.
-                if source:
-                    form._source = PeopleSyncSource.objects.select_for_update().get(pk=source.pk)
-                saved = form.save()
-            messages.success(request, '人员目录来源已保存；请先测试连接，再预览数据并执行导入。')
-            return redirect(f"{reverse('asset_list', args=['people'])}?import=api&provider={provider}&source_id={saved.pk}")
-        except (ValidationError, IntegrityError):
-            form.add_error(None, '来源配置无效或稳定来源标识已被使用。')
-    return _redirect_invalid_source_form(request, form, source, provider)
+    """Temporary fixed-provider bridge for the old route."""
+    return people_provider_save(request, request.POST.get('source_type', ''))
 
 
 def _queue_operation(request, task_type):
-    source = _source(request.POST.get('source_id'))
+    provider = request.POST.get('provider', '')
+    source = _provider_source(provider)
     if source is None:
-        return _render_modal(request, provider=request.POST.get('provider', 'feishu'),
-                             error='请先配置并选择一个人员目录来源。')
+        return _render_modal(
+            request,
+            provider=provider,
+            error=f'请保存{PROVIDERS[provider].label} API 设置后再操作。',
+        )
     if not request.session.session_key:
         request.session.create()
     try:
@@ -149,22 +184,33 @@ def people_preview(request):
 
 
 def people_operation(request, pk, *, error=''):
-    task = get_object_or_404(TaskRun, pk=pk, task_type__in=TaskRun.PEOPLE_TASK_TYPES)
+    task = get_object_or_404(
+        TaskRun, pk=pk, task_type__in=TaskRun.PEOPLE_TASK_TYPES,
+    )
     require_people_owner(request, task)
     source = _source(task.people_source_id)
     target = task.target_runs.first()
     preview = None
-    if (task.task_type == TaskRun.TaskType.PEOPLE_PREVIEW and task.status == TaskRun.Status.SUCCESS
-            and target and target.status == TaskRun.Status.SUCCESS and not task.people_applied_at):
+    if (
+        task.task_type == TaskRun.TaskType.PEOPLE_PREVIEW
+        and task.status == TaskRun.Status.SUCCESS
+        and target
+        and target.status == TaskRun.Status.SUCCESS
+        and not task.people_applied_at
+    ):
         try:
             preview = SyncPreview.from_dict(target.result_snapshot.get('preview'))
         except PeopleSyncError:
             pass
     context = people_modal_context(request, source=source)
-    context.update({'people_operation': task, 'people_operation_source': source.public_data(),
-                    'people_operation_error': error,
-                    'people_operation_target': target, 'people_preview': preview,
-                    'open_import_modal': False})
+    context.update({
+        'people_operation': task,
+        'people_operation_source': source.public_data(),
+        'people_operation_error': error,
+        'people_operation_target': target,
+        'people_preview': preview,
+        'open_import_modal': False,
+    })
     from index.devices.views import asset_list
     response = asset_list(request, 'people', integration_context=context)
     if task.status in {TaskRun.Status.QUEUED, TaskRun.Status.RUNNING}:
@@ -175,17 +221,31 @@ def people_operation(request, pk, *, error=''):
 @require_POST
 def people_apply(request):
     try:
-        task = TaskRun.objects.get(pk=request.POST.get('task_id'), task_type__in=TaskRun.PEOPLE_TASK_TYPES)
+        task = TaskRun.objects.get(
+            pk=request.POST.get('task_id'),
+            task_type__in=TaskRun.PEOPLE_TASK_TYPES,
+        )
     except (TaskRun.DoesNotExist, ValidationError, ValueError):
         raise Http404('人员目录操作不存在。') from None
     require_people_owner(request, task)
     if request.POST.get('confirm') != 'yes':
         return HttpResponseBadRequest('必须明确确认预览后才能应用。')
     try:
-        result = apply_people_task(task.pk, request.session.session_key, request.POST.get('preview_token', ''))
+        result = apply_people_task(
+            task.pk,
+            request.session.session_key,
+            request.POST.get('preview_token', ''),
+        )
     except PeopleSyncError:
-        response = people_operation(request, task.pk, error='预览已失效、已应用或配置已变更，请重新生成预览。')
+        response = people_operation(
+            request, task.pk,
+            error='预览已失效、已应用或配置已变更，请重新生成预览。',
+        )
         response.status_code = 400
         return response
-    messages.success(request, f'人员导入完成：新增 {result.created} 条，更新 {result.updated} 条，停用 {result.deactivated} 条。')
+    messages.success(
+        request,
+        f'人员导入完成：新增 {result.created} 条，更新 {result.updated} 条，'
+        f'停用 {result.deactivated} 条。',
+    )
     return redirect('asset_list', kind='people')

@@ -292,7 +292,7 @@ FIXED_ALERT_OWNERS = (
 )
 
 FIXED_PHASE4_OWNERS = (
-    *((PeopleSyncSource, f'people-source-{provider}', {'source_key': f'demo-{provider}', 'source_type': provider})
+    *((PeopleSyncSource, f'people-source-{provider}', {'source_key': f'people-provider-{provider}', 'source_type': provider})
       for provider in ('feishu', 'dingtalk')),
     (InspectionProfile, 'demo-profile-network', {'name': '演示网络巡检', 'device_type': 'network_device'}),
     (InspectionProfile, 'demo-profile-monitor', {'name': '演示安防巡检', 'device_type': 'monitor'}),
@@ -514,7 +514,8 @@ class Command(BaseCommand):
             credential_key = 'app_id' if provider == 'feishu' else 'app_key'
             source, _ = PeopleSyncSource.objects.update_or_create(
                 pk=_demo_uuid(f'people-source-{provider}'), defaults={
-                    'name': f'演示目录-{provider}', 'source_key': f'demo-{provider}',
+                    'name': '飞书' if provider == 'feishu' else '钉钉',
+                    'source_key': f'people-provider-{provider}',
                     'source_type': provider, 'is_enabled': False,
                     'credentials': {credential_key: DEMO_SECRET, 'app_secret': DEMO_SECRET},
                     'root_department_ids': ['0' if provider == 'feishu' else '1'],

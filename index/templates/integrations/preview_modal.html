@@ -13,7 +13,7 @@
             {% elif people_operation.task_type == 'people_test' %}
             <div class="alert alert-success mb-0">第 1 步连接测试成功，可以继续预览数据。</div>
             <form method="post" action="{% url 'people_preview' %}" class="d-grid">{% csrf_token %}
-                <input type="hidden" name="source_id" value="{{ people_operation_source.id }}">
+                <input type="hidden" name="provider" value="{{ people_operation_source.source_type }}">
                 <button class="btn btn-primary" type="submit">第 2 步：预览数据</button>
             </form>
             {% endif %}
@@ -33,7 +33,7 @@
                 <button class="btn btn-primary" type="submit">第 3 步：执行导入</button>
             </form>
             {% endif %}
-            <a class="btn btn-outline-secondary" href="{% url 'asset_list' 'people' %}?import=api&amp;provider={{ people_operation_source.source_type }}&amp;source_id={{ people_operation_source.id }}">返回来源配置 / 重新预览</a>
+            <a class="btn btn-outline-secondary" href="{% url 'asset_list' 'people' %}?import=people&amp;provider={{ people_operation_source.source_type }}">返回 API 设置 / 重新预览</a>
         </div>
     </div></div>
 </div>

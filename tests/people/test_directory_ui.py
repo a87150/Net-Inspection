@@ -29,12 +29,12 @@ class PeopleFlowMixin:
     def setUp(self):
         super().setUp()
         self.source = PeopleSyncSource.objects.create(
-            name='总部目录', source_key='hq', source_type='feishu',
+            name='飞书', source_key='people-provider-feishu', source_type='feishu',
             credentials={'app_id': 'private-app-id', 'app_secret': 'private-app-secret'},
         )
         self.other = PeopleSyncSource.objects.create(
-            name='分部目录', source_key='branch', source_type='feishu',
-            credentials={'app_id': 'branch-app', 'app_secret': 'branch-secret'},
+            name='钉钉', source_key='people-provider-dingtalk', source_type='dingtalk',
+            credentials={'app_key': 'branch-app', 'app_secret': 'branch-secret'},
         )
         PeopleSyncSource.objects.filter(pk__in=[self.source.pk, self.other.pk]).update(
             last_tested_at=timezone.now(),
@@ -46,7 +46,9 @@ class PeopleFlowMixin:
 
     def enqueue(self, operation='preview', source=None, client=None):
         response = (client or self.client).post(
-            f'/integrations/people/{operation}/', {'source_id': (source or self.source).pk},
+            f'/integrations/people/{operation}/', {
+                'provider': (source or self.source).source_type,
+            },
         )
         self.assertEqual(response.status_code, 302, response.content[:500])
         task = TaskRun.objects.latest('created_at')
@@ -74,22 +76,27 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
         PeopleSyncSource.objects.filter(pk=self.source.pk).update(last_tested_at=None)
 
         response = self.client.post(
-            '/integrations/people/preview/', {'source_id': self.source.pk},
+            '/integrations/people/preview/', {'provider': 'feishu'},
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '请先完成第 1 步“测试连接”')
         self.assertEqual(TaskRun.objects.count(), 0)
 
-    def test_people_source_page_presents_three_ordered_import_stages(self):
+    def test_people_import_shows_only_fixed_provider_settings_and_three_stages(self):
         response = self.client.get(
-            f'/assets/people/?import=api&provider=feishu&source_id={self.source.pk}',
+            '/assets/people/?import=people&provider=feishu',
         )
 
+        self.assertContains(response, '飞书 API 设置')
+        self.assertContains(response, '钉钉 API 设置')
         self.assertContains(response, '第 1 步：测试连接')
         self.assertContains(response, '第 2 步：预览数据')
         self.assertContains(response, '第 3 步：执行导入')
-        self.assertNotContains(response, '测试连接（可选）')
+        self.assertNotContains(response, '新建来源')
+        self.assertNotContains(response, '来源名称')
+        self.assertNotContains(response, '稳定来源标识')
+        self.assertNotContains(response, 'name="source_id"')
 
     def test_provider_tabs_are_import_only_and_credentials_are_write_only(self):
         response = self.client.get('/assets/people/')
@@ -102,51 +109,44 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
         self.assertContains(response, 'id="people-tab-feishu"')
         self.assertContains(response, 'id="people-tab-dingtalk"')
         self.assertContains(response, 'CSV 或 Excel 文件')
-        self.assertContains(response, 'API 导入')
+        self.assertContains(response, '飞书 API 设置')
+        self.assertContains(response, '钉钉 API 设置')
         self.assertNotContains(response, 'private-app')
         self.assertContains(response, 'type="password"')
         self.assertNotContains(self.client.get('/assets/networks/'), 'people-tab-feishu')
 
-    def test_invalid_source_save_redirects_to_people_list_and_reopens_without_secrets(self):
-        response = self.client.post('/integrations/people/sources/save/?page_size=500', {
-            'source_type': 'feishu', 'name': '保留名称', 'source_key': 'invalid key',
+    def test_invalid_provider_save_redirects_to_fixed_tab_without_secrets(self):
+        response = self.client.post('/integrations/people/providers/feishu/save/?page_size=500', {
             'app_id': 'input-private-id', 'app_secret': 'input-private-secret',
-            'root_department_ids': 'root', 'is_enabled': 'on',
+            'root_department_ids': 'root, root', 'is_enabled': 'on',
         })
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.url.startswith('/assets/people/?'))
-        self.assertIn('import=api', response.url)
+        self.assertIn('import=people', response.url)
         self.assertIn('provider=feishu', response.url)
 
         response = self.client.get(response.url)
 
-        self.assertContains(response, '保留名称')
-        self.assertContains(response, '请检查来源配置')
+        self.assertContains(response, '根部门不能重复')
         self.assertContains(response, 'data-auto-open="true"')
         self.assertNotContains(response, 'input-private')
         self.assertNotIn('input-private', str(dict(self.client.session)))
         self.assertEqual(PeopleSyncSource.objects.count(), 2)
 
-    def test_blank_credentials_preserve_selected_source_and_source_identity(self):
-        response = self.client.post('/integrations/people/sources/save/', {
-            'source_id': self.other.pk, 'source_type': 'feishu', 'source_key': 'branch',
-            'name': '更新分部', 'root_department_ids': 'root, child', 'is_enabled': 'on',
-            'app_id': '', 'app_secret': '',
+    def test_blank_credentials_preserve_canonical_source_identity(self):
+        response = self.client.post('/integrations/people/providers/dingtalk/save/', {
+            'root_department_ids': 'root, child', 'is_enabled': 'on',
+            'app_key': '', 'app_secret': '',
         })
         self.assertEqual(response.status_code, 302)
         self.other.refresh_from_db()
         self.source.refresh_from_db()
         self.assertEqual(self.other.credentials['app_secret'], 'branch-secret')
         self.assertEqual(self.other.root_department_ids, ['root', 'child'])
-        self.assertEqual(self.source.name, '总部目录')
-        response = self.client.post('/integrations/people/sources/save/', {
-            'source_id': self.other.pk, 'source_type': 'dingtalk', 'source_key': 'hq',
-            'name': 'hijack', 'app_key': 'key', 'app_secret': 'secret',
-        })
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.url.startswith('/assets/people/?'))
-        self.other.refresh_from_db()
-        self.assertEqual((self.other.source_type, self.other.source_key), ('feishu', 'branch'))
+        self.assertEqual((self.other.name, self.other.source_type, self.other.source_key), (
+            '钉钉', 'dingtalk', 'people-provider-dingtalk',
+        ))
+        self.assertEqual(self.source.name, '飞书')
 
     def test_durable_preview_then_explicit_database_only_apply_exact_saved_diff(self):
         old = People.objects.create(employee_id='OLD', name='旧员工', source='feishu',
@@ -211,7 +211,7 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
 
     def test_disabled_source_and_duplicate_operation_are_not_queued(self):
         task, _ = self.enqueue()
-        response = self.client.post('/integrations/people/preview/', {'source_id': self.source.pk})
+        response = self.client.post('/integrations/people/preview/', {'provider': 'feishu'})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '活动')
         self.assertEqual(TaskRun.objects.count(), 1)
@@ -219,7 +219,7 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
     def test_queue_and_expired_apply_errors_are_visible_inside_reopened_modal(self):
         from tests.common.test_table_exports import extract_div
         task, _ = self.enqueue()
-        response = self.client.post('/integrations/people/preview/', {'source_id': self.source.pk})
+        response = self.client.post('/integrations/people/preview/', {'provider': 'feishu'})
         self.assertIn('活动操作', extract_div(response.content.decode(), 'importModal'))
         target = self.execute(task)
         with patch('django.core.signing.time.time', return_value=timezone.now().timestamp() + 301):
@@ -228,12 +228,12 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
         self.assertIn('预览已失效', extract_div(response.content.decode(), 'peoplePreviewModal'))
         self.other.is_enabled = False
         self.other.save()
-        response = self.client.post('/integrations/people/preview/', {'source_id': self.other.pk})
+        response = self.client.post('/integrations/people/preview/', {'provider': 'dingtalk'})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(TaskRun.objects.count(), 1)
 
     def test_post_and_csrf_required_for_every_write_including_legacy_api_entry(self):
-        paths = ['/integrations/people/sources/save/', '/integrations/people/test/',
+        paths = ['/integrations/people/providers/feishu/save/', '/integrations/people/test/',
                  '/integrations/people/preview/', '/integrations/people/apply/',
                  '/data/people/api/feishu/']
         csrf_client = Client(enforce_csrf_checks=True)
@@ -266,7 +266,7 @@ class PeopleQueueTests(PeopleFlowMixin, TestCase):
 
         self.assertContains(response, '第 2 步：预览数据')
         self.assertContains(response, reverse('people_preview'))
-        self.assertContains(response, f'name="source_id" value="{self.source.pk}"')
+        self.assertContains(response, 'name="provider" value="feishu"')
 
     def test_changed_source_before_worker_and_incomplete_snapshot_fail_closed(self):
         task, _ = self.enqueue()
@@ -377,7 +377,7 @@ class PeopleQueueTests(PeopleFlowMixin, TestCase):
     def test_duplicate_other_session_is_rejected_but_different_source_is_independent(self):
         self.enqueue()
         other_client = Client()
-        response = other_client.post('/integrations/people/preview/', {'source_id': self.source.pk})
+        response = other_client.post('/integrations/people/preview/', {'provider': 'feishu'})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(TaskRun.objects.count(), 1)
         other_task, _ = self.enqueue(source=self.other, client=other_client)

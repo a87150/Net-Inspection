@@ -61,7 +61,7 @@
 - Consumes: `PeopleSyncSource.public_data() -> dict` and existing encrypted/write-only `credentials` JSON contract.
 - Produces: `PROVIDERS: dict[str, ProviderDefinition]`, `get_provider_definition(provider: str) -> ProviderDefinition`, `get_provider_source(provider: str) -> PeopleSyncSource | None`, `save_provider_source(provider: str, cleaned_data: dict) -> PeopleSyncSource`, `PeopleProviderForm(data=None, *, provider: str, source: PeopleSyncSource | None)`.
 
-- [ ] **Step 1: Write failing fixed-provider UI and persistence tests**
+- [x] **Step 1: Write failing fixed-provider UI and persistence tests**
 
   Replace the multi-source expectations in `tests/people/test_directory_ui.py` and `tests/common/test_table_exports.py` with tests asserting:
 
@@ -93,7 +93,7 @@
 
   Add a seed test asserting that only the two canonical keys are created by demo seeding.
 
-- [ ] **Step 2: Run the new tests and verify the old multi-source implementation fails**
+- [x] **Step 2: Run the new tests and verify the old multi-source implementation fails**
 
   Run:
 
@@ -103,7 +103,7 @@
 
   Expected: FAIL because the page still renders source names/keys/selectors and the save endpoint accepts arbitrary source identity.
 
-- [ ] **Step 3: Add the fixed provider registry and safe save service**
+- [x] **Step 3: Add the fixed provider registry and safe save service**
 
   Create `net/people/providers.py` with an immutable definition and canonical lookup:
 
@@ -157,7 +157,7 @@
 
   The implementation must invalidate `last_tested_at` only when credentials, root departments, provider identity, or enabled state actually changes; submitting identical public values with blank secrets must retain a current successful test.
 
-- [ ] **Step 4: Replace the form, modal context and template with fixed tabs**
+- [x] **Step 4: Replace the form, modal context and template with fixed tabs**
 
   Rename `PeopleSourceForm` to `PeopleProviderForm`; remove `source_type`, `name`, and `source_key`; keep provider-specific credential fields, roots, and enabled. Make `public_form()` reconstruct only non-secret bound values.
 
@@ -169,17 +169,17 @@
 
   Remove all source selector/new-source markup and display fixed headings, “保存设置”, “测试连接”, and “预览数据”. Update `import_people_api` to redirect to this fixed tab without creating or selecting a source.
 
-- [ ] **Step 5: Canonicalize demo fixtures**
+- [x] **Step 5: Canonicalize demo fixtures**
 
   In `seed_demo_data.py`, update/create the two rows using canonical `source_key` values and labels. Ensure reset logic identifies these records by their deterministic demo primary keys and canonical keys, without deleting unrelated user rows.
 
-- [ ] **Step 6: Run Task 1 tests**
+- [x] **Step 6: Run Task 1 tests**
 
   Run the same command from Step 2.
 
   Expected: PASS; rendered response must not contain saved secrets or arbitrary source controls.
 
-- [ ] **Step 7: Commit and stop for user inspection**
+- [x] **Step 7: Commit and stop for user inspection**
 
   ```powershell
   git add net/people/providers.py index/people/forms.py index/people/integrations.py index/templates/integrations/source_modal.html index/templates/common/import_modal.html index/common/imports.py net/management/commands/seed_demo_data.py tests/people/test_directory_ui.py tests/common/test_table_exports.py tests/architecture/test_demo_seed.py
