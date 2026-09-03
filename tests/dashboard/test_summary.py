@@ -325,6 +325,12 @@ class DashboardSummaryTests(TestCase):
         )
         self.assertContains(
             response,
+            '<strong class="text-success">0</strong>',
+            count=2,
+            html=True,
+        )
+        self.assertContains(
+            response,
             '<strong class="text-danger">0</strong>',
             count=2,
             html=True,

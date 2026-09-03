@@ -102,8 +102,14 @@ class DomainGroupWorkspaceTests(TestCase):
         response = self.client.get(reverse('domain_controller_settings'))
 
         self.assertContains(response, '域账号')
-        self.assertContains(response, '启用 1')
+        self.assertContains(response, '启用')
         self.assertContains(response, '停用 1')
+        self.assertContains(
+            response,
+            '<span class="text-success">1</span>',
+            count=2,
+            html=True,
+        )
         self.assertContains(response, '域分组')
         self.assertContains(response, '/domain/groups/')
         self.assertContains(response, '安全组 1')
