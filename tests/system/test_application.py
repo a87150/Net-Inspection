@@ -591,6 +591,16 @@ class ImportModalTests(TestCase):
         self.assertContains(response, '导出筛选结果')
 
     def test_domain_child_pages_offer_filtered_export_and_only_accounts_allow_import(self):
+        operator = get_user_model().objects.create_user(
+            username='domain-list-operator', password='test-password',
+        )
+        operator.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label='net', codename='manage_domain_operations',
+            ),
+        )
+        self.client.force_login(operator)
+
         for route_name, table_key in (
             ('domain_account_list', 'domain_accounts'),
             ('domain_computer_list', 'domain_computers'),

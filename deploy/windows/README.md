@@ -7,7 +7,7 @@
 ```powershell
 Set-Location C:\NetInspection
 py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.lock.txt
 New-Item -ItemType Directory -Force -Path C:\NetInspectionData\logs,C:\NetInspectionData\staticfiles,C:\NetInspectionData\incoming,C:\NetInspectionData\incoming\processed,C:\NetInspectionData\incoming\failed
 ```
 

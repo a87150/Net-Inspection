@@ -6,13 +6,13 @@ Django 网络与终端监控应用：PowerShell 上报计算机日志，后端�
 
 ## 首次体验：独立持久的本地演示
 
-要求 Python **3.12+**（启动时强制检查），本机已验证 `.venv` 的 **3.12.13**。现有环境也须重新安装 requirements（包括 Waitress、WhiteNoise 和新版原生 Dahua 依赖）。
+要求 Python **3.12+**（启动时强制检查），本机已验证 `.venv` 的 **3.12.13**。现有环境也须重新安装 `requirements.lock.txt`（包括 Waitress、WhiteNoise 和新版原生 Dahua 依赖）。`requirements.txt` 记录直接依赖，锁文件固定直接及间接依赖，部署统一使用锁文件。
 
 Windows，在本项目目录：
 
 ```powershell
 # 没有虚拟环境时：py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.lock.txt
 .\.venv\Scripts\python.exe -m deploy.demo
 ```
 
@@ -20,7 +20,7 @@ Linux：
 
 ```bash
 python3.12 -m venv .venv
-./.venv/bin/python -m pip install -r requirements.txt
+./.venv/bin/python -m pip install -r requirements.lock.txt
 ./.venv/bin/python -m deploy.demo
 ```
 

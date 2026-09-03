@@ -2,7 +2,7 @@
 
 这是生产 MySQL 的安装说明，不是演示 SQLite 的启动命令。仅在目标 Linux 主机由管理员执行。
 准备 Python 3.12+（应用强制最低 3.12）、MySQL 8 的 utf8mb4 数据库和专用数据库账号；安装 mysqlclient 所需的系统编译依赖。
-将应用放到 `/opt/net-inspection`，创建 `.venv` 并 `./.venv/bin/python -m pip install -r requirements.txt`。
+将应用放到 `/opt/net-inspection`，创建 `.venv` 并 `./.venv/bin/python -m pip install -r requirements.lock.txt`。
 创建低权限 `net-inspection` 服务账号，让它读取应用、写入以下目录（不要把日志/归档放进 staticfiles）：
 
 ```bash
