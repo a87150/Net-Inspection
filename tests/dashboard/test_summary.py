@@ -310,3 +310,21 @@ class DashboardSummaryTests(TestCase):
         self.assertEqual(domain['account_total'], 0)
         self.assertEqual(domain['computer_total'], 0)
         self.assertEqual(domain['group_total'], 0)
+
+    def test_dashboard_cards_render_compact_labels_and_aligned_footer_dates(self):
+        response = self.client.get(reverse('index'))
+        items = {item['key']: item for item in response.context['items']}
+
+        self.assertEqual(items['computers']['normal_label'], '正常')
+        self.assertEqual(items['computers']['abnormal_label'], '异常')
+        self.assertContains(response, 'class="metric-card__domain-status"', count=6)
+        self.assertContains(
+            response,
+            'class="metric-card__last-run text-secondary mb-0 text-end"',
+            count=4,
+        )
+        self.assertContains(
+            response,
+            'class="card-footer metric-card__footer metric-card__actions px-4 pb-4 d-flex gap-2 flex-wrap align-items-center justify-content-end"',
+            count=6,
+        )

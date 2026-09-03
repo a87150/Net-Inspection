@@ -427,17 +427,34 @@ th[aria-sort="descending"] .table-sort-link::after { color: var(--color-primary)
     min-height: 4.25rem;
 }
 
-.metric-card__actions--end {
-    justify-content: flex-end;
-    margin-top: auto;
-}
-
 .metric-card__last-run {
     font-size: .875rem;
+    white-space: nowrap;
 }
 
-.metric-card__domain-columns .col-6 + .col-6 {
+.metric-card__domain-columns .col-4 + .col-4 {
     border-inline-start: 1px solid var(--color-border);
+}
+
+.metric-card__domain-breakdown {
+    display: grid;
+    gap: .2rem;
+    margin-top: .5rem;
+}
+
+.metric-card__domain-status {
+    display: grid;
+    grid-template-columns: minmax(3rem, 1fr) auto;
+    align-items: baseline;
+    gap: .4rem;
+    color: var(--color-text-muted);
+    font-size: .8rem;
+    text-align: left;
+}
+
+.metric-card__domain-status strong {
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums;
 }
 
 .inspection-taskbar__header {

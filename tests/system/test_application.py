@@ -1425,7 +1425,7 @@ class DynamicTableQueryTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['table_state']['sort'], 'name')
-        self.assertEqual(response.context['table_state']['page_size'], 100)
+        self.assertEqual(response.context['table_state']['page_size'], 500)
 
     def test_server_verify_ssl_is_visible_and_filters_as_boolean(self):
         secure = Server.objects.create(name='安全服务器', ip='192.0.2.201', verify_ssl=True)
@@ -1473,6 +1473,19 @@ class DynamicTableQueryTests(TestCase):
 
 
 class TablePaginationTests(TestCase):
+    def test_table_page_size_supports_large_operational_views(self):
+        People.objects.bulk_create([
+            People(name=f'人员{number}', employee_id=f'P-LARGE-{number:03d}')
+            for number in range(21)
+        ])
+
+        response = self.client.get(
+            reverse('item_list', args=['people']), {'page_size': '500'},
+        )
+
+        self.assertEqual(response.context['table_state']['page_size'], 500)
+        self.assertContains(response, '<option value="500" selected>500</option>', html=True)
+
     def test_asset_page_size_controls_page_object_count(self):
         People.objects.bulk_create([
             People(name=f'人员{number}', employee_id=f'P{number:03d}')
