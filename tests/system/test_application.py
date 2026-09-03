@@ -1282,6 +1282,14 @@ class TableWorkspaceTemplateTests(TestCase):
         )
 
         self.assertContains(response, '共 21 条，当前显示第 21–21 条')
+        document = parse_response_html(response)
+        self.assertEqual(len(document.find('div', **{'data-table-result-bar': ''})), 1)
+        self.assertEqual(len(document.find('select', **{'data-page-size': ''})), 1)
+
+    def test_domain_list_omits_obsolete_read_only_sync_message(self):
+        response = self.client.get(reverse('domain_account_list'))
+
+        self.assertNotContains(response, '由域控同步维护，只读查看。')
 
     def test_workspace_reports_explicit_zero_results(self):
         response = self.client.get(reverse('item_list', args=['people']))

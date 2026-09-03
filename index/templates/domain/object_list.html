@@ -3,7 +3,7 @@
 {% block title %}{{ item_name }}列表{% endblock %}
 {% block content %}
 <header class="page-heading">
-    <div class="page-heading__copy"><p class="page-heading__eyebrow">域控对象</p><h1 class="page-heading__title">{{ item_name }}列表</h1><p class="page-heading__description">由域控同步维护，只读查看。</p></div>
+    <div class="page-heading__copy"><p class="page-heading__eyebrow">域控对象</p><h1 class="page-heading__title">{{ item_name }}列表</h1></div>
     <div class="page-heading__actions">
         {% if domain_object_type == 'account' and can_manage_domain %}<button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#domainAccountImportModal">批量导入账号</button>{% endif %}
         <a class="btn btn-outline-secondary" href="{% url 'domain_controller_settings' %}">返回域控管理</a>

@@ -70,16 +70,20 @@
                     {% endfor %}
                 </div>
             </fieldset>
-            <div class="table-config__page-size">
-                <label class="form-label" for="table-page-size-{{ table_definition.key }}">每页条数</label>
-                <select class="form-select" id="table-page-size-{{ table_definition.key }}" name="{{ table_state.parameter_names.page_size }}" data-page-size data-default-page-size="{{ table_definition.default_page_size }}">
-                    {% for size in page_sizes %}<option value="{{ size }}"{% if table_state.page_size == size %} selected{% endif %}>{{ size }}</option>{% endfor %}
-                </select>
-                <button class="btn btn-outline-secondary btn-sm mt-3" type="button" data-table-reset>恢复默认表格</button>
+            <div class="table-config__reset">
+                <button class="btn btn-outline-secondary btn-sm" type="button" data-table-reset>恢复默认表格</button>
             </div>
         </div>
     </details>
+    <div class="table-result-bar" data-table-result-bar>
+        <p class="small text-secondary mb-0" data-result-summary aria-live="polite">
+            {% if page_obj.paginator.count %}共 {{ page_obj.paginator.count }} 条，当前显示第 {{ page_obj.start_index }}–{{ page_obj.end_index }} 条{% else %}共 0 条，当前无结果{% endif %}
+        </p>
+        <div class="table-result-bar__page-size">
+            <label class="small text-secondary text-nowrap mb-0" for="table-page-size-{{ table_definition.key }}">每页条数</label>
+            <select class="form-select form-select-sm" id="table-page-size-{{ table_definition.key }}" name="{{ table_state.parameter_names.page_size }}" data-page-size data-default-page-size="{{ table_definition.default_page_size }}">
+                {% for size in page_sizes %}<option value="{{ size }}"{% if table_state.page_size == size %} selected{% endif %}>{{ size }}</option>{% endfor %}
+            </select>
+        </div>
+    </div>
 </form>
-<p class="small text-secondary mb-3" data-result-summary aria-live="polite">
-    {% if page_obj.paginator.count %}共 {{ page_obj.paginator.count }} 条，当前显示第 {{ page_obj.start_index }}–{{ page_obj.end_index }} 条{% else %}共 0 条，当前无结果{% endif %}
-</p>

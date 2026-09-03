@@ -322,8 +322,26 @@ a.metric-card:hover {
 }
 
 .table-config .form-check-label,
-.table-config__page-size {
+.table-config__reset {
     font-size: .82rem;
+}
+
+.table-result-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    margin-top: .75rem;
+}
+
+.table-result-bar__page-size {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+}
+
+.table-result-bar__page-size .form-select {
+    width: 5.25rem;
 }
 
 .table-toolbar__actions .form-control {
