@@ -1,6 +1,7 @@
 import csv
 import io
 import ipaddress
+from pathlib import Path
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
 
@@ -8,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.db import DatabaseError, transaction
 
 from net.models import Computer, Domain_Account, Domain_Computer, Network_Device, People, SecurityDevice, Server
+from net.data_exchange.xlsx import build_xlsx, read_xlsx_rows
 
 
 IMPORTABLE_ENTITIES = {'people', 'networks', 'servers', 'monitors'}
@@ -90,6 +92,7 @@ ENTITY_SPECS = {
             ('部门', 'department', _text), ('上级', 'leader', _text), ('是否在职', 'is_active', _boolean),
             ('入职日期', 'hire_date', _date), ('离职日期', 'departure_date', _date),
         ],
+        'sample': ('张三', 'H10001', 'zhangsan@example.invalid', '信息技术部', '李经理', '是', '2026-01-15', ''),
     },
     'accounts': {
         'name': '域账号',
@@ -145,6 +148,7 @@ ENTITY_SPECS = {
             ('SSH账号', 'username', _text), ('SSH密码', 'password', _text),
         ],
         'secret_fields': {'password'},
+        'sample': ('核心交换机', '192.0.2.10', '交换机', 'H3C', 'ssh', '22', 'S5560X', 'Intel Atom', '4', '8', '48', '10', 'readonly', 'CHANGE-ME'),
     },
     'servers': {
         'name': '服务器',
@@ -166,6 +170,7 @@ ENTITY_SPECS = {
             ('磁盘总量', 'disk_total_gb', _gib),
         ],
         'secret_fields': {'password', 'api_token'},
+        'sample': ('应用服务器', '192.0.2.20', 'Linux', 'Ubuntu 24.04', '22', 'readonly', 'CHANGE-ME', '', '', '否', '24.04', '', '2026-01-15', 'Example', 'Rack Server', 'DEMO-SRV-001', 'x86_64', 'Xeon', '32', '8', '16', '512'),
     },
     'monitors': {
         'name': '安防设备',
@@ -181,6 +186,7 @@ ENTITY_SPECS = {
             ('内存总量', 'memory_total_gb', _gib), ('磁盘总量', 'disk_total_gb', _gib),
         ],
         'secret_fields': {'api_password', 'api_token'},
+        'sample': ('前门门禁闸机', '192.0.2.30', '门禁闸机', 'Dahua', 'https://192.0.2.30/api/status', 'readonly', 'CHANGE-ME', '', '否', 'ASI7213Y', 'ARM', '2', '8'),
     },
 }
 
@@ -197,7 +203,9 @@ def export_csv(entity, template_only=False):
     stream = io.StringIO(newline='')
     writer = csv.writer(stream)
     writer.writerow([label for label, _, _ in spec['columns']])
-    if not template_only:
+    if template_only:
+        writer.writerow(spec['sample'])
+    else:
         for obj in spec['model'].objects.all().order_by('pk'):
             row = []
             for _, field, _ in spec['columns']:
@@ -210,6 +218,35 @@ def export_csv(entity, template_only=False):
                 row.append(value if value is not None else '')
             writer.writerow(row)
     return '\ufeff' + stream.getvalue()
+
+
+def export_xlsx_template(entity):
+    spec = get_spec(entity)
+    return build_xlsx(
+        ([label for label, _, _ in spec['columns']], spec['sample']),
+        sheet_name=spec['name'],
+    )
+
+
+def import_file(entity, uploaded_file):
+    suffix = Path(uploaded_file.name or '').suffix.casefold()
+    if suffix == '.csv':
+        return import_csv(entity, uploaded_file)
+    if suffix != '.xlsx':
+        raise ValueError('仅支持 CSV 或 Excel (.xlsx) 文件')
+    size = getattr(uploaded_file, 'size', None)
+    if size is not None and size > MAX_CSV_UPLOAD_BYTES:
+        raise ValueError('文件不能超过 2 MB')
+    rows = read_xlsx_rows(
+        uploaded_file,
+        max_rows=MAX_CSV_ROWS + 1,
+        max_columns=MAX_CSV_COLUMNS,
+        max_cell_chars=MAX_CSV_CELL_CHARS,
+    )
+    stream = io.StringIO(newline='')
+    csv.writer(stream).writerows(rows)
+    converted = io.BytesIO(('\ufeff' + stream.getvalue()).encode('utf-8'))
+    return import_csv(entity, converted)
 
 
 def _decode_upload(uploaded_file):

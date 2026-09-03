@@ -31,6 +31,7 @@ urlpatterns = [
     path('alerts/test-send/', views.alert_test_send, name='alert_test_send'),
     path('alerts/<uuid:pk>/', views.alert_detail, name='alert_detail'),
     path('data/<str:entity>/template/', views.download_inventory_template, name='download_inventory_template'),
+    path('data/<str:entity>/template/<str:file_format>/', views.download_inventory_template, name='download_inventory_template_format'),
     path('data/<str:entity>/import/', views.import_inventory, name='import_inventory'),
     path('data/people/api/<str:provider>/', views.import_people_api, name='import_people_from_api'),
     path('integrations/people/sources/save/', views.people_source_save, name='people_source_save'),

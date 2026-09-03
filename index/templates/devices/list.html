@@ -9,8 +9,7 @@
         <p class="page-heading__description">{% if item_key == 'people' %}展示姓名、工号、部门、邮箱、上级和启用状态。{% else %}仅展示名称、地址、型号和系统版本等基础信息。{% endif %}</p>
     </div>
     <div class="page-heading__actions">
-        {% if import_enabled %}<button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#importModal">导入</button>{% endif %}
-        {% if personnel_api_import %}<a class="btn btn-outline-primary" href="{% url 'asset_list' 'people' %}?import=api&amp;provider=feishu">API 导入</a>{% endif %}
+        {% if import_enabled %}<button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#importModal">{% if item_key == 'people' %}导入人员{% else %}导入{% endif %}</button>{% endif %}
         {% if task_project_kind %}
         <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#profileConfigModal">{{ task_config_label }}</button>
         {% if item_key == 'computers' and task_default_profile and task_default_profile.is_enabled and task_default_profile.scan_directories %}
@@ -63,7 +62,7 @@
                         {% if task_allow_target_selection %}<button class="btn btn-outline-primary btn-sm" type="button" data-task-target="{{ obj.pk }}" data-bs-toggle="modal" data-bs-target="#runTaskModal">{{ task_action_label }}</button>{% endif %}
                     </div></td>
                 </tr>
-                {% empty %}<tr><td colspan="20"><div class="empty-state"><strong>{% if item_key == 'computers' %}暂无 PC 数据{% else %}暂无资产数据{% endif %}</strong><span>{% if item_key == 'computers' %}请运行 PowerShell PC 信息采集脚本并上报。{% else %}可点击右上角“导入”添加资产。{% endif %}</span></div></td></tr>{% endfor %}
+                {% empty %}<tr><td colspan="20"><div class="empty-state"><strong>{% if item_key == 'computers' %}暂无 PC 数据{% else %}暂无资产数据{% endif %}</strong><span>{% if item_key == 'computers' %}请运行 PowerShell PC 信息采集脚本并上报。{% elif item_key == 'people' %}可点击右上角“导入人员”添加人员。{% else %}可点击右上角“导入”添加资产。{% endif %}</span></div></td></tr>{% endfor %}
                 </tbody>
             </table>
         </div>

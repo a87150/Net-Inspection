@@ -8,21 +8,29 @@ from django.views.decorators.http import require_POST
 from net.data_exchange.inventory_csv import (
     IMPORTABLE_ENTITIES,
     export_csv,
+    export_xlsx_template,
     get_spec,
-    import_csv,
+    import_file,
 )
 from net.people.importing import get_personnel_provider_label
 
 
-def download_inventory_template(request, entity):
+def download_inventory_template(request, entity, file_format='csv'):
     if entity not in IMPORTABLE_ENTITIES:
         raise Http404('该数据由系统自动获取，不提供导入模板')
     spec = get_spec(entity)
-    response = HttpResponse(
-        export_csv(entity, template_only=True),
-        content_type='text/csv; charset=utf-8',
-    )
-    filename = quote(f"{spec['name']}_导入模板.csv")
+    if file_format == 'csv':
+        content = export_csv(entity, template_only=True)
+        content_type = 'text/csv; charset=utf-8'
+    elif file_format == 'xlsx':
+        content = export_xlsx_template(entity)
+        content_type = (
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+    else:
+        raise Http404('不支持的模板格式')
+    response = HttpResponse(content, content_type=content_type)
+    filename = quote(f"{spec['name']}_导入模板.{file_format}")
     response['Content-Disposition'] = f"attachment; filename*=UTF-8''{filename}"
     return response
 
@@ -46,7 +54,7 @@ def import_inventory(request, entity):
         return redirect('item_list', item=entity)
 
     try:
-        created, updated = import_csv(entity, uploaded_file)
+        created, updated = import_file(entity, uploaded_file)
         messages.success(request, f'导入完成：新增 {created} 条，更新 {updated} 条。')
     except ValueError as exc:
         messages.error(request, f'导入失败：{exc}')

@@ -9,7 +9,14 @@ from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
 
-from net.models import Domain_Account, Domain_Computer, Network_Device, People, Server
+from net.models import (
+    Domain_Account,
+    Domain_Computer,
+    Network_Device,
+    People,
+    SecurityDevice,
+    Server,
+)
 from net.data_exchange.inventory_csv import import_csv
 
 
@@ -49,6 +56,47 @@ def extract_div(document, element_id):
 
 
 class FilteredExportContractTests(TestCase):
+    def test_each_manual_import_template_has_csv_and_xlsx_sample_data(self):
+        cases = (
+            ('people', People, '工号', 'H10001', 'employee_id'),
+            ('networks', Network_Device, 'IP地址', '192.0.2.10', 'ip'),
+            ('servers', Server, 'IP地址', '192.0.2.20', 'ip'),
+            ('monitors', SecurityDevice, 'IP地址', '192.0.2.30', 'ip'),
+        )
+
+        for entity, model, column, sample_value, model_field in cases:
+            with self.subTest(entity=entity):
+                csv_response = self.client.get(
+                    reverse('download_inventory_template', args=[entity]),
+                )
+                csv_rows = list(csv.DictReader(StringIO(
+                    csv_response.content.decode('utf-8-sig'),
+                )))
+                self.assertEqual(len(csv_rows), 1)
+                self.assertEqual(csv_rows[0][column], sample_value)
+
+                xlsx_response = self.client.get(
+                    f'/data/{entity}/template/xlsx/',
+                )
+                self.assertEqual(xlsx_response.status_code, 200)
+                self.assertTrue(xlsx_response.content.startswith(b'PK'))
+                upload = SimpleUploadedFile(
+                    f'{entity}.xlsx',
+                    xlsx_response.content,
+                    content_type=(
+                        'application/vnd.openxmlformats-officedocument.'
+                        'spreadsheetml.sheet'
+                    ),
+                )
+                import_response = self.client.post(
+                    reverse('import_inventory', args=[entity]),
+                    {'file': upload},
+                )
+                self.assertEqual(import_response.status_code, 302)
+                self.assertTrue(model.objects.filter(
+                    **{model_field: sample_value},
+                ).exists())
+
     def test_export_uses_filter_and_ignores_page_size(self):
         People.objects.bulk_create([
             People(
@@ -88,13 +136,19 @@ class FilteredExportContractTests(TestCase):
                 self.assertEqual(len(parsed.find(
                     'button', **{'data-bs-target': '#importModal'},
                 )), 1)
-                self.assertIn('>导入</button>', document)
+                button_label = '导入人员' if entity == 'people' else '导入'
+                self.assertIn(f'>{button_label}</button>', document)
                 self.assertIn(
                     f'action="{reverse("import_inventory", args=[entity])}"', modal,
                 )
-                self.assertIn(
-                    reverse('download_inventory_template', args=[entity]), modal,
-                )
+                for file_format in ('csv', 'xlsx'):
+                    self.assertIn(
+                        reverse(
+                            'download_inventory_template_format',
+                            args=[entity, file_format],
+                        ),
+                        modal,
+                    )
                 self.assertNotIn('/export/', modal)
                 self.assertNotIn('导出 CSV', modal)
                 self.assertNotIn('数据工具', document)

@@ -545,7 +545,14 @@ class ImportModalTests(TestCase):
         modal_markup = self._modal_markup(response)
 
         self.assertEqual(len(document.find('button', **{'data-bs-target': '#importModal'})), 1)
-        self.assertIn(reverse('download_inventory_template', args=['people']), modal_markup)
+        self.assertIn(
+            reverse('download_inventory_template_format', args=['people', 'csv']),
+            modal_markup,
+        )
+        self.assertIn(
+            reverse('download_inventory_template_format', args=['people', 'xlsx']),
+            modal_markup,
+        )
         self.assertIn(reverse('import_inventory', args=['people']), modal_markup)
         self.assertIn('enctype="multipart/form-data"', modal_markup)
         self.assertIn('name="file"', modal_markup)

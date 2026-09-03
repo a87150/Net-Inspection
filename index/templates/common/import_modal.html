@@ -6,18 +6,21 @@
             {% if people_import_error %}<div class="alert alert-danger mb-0" role="alert">{{ people_import_error }}</div>{% endif %}
             {% if personnel_api_import %}
             <ul class="nav nav-tabs" role="tablist" aria-label="人员导入方式">
-                <li class="nav-item" role="presentation"><button class="nav-link {% if people_active_tab == 'csv' %}active{% endif %}" id="people-tab-csv" data-bs-toggle="tab" data-bs-target="#people-panel-csv" type="button" role="tab" aria-controls="people-panel-csv" aria-selected="{% if people_active_tab == 'csv' %}true{% else %}false{% endif %}">CSV</button></li>
+                <li class="nav-item" role="presentation"><button class="nav-link {% if people_active_tab == 'csv' %}active{% endif %}" id="people-tab-csv" data-bs-toggle="tab" data-bs-target="#people-panel-csv" type="button" role="tab" aria-controls="people-panel-csv" aria-selected="{% if people_active_tab == 'csv' %}true{% else %}false{% endif %}">文件</button></li>
                 {% for tab in people_provider_tabs %}<li class="nav-item" role="presentation"><button class="nav-link {% if tab.active %}active{% endif %}" id="people-tab-{{ tab.provider }}" data-bs-toggle="tab" data-bs-target="#people-panel-{{ tab.provider }}" type="button" role="tab" aria-controls="people-panel-{{ tab.provider }}" aria-selected="{{ tab.active|yesno:'true,false' }}">{{ tab.label }}</button></li>{% endfor %}
             </ul>
             <div class="tab-content">
             {% endif %}
             <section {% if personnel_api_import %}class="tab-pane fade {% if people_active_tab == 'csv' %}show active{% endif %}" id="people-panel-csv" role="tabpanel" aria-labelledby="people-tab-csv"{% endif %}>
-                <h3 class="h6">从 CSV 导入</h3>
+                <h3 class="h6">从文件导入</h3>
                 <p class="text-secondary small">此入口只接受{{ item_name }}模板。请先下载模板，填写后再上传。</p>
-                <a href="{% url 'download_inventory_template' item_key %}" class="btn btn-outline-secondary mb-3">下载{{ item_name }}模板</a>
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <a href="{% url 'download_inventory_template_format' item_key 'csv' %}" class="btn btn-outline-secondary">下载 CSV 模板</a>
+                    <a href="{% url 'download_inventory_template_format' item_key 'xlsx' %}" class="btn btn-outline-secondary">下载 Excel 模板</a>
+                </div>
                 <form method="post" enctype="multipart/form-data" action="{% url 'import_inventory' item_key %}">
-                    {% csrf_token %}<label class="form-label" for="inventoryFile-{{ item_key }}">CSV 文件</label>
-                    <div class="d-flex flex-column flex-md-row gap-3"><input class="form-control" id="inventoryFile-{{ item_key }}" type="file" name="file" accept=".csv,text/csv" required><button class="btn btn-dark text-nowrap" type="submit">开始导入</button></div>
+                    {% csrf_token %}<label class="form-label" for="inventoryFile-{{ item_key }}">CSV 或 Excel 文件</label>
+                    <div class="d-flex flex-column flex-md-row gap-3"><input class="form-control" id="inventoryFile-{{ item_key }}" type="file" name="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required><button class="btn btn-dark text-nowrap" type="submit">开始导入</button></div>
                 </form>
             </section>
             {% if personnel_api_import %}

@@ -67,9 +67,15 @@ class PeopleFlowMixin:
 class PeopleImportUITests(PeopleFlowMixin, TestCase):
     def test_provider_tabs_are_import_only_and_credentials_are_write_only(self):
         response = self.client.get('/assets/people/')
+        document = response.content.decode(response.charset)
+
+        self.assertIn('>导入人员</button>', document)
+        self.assertNotIn('>API 导入</a>', document)
+        self.assertContains(response, '>文件</button>')
+        self.assertContains(response, '可点击右上角“导入人员”添加人员。')
         self.assertContains(response, 'id="people-tab-feishu"')
         self.assertContains(response, 'id="people-tab-dingtalk"')
-        self.assertContains(response, 'CSV 文件')
+        self.assertContains(response, 'CSV 或 Excel 文件')
         self.assertContains(response, 'API 导入')
         self.assertNotContains(response, 'private-app')
         self.assertContains(response, 'type="password"')
