@@ -1210,14 +1210,38 @@ body.app-shell {
 }
 
 .target-device-picker {
-    display: grid;
-    max-height: 12rem;
-    gap: .5rem;
-    overflow-y: auto;
     padding: .55rem;
     border: 1px solid rgba(129, 153, 198, .3);
     border-radius: var(--radius-sm);
     background: rgba(255, 255, 255, .42);
+}
+
+.target-device-picker__toolbar {
+    display: grid;
+    grid-template-columns: minmax(12rem, 1fr) minmax(8rem, .45fr) auto auto;
+    gap: .5rem;
+}
+
+.target-device-picker__summary {
+    display: flex;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .7rem .2rem .55rem;
+    color: var(--color-text-muted);
+    font-size: .74rem;
+}
+
+.target-device-picker__summary > :first-child {
+    color: var(--color-primary);
+    font-weight: 700;
+}
+
+.target-device-picker__choices {
+    display: grid;
+    max-height: 12rem;
+    gap: .5rem;
+    overflow-y: auto;
+    padding-right: .15rem;
     scrollbar-color: rgba(49, 87, 213, .45) transparent;
 }
 
@@ -1248,6 +1272,33 @@ body.app-shell {
 .target-device-picker__option .form-check-input:checked {
     border-color: var(--color-primary);
     background-color: var(--color-primary);
+}
+
+.target-device-filter-panel {
+    background: rgba(255, 255, 255, .4) !important;
+}
+
+[data-bulk-choice-group] {
+    position: relative;
+}
+
+.bulk-choice-group__heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    margin-bottom: .7rem;
+}
+
+.bulk-choice-group__heading legend {
+    margin-bottom: 0 !important;
+}
+
+.bulk-choice-group__actions {
+    display: inline-flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    gap: .45rem;
 }
 
 .inspection-config-modal .modal-body legend,
@@ -1409,4 +1460,18 @@ code {
     .modal-shell { max-height: calc(100vh - .5rem); margin: .25rem; }
     .modal-shell .modal-body { padding: 1rem; }
     .modal-section { padding: .85rem; }
+
+    .target-device-picker__toolbar {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .target-device-picker__toolbar .form-control {
+        grid-column: 1 / -1;
+    }
+
+    .target-device-picker__summary {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: .2rem;
+    }
 }

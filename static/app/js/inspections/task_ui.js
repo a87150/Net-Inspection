@@ -14,7 +14,62 @@ function selectRow(doc, id) {
     doc.querySelectorAll('[name="target_mode"]').forEach(mode => { mode.checked = mode.value === 'selected'; });
 }
 
-if (typeof module !== 'undefined') module.exports = {switchProfile, selectRow};
+function filterTargetDeviceChoices(choices, query, visibility) {
+    const normalizedQuery = (query || '').trim().toLocaleLowerCase();
+    choices.forEach(choice => {
+        const matchesQuery = !normalizedQuery || choice.label.toLocaleLowerCase().includes(normalizedQuery);
+        const matchesVisibility = visibility !== 'selected' || choice.input.checked;
+        choice.hidden = !(matchesQuery && matchesVisibility);
+    });
+}
+
+function updateTargetDeviceSelection(choices, action) {
+    choices.filter(choice => !choice.hidden).forEach(choice => {
+        choice.input.checked = action === 'invert' ? !choice.input.checked : action === 'all';
+    });
+}
+
+function updateCheckboxSelection(inputs, action) {
+    inputs.filter(input => !input.disabled).forEach(input => {
+        input.checked = action === 'invert' ? !input.checked : action === 'all';
+    });
+}
+
+function bindTargetDevicePicker(picker) {
+    const search = picker.querySelector('[data-target-device-search]');
+    const visibility = picker.querySelector('[data-target-device-visibility]');
+    const count = picker.querySelector('[data-target-device-count]');
+    const choices = Array.from(picker.querySelectorAll('[data-target-device-option]'), option => ({
+        get hidden() { return option.hidden; },
+        set hidden(value) { option.hidden = value; },
+        label: option.dataset.targetDeviceLabel || option.textContent,
+        input: option.querySelector('input[type="checkbox"]'),
+    }));
+    const refresh = () => {
+        filterTargetDeviceChoices(choices, search.value, visibility.value);
+        count.textContent = `已选 ${choices.filter(choice => choice.input.checked).length} / ${choices.length} 台`;
+    };
+    search.addEventListener('input', refresh);
+    visibility.addEventListener('change', refresh);
+    picker.querySelector('[data-target-device-select-all]').addEventListener('click', () => {
+        updateTargetDeviceSelection(choices, 'all');
+        refresh();
+    });
+    picker.querySelector('[data-target-device-invert]').addEventListener('click', () => {
+        updateTargetDeviceSelection(choices, 'invert');
+        refresh();
+    });
+    choices.forEach(choice => choice.input.addEventListener('change', refresh));
+    refresh();
+}
+
+function bindBulkChoiceGroup(group) {
+    const inputs = () => Array.from(group.querySelectorAll('[data-bulk-choice]'));
+    group.querySelector('[data-bulk-select-all]').addEventListener('click', () => updateCheckboxSelection(inputs(), 'all'));
+    group.querySelector('[data-bulk-invert]').addEventListener('click', () => updateCheckboxSelection(inputs(), 'invert'));
+}
+
+if (typeof module !== 'undefined') module.exports = {switchProfile, selectRow, filterTargetDeviceChoices, updateTargetDeviceSelection, updateCheckboxSelection};
 
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('#task-profile, #config-profile').forEach(select => {
@@ -23,6 +78,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-task-target]').forEach(button => {
         button.addEventListener('click', () => selectRow(document, button.dataset.taskTarget));
     });
+    document.querySelectorAll('[data-target-device-picker]').forEach(bindTargetDevicePicker);
+    document.querySelectorAll('[data-bulk-choice-group]').forEach(bindBulkChoiceGroup);
     document.querySelectorAll('.modal[data-auto-open="true"]').forEach((modal) => {
         if (window.bootstrap?.Modal) window.bootstrap.Modal.getOrCreateInstance(modal).show();
     });

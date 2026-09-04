@@ -29,3 +29,37 @@ test('row action clears previous selection and chooses exactly clicked row', () 
     assert.deepEqual(boxes.map(box=>box.checked), [false,true]);
     assert.deepEqual(modes.map(mode=>mode.checked), [false,true]);
 });
+
+test('target device bulk actions affect only visible device choices', () => {
+    assert.equal(typeof ui.updateTargetDeviceSelection, 'function');
+    const choices = [
+        {hidden:false, input:{checked:false}},
+        {hidden:true, input:{checked:false}},
+        {hidden:false, input:{checked:true}},
+    ];
+    ui.updateTargetDeviceSelection(choices, 'all');
+    assert.deepEqual(choices.map(choice => choice.input.checked), [true,false,true]);
+    ui.updateTargetDeviceSelection(choices, 'invert');
+    assert.deepEqual(choices.map(choice => choice.input.checked), [false,false,false]);
+});
+
+test('target device filtering combines keyword and selected-state filters', () => {
+    assert.equal(typeof ui.filterTargetDeviceChoices, 'function');
+    const choices = [
+        {label:'核心交换机 (192.0.2.11)', hidden:false, input:{checked:true}},
+        {label:'接入交换机 (192.0.2.12)', hidden:false, input:{checked:false}},
+    ];
+    ui.filterTargetDeviceChoices(choices, '核心', 'all');
+    assert.deepEqual(choices.map(choice => choice.hidden), [false,true]);
+    ui.filterTargetDeviceChoices(choices, '', 'selected');
+    assert.deepEqual(choices.map(choice => choice.hidden), [false,true]);
+});
+
+test('generic checkbox bulk actions skip disabled choices', () => {
+    assert.equal(typeof ui.updateCheckboxSelection, 'function');
+    const inputs = [{checked:false, disabled:false}, {checked:true, disabled:true}, {checked:false, disabled:false}];
+    ui.updateCheckboxSelection(inputs, 'all');
+    assert.deepEqual(inputs.map(input => input.checked), [true,true,true]);
+    ui.updateCheckboxSelection(inputs, 'invert');
+    assert.deepEqual(inputs.map(input => input.checked), [false,true,false]);
+});
