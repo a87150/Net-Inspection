@@ -9,6 +9,7 @@ from net.models import (
     ComputerAnalysisProfile,
     ComputerLogFile,
     InspectionProfile,
+    Network_Device,
     Server,
     TaskRun,
 )
@@ -57,6 +58,46 @@ class EnqueueTaskTests(TestCase):
         self.assertEqual(target.target_snapshot['ip'], '192.0.2.41')
         self.assertEqual(target.target_snapshot['name'], '应用服务器')
         self.assertNotIn('password', target.target_snapshot)
+
+    def test_enqueue_snapshots_public_snmp_settings_and_excludes_all_secrets(self):
+        from net.inspections.queue import enqueue_task
+
+        profile = InspectionProfile.objects.create(
+            name='网络混合巡检',
+            device_type=InspectionProfile.DeviceType.NETWORK_DEVICE,
+            selected_items=['device_info'],
+        )
+        device = Network_Device.objects.create(
+            device_name='边界路由器', ip='192.0.2.88', connection_type='hybrid',
+            username='ssh-user', password='ssh-secret',
+            snmp_version='v3', snmp_port=1161,
+            snmp_security_level='authPriv', snmp_username='snmp-user',
+            snmp_auth_protocol='sha256', snmp_auth_password='auth-secret',
+            snmp_priv_protocol='aes128', snmp_priv_password='priv-secret',
+            snmp_context_name='tenant-a', snmp_retries=5,
+        )
+
+        task = enqueue_task(profile, [device.pk], TaskRun.Source.MANUAL)
+        snapshot = task.target_runs.get().target_snapshot
+
+        self.assertEqual(snapshot, {
+            'id': str(device.pk),
+            'device_name': '边界路由器',
+            'ip': '192.0.2.88',
+            'device_type': None,
+            'model': None,
+            'vendor': None,
+            'connection_type': 'hybrid',
+            'port': 22,
+            'snmp_version': 'v3',
+            'snmp_port': 1161,
+            'snmp_security_level': 'authPriv',
+            'snmp_username': 'snmp-user',
+            'snmp_auth_protocol': 'sha256',
+            'snmp_priv_protocol': 'aes128',
+            'snmp_context_name': 'tenant-a',
+            'snmp_retries': 5,
+        })
 
     def test_enqueue_rejects_profile_items_not_enabled_by_profile(self):
         """Removing profile-item validation would run an unconfigured check."""
@@ -462,6 +503,27 @@ class LeaseQueueTests(TestCase):
             finished.target_runs.get(pk=targets[1].pk).error_message,
             full_error,
         )
+
+    def test_finish_keeps_one_partial_target_as_parent_partial_with_zero_successes(self):
+        enqueue_task, claim_next_task, _renew, _recover, finish_task = self._queue_api()
+        task = enqueue_task(
+            self.profile,
+            [self.first_server.pk],
+            TaskRun.Source.MANUAL,
+            overrides={'available_at': self.now},
+        )
+        claimed = claim_next_task('worker-a', lease_seconds=30, now=self.now)
+        target = claimed.target_runs.get()
+        target.status = TaskRun.Status.PARTIAL
+        target.started_at = self.now
+        target.finished_at = self.now
+        target.save()
+
+        finished = finish_task(task.pk, 'worker-a')
+
+        self.assertEqual(finished.status, TaskRun.Status.PARTIAL)
+        self.assertEqual(finished.successful_targets, 0)
+        self.assertEqual(finished.failed_targets, 1)
 
     def test_finish_rejects_target_terminal_state_that_bypassed_its_audit_contract(self):
         """Trusting raw target status alone would aggregate a record without a finish time."""

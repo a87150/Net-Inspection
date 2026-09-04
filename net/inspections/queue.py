@@ -36,6 +36,9 @@ _ASSET_SPECS = {
         (
             'device_name', 'ip', 'device_type', 'model', 'vendor',
             'connection_type', 'port',
+            'snmp_version', 'snmp_port', 'snmp_security_level',
+            'snmp_username', 'snmp_auth_protocol', 'snmp_priv_protocol',
+            'snmp_context_name', 'snmp_retries',
         ),
     ),
     TaskTargetRun.TargetType.SERVER: (
@@ -550,10 +553,13 @@ def _finish_locked(task, *, now, target_runs=None):
     successes = sum(
         target.status == TaskRun.Status.SUCCESS for target in target_runs
     )
+    partials = sum(
+        target.status == TaskRun.Status.PARTIAL for target in target_runs
+    )
     failures = sum(target_failed(target) for target in target_runs)
     if successes == len(target_runs):
         status = TaskRun.Status.SUCCESS
-    elif successes:
+    elif successes or partials:
         status = TaskRun.Status.PARTIAL
     else:
         status = TaskRun.Status.FAILED

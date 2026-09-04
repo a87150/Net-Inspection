@@ -409,11 +409,11 @@
 **Interfaces:**
 - Documents: Worker 依赖、UDP/161、四种模式、SNMPv3 推荐、SNMPv2c 风险、支持项目、SSH 配置/日志边界和无真实设备测试声明。
 
-- [ ] **Step 1: Update operator documentation**
+- [x] **Step 1: Update operator documentation**
 
   Document that production firewalls must allow Worker-to-device UDP/161; SNMPv3 `authPriv` is recommended; v2c is retained only for legacy devices; `hybrid` is the normal choice. Include a troubleshooting table for timeout, authentication, unsupported OID, partial result and SSH fallback.
 
-- [ ] **Step 2: Run the focused final verification**
+- [x] **Step 2: Run the focused final verification**
 
   ```powershell
   .\.venv\Scripts\python.exe manage.py test tests.devices.network tests.devices.test_collection_evidence tests.inspections.test_worker tests.inspections.test_worker_review tests.devices.pc.test_inventory tests.common.test_table_exports tests.architecture.test_device_boundaries tests.architecture.test_admin_registry tests.architecture.test_demo_seed tests.system.test_dependencies --verbosity 1
@@ -424,11 +424,11 @@
 
   Expected: all selected tests PASS, Django reports no issues, no migration drift and no whitespace errors. Do not run a real SNMP/SSH target.
 
-- [ ] **Step 3: Verify concurrent UI changes remain untouched**
+- [x] **Step 3: Verify concurrent UI changes remain untouched**
 
   Compare `git status --short` with the initial dirty set. The pre-existing UI files and `.ui-inspect-runtime/` must remain unstaged/uncommitted unless their owning task has committed them independently; this feature must not delete or rewrite them.
 
-- [ ] **Step 4: Commit documentation and completed checklist**
+- [x] **Step 4: Commit documentation and completed checklist**
 
   ```powershell
   git add README.md docs/deployment.md docs/superpowers/plans/2026-09-04-network-snmp-hybrid.md

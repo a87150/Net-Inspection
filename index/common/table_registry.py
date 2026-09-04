@@ -108,6 +108,8 @@ TABLE_DEFINITIONS = {
             _field('model', '型号', default_filter=False),
             _field('connection_type', '连接方式', 'choice', default_filter=False),
             _field('port', '管理端口', 'choice', default_filter=False),
+            _field('snmp_version', 'SNMP 版本', 'choice', visible=False, default_filter=False),
+            _field('snmp_port', 'SNMP 端口', 'number', visible=False, default_filter=False),
             _field('cpu_model', 'CPU 型号', default_filter=False),
             _field('memory_total_gb', '内存总量', 'number', default_filter=False),
             _field('disk_total_gb', '磁盘总量', 'number', default_filter=False),

@@ -64,6 +64,8 @@ export DJANGO_SQLITE_PATH="$NET_DATABASE_PATH"
 Web：`.venv` Python `-m waitress --listen=127.0.0.1:8000 --threads=4 net.wsgi:application`；WhiteNoise 从 `DJANGO_STATIC_ROOT` 服务 collectstatic 输出，DEBUG 必须 false，不用 runserver。
 Worker：`.venv` Python `manage.py run_task_worker --threads 4 --poll-seconds 5 --lease-seconds 60`；页面“手动执行巡检”“手动执行分析”创建数据库任务，独立 Worker 做采集、扫描、分析和告警，受全局和任务并发上限约束。
 
+网络设备巡检支持 `ssh`、`snmp`、`hybrid`、`auto` 四种连接模式，生产常规选择推荐 `hybrid`：设备信息、CPU、内存、温度、接口状态和 VLAN 状态可由 SNMP 采集，`logs` 和 `config_info` 必须由 SSH 采集。Worker 必须安装锁文件中的 PySNMP 依赖，并能通过生产防火墙访问设备 UDP/161（或资产配置的自定义 SNMP 端口）。SNMP 推荐使用 v3 `authPriv`；v2c Community 无加密，仅为不支持 v3 的旧设备保留。完整模式语义、安全边界和排障表见 [网络设备 SNMP/SSH 巡检部署说明](docs/deployment.md#网络设备-snmp--ssh-巡检)。自动化验收全部使用内存会话或 mock，尚未在真实网络设备上测试，上线前须在受控设备和网段做只读 smoke test。
+
 域账号/计算机写操作也由此独立 Worker 执行；Web 与 Worker 必须共享生产数据库和 `DOMAIN_OPERATION_ENCRYPTION_KEY`。权限、Fernet 密钥、LDAPS、Windows/Linux Worker 及真实 AD 测试 OU 的上线 smoke test 请见 [域操作部署说明](docs/deployment.md#域控操作)。演示库只含离线的 OU 移动和启用审计示例，绝不含密码任务或真实 LDAP 连接。
 
 服务示例包含可写日志/归档目录、停止窗口、重启及租约恢复。`--once` 会安排计划、执行任务/处理告警，**不是被动健康检查**。被动检查用 manage.py check、服务状态和本机 Web/CSS/JS GET。
@@ -116,7 +118,7 @@ CSV 新增及兼容的手工/CSV 更新标记 `source=csv`，清除不适用的�
 
 ## 协议和配置导出边界
 
-Linux/网络设备使用 SSH，Windows 服务器用独立 HTTP JSON 服务，安防设备用 API；ICMP 仅辅助。区分成功、部分成功、失败/不可达。只保存本次选中项目及**脱敏后的原始输出**，不承诺完整原始回显。
+Linux 使用 SSH；网络设备按资产设置使用 SSH、SNMP 或两者组合；Windows 服务器用独立 HTTP JSON 服务，安防设备用 API；ICMP 仅辅助。区分成功、部分成功、失败/不可达。只保存本次选中项目及**脱敏后的原始输出**，不承诺完整原始回显。
 配置下载仅使用最近成功的已保存配置项，**下载不连接设备**。ZIP 遵循资产筛选，manifest 列明成功、未采集、失败、不支持。
 
 | 原生配置支持 | 精确范围 |

@@ -14,6 +14,7 @@ class DeviceBoundaryTests(SimpleTestCase):
         ("net.devices.server.windows_http", "collect_windows_http"),
         ("net.devices.server.linux_ssh", "collect_linux_ssh"),
         ("net.devices.network.ssh", "collect_network_ssh"),
+        ("net.devices.network.snmp", "collect_network_snmp"),
         ("net.devices.security.api", "collect_security_api"),
         ("net.devices.inventory", "refresh_asset_inventory"),
         ("net.data_exchange.inventory_csv", "import_csv"),

@@ -24,7 +24,9 @@ from net.models import (
     TaskRun,
     TaskTargetRun,
 )
-from net.devices.network.ssh import NETWORK_COMMANDS, collect_network_ssh
+from net.devices.network.collector import collect_network
+from net.devices.network.snmp import SNMP_ITEMS
+from net.devices.network.ssh import NETWORK_COMMANDS
 from net.devices.security.api import collect_security_api
 from net.devices.server.linux_ssh import collect_linux_ssh
 from net.devices.server.windows_http import collect_windows_http
@@ -108,7 +110,10 @@ def _asset_context(target):
     snapshot = dict(target.target_snapshot or {})
     target_type = target.target_type
     if target_type == TaskTargetRun.TargetType.NETWORK_DEVICE:
-        model, secret_fields = Network_Device, ('username', 'password')
+        model, secret_fields = Network_Device, (
+            'username', 'password', 'snmp_community',
+            'snmp_auth_password', 'snmp_priv_password',
+        )
     elif target_type == TaskTargetRun.TargetType.SERVER:
         model, secret_fields = Server, ('username', 'password', 'api_token')
     elif target_type == TaskTargetRun.TargetType.MONITOR:
@@ -140,9 +145,7 @@ def _collect(target, task, asset):
     timeout = _timeout_seconds(task)
     selection = {'selected_items': list(task.selected_items_snapshot)}
     if target.target_type == TaskTargetRun.TargetType.NETWORK_DEVICE:
-        if not getattr(asset, 'username', '') or not getattr(asset, 'password', ''):
-            return _missing_configuration('未配置网络设备 SSH 账号和密码')
-        return collect_network_ssh(asset, timeout, **selection)
+        return collect_network(asset, timeout, **selection)
     if target.target_type == TaskTargetRun.TargetType.SERVER:
         if str(getattr(asset, 'server_type', '')).lower() == 'windows':
             return collect_windows_http(asset, timeout, **selection)
@@ -195,6 +198,24 @@ def _selected_raw(target, task, raw):
                                for key, command in zip(NETWORK_FIELDS, commands) if key == item)
                    for item in NETWORK_FIELDS}
         aliases['config_info'] = ('config_info',)
+        selected = set(task.selected_items_snapshot)
+        allowed = {
+            key
+            for item in selected
+            for key in aliases.get(item, ())
+        }
+        allowed.update(item for item in selected if item in SNMP_ITEMS)
+        if not isinstance(raw, dict):
+            return {}
+        return {
+            key: value
+            for key, value in raw.items()
+            if key in allowed or (
+                isinstance(key, str)
+                and key.partition(':')[0] in {'snmp', 'ssh'}
+                and key.partition(':')[2] in allowed
+            )
+        }
     elif target.target_type == TaskTargetRun.TargetType.MONITOR:
         aliases = SECURITY_FIELDS
     elif target.target_snapshot.get('server_type') == 'windows':
@@ -334,7 +355,8 @@ def execute_target(target_run, *, worker_id, lease_guard=None):
     try:
         asset = _asset_context(started)
         secrets = tuple(getattr(asset, field, '') for field in (
-            'username', 'password', 'api_username', 'api_password', 'api_token',
+            'username', 'password', 'snmp_community', 'snmp_auth_password',
+            'snmp_priv_password', 'api_username', 'api_password', 'api_token',
         ))
         if 'config_info' in started.task.selected_items_snapshot:
             secrets += configuration_secrets()

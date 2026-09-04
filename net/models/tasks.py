@@ -591,7 +591,6 @@ class TaskRun(models.Model):
                             lease_expires_at__isnull=True,
                             progress=100,
                             completed_targets=models.F('total_targets'),
-                            successful_targets__gt=0,
                             failed_targets__gt=0,
                         )
                         & models.Q(
@@ -751,8 +750,6 @@ class TaskRun(models.Model):
                 if self.failed_targets != 0:
                     errors['failed_targets'] = '成功任务不能包含失败目标。'
             elif self.status == self.Status.PARTIAL:
-                if self.successful_targets == 0:
-                    errors['successful_targets'] = '部分成功任务必须包含成功目标。'
                 if self.failed_targets == 0:
                     errors['failed_targets'] = '部分成功任务必须包含失败目标。'
             elif self.status == self.Status.FAILED:

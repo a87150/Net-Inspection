@@ -146,9 +146,29 @@ ENTITY_SPECS = {
             ('端口总数', 'port_count', _non_negative_integer),
             ('VLAN 数量', 'vlan_count', _non_negative_integer),
             ('SSH账号', 'username', _text), ('SSH密码', 'password', _text),
+            ('SNMP 版本', 'snmp_version', _text),
+            ('SNMP 端口', 'snmp_port', _integer),
+            ('SNMP Community', 'snmp_community', _text),
+            ('SNMPv3 用户名', 'snmp_username', _text),
+            ('安全级别', 'snmp_security_level', _text),
+            ('认证协议', 'snmp_auth_protocol', _text),
+            ('认证密码', 'snmp_auth_password', _text),
+            ('加密协议', 'snmp_priv_protocol', _text),
+            ('加密密码', 'snmp_priv_password', _text),
+            ('上下文', 'snmp_context_name', _text),
+            ('重试次数', 'snmp_retries', _non_negative_integer),
         ],
-        'secret_fields': {'password'},
-        'sample': ('核心交换机', '192.0.2.10', '交换机', 'H3C', 'ssh', '22', 'S5560X', 'Intel Atom', '4', '8', '48', '10', 'readonly', 'CHANGE-ME'),
+        'secret_fields': {
+            'password', 'snmp_community', 'snmp_auth_password',
+            'snmp_priv_password',
+        },
+        'sample': (
+            '核心交换机', '192.0.2.10', '交换机', 'H3C', 'hybrid', '22',
+            'S5560X', 'Intel Atom', '4', '8', '48', '10', 'readonly',
+            'DEMO-ONLY-NOT-A-SECRET', 'v3', '161', '', 'snmp-reader',
+            'authPriv', 'sha256', 'DEMO-ONLY-NOT-A-SECRET', 'aes128',
+            'DEMO-ONLY-NOT-A-SECRET', 'demo-context', '1',
+        ),
     },
     'servers': {
         'name': '服务器',
@@ -200,18 +220,19 @@ def get_spec(entity):
 
 def export_csv(entity, template_only=False):
     spec = get_spec(entity)
+    columns = spec['columns'] if template_only else [
+        column for column in spec['columns']
+        if column[1] not in spec.get('secret_fields', set())
+    ]
     stream = io.StringIO(newline='')
     writer = csv.writer(stream)
-    writer.writerow([label for label, _, _ in spec['columns']])
+    writer.writerow([label for label, _, _ in columns])
     if template_only:
         writer.writerow(spec['sample'])
     else:
         for obj in spec['model'].objects.all().order_by('pk'):
             row = []
-            for _, field, _ in spec['columns']:
-                if field in spec.get('secret_fields', set()):
-                    row.append('')
-                    continue
+            for _, field, _ in columns:
                 value = getattr(obj, field, '')
                 if isinstance(value, bool):
                     value = '是' if value else '否'

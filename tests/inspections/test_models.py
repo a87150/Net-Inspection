@@ -989,6 +989,22 @@ class TaskModelDatabaseTests(TestCase):
             {'success', 'partial', 'failed', 'cancelled'},
         )
 
+    def test_database_and_model_accept_parent_partial_with_no_successful_targets(self):
+        task = self._create_task(target_ids=['partial-only'])
+        now = timezone.now()
+
+        TaskRun.objects.filter(pk=task.pk).update(
+            status='partial', active_scope_key=None, finished_at=now,
+            progress=100, total_targets=1, completed_targets=1,
+            successful_targets=0, failed_targets=1, lease_expires_at=None,
+        )
+
+        task.refresh_from_db()
+        task.full_clean()
+        self.assertEqual(task.status, TaskRun.Status.PARTIAL)
+        self.assertEqual(task.successful_targets, 0)
+        self.assertEqual(task.failed_targets, 1)
+
     def test_terminal_task_releases_scope_for_a_later_run(self):
         task = self._create_task()
         task.status = TaskRun.Status.SUCCESS

@@ -231,7 +231,14 @@ class DeterministicDemoSeedTests(TestCase):
                     )
                 ),
                 'networks': tuple(
-                    Network_Device.objects.order_by('ip').values_list('ip', 'pk')
+                    Network_Device.objects.order_by('ip').values_list(
+                        'ip', 'pk', 'connection_type', 'snmp_version',
+                        'snmp_port', 'snmp_community', 'snmp_security_level',
+                        'snmp_username', 'snmp_auth_protocol',
+                        'snmp_auth_password', 'snmp_priv_protocol',
+                        'snmp_priv_password', 'snmp_context_name',
+                        'snmp_retries',
+                    )
                 ),
                 'servers': tuple(
                     Server.objects.order_by('ip').values_list('ip', 'pk')
@@ -273,6 +280,34 @@ class DeterministicDemoSeedTests(TestCase):
 
         self.assertEqual(self._snapshot(), first)
         request_mock.assert_not_called()
+
+    def test_demo_networks_cover_ssh_hybrid_and_auto_without_routable_targets(self):
+        call_command('seed_demo_data', reset=True, stdout=StringIO())
+
+        devices = list(Network_Device.objects.order_by('ip'))
+        self.assertEqual(
+            {device.connection_type for device in devices},
+            {'ssh', 'hybrid', 'auto'},
+        )
+        self.assertEqual(
+            [device.ip for device in devices],
+            ['192.0.2.11', '192.0.2.12', '192.0.2.13'],
+        )
+        self.assertTrue(all(device.snmp_port == 161 for device in devices))
+        snmp_devices = [
+            device for device in devices if device.connection_type != 'ssh'
+        ]
+        self.assertEqual(
+            {device.snmp_version for device in snmp_devices}, {'v2c', 'v3'},
+        )
+        self.assertTrue(all(
+            not value or value == 'DEMO-ONLY-NOT-A-SECRET'
+            for device in snmp_devices
+            for value in (
+                device.snmp_community, device.snmp_auth_password,
+                device.snmp_priv_password,
+            )
+        ))
 
     def test_reset_preserves_rows_outside_the_named_demo_scope(self):
         person = People.objects.create(name='真实人员', employee_id='REAL-001')
