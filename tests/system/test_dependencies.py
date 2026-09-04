@@ -15,6 +15,7 @@ LATEST_STABLE_DIRECT_DEPENDENCIES = {
     "aiohttp": "3.14.3",
     "dnspython": "2.8.0",
     "paramiko": "5.0.0",
+    "pysnmp": "7.1.29",
     "waitress": "3.0.2",
     "whitenoise": "6.12.0",
 }

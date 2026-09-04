@@ -1,5 +1,7 @@
 import uuid
 
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from net.infrastructure.sanitization import public_connection_url
@@ -33,21 +35,111 @@ class Computer(models.Model):
 
 
 class Network_Device(models.Model):
+    CONNECTION_TYPE_CHOICES = [
+        ('ssh', 'SSH'),
+        ('snmp', 'SNMP'),
+        ('hybrid', 'SSH + SNMP'),
+        ('auto', '自动'),
+    ]
+    SNMP_VERSION_CHOICES = [('v2c', 'SNMPv2c'), ('v3', 'SNMPv3')]
+    SNMP_SECURITY_LEVEL_CHOICES = [
+        ('noAuthNoPriv', 'noAuthNoPriv'),
+        ('authNoPriv', 'authNoPriv'),
+        ('authPriv', 'authPriv'),
+    ]
+    SNMP_AUTH_PROTOCOL_CHOICES = [
+        ('md5', 'MD5'),
+        ('sha1', 'SHA-1'),
+        ('sha224', 'SHA-224'),
+        ('sha256', 'SHA-256'),
+        ('sha384', 'SHA-384'),
+        ('sha512', 'SHA-512'),
+    ]
+    SNMP_PRIV_PROTOCOL_CHOICES = [
+        ('des', 'DES'),
+        ('aes128', 'AES-128'),
+        ('aes192', 'AES-192'),
+        ('aes256', 'AES-256'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     device_name = models.CharField(max_length=255, blank=True, null=True)
     ip = models.CharField(max_length=255, unique=True)
     device_type = models.CharField(max_length=255, blank=True, null=True)
     model = models.CharField(max_length=255, blank=True, null=True)
     vendor = models.CharField(max_length=255, blank=True, null=True)
-    connection_type = models.CharField(max_length=255, blank=True, null=True)
+    connection_type = models.CharField(
+        max_length=255,
+        choices=CONNECTION_TYPE_CHOICES,
+        default='ssh',
+        blank=True,
+        null=True,
+    )
     port = models.PositiveIntegerField(default=22)
     username = models.CharField(max_length=255, blank=True, null=True)
     password = models.CharField(max_length=255, blank=True, null=True)
+    snmp_version = models.CharField(
+        max_length=3, choices=SNMP_VERSION_CHOICES, default='v2c'
+    )
+    snmp_port = models.PositiveIntegerField(
+        default=161, validators=[MinValueValidator(1), MaxValueValidator(65535)]
+    )
+    snmp_community = models.CharField(max_length=255, blank=True, default='')
+    snmp_security_level = models.CharField(
+        max_length=12,
+        choices=SNMP_SECURITY_LEVEL_CHOICES,
+        default='noAuthNoPriv',
+    )
+    snmp_username = models.CharField(max_length=255, blank=True, default='')
+    snmp_auth_protocol = models.CharField(
+        max_length=6, choices=SNMP_AUTH_PROTOCOL_CHOICES, blank=True, default=''
+    )
+    snmp_auth_password = models.CharField(max_length=255, blank=True, default='')
+    snmp_priv_protocol = models.CharField(
+        max_length=6, choices=SNMP_PRIV_PROTOCOL_CHOICES, blank=True, default=''
+    )
+    snmp_priv_password = models.CharField(max_length=255, blank=True, default='')
+    snmp_context_name = models.CharField(max_length=255, blank=True, default='')
+    snmp_retries = models.PositiveSmallIntegerField(
+        default=1, validators=[MinValueValidator(0), MaxValueValidator(10)]
+    )
     cpu_model = models.CharField(max_length=255, blank=True, null=True)
     memory_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     disk_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     port_count = models.PositiveIntegerField(null=True, blank=True)
     vlan_count = models.PositiveIntegerField(null=True, blank=True)
+
+    @property
+    def effective_connection_type(self):
+        return self.connection_type if self.connection_type in {'ssh', 'snmp', 'hybrid', 'auto'} else 'ssh'
+
+    @property
+    def uses_snmp(self):
+        return self.effective_connection_type in {'snmp', 'hybrid', 'auto'}
+
+    def clean(self):
+        super().clean()
+        if not self.uses_snmp:
+            return
+        if self.snmp_version == 'v2c' and not self.snmp_community:
+            raise ValidationError({'snmp_community': 'SNMPv2c 必须配置 Community。'})
+        if self.snmp_version != 'v3':
+            return
+        errors = {}
+        if not self.snmp_username:
+            errors['snmp_username'] = 'SNMPv3 必须配置用户名。'
+        if self.snmp_security_level in {'authNoPriv', 'authPriv'}:
+            if not self.snmp_auth_protocol:
+                errors['snmp_auth_protocol'] = 'SNMPv3 认证必须配置认证协议。'
+            if not self.snmp_auth_password:
+                errors['snmp_auth_password'] = 'SNMPv3 认证必须配置认证密码。'
+        if self.snmp_security_level == 'authPriv':
+            if not self.snmp_priv_protocol:
+                errors['snmp_priv_protocol'] = 'SNMPv3 加密必须配置隐私协议。'
+            if not self.snmp_priv_password:
+                errors['snmp_priv_password'] = 'SNMPv3 加密必须配置隐私密码。'
+        if errors:
+            raise ValidationError(errors)
 
     def __str__(self):
         return f'{self.device_name or "网络设备"} ({self.ip})'
