@@ -39,6 +39,14 @@ class SharedInterfaceContractTests(TestCase):
         self.assertContains(response, '域控管理')
         self.assertContains(response, '巡检任务栏')
 
+    def test_dashboard_cards_use_glass_surface_without_status_side_rail(self):
+        response = self.client.get(reverse('index'))
+
+        self.assertContains(response, 'glass-card')
+        self.assertContains(response, 'data-dashboard-card-state')
+        self.assertNotContains(response, 'metric-card--danger')
+        self.assertNotContains(response, 'metric-card--success')
+
     def test_asset_table_marks_scroll_context_and_action_column(self):
         response = self.client.get(reverse('asset_list', args=['networks']))
 
