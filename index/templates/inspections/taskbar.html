@@ -1,11 +1,11 @@
 {% load extras %}
-<section class="card surface-card inspection-taskbar" aria-labelledby="inspection-taskbar-title">
+<section class="card surface-card inspection-taskbar execution-workspace" aria-labelledby="inspection-taskbar-title">
     <div class="card-header surface-card__header inspection-taskbar__header">
         <div>
             <p class="page-heading__eyebrow mb-1">执行中心</p>
             <h2 class="h5 mb-0" id="inspection-taskbar-title">{{ task_section_title|default:'巡检任务栏' }}</h2>
         </div>
-        <a class="btn btn-outline-dark btn-sm" href="{% url 'task_list' %}">全部后台任务</a>
+        <div class="execution-workspace__header-actions"><div class="execution-workspace__summary"><span>当前任务</span><strong>{{ task_page.paginator.count }}</strong></div><a class="btn btn-outline-dark btn-sm" href="{% url 'task_list' %}">全部后台任务</a></div>
     </div>
     <div class="table-scroll-shell">
     <p class="table-scroll-hint">可横向滚动查看完整任务信息</p>

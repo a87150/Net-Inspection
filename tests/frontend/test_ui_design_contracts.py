@@ -31,6 +31,12 @@ class SharedInterfaceContractTests(TestCase):
         self.assertContains(response, 'app-brand__copy')
         self.assertNotContains(response, 'app-brand__mark')
 
+    def test_operations_console_context_links_to_django_admin(self):
+        response = self.client.get(reverse('index'))
+
+        self.assertContains(response, f'href="{reverse("admin:index")}"')
+        self.assertContains(response, '运维管理台')
+
     def test_dashboard_exposes_scan_friendly_overview_and_task_table(self):
         response = self.client.get(reverse('index'))
 
@@ -44,6 +50,21 @@ class SharedInterfaceContractTests(TestCase):
         self.assertContains(response, '安防设备')
         self.assertContains(response, '域控管理')
         self.assertContains(response, '巡检任务栏')
+
+    def test_execution_and_department_surfaces_use_the_shared_glass_workspace(self):
+        dashboard = self.client.get(reverse('index'))
+        statistics = self.client.get(reverse('people_statistics'))
+        task_list = self.client.get(reverse('task_list'))
+        records = self.client.get(reverse('inspection_records'))
+        analyses = self.client.get(reverse('computer_analysis_list'))
+
+        self.assertContains(dashboard, 'execution-workspace')
+        self.assertContains(dashboard, 'execution-workspace__summary')
+        self.assertContains(statistics, 'department-workspace')
+        self.assertContains(statistics, 'department-workspace__summary')
+        self.assertContains(task_list, 'execution-list-workspace')
+        self.assertContains(records, 'execution-list-workspace')
+        self.assertContains(analyses, 'execution-list-workspace')
 
     def test_dashboard_cards_use_glass_surface_without_status_side_rail(self):
         response = self.client.get(reverse('index'))

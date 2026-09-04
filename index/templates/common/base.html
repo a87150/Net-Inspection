@@ -52,7 +52,7 @@
                     <li class="nav-item"><a class="nav-link" href="{% url 'task_list' %}">后台任务</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'alert_list' %}">告警记录</a></li>
                 </ul>
-                <span class="navbar-text app-navbar__context"><span class="status-dot status-dot--success" aria-hidden="true"></span>运维管理台</span>
+                <a class="navbar-text app-navbar__context" href="{% url 'admin:index' %}"><span class="status-dot status-dot--success" aria-hidden="true"></span>运维管理台</a>
             </div>
         </div>
     </nav>

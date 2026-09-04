@@ -175,6 +175,14 @@ body.app-shell {
     backdrop-filter: blur(16px) saturate(125%);
 }
 
+.page-heading__subtitle {
+    color: var(--color-text-muted);
+    font-size: .58em;
+    font-weight: 600;
+    letter-spacing: -.01em;
+    white-space: nowrap;
+}
+
 .surface-card__header,
 .surface-card > .card-header {
     border-bottom: 1px solid var(--color-border);
@@ -550,6 +558,60 @@ details > summary {
 
 .modal-footer {
     gap: .5rem;
+}
+
+.execution-workspace {
+    position: relative;
+    isolation: isolate;
+}
+
+.execution-workspace::before,
+.department-workspace::before,
+.execution-list-workspace::before {
+    position: absolute;
+    z-index: -1;
+    top: -6rem;
+    right: -4rem;
+    width: 15rem;
+    height: 15rem;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(102, 136, 255, .16), rgba(102, 136, 255, 0) 69%);
+    content: '';
+    pointer-events: none;
+}
+
+.execution-workspace__header-actions,
+.department-workspace__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .85rem;
+}
+
+.execution-workspace__summary,
+.department-workspace__summary {
+    display: inline-flex;
+    align-items: baseline;
+    gap: .45rem;
+    padding: .38rem .62rem;
+    border: 1px solid rgba(89, 120, 230, .18);
+    border-radius: 999px;
+    background: rgba(246, 249, 255, .72);
+    color: var(--color-text-muted);
+    font-size: .76rem;
+}
+
+.execution-workspace__summary strong,
+.department-workspace__summary strong {
+    color: var(--color-primary);
+    font-size: .92rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.department-workspace,
+.execution-list-workspace {
+    position: relative;
+    isolation: isolate;
 }
 
 .page-pagination {
@@ -1479,5 +1541,16 @@ code {
         align-items: flex-start;
         flex-direction: column;
         gap: .2rem;
+    }
+
+    .inspection-taskbar__header,
+    .execution-workspace__header-actions,
+    .department-workspace__header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .execution-workspace__header-actions {
+        width: 100%;
     }
 }
