@@ -69,3 +69,11 @@ class SharedInterfaceContractTests(TestCase):
 
         self.assertContains(domain, 'modal-dialog-scrollable modal-shell')
         self.assertContains(people, 'class="modal-dialog modal-lg modal-dialog-scrollable modal-shell')
+
+    def test_alert_configuration_modals_use_glass_sections_and_persistent_actions(self):
+        response = self.client.get(reverse('alert_list'))
+
+        self.assertContains(response, 'alert-policy-modal')
+        self.assertContains(response, 'alert-channel-modal')
+        self.assertContains(response, 'modal-section')
+        self.assertContains(response, 'modal-footer')

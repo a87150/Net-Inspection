@@ -1,4 +1,4 @@
-<div class="modal fade" id="alertChannelModal" data-auto-open="{{ alert_channel_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="alertChannelModalLabel" aria-hidden="true">
+<div class="modal fade alert-channel-modal" id="alertChannelModal" data-auto-open="{{ alert_channel_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="alertChannelModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell"><div class="modal-content">
         <form method="post" action="{% url 'alert_channel_save' %}">{% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -7,8 +7,8 @@
             <div class="modal-header"><h2 class="modal-title fs-5" id="alertChannelModalLabel">{% if alert_edit_channel %}编辑{% else %}新增{% endif %}{% if alert_channel_type == 'email' %}邮件{% elif alert_channel_type == 'dingtalk' %}钉钉{% else %}飞书{% endif %}告警渠道</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
             <div class="modal-body">
                 {% if alert_channel_errors %}<div class="alert alert-danger" role="alert"><strong>渠道未保存</strong><ul class="mb-0">{% for error in alert_channel_errors %}<li>{{ error }}</li>{% endfor %}</ul><p class="mb-0">请修正配置；新填写的凭据不会保留，请重新输入。</p></div>{% endif %}
-                <p class="text-secondary small">Webhook 与密码均为只写字段：编辑时留空即可保持原值，页面不会回显已保存的凭据。</p>
-                <div class="row g-3">
+                <div class="modal-section alert-channel-modal__notice"><p class="text-secondary small mb-0">Webhook 与密码均为只写字段：编辑时留空即可保持原值，页面不会回显已保存的凭据。</p></div>
+                <div class="modal-section alert-channel-modal__section"><div class="row g-3">
                     <div class="col-md-8"><label class="form-label" for="id_name">渠道名称</label>{{ alert_channel_form.name }}</div>
                     <div class="col-md-4 d-flex align-items-end"><label class="form-check mb-2">{{ alert_channel_form.is_enabled }}<span class="form-check-label">启用渠道</span></label></div>
                     {% if alert_channel_type == 'email' %}
@@ -20,7 +20,7 @@
                     <div class="col-12"><label class="form-label" for="id_webhook_url">{{ alert_channel_form.webhook_url.label }}</label>{{ alert_channel_form.webhook_url }}</div>
                     <div class="col-12"><label class="form-label" for="id_secret">{{ alert_channel_form.secret.label }}</label>{{ alert_channel_form.secret }}</div>
                     {% endif %}
-                </div>
+                </div></div>
             </div>
             <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">保存渠道</button></div>
         </form>
