@@ -236,9 +236,15 @@ def _parse_cpu(snapshot, vendor):
 def _parse_memory(snapshot, vendor):
     registry = VENDOR_OIDS.get(_vendor_key(vendor), {})
     total = _first_numeric(snapshot["scalars"], registry.get("memory_total", ()), lambda value: value > 0)
-    used = _first_numeric(snapshot["scalars"], registry.get("memory_used", ()), lambda value: value >= 0)
-    if total is not None and used is not None and used > total:
-        used = None
+    used = (
+        _first_numeric(
+            snapshot["scalars"],
+            registry.get("memory_used", ()),
+            lambda value: 0 <= value <= total,
+        )
+        if total is not None
+        else None
+    )
     if total is None or used is None:
         types = _table(snapshot, HR_STORAGE_TYPE)
         units = _table(snapshot, HR_STORAGE_ALLOCATION_UNITS)

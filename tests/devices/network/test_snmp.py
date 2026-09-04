@@ -41,6 +41,7 @@ from net.devices.network.snmp import (
     PySnmpSession,
     SnmpQueryError,
     collect_network_snmp,
+    parse_snmp_snapshot,
 )
 from net.models import Network_Device
 
@@ -289,6 +290,34 @@ class NetworkSnmpCollectionTests(SimpleTestCase):
 
         self.assertEqual(result.data["memory"]["usage_percent"], 20.0)
         self.assertIn(HR_STORAGE_USED, session.walk_queries)
+
+    def test_parser_uses_later_vendor_used_candidate_when_first_exceeds_total(self):
+        total_oid = "1.3.6.1.4.1.9.99.1.0"
+        invalid_used_oid = "1.3.6.1.4.1.9.99.2.0"
+        valid_used_oid = "1.3.6.1.4.1.9.99.3.0"
+        snapshot = {
+            "scalars": {
+                total_oid: 100,
+                invalid_used_oid: 150,
+                valid_used_oid: 40,
+            },
+            "tables": {},
+        }
+
+        with patch.dict(
+            VENDOR_OIDS["cisco"],
+            {
+                "memory_total": (total_oid,),
+                "memory_used": (invalid_used_oid, valid_used_oid),
+            },
+        ):
+            data, _, completed = parse_snmp_snapshot(snapshot, ["memory"], "cisco")
+
+        self.assertEqual(
+            data["memory"],
+            {"total_bytes": 100, "used_bytes": 40, "usage_percent": 40.0},
+        )
+        self.assertEqual(completed, {"memory"})
 
     def test_invalid_vendor_temperature_uses_entity_sensor_fallback(self):
         temperature_oid = VENDOR_OIDS["cisco"]["temperature"][0]
