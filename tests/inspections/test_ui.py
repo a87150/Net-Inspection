@@ -117,6 +117,28 @@ class TaskUiTestCase(TestCase):
             [{'target_type': 'server', 'target_id': str(self.linux.pk)}],
         )
 
+    def test_manual_configured_run_uses_the_selected_profile_without_overrides(self):
+        response = self.post_manual({
+            'profile_id': str(self.server_profile.pk),
+            'next': reverse('asset_list', args=['servers']),
+        })
+
+        self.assertEqual(response.status_code, 302)
+        task = TaskRun.objects.get()
+        self.assertEqual(task.selected_items_snapshot, ['cpu', 'memory'])
+        self.assertEqual(
+            set(task.target_runs.values_list('target_id', flat=True)),
+            {str(self.linux.pk), str(self.windows.pk)},
+        )
+
+    def test_manual_run_modal_only_exposes_a_configured_profile_selector(self):
+        response = self.client.get(reverse('asset_list', args=['servers']))
+
+        self.assertContains(response, 'manual-config-runner')
+        self.assertNotContains(response, '目标范围</legend>')
+        self.assertNotContains(response, '执行项目</legend>')
+        self.assertNotContains(response, 'manual-concurrency')
+
     def test_manual_all_and_filtered_enqueue_snapshot_the_requested_server_scope(self):
         """The all and filtered modes must remain distinct after the modal closes."""
         all_response = self.post_manual({
@@ -153,12 +175,12 @@ class TaskUiTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, '表格已选项目')
 
-    def test_computer_pages_offer_only_worker_owned_scan_mode(self):
-        """Computer and analysis rows are not ComputerLogFile targets for direct selection."""
+    def test_computer_pages_offer_only_configured_analysis_execution(self):
+        """Computer and analysis rows are not direct targets; the configured scan owns them."""
         response = self.client.get(reverse('asset_list', args=['computers']))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '扫描并分析新日志')
+        self.assertContains(response, '选择已配置任务')
         self.assertNotContains(response, '全部资产')
         self.assertNotContains(response, '表格已选项目')
 

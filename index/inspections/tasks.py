@@ -221,6 +221,23 @@ def manual_task_create(request):
         messages.error(request, '请选择一个启用的任务配置。')
         _remember_modal(request, 'run')
         return redirect(next_url)
+    if not request.POST.get('target_mode'):
+        try:
+            if isinstance(profile, ComputerAnalysisProfile):
+                task = enqueue_computer_scan_task(profile, TaskRun.Source.MANUAL)
+            else:
+                from net.inspections.schedules import _selected_target_ids
+                task = enqueue_task(
+                    profile,
+                    _selected_target_ids(profile),
+                    TaskRun.Source.MANUAL,
+                )
+        except ValidationError as exc:
+            messages.error(request, '任务未创建：' + '；'.join(exc.messages))
+            _remember_modal(request, 'run')
+            return redirect(next_url)
+        messages.success(request, f'任务已入队，共 {task.total_targets} 个目标。')
+        return redirect('task_detail', pk=task.pk)
     form = ManualTaskForm(request.POST, profile=profile)
     if not form.is_valid():
         messages.error(request, '任务未创建：' + '；'.join(
