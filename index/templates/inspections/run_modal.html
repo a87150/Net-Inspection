@@ -1,4 +1,4 @@
-<div class="modal fade" id="runTaskModal" data-auto-open="{{ task_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="runTaskModalLabel" aria-hidden="true">
+<div class="modal fade task-run-modal" id="runTaskModal" data-auto-open="{{ task_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="runTaskModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell"><div class="modal-content">
         <form id="manualTaskForm" method="post" action="{% url 'manual_task_create' %}">
             {% csrf_token %}

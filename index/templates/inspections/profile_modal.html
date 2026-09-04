@@ -1,4 +1,4 @@
-<div class="modal fade" id="profileConfigModal" data-auto-open="{{ profile_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="profileConfigModalLabel" aria-hidden="true">
+<div class="modal fade inspection-config-modal" id="profileConfigModal" data-auto-open="{{ profile_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="profileConfigModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell"><div class="modal-content">
         {% if task_project_kind == 'computers' %}
         <form method="post" action="{% url 'computer_analysis_profile_configure' %}">

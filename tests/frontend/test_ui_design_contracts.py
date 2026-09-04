@@ -25,6 +25,12 @@ class SharedInterfaceContractTests(TestCase):
                 self.assertContains(response, 'app-content')
                 self.assertContains(response, 'id="main-content"')
 
+    def test_brand_uses_text_identity_without_letter_mark(self):
+        response = self.client.get(reverse('index'))
+
+        self.assertContains(response, 'app-brand__copy')
+        self.assertNotContains(response, 'app-brand__mark')
+
     def test_dashboard_exposes_scan_friendly_overview_and_task_table(self):
         response = self.client.get(reverse('index'))
 
@@ -60,6 +66,8 @@ class SharedInterfaceContractTests(TestCase):
         response = self.client.get(reverse('asset_list', args=['computers']))
 
         self.assertContains(response, 'id="profileConfigModal"')
+        self.assertContains(response, 'inspection-config-modal')
+        self.assertContains(response, 'task-run-modal')
         self.assertContains(response, 'modal-dialog-scrollable modal-shell')
         self.assertContains(response, 'modal-section')
 

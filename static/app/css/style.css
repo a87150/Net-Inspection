@@ -723,23 +723,8 @@ body.app-shell {
 .app-brand {
     display: inline-flex;
     align-items: center;
-    gap: .7rem;
     margin-right: clamp(1rem, 2vw, 2rem);
     padding-block: .45rem;
-}
-
-.app-brand__mark {
-    display: grid;
-    width: 2rem;
-    height: 2rem;
-    place-items: center;
-    border: 1px solid rgba(255, 255, 255, .2);
-    border-radius: .62rem;
-    background: linear-gradient(145deg, #4773ef, #2548aa);
-    box-shadow: 0 6px 16px rgba(13, 44, 116, .4);
-    color: #fff;
-    font-size: .9rem;
-    font-weight: 800;
 }
 
 .app-brand__copy {
@@ -1182,6 +1167,74 @@ body.app-shell {
     .alert-channel-modal .modal-content {
         background: #f8faff;
     }
+}
+
+/* Inspection configuration carries substantially more fields than a regular
+   dialog, so its settings are grouped into a legible glass workspace. */
+.inspection-config-modal .modal-body,
+.task-run-modal .modal-body {
+    background: linear-gradient(180deg, rgba(244, 248, 255, .44), rgba(255, 255, 255, .15));
+}
+
+.inspection-config-modal .modal-body > .modal-section {
+    gap: 1rem;
+    border-color: rgba(142, 162, 196, .28);
+    background: rgba(255, 255, 255, .48);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .65);
+}
+
+.inspection-config-modal .modal-body > .modal-section > .border-top,
+.inspection-config-modal .modal-body > .modal-section > .border-bottom,
+.inspection-config-modal .modal-body > .modal-section fieldset,
+.task-run-modal fieldset,
+.task-run-modal .modal-body > div {
+    padding: 1rem;
+    border: 1px solid rgba(142, 162, 196, .24) !important;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, .42);
+}
+
+.inspection-config-modal .modal-body legend,
+.task-run-modal legend {
+    width: auto;
+    margin-bottom: .65rem;
+    color: var(--color-text);
+    font-weight: 700;
+}
+
+.inspection-config-modal .form-control,
+.inspection-config-modal .form-select,
+.task-run-modal .form-control,
+.task-run-modal .form-select {
+    border-color: rgba(142, 162, 196, .42);
+    background: rgba(255, 255, 255, .72);
+}
+
+.inspection-config-modal .form-check,
+.task-run-modal .form-check {
+    min-height: 2.45rem;
+    padding: .62rem .72rem .62rem 2.1rem;
+    border: 1px solid rgba(142, 162, 196, .2);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, .45);
+}
+
+.inspection-config-modal .form-check:hover,
+.task-run-modal .form-check:hover {
+    border-color: rgba(49, 87, 213, .35);
+    background: rgba(255, 255, 255, .74);
+}
+
+.inspection-config-modal details {
+    padding: .75rem 1rem;
+    border: 1px solid rgba(142, 162, 196, .24) !important;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, .36);
+}
+
+.inspection-config-modal .modal-footer,
+.task-run-modal .modal-footer {
+    box-shadow: 0 -12px 28px -22px rgba(20, 34, 60, .92);
 }
 
 .modal-section {
