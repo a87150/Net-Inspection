@@ -1218,6 +1218,111 @@ body.app-shell {
     border-left: 3px solid rgba(49, 87, 213, .45) !important;
 }
 
+.alert-channel-management,
+.alert-channel-editor {
+    padding: 1rem;
+    border: 1px solid rgba(142, 162, 196, .26);
+    border-radius: var(--radius);
+    background: linear-gradient(145deg, rgba(255, 255, 255, .72), rgba(239, 244, 255, .48));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .76);
+}
+
+.alert-channel-management__heading,
+.alert-channel-editor__heading,
+.alert-channel-management__item,
+.alert-channel-management__item-actions,
+.alert-channel-management__actions {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+}
+
+.alert-channel-management__heading,
+.alert-channel-management__item {
+    justify-content: space-between;
+}
+
+.alert-channel-management__actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.alert-channel-management__list {
+    display: grid;
+    gap: .5rem;
+    max-height: 14rem;
+    overflow-y: auto;
+    margin-top: .9rem;
+    padding-right: .15rem;
+}
+
+.alert-channel-management__item {
+    min-height: 3.4rem;
+    padding: .65rem .75rem;
+    border: 1px solid rgba(142, 162, 196, .2);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, .5);
+}
+
+.alert-channel-management__item strong {
+    margin-right: .45rem;
+}
+
+.alert-channel-editor__heading {
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.alert-channel-editor__heading h3 {
+    color: var(--color-text);
+    font-weight: 750;
+}
+
+.alert-channel-editor__heading p {
+    color: var(--color-text-muted);
+    font-size: .78rem;
+}
+
+.alert-channel-editor__index {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 1px solid rgba(73, 108, 222, .18);
+    border-radius: .65rem;
+    background: rgba(239, 244, 255, .82);
+    color: var(--color-primary);
+    font-size: .72rem;
+    font-weight: 750;
+}
+
+.alert-channel-editor input:not([type='checkbox']),
+.alert-channel-editor select,
+.alert-channel-editor textarea {
+    display: block;
+    width: 100%;
+    min-height: 2.45rem;
+    padding: .5rem .7rem;
+    border: 1px solid rgba(142, 162, 196, .42);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, .72);
+    color: var(--color-text);
+}
+
+.alert-channel-editor textarea {
+    min-height: 5.5rem;
+    resize: vertical;
+}
+
+.alert-channel-editor input:focus,
+.alert-channel-editor select:focus,
+.alert-channel-editor textarea:focus {
+    outline: 0;
+    border-color: rgba(49, 87, 213, .65);
+    box-shadow: 0 0 0 .2rem rgba(49, 87, 213, .14);
+}
+
 .alert-policy-modal .form-control,
 .alert-policy-modal .form-select,
 .alert-channel-modal .form-control,
@@ -1565,6 +1670,17 @@ code {
     .modal-shell .modal-body { padding: 1rem; }
     .modal-section { padding: .85rem; }
     .inspection-config-block { padding: .85rem; }
+
+    .alert-channel-management__heading,
+    .alert-channel-management__item {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .alert-channel-management__actions,
+    .alert-channel-management__item-actions {
+        justify-content: flex-start;
+    }
 
     .target-device-picker__toolbar {
         grid-template-columns: 1fr 1fr;

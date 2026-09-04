@@ -124,3 +124,10 @@ class SharedInterfaceContractTests(TestCase):
         self.assertContains(response, 'alert-channel-modal')
         self.assertContains(response, 'modal-section')
         self.assertContains(response, 'modal-footer')
+
+    def test_alert_channel_management_is_embedded_in_the_configuration_modal(self):
+        response = self.client.get(reverse('alert_list'))
+
+        self.assertContains(response, 'alert-channel-management')
+        self.assertContains(response, 'alert-channel-editor')
+        self.assertNotContains(response, '渠道管理：</span>')
