@@ -363,6 +363,57 @@ class LeaseQueueTests(TestCase):
         self.assertEqual(claimed_second.pk, second.pk)
         self.assertIsNone(claim_next_task('worker-c', lease_seconds=30, now=self.now))
 
+    def test_cancel_task_atomically_finishes_every_unfinished_target(self):
+        """Leaving queued targets active would let a Worker continue a cancelled task."""
+        from net.inspections.queue import cancel_task, claim_next_task, enqueue_task, renew_lease
+
+        task = enqueue_task(
+            self.profile,
+            [self.first_server.pk, self.second_server.pk],
+            TaskRun.Source.MANUAL,
+            overrides={'available_at': self.now},
+        )
+        claimed = claim_next_task('worker-a', lease_seconds=30, now=self.now)
+        self.assertEqual(claimed.status, TaskRun.Status.RUNNING)
+
+        cancelled = cancel_task(task.pk, now=self.now)
+
+        self.assertEqual(cancelled.status, TaskRun.Status.CANCELLED)
+        self.assertEqual(cancelled.progress, 100)
+        self.assertEqual(cancelled.completed_targets, 2)
+        self.assertEqual(cancelled.successful_targets, 0)
+        self.assertEqual(cancelled.failed_targets, 0)
+        self.assertEqual(cancelled.finished_at, self.now)
+        self.assertIsNone(cancelled.lease_expires_at)
+        self.assertIsNone(cancelled.active_scope_key)
+        self.assertFalse(renew_lease(cancelled.pk, 'worker-a', lease_seconds=30))
+        self.assertEqual(
+            set(cancelled.target_runs.values_list('status', flat=True)),
+            {TaskRun.Status.CANCELLED},
+        )
+        self.assertTrue(all(
+            value == self.now
+            for value in cancelled.target_runs.values_list('finished_at', flat=True)
+        ))
+
+    def test_cancel_task_rejects_an_already_finished_task_without_changes(self):
+        """A repeated stop must not rewrite immutable terminal task history."""
+        from net.inspections.queue import cancel_task, enqueue_task
+
+        task = enqueue_task(
+            self.profile,
+            [self.first_server.pk],
+            TaskRun.Source.MANUAL,
+            overrides={'available_at': self.now},
+        )
+        first_cancel = cancel_task(task.pk, now=self.now)
+
+        with self.assertRaisesMessage(ValidationError, '任务已经结束'):
+            cancel_task(task.pk, now=self.now + timedelta(seconds=1))
+
+        task.refresh_from_db()
+        self.assertEqual(task.finished_at, first_cancel.finished_at)
+
     def test_renewal_requires_current_lease_owner(self):
         """Ignoring ownership would let another worker extend a stolen lease."""
         enqueue_task, claim_next_task, renew_lease, _recover, _finish = self._queue_api()

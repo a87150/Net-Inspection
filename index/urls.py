@@ -21,6 +21,7 @@ urlpatterns = [
     path('actions/run-infrastructure-inspection/', views.run_infrastructure_inspection, name='run_infrastructure_inspection'),
     path('tasks/', views.task_list, name='task_list'),
     path('tasks/manual/', views.manual_task_create, name='manual_task_create'),
+    path('tasks/<uuid:pk>/cancel/', views.task_cancel, name='task_cancel'),
     path('tasks/profiles/inspection/', views.inspection_profile_configure, name='inspection_profile_configure'),
     path('tasks/profiles/computer/', views.computer_analysis_profile_configure, name='computer_analysis_profile_configure'),
     path('tasks/profiles/computer/<uuid:profile_id>/scripts/<str:platform>/', views.pc_script_download, name='pc_script_download'),

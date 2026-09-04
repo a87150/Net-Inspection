@@ -2,7 +2,7 @@
 {% load extras %}
 {% block title %}任务详情{% endblock %}
 {% block content %}
-<header class="page-heading"><div class="page-heading__copy"><p class="page-heading__eyebrow">执行中心</p><h1 class="page-heading__title">任务详情</h1><p class="page-heading__description">{{ task.get_task_type_display }} · {{ task.get_source_display }} · {{ task.get_status_display }}</p></div><div class="page-heading__actions"><a class="btn btn-outline-secondary" href="{% url 'task_list' %}">返回任务列表</a></div></header>
+<header class="page-heading"><div class="page-heading__copy"><p class="page-heading__eyebrow">执行中心</p><h1 class="page-heading__title">任务详情</h1><p class="page-heading__description">{{ task.get_task_type_display }} · {{ task.get_source_display }} · {{ task.get_status_display }}</p></div><div class="page-heading__actions">{% if user.is_authenticated and task.status in task.ACTIVE_STATUSES %}<form method="post" action="{% url 'task_cancel' task.pk %}" onsubmit="return confirm('确定结束这个任务吗？尚未开始的目标会被取消，正在执行的外部调用将在超时后退出。');">{% csrf_token %}<button class="btn btn-outline-danger" type="submit">结束任务</button></form>{% endif %}<a class="btn btn-outline-secondary" href="{% url 'task_list' %}">返回任务列表</a></div></header>
 {% if domain_operation %}
 <section class="card surface-card mb-4" data-domain-operation-detail>
     <div class="card-body">

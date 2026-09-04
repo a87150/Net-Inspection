@@ -4,7 +4,8 @@ from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 from django.contrib import messages
-from django.core.exceptions import ValidationError
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.http import Http404
@@ -35,7 +36,7 @@ from net.models import (
     TaskTargetRun,
 )
 from net.inspections.executor import _database_guard
-from net.inspections.queue import enqueue_computer_scan_task, enqueue_task
+from net.inspections.queue import cancel_task, enqueue_computer_scan_task, enqueue_task
 
 
 PROJECTS = {
@@ -410,6 +411,33 @@ def task_list(request):
         'table_export_path': reverse('table_export', args=['task_runs']),
         'pagination_query': query_without_page(request),
     })
+
+
+@login_required
+@require_POST
+def task_cancel(request, pk):
+    task = get_object_or_404(TaskRun, pk=pk)
+    if task.task_type in TaskRun.PEOPLE_INTERACTIVE_TASK_TYPES:
+        from index.people.integrations import require_people_owner
+        require_people_owner(request, task)
+    if (
+        task.task_type == TaskRun.TaskType.DOMAIN_OPERATION
+        and not request.user.has_perm('net.manage_domain_operations')
+    ):
+        raise PermissionDenied
+    default_url = (
+        reverse('people_operation', args=[task.pk])
+        if task.task_type in TaskRun.PEOPLE_INTERACTIVE_TASK_TYPES
+        else reverse('task_detail', args=[task.pk])
+    )
+    next_url = _safe_next(request, request.POST.get('next'), default_url)
+    try:
+        cancel_task(task.pk)
+    except ValidationError as exc:
+        messages.error(request, '任务未结束：' + '；'.join(exc.messages))
+    else:
+        messages.success(request, '任务已结束；正在执行的外部调用将在超时后退出。')
+    return redirect(next_url)
 
 
 def _target_result_url(target):

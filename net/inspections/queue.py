@@ -529,6 +529,65 @@ def renew_lease(task_id, worker_id, lease_seconds):
         return True
 
 
+def cancel_task(task_id, *, now=None):
+    """Atomically cancel active work and fence its current Worker lease."""
+    now = _queue_now(now)
+    try:
+        normalized_task_id = TaskRun._meta.pk.to_python(task_id)
+    except (TypeError, ValueError, ValidationError):
+        raise ValidationError({'task_id': '任务 ID 无效。'}) from None
+    with transaction.atomic():
+        task = TaskRun.objects.select_for_update().filter(pk=normalized_task_id).first()
+        if task is None:
+            raise ValidationError({'task_id': '任务不存在。'})
+        if task.status not in TaskRun.ACTIVE_STATUSES:
+            raise ValidationError({'status': '任务已经结束，不能重复结束。'})
+        targets = list(
+            task.target_runs.select_for_update().order_by('created_at', 'pk')
+        )
+        for target in targets:
+            if target_is_terminal(target):
+                continue
+            target.status = TaskRun.Status.CANCELLED
+            target.finished_at = now
+            if not target.error_message:
+                target.error_message = '任务已由用户手动结束。'
+            save_target(target, {'status', 'finished_at', 'error_message'})
+
+        statuses = [target.status for target in targets]
+        task.status = TaskRun.Status.CANCELLED
+        task.progress = 100
+        task.completed_targets = len(targets)
+        task.successful_targets = statuses.count(TaskRun.Status.SUCCESS)
+        task.failed_targets = sum(
+            status in {TaskRun.Status.FAILED, TaskRun.Status.PARTIAL}
+            for status in statuses
+        )
+        task.finished_at = now
+        task.lease_expires_at = None
+        task.error_summary = '任务已由用户手动结束。'
+        save_task(task, {
+            'status', 'progress', 'completed_targets', 'successful_targets',
+            'failed_targets', 'finished_at', 'lease_expires_at', 'error_summary',
+        })
+
+        if task.task_type == TaskRun.TaskType.DOMAIN_OPERATION:
+            from net.models import DomainOperation, DomainOperationSecret
+
+            operation = DomainOperation.objects.select_for_update().filter(
+                task_id=task.pk,
+            ).first()
+            if operation is not None:
+                DomainOperationSecret.objects.filter(operation=operation).delete()
+                operation.status = DomainOperation.Status.CANCELLED
+                operation.started_at = task.started_at
+                operation.finished_at = now
+                operation.save(update_fields={
+                    'status', 'started_at', 'finished_at', 'updated_at',
+                })
+        return task
+
+
 def recover_expired_tasks(now=None):
     """Release expired leases or terminally fail tasks that exhausted retries."""
     now = _queue_now(now)

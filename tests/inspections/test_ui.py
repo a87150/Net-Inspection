@@ -5,6 +5,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -316,3 +317,44 @@ class TaskUiTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'name="filter_progress"')
         self.assertNotContains(response, 'data-sort-key="progress"')
+
+    def test_active_task_pages_offer_authenticated_manual_stop(self):
+        """Omitting the stop control would leave an operator unable to cancel stuck work."""
+        task = enqueue_task(
+            self.server_profile,
+            [self.linux.pk],
+            TaskRun.Source.MANUAL,
+        )
+        user = get_user_model().objects.create_user('operator', password='secret')
+        self.client.force_login(user)
+
+        listing = self.client.get(reverse('task_list'))
+        detail = self.client.get(reverse('task_detail', args=[task.pk]))
+
+        stop_url = reverse('task_cancel', args=[task.pk])
+        for response in (listing, detail):
+            self.assertContains(response, '结束任务')
+            self.assertContains(response, f'action="{stop_url}"')
+
+    def test_manual_stop_requires_login_and_cancels_the_task(self):
+        """An unauthenticated or GET request must not mutate task execution state."""
+        task = enqueue_task(
+            self.server_profile,
+            [self.linux.pk],
+            TaskRun.Source.MANUAL,
+        )
+        stop_url = reverse('task_cancel', args=[task.pk])
+
+        anonymous = self.client.post(stop_url)
+        task.refresh_from_db()
+        self.assertEqual(anonymous.status_code, 302)
+        self.assertEqual(task.status, TaskRun.Status.QUEUED)
+
+        user = get_user_model().objects.create_user('operator', password='secret')
+        self.client.force_login(user)
+        self.assertEqual(self.client.get(stop_url).status_code, 405)
+        response = self.client.post(stop_url)
+
+        self.assertRedirects(response, reverse('task_detail', args=[task.pk]))
+        task.refresh_from_db()
+        self.assertEqual(task.status, TaskRun.Status.CANCELLED)
