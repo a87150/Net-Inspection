@@ -25,6 +25,7 @@ from net.models import (
     TaskTargetRun,
 )
 from net.devices.network.collector import collect_network
+from net.devices.network.snmp import SNMP_ITEMS
 from net.devices.network.ssh import NETWORK_COMMANDS
 from net.devices.security.api import collect_security_api
 from net.devices.server.linux_ssh import collect_linux_ssh
@@ -197,6 +198,24 @@ def _selected_raw(target, task, raw):
                                for key, command in zip(NETWORK_FIELDS, commands) if key == item)
                    for item in NETWORK_FIELDS}
         aliases['config_info'] = ('config_info',)
+        selected = set(task.selected_items_snapshot)
+        allowed = {
+            key
+            for item in selected
+            for key in aliases.get(item, ())
+        }
+        allowed.update(item for item in selected if item in SNMP_ITEMS)
+        if not isinstance(raw, dict):
+            return {}
+        return {
+            key: value
+            for key, value in raw.items()
+            if key in allowed or (
+                isinstance(key, str)
+                and key.partition(':')[0] in {'snmp', 'ssh'}
+                and key.partition(':')[2] in allowed
+            )
+        }
     elif target.target_type == TaskTargetRun.TargetType.MONITOR:
         aliases = SECURITY_FIELDS
     elif target.target_snapshot.get('server_type') == 'windows':

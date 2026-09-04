@@ -553,10 +553,13 @@ def _finish_locked(task, *, now, target_runs=None):
     successes = sum(
         target.status == TaskRun.Status.SUCCESS for target in target_runs
     )
+    partials = sum(
+        target.status == TaskRun.Status.PARTIAL for target in target_runs
+    )
     failures = sum(target_failed(target) for target in target_runs)
     if successes == len(target_runs):
         status = TaskRun.Status.SUCCESS
-    elif successes:
+    elif successes or partials:
         status = TaskRun.Status.PARTIAL
     else:
         status = TaskRun.Status.FAILED

@@ -113,7 +113,7 @@ class TaskWorkerTests(TransactionTestCase):
         profile = InspectionProfile.objects.create(
             name='混合巡检',
             device_type=InspectionProfile.DeviceType.NETWORK_DEVICE,
-            selected_items=['cpu', 'logs'],
+            selected_items=['cpu', 'memory', 'logs'],
             timeout_seconds=9,
             concurrent_workers=1,
         )
@@ -170,7 +170,15 @@ class TaskWorkerTests(TransactionTestCase):
             return CollectionResult(
                 True,
                 'success',
-                data={'cpu': {'usage_percent': 17, 'notice': 'live-auth-password'}},
+                data={
+                    'cpu': {'usage_percent': 17, 'notice': 'live-auth-password'},
+                    'memory': {'usage_percent': 41},
+                },
+                raw={
+                    'cpu': {'1.3.6.1': 'live-auth-password'},
+                    'memory': {'1.3.6.2': 'memory evidence'},
+                    'vlan_status': {'1.3.6.3': 'unselected SNMP evidence'},
+                },
             )
 
         def ssh_result(asset, timeout, selected_items=None):
@@ -178,7 +186,14 @@ class TaskWorkerTests(TransactionTestCase):
                 asset.username, asset.password, timeout, list(selected_items or []),
             )
             return CollectionResult(
-                True, 'success', data={'logs': ['live-priv-password']},
+                True,
+                'success',
+                data={'logs': ['live-priv-password']},
+                raw={
+                    'cpu': 'SSH collision evidence',
+                    'show logging | last 100': 'SSH log evidence',
+                    'show vlan brief': 'unselected SSH evidence',
+                },
             )
 
         snmp_collect.side_effect = snmp_result
@@ -188,10 +203,17 @@ class TaskWorkerTests(TransactionTestCase):
 
         inspection = Network_Device_Inspection.objects.get()
         self.assertEqual(inspection.status, 'success')
-        self.assertEqual(set(inspection.details), {'cpu', 'logs'})
+        self.assertEqual(set(inspection.details), {'cpu', 'memory', 'logs'})
+        self.assertEqual(inspection.raw_output, {
+            'snmp:cpu': {'1.3.6.1': '[REDACTED]'},
+            'ssh:cpu': 'SSH collision evidence',
+            'memory': {'1.3.6.2': 'memory evidence'},
+            'show logging | last 100': 'SSH log evidence',
+        })
         self.assertEqual(seen['snmp'], (
             'live-ssh-user', 'live-ssh-password', 'live-auth-password',
-            'live-priv-password', 'live-community-secret', 1161, 9, ['cpu'],
+            'live-priv-password', 'live-community-secret', 1161, 9,
+            ['cpu', 'memory'],
         ))
         self.assertEqual(seen['ssh'], (
             'live-ssh-user', 'live-ssh-password', 9, ['logs'],
@@ -236,10 +258,23 @@ class TaskWorkerTests(TransactionTestCase):
         inspection = Network_Device_Inspection.objects.get()
         self.assertEqual(inspection.status, 'partial')
         self.assertEqual(inspection.details, {'logs': ['accepted']})
-        self.assertEqual(
-            TaskRun.objects.get().target_runs.get().status,
-            TaskRun.Status.PARTIAL,
-        )
+        run = TaskRun.objects.get()
+        run.refresh_from_db()
+        self.assertEqual(run.status, TaskRun.Status.PARTIAL)
+        self.assertEqual(run.target_runs.get().status, TaskRun.Status.PARTIAL)
+
+    @patch('net.inspections.executor.collect_linux_ssh')
+    def test_worker_keeps_parent_failed_when_every_target_fails(self, collect):
+        profile = self._profile(concurrent_workers=1)
+        server = self._server(10)
+        enqueue_task(profile, [server.pk], TaskRun.Source.MANUAL)
+        collect.return_value = CollectionResult(False, 'failed', 'unreachable')
+
+        TaskWorker(worker_id='all-failed-worker', threads=1, lease_seconds=10).run_once()
+
+        run = TaskRun.objects.get()
+        run.refresh_from_db()
+        self.assertEqual(run.status, TaskRun.Status.FAILED)
 
     @patch('net.inspections.executor.collect_linux_ssh')
     def test_worker_isolates_target_failure_and_finishes_partial_task(self, collect):
