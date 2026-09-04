@@ -1,0 +1,278 @@
+import asyncio
+import json
+from unittest.mock import AsyncMock, patch
+
+from django.test import SimpleTestCase
+from pysnmp.proto.rfc1902 import Integer32
+
+from net.devices.network.snmp import (
+    ENT_SENSOR_PRECISION,
+    ENT_SENSOR_SCALE,
+    ENT_SENSOR_STATUS,
+    ENT_SENSOR_TYPE,
+    ENT_SENSOR_VALUE,
+    HR_MEMORY_SIZE,
+    HR_STORAGE_ALLOCATION_UNITS,
+    HR_STORAGE_SIZE,
+    HR_STORAGE_TYPE,
+    HR_STORAGE_USED,
+    HR_PROCESSOR_LOAD,
+    IF_ADMIN_STATUS,
+    IF_DESCR,
+    IF_HC_IN,
+    IF_HC_OUT,
+    IF_HIGH_SPEED,
+    IF_IN_DISCARDS,
+    IF_IN_ERRORS,
+    IF_MAC,
+    IF_NAME,
+    IF_OPER_STATUS,
+    IF_OUT_DISCARDS,
+    IF_OUT_ERRORS,
+    QBRIDGE_VLAN_NAME,
+    SNMP_ITEMS,
+    SYS_DESCR,
+    SYS_NAME,
+    SYS_UPTIME,
+    VENDOR_OIDS,
+    PySnmpSession,
+    SnmpQueryError,
+    collect_network_snmp,
+)
+from net.models import Network_Device
+
+
+PHYSICAL_MEMORY = "1.3.6.1.2.1.25.2.1.2"
+
+
+class MemorySession:
+    def __init__(self, scalars=None, tables=None, error=None):
+        self.scalars = scalars or {}
+        self.tables = tables or {}
+        self.error = error
+        self.get_queries = []
+        self.walk_queries = []
+
+    async def get(self, oid):
+        self.get_queries.append(oid)
+        if self.error:
+            raise self.error
+        return self.scalars.get(oid)
+
+    async def walk(self, oid):
+        self.walk_queries.append(oid)
+        if self.error:
+            raise self.error
+        return self.tables.get(oid, [])
+
+    async def close(self):
+        return None
+
+
+class NetworkSnmpCollectionTests(SimpleTestCase):
+    def setUp(self):
+        self.device = Network_Device(
+            ip="192.0.2.20",
+            vendor="generic",
+            connection_type="snmp",
+            snmp_version="v2c",
+            snmp_community="private-community",
+            snmp_auth_password="auth-secret",
+            snmp_priv_password="priv-secret",
+        )
+
+    def collect(self, session, selected_items):
+        return collect_network_snmp(
+            self.device,
+            selected_items=selected_items,
+            session_factory=lambda *_: session,
+        )
+
+    def test_standard_mibs_produce_device_and_interface_details(self):
+        session = MemorySession(
+            scalars={
+                SYS_NAME: "core-sw-1",
+                SYS_DESCR: "Example Switch",
+                SYS_UPTIME: 12345,
+            },
+            tables={
+                IF_NAME: [("1", "Gi0/1")],
+                IF_DESCR: [("1", "uplink")],
+                IF_MAC: [("1", bytes.fromhex("001122334455"))],
+                IF_ADMIN_STATUS: [("1", 1)],
+                IF_OPER_STATUS: [("1", 1)],
+                IF_HIGH_SPEED: [("1", 1000)],
+                IF_HC_IN: [("1", 1024)],
+                IF_HC_OUT: [("1", 2048)],
+                IF_IN_ERRORS: [("1", 2)],
+                IF_OUT_ERRORS: [("1", 3)],
+                IF_IN_DISCARDS: [("1", 4)],
+                IF_OUT_DISCARDS: [("1", 5)],
+            },
+        )
+
+        result = self.collect(session, ["device_info", "interface_status"])
+
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.data["device_info"]["system_name"], "core-sw-1")
+        self.assertEqual(result.data["device_info"]["description"], "Example Switch")
+        self.assertEqual(result.data["device_info"]["uptime_ticks"], 12345)
+        self.assertEqual(
+            result.data["interface_status"]["interfaces"][0],
+            {
+                "index": "1",
+                "name": "Gi0/1",
+                "description": "uplink",
+                "mac": "00:11:22:33:44:55",
+                "admin_status": "up",
+                "oper_status": "up",
+                "speed_mbps": 1000,
+                "in_octets": 1024,
+                "out_octets": 2048,
+                "in_errors": 2,
+                "out_errors": 3,
+                "in_discards": 4,
+                "out_discards": 5,
+            },
+        )
+        self.assertIn(IF_HC_IN, result.raw["interface_status"])
+        json.dumps(result.raw)
+
+    def test_missing_oid_marks_only_that_item_missing(self):
+        result = self.collect(
+            MemorySession(scalars={SYS_NAME: "sw"}),
+            ["device_info", "temperature"],
+        )
+
+        self.assertEqual(result.status, "partial")
+        self.assertIn("device_info", result.data)
+        self.assertNotIn("temperature", result.data)
+
+    def test_host_resources_cpu_load_is_averaged(self):
+        result = self.collect(
+            MemorySession(tables={HR_PROCESSOR_LOAD: [("1", 10), ("2", 30)]}),
+            ["cpu"],
+        )
+
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.data["cpu"], {"usage_percent": 20.0})
+
+    def test_host_resources_memory_uses_physical_storage_allocation_units(self):
+        result = self.collect(
+            MemorySession(
+                scalars={HR_MEMORY_SIZE: 2048},
+                tables={
+                    HR_STORAGE_TYPE: [("7", PHYSICAL_MEMORY)],
+                    HR_STORAGE_ALLOCATION_UNITS: [("7", 1024)],
+                    HR_STORAGE_SIZE: [("7", 2048)],
+                    HR_STORAGE_USED: [("7", 512)],
+                },
+            ),
+            ["memory"],
+        )
+
+        self.assertEqual(
+            result.data["memory"],
+            {
+                "total_bytes": 2097152,
+                "used_bytes": 524288,
+                "usage_percent": 25.0,
+            },
+        )
+
+    def test_entity_sensor_temperature_applies_scale_and_precision(self):
+        result = self.collect(
+            MemorySession(
+                tables={
+                    ENT_SENSOR_TYPE: [("10", 8)],
+                    ENT_SENSOR_SCALE: [("10", 9)],
+                    ENT_SENSOR_PRECISION: [("10", 1)],
+                    ENT_SENSOR_VALUE: [("10", 425)],
+                    ENT_SENSOR_STATUS: [("10", 1)],
+                }
+            ),
+            ["temperature"],
+        )
+
+        self.assertEqual(result.data["temperature"], {"values_celsius": [42.5]})
+
+    def test_q_bridge_vlan_names_are_normalized_by_vlan_id(self):
+        result = self.collect(
+            MemorySession(tables={QBRIDGE_VLAN_NAME: [("10", "users"), ("20", "voice")]}),
+            ["vlan_status"],
+        )
+
+        self.assertEqual(
+            result.data["vlan_status"],
+            {"vlans": [{"vlan_id": 10, "name": "users"}, {"vlan_id": 20, "name": "voice"}]},
+        )
+
+    def test_vendor_registry_is_complete_and_first_valid_candidate_wins(self):
+        self.assertEqual(set(VENDOR_OIDS), {"cisco", "huawei", "h3c", "ruijie"})
+        first, second = VENDOR_OIDS["cisco"]["cpu"][:2]
+        self.device.vendor = "Cisco Systems"
+        session = MemorySession(scalars={first: 17, second: 99})
+
+        result = self.collect(session, ["cpu"])
+
+        self.assertEqual(result.data["cpu"], {"usage_percent": 17.0})
+        self.assertIn(first, session.get_queries)
+        self.assertNotIn(second, session.get_queries)
+
+    def test_query_failures_have_fixed_categories_and_never_expose_secrets(self):
+        expected = {
+            "authentication": (True, "SNMP authentication failed"),
+            "timeout": (False, "SNMP request timed out"),
+            "response": (True, "SNMP response error"),
+        }
+        for category, (reachable, message) in expected.items():
+            with self.subTest(category=category):
+                result = self.collect(
+                    MemorySession(error=SnmpQueryError(category)),
+                    ["device_info"],
+                )
+                serialized = json.dumps(
+                    {"message": result.message, "data": result.data, "raw": result.raw}
+                )
+                self.assertEqual(result.status, "failed")
+                self.assertEqual(result.reachable, reachable)
+                self.assertEqual(result.message, message)
+                self.assertNotIn("private-community", serialized)
+                self.assertNotIn("auth-secret", serialized)
+                self.assertNotIn("priv-secret", serialized)
+
+    def test_item_registry_contains_only_supported_public_items(self):
+        self.assertEqual(
+            SNMP_ITEMS,
+            frozenset(
+                {
+                    "device_info",
+                    "cpu",
+                    "memory",
+                    "temperature",
+                    "interface_status",
+                    "vlan_status",
+                }
+            ),
+        )
+
+    def test_empty_selection_performs_no_queries(self):
+        session = MemorySession(scalars={SYS_NAME: "must-not-be-read"})
+
+        result = self.collect(session, [])
+
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.data, {})
+        self.assertEqual(session.get_queries, [])
+        self.assertEqual(session.walk_queries, [])
+
+    def test_pysnmp_adapter_preserves_normal_integer_values(self):
+        session = PySnmpSession(self.device, timeout=1)
+        session.target = object()
+        response = (None, 0, 0, ((SYS_UPTIME, Integer32(7)),))
+
+        with patch("net.devices.network.snmp.get_cmd", new=AsyncMock(return_value=response)):
+            value = asyncio.run(session.get(SYS_UPTIME))
+        asyncio.run(session.close())
+
+        self.assertEqual(value, 7)
