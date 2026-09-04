@@ -109,7 +109,19 @@ class InspectionProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
         self.device_type = device_type
         self.instance = instance
         from net.inspections.schedules import _ASSET_MODELS, target_rule_fields
-        self.fields['target_rule_ids'].choices = [(str(obj.pk), str(obj)) for obj in _ASSET_MODELS[device_type].objects.order_by('pk')]
+        target_devices = list(_ASSET_MODELS[device_type].objects.order_by('pk'))
+        self.fields['target_rule_ids'].choices = [(str(obj.pk), str(obj)) for obj in target_devices]
+        self.target_device_options = [
+            {
+                'id': str(obj.pk),
+                'label': str(obj),
+                'vendor': str(getattr(obj, 'vendor', None) or getattr(obj, 'manufacturer', None) or '未填写'),
+                'device_type': str(getattr(obj, 'device_type', None) or getattr(obj, 'server_type', None) or '未分类'),
+            }
+            for obj in target_devices
+        ]
+        self.target_device_vendors = sorted({option['vendor'] for option in self.target_device_options})
+        self.target_device_types = sorted({option['device_type'] for option in self.target_device_options})
         self.rule_fields = target_rule_fields(device_type)
         for key, (model_field, label) in self.rule_fields.items():
             if model_field.get_internal_type() == 'BooleanField':

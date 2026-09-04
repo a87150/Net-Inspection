@@ -55,6 +55,15 @@ test('target device filtering combines keyword and selected-state filters', () =
     assert.deepEqual(choices.map(choice => choice.hidden), [false,true]);
 });
 
+test('target device filtering narrows choices by vendor and type', () => {
+    const choices = [
+        {label:'核心交换机', vendor:'华为', deviceType:'核心', hidden:false, input:{checked:false}},
+        {label:'接入交换机', vendor:'思科', deviceType:'接入', hidden:false, input:{checked:false}},
+    ];
+    ui.filterTargetDeviceChoices(choices, '', 'all', '华为', '核心');
+    assert.deepEqual(choices.map(choice => choice.hidden), [false,true]);
+});
+
 test('generic checkbox bulk actions skip disabled choices', () => {
     assert.equal(typeof ui.updateCheckboxSelection, 'function');
     const inputs = [{checked:false, disabled:false}, {checked:true, disabled:true}, {checked:false, disabled:false}];

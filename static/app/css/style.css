@@ -1218,7 +1218,7 @@ body.app-shell {
 
 .target-device-picker__toolbar {
     display: grid;
-    grid-template-columns: minmax(12rem, 1fr) minmax(8rem, .45fr) auto auto;
+    grid-template-columns: minmax(12rem, 1fr) repeat(3, minmax(7rem, .42fr)) auto auto;
     gap: .5rem;
 }
 
@@ -1274,8 +1274,14 @@ body.app-shell {
     background-color: var(--color-primary);
 }
 
-.target-device-filter-panel {
-    background: rgba(255, 255, 255, .4) !important;
+.target-device-picker__option > span {
+    flex: 1 1 auto;
+}
+
+.target-device-picker__option > small {
+    flex: 0 0 auto;
+    color: var(--color-text-muted);
+    font-size: .72rem;
 }
 
 [data-bulk-choice-group] {

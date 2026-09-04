@@ -14,12 +14,14 @@ function selectRow(doc, id) {
     doc.querySelectorAll('[name="target_mode"]').forEach(mode => { mode.checked = mode.value === 'selected'; });
 }
 
-function filterTargetDeviceChoices(choices, query, visibility) {
+function filterTargetDeviceChoices(choices, query, visibility, vendor = '', deviceType = '') {
     const normalizedQuery = (query || '').trim().toLocaleLowerCase();
     choices.forEach(choice => {
         const matchesQuery = !normalizedQuery || choice.label.toLocaleLowerCase().includes(normalizedQuery);
         const matchesVisibility = visibility !== 'selected' || choice.input.checked;
-        choice.hidden = !(matchesQuery && matchesVisibility);
+        const matchesVendor = !vendor || choice.vendor === vendor;
+        const matchesType = !deviceType || choice.deviceType === deviceType;
+        choice.hidden = !(matchesQuery && matchesVisibility && matchesVendor && matchesType);
     });
 }
 
@@ -37,19 +39,28 @@ function updateCheckboxSelection(inputs, action) {
 
 function bindTargetDevicePicker(picker) {
     const search = picker.querySelector('[data-target-device-search]');
+    const vendor = picker.querySelector('[data-target-device-vendor]');
+    const deviceType = picker.querySelector('[data-target-device-type]');
     const visibility = picker.querySelector('[data-target-device-visibility]');
     const count = picker.querySelector('[data-target-device-count]');
+    const mode = picker.closest('.inspection-config-section').querySelector('[data-target-device-mode]');
     const choices = Array.from(picker.querySelectorAll('[data-target-device-option]'), option => ({
         get hidden() { return option.hidden; },
         set hidden(value) { option.hidden = value; },
         label: option.dataset.targetDeviceLabel || option.textContent,
+        vendor: option.dataset.targetDeviceVendor || '',
+        deviceType: option.dataset.targetDeviceType || '',
         input: option.querySelector('input[type="checkbox"]'),
     }));
     const refresh = () => {
-        filterTargetDeviceChoices(choices, search.value, visibility.value);
-        count.textContent = `已选 ${choices.filter(choice => choice.input.checked).length} / ${choices.length} 台`;
+        filterTargetDeviceChoices(choices, search.value, visibility.value, vendor.value, deviceType.value);
+        const selectedCount = choices.filter(choice => choice.input.checked).length;
+        mode.value = selectedCount ? 'selected' : 'all';
+        count.textContent = `已选 ${selectedCount} / ${choices.length} 台`;
     };
     search.addEventListener('input', refresh);
+    vendor.addEventListener('change', refresh);
+    deviceType.addEventListener('change', refresh);
     visibility.addEventListener('change', refresh);
     picker.querySelector('[data-target-device-select-all]').addEventListener('click', () => {
         updateTargetDeviceSelection(choices, 'all');
