@@ -1240,16 +1240,54 @@ body.app-shell {
     background: linear-gradient(180deg, rgba(244, 248, 255, .44), rgba(255, 255, 255, .15));
 }
 
-.inspection-config-modal .modal-body > .modal-section {
-    gap: 1rem;
-    border-color: rgba(142, 162, 196, .28);
-    background: rgba(255, 255, 255, .48);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .65);
+.inspection-config-layout {
+    display: grid;
+    gap: .85rem;
 }
 
-.inspection-config-modal .modal-body > .modal-section > .border-top,
-.inspection-config-modal .modal-body > .modal-section > .border-bottom,
-.inspection-config-modal .modal-body > .modal-section fieldset,
+.inspection-config-block {
+    padding: 1rem;
+    border: 1px solid rgba(142, 162, 196, .24) !important;
+    border-radius: var(--radius);
+    background: linear-gradient(145deg, rgba(255, 255, 255, .7), rgba(238, 244, 255, .46));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .76);
+}
+
+.inspection-config-block__heading {
+    display: flex;
+    align-items: flex-start;
+    gap: .72rem;
+    margin-bottom: 1rem;
+}
+
+.inspection-config-block__heading h3 {
+    color: var(--color-text);
+    font-weight: 750;
+}
+
+.inspection-config-block__heading p {
+    color: var(--color-text-muted);
+    font-size: .78rem;
+}
+
+.inspection-config-block__index {
+    display: grid;
+    width: 1.9rem;
+    height: 1.9rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 1px solid rgba(73, 108, 222, .18);
+    border-radius: .65rem;
+    background: rgba(239, 244, 255, .82);
+    color: var(--color-primary);
+    font-size: .72rem;
+    font-weight: 750;
+}
+
+.inspection-config-block fieldset {
+    min-width: 0;
+}
+
 .task-run-modal fieldset,
 .task-run-modal .modal-body > div {
     padding: 1rem;
@@ -1258,7 +1296,7 @@ body.app-shell {
     background: rgba(255, 255, 255, .42);
 }
 
-.inspection-config-modal .modal-body > .modal-section > .inspection-config-section--targets {
+.inspection-config-block.inspection-config-section--targets {
     position: relative;
     border-color: rgba(129, 153, 198, .34) !important;
     background: linear-gradient(145deg, rgba(255, 255, 255, .7), rgba(232, 240, 255, .5));
@@ -1266,9 +1304,7 @@ body.app-shell {
 }
 
 .inspection-config-modal .inspection-config-section--targets h3 {
-    margin-bottom: 1rem;
     color: var(--color-primary);
-    font-weight: 750;
 }
 
 .target-device-picker {
@@ -1528,6 +1564,7 @@ code {
     .modal-shell { max-height: calc(100vh - .5rem); margin: .25rem; }
     .modal-shell .modal-body { padding: 1rem; }
     .modal-section { padding: .85rem; }
+    .inspection-config-block { padding: .85rem; }
 
     .target-device-picker__toolbar {
         grid-template-columns: 1fr 1fr;

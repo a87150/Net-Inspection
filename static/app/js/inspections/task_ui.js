@@ -43,7 +43,7 @@ function bindTargetDevicePicker(picker) {
     const deviceType = picker.querySelector('[data-target-device-type]');
     const visibility = picker.querySelector('[data-target-device-visibility]');
     const count = picker.querySelector('[data-target-device-count]');
-    const mode = picker.closest('.inspection-config-section').querySelector('[data-target-device-mode]');
+    const mode = picker.closest('.inspection-config-block').querySelector('[data-target-device-mode]');
     const choices = Array.from(picker.querySelectorAll('[data-target-device-option]'), option => ({
         get hidden() { return option.hidden; },
         set hidden(value) { option.hidden = value; },

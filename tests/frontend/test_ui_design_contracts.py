@@ -92,6 +92,15 @@ class SharedInterfaceContractTests(TestCase):
         self.assertContains(response, 'modal-dialog-scrollable modal-shell')
         self.assertContains(response, 'modal-section')
 
+    def test_inspection_profile_modal_uses_flat_ordered_configuration_blocks(self):
+        response = self.client.get(reverse('asset_list', args=['networks']))
+        html = response.content.decode(response.charset)
+
+        expected_steps = ('profile', 'parameters', 'items', 'targets', 'schedule')
+        positions = [html.index(f'data-config-step="{step}"') for step in expected_steps]
+        self.assertEqual(positions, sorted(positions))
+        self.assertContains(response, 'inspection-config-layout')
+
     def test_scheduled_target_rules_use_a_dedicated_glass_section(self):
         response = self.client.get(reverse('asset_list', args=['networks']))
 
