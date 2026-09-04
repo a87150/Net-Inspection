@@ -1196,7 +1196,7 @@ body.app-shell {
     background: rgba(255, 255, 255, .42);
 }
 
-.inspection-config-modal .inspection-config-section--targets {
+.inspection-config-modal .modal-body > .modal-section > .inspection-config-section--targets {
     position: relative;
     border-color: rgba(129, 153, 198, .34) !important;
     background: linear-gradient(145deg, rgba(255, 255, 255, .7), rgba(232, 240, 255, .5));
