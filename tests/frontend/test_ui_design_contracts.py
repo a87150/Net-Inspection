@@ -75,6 +75,7 @@ class SharedInterfaceContractTests(TestCase):
         response = self.client.get(reverse('asset_list', args=['networks']))
 
         self.assertContains(response, 'inspection-config-section--targets')
+        self.assertContains(response, 'target-device-picker')
 
     def test_domain_and_import_modals_use_shared_modal_shell(self):
         domain = self.client.get(reverse('domain_controller_settings'))

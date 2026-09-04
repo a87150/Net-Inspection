@@ -72,7 +72,7 @@ class FinalOperatorTests(TestCase):
         self.assertEqual(list(tasks[0].target_runs.values_list('target_id', flat=True)), [str(self.server.pk)])
         page = self.client.get(reverse('asset_list', args=['servers']), {'task_profile': str(self.profile.pk)})
         self.assertContains(page, 'target_rule_mode')
-        self.assertContains(page, f'value="{other.pk}" selected')
+        self.assertContains(page, f'name="target_rule_ids" value="{other.pk}" checked')
 
     def test_filtered_rules_use_public_fields_only(self):
         self.save_profile(target_rule_mode='filtered', rule_server_type='linux')
