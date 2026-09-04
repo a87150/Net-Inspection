@@ -36,6 +36,33 @@ macOS 下载文件名为 `getinfo_upload_macos.sh`，是无 BOM 的 UTF-8 POSIX 
 
 自动化测试覆盖生成、profile 绑定、下载登录保护、BOM/no-store 与静态秘密扫描，但不等同于真实端点环境验证。部署前仍必须在真实 Windows PowerShell 5.1 主机和真实 macOS 主机做 smoke test：从登录后的页面下载对应脚本，确认路径权限与 UTF-8/BOM、上传 URL 和 TLS，制造一次可控上传失败确认 JSON 留存，再确认 Worker 将一次成功上传消费为预期分析记录。不要在演示数据库或未受控的生产资产上执行该测试。
 
+## 网络设备 SNMP / SSH 巡检
+
+网络设备主动巡检由独立 Worker 发起，而不是由浏览器或 Web 进程直连设备。所有 Worker 节点都必须使用更新后的 `requirements.lock.txt` 安装依赖，确认 PySNMP 可用，并能解析、路由到目标管理地址。生产防火墙和设备 ACL 必须允许 **Worker 到设备的 UDP/161** 及返回流量；资产使用自定义 SNMP 端口时放行对应 UDP 端口。无需向 Web 前端开放 UDP/161，也不要把设备管理网直接暴露给用户网段。
+
+连接模式含义如下，生产常规选择推荐 `hybrid`：
+
+| 模式 | 行为与适用场景 |
+| --- | --- |
+| `ssh` | 全部请求项目走现有 SSH 采集；用于未启用 SNMP 或仍依赖 SSH 指标命令的设备。 |
+| `snmp` | 只采集 SNMP 支持项目；请求 `logs`、`config_info` 或其他不支持项目时会明确缺项/失败，不会暗中改走 SSH。 |
+| `hybrid` | 推荐模式。SNMP 负责支持的指标，SSH 负责 `logs` 和 `config_info`；任一协议成功的数据会保留，另一协议失败可形成 `partial`。 |
+| `auto` | 初始分工与 `hybrid` 相同；SNMP 没有返回的指标再交给 SSH 回退采集。适合确需指标回退的环境，但应监控额外 SSH 连接和命令负载。 |
+
+SNMP 支持的项目为 `device_info`、`cpu`、`memory`、`temperature`、`interface_status`、`vlan_status`。其中厂商私有 OID 或标准 MIB 值可能因型号、系统版本和代理配置而缺失；单个 OID 不支持只影响相应项目，不应中断其他已完成项目。`logs` 和 `config_info` **必须使用 SSH**，SNMP 不读取日志，也不导出运行配置；需要这两项时应选择 `hybrid`、`auto` 或 `ssh`，并配置有效 SSH 凭据。
+
+新设备推荐 SNMPv3 `authPriv`，同时提供身份认证和报文加密，并按设备支持选择认证、加密算法。SNMPv2c Community 以无加密方式传输，仅为无法使用 v3 的旧设备保留；应限制到专用管理 VLAN、仅授予只读权限、用 ACL 限制 Worker 来源并定期轮换。系统只执行 SNMP GET/BULK WALK，不执行 SET；不要授予写权限。SNMP 和 SSH 秘密字段只写，不能出现在列表、导出、任务快照、结果或错误信息中。
+
+| 现象 | 检查与处理 |
+| --- | --- |
+| 超时 / 不可达 | 从实际 Worker 节点检查到设备管理地址的路由、UDP/161（或自定义端口）、双向防火墙/ACL 和 SNMP 服务状态；核对地址、端口、超时及重试次数。不要用 Web 节点连通性代替 Worker 验证。 |
+| 认证失败 | 核对 v2c Community，或 v3 用户名、安全级别、认证/加密协议及密码；确认设备侧用户绑定了同一算法和只读视图。错误详情不得粘贴或回显秘密。 |
+| 不支持 OID / 项目缺失 | 确认设备已启用对应标准 MIB 或支持已登记的厂商 OID，并检查 SNMP view 是否允许读取。单项缺失可保留其他项目；不要把缺值误判为设备整体离线。 |
+| `partial` | 查看结果中已完成与缺失的请求项目，并分别检查 SNMP 和 SSH 错误。`hybrid` 下任一协议的有效数据都会保留；修复失败协议后重新巡检。 |
+| SSH fallback 未发生或失败 | 只有 `auto` 会把 SNMP 未返回的指标回退给 SSH；`hybrid` 仅将 `logs`/`config_info` 固定交给 SSH。核对模式、SSH 地址/端口/用户名/密码、设备命令权限和 Worker 到 TCP/22 的策略。 |
+
+本功能的自动化验收仅使用内存 SNMP 会话和 mock SSH，**尚未在真实网络设备上测试**，且演示数据不会发起真实采集。生产启用前应在隔离管理网选择受控设备做只读 smoke test：验证 Worker 网络路径、v3 `authPriv`、所选项目、`partial` 展示及必要的 SSH 回退；不得执行 SNMP SET 或远程配置变更。
+
 ## 域控操作
 
 域账号、域计算机写操作以及域账号表格导入由权限 `net.manage_domain_operations` 保护。域分组仅从域控同步展示。超级管理员自动拥有该权限；建议创建一个专用组并授予权限，而不是向日常账号逐一赋权：
