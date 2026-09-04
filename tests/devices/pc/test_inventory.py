@@ -132,6 +132,37 @@ class AssetInventoryImportExportTests(TestCase):
             field.name for field in Network_Device._meta.get_fields()
         })
 
+    def test_network_import_accepts_complete_hybrid_snmp_v3_settings(self):
+        import_csv('networks', SimpleUploadedFile(
+            'hybrid-network.csv',
+            (
+                '设备名称,IP地址,连接方式,SSH端口,SSH账号,SSH密码,'
+                'SNMP 版本,SNMP 端口,SNMP Community,SNMPv3 用户名,安全级别,'
+                '认证协议,认证密码,加密协议,加密密码,上下文,重试次数\n'
+                '混合巡检交换机,192.0.2.94,hybrid,2222,ssh-reader,ssh-secret,'
+                'v3,1161,unused-community,snmp-reader,authPriv,sha256,'
+                'auth-secret,aes128,priv-secret,tenant-a,3\n'
+            ).encode('utf-8-sig'),
+            content_type='text/csv',
+        ))
+
+        device = Network_Device.objects.get(ip='192.0.2.94')
+        self.assertEqual(device.connection_type, 'hybrid')
+        self.assertEqual(device.port, 2222)
+        self.assertEqual(device.username, 'ssh-reader')
+        self.assertEqual(device.password, 'ssh-secret')
+        self.assertEqual(device.snmp_version, 'v3')
+        self.assertEqual(device.snmp_port, 1161)
+        self.assertEqual(device.snmp_community, 'unused-community')
+        self.assertEqual(device.snmp_username, 'snmp-reader')
+        self.assertEqual(device.snmp_security_level, 'authPriv')
+        self.assertEqual(device.snmp_auth_protocol, 'sha256')
+        self.assertEqual(device.snmp_auth_password, 'auth-secret')
+        self.assertEqual(device.snmp_priv_protocol, 'aes128')
+        self.assertEqual(device.snmp_priv_password, 'priv-secret')
+        self.assertEqual(device.snmp_context_name, 'tenant-a')
+        self.assertEqual(device.snmp_retries, 3)
+
     def test_server_inventory_matches_pc_static_configuration_detail(self):
         server = Server.objects.create(
             name='SRV-INVENTORY', ip='192.0.2.120', os='Windows Server 2025',

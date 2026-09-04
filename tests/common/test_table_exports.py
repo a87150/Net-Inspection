@@ -4,11 +4,13 @@ from html.parser import HTMLParser
 from io import StringIO
 from unittest.mock import patch
 
+from django.contrib import admin
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
 
+from index.common.table_registry import get_table_definition
 from net.models import (
     Domain_Account,
     Domain_Computer,
@@ -74,6 +76,16 @@ class FilteredExportContractTests(TestCase):
                 )))
                 self.assertEqual(len(csv_rows), 1)
                 self.assertEqual(csv_rows[0][column], sample_value)
+                if entity == 'networks':
+                    self.assertEqual(csv_rows[0]['连接方式'], 'hybrid')
+                    self.assertEqual(csv_rows[0]['SNMP 版本'], 'v3')
+                    self.assertEqual(csv_rows[0]['SNMP 端口'], '161')
+                    self.assertEqual(
+                        csv_rows[0]['认证密码'], 'DEMO-ONLY-NOT-A-SECRET',
+                    )
+                    self.assertEqual(
+                        csv_rows[0]['加密密码'], 'DEMO-ONLY-NOT-A-SECRET',
+                    )
 
                 xlsx_response = self.client.get(
                     f'/data/{entity}/template/xlsx/',
@@ -96,6 +108,48 @@ class FilteredExportContractTests(TestCase):
                 self.assertTrue(model.objects.filter(
                     **{model_field: sample_value},
                 ).exists())
+
+    def test_network_lists_and_exports_expose_only_public_connection_settings(self):
+        Network_Device.objects.create(
+            device_name='secret-network', ip='192.0.2.95',
+            connection_type='hybrid', snmp_version='v3', snmp_port=1161,
+            password='ssh-password-private', snmp_community='community-private',
+            snmp_username='snmp-reader', snmp_security_level='authPriv',
+            snmp_auth_protocol='sha256', snmp_auth_password='auth-private',
+            snmp_priv_protocol='aes128', snmp_priv_password='priv-private',
+        )
+
+        response = self.client.get(reverse('table_export', args=['networks']))
+        exported = response.content.decode('utf-8-sig')
+        headers = next(csv.reader(StringIO(exported)))
+        definition = get_table_definition('networks')
+        field_keys = {field.key for field in definition.fields}
+        field_labels = {field.label for field in definition.fields}
+        admin_search_fields = set(
+            admin.site._registry[Network_Device].search_fields
+        )
+        secret_names = {
+            'password', 'snmp_community', 'snmp_auth_password',
+            'snmp_priv_password',
+        }
+        secret_labels = {
+            'SSH密码', 'SNMP Community', 'SNMP认证密码', 'SNMP加密密码',
+            '认证密码', '加密密码',
+        }
+
+        self.assertEqual(
+            {'connection_type', 'snmp_version', 'snmp_port'} & field_keys,
+            {'connection_type', 'snmp_version', 'snmp_port'},
+        )
+        self.assertTrue(secret_names.isdisjoint(field_keys))
+        self.assertTrue(secret_names.isdisjoint(admin_search_fields))
+        self.assertTrue(secret_labels.isdisjoint(headers))
+        self.assertTrue(secret_labels.isdisjoint(field_labels))
+        for secret in (
+            'ssh-password-private', 'community-private', 'auth-private',
+            'priv-private',
+        ):
+            self.assertNotIn(secret, exported)
 
     def test_export_uses_filter_and_ignores_page_size(self):
         People.objects.bulk_create([

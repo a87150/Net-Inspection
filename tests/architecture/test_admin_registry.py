@@ -121,7 +121,10 @@ class AdminRegistryTests(TestCase):
     def test_device_credentials_are_not_in_admin_lists_or_searches(self):
         """A later display/search-field expansion must not expose credentials."""
         credential_fields = {
-            Network_Device: {'username', 'password'},
+            Network_Device: {
+                'username', 'password', 'snmp_community',
+                'snmp_auth_password', 'snmp_priv_password',
+            },
             Server: {'username', 'password', 'api_token'},
             SecurityDevice: {'api_username', 'api_password', 'api_token'},
         }
@@ -175,12 +178,30 @@ class AdminSecretFormTests(TestCase):
                 Network_Device.objects.create(
                     device_name='admin-network', ip='192.0.2.41', username='network-user',
                     password='network-password-private',
+                    connection_type='hybrid', snmp_version='v3',
+                    snmp_community='network-community-private',
+                    snmp_security_level='authPriv', snmp_username='snmp-user',
+                    snmp_auth_protocol='sha256',
+                    snmp_auth_password='network-auth-private',
+                    snmp_priv_protocol='aes128',
+                    snmp_priv_password='network-priv-private',
                 ),
-                {'password': 'network-password-private'},
+                {
+                    'password': 'network-password-private',
+                    'snmp_community': 'network-community-private',
+                    'snmp_auth_password': 'network-auth-private',
+                    'snmp_priv_password': 'network-priv-private',
+                },
                 {
                     'device_name': 'admin-network', 'ip': '192.0.2.41', 'device_type': '',
-                    'model': '', 'vendor': '', 'connection_type': '', 'port': '22',
+                    'model': '', 'vendor': '', 'connection_type': 'hybrid', 'port': '22',
                     'username': 'network-user', 'password': '', 'cpu_model': '',
+                    'snmp_version': 'v3', 'snmp_port': '161',
+                    'snmp_community': '', 'snmp_security_level': 'authPriv',
+                    'snmp_username': 'snmp-user', 'snmp_auth_protocol': 'sha256',
+                    'snmp_auth_password': '', 'snmp_priv_protocol': 'aes128',
+                    'snmp_priv_password': '', 'snmp_context_name': '',
+                    'snmp_retries': '1',
                     'memory_total_gb': '', 'disk_total_gb': '', 'port_count': '',
                     'vlan_count': '',
                 },

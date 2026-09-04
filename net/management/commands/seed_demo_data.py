@@ -981,24 +981,59 @@ class Command(BaseCommand):
 
     def _seed_networks(self, anchor):
         specs = (
-            ('192.0.2.11', '演示-核心交换机', '交换机', 'Huawei', 'CloudEngine S5735-L', 22),
-            ('192.0.2.12', '演示-接入交换机', '交换机', 'H3C', 'S5130S', 22),
-            ('192.0.2.13', '演示-边界路由器', '路由器', 'Cisco', 'ISR 4331', 2222),
+            {
+                'ip': '192.0.2.11', 'name': '演示-核心交换机',
+                'device_type': '交换机', 'vendor': 'Huawei',
+                'model': 'CloudEngine S5735-L', 'port': 22,
+                'connection_type': 'ssh',
+            },
+            {
+                'ip': '192.0.2.12', 'name': '演示-接入交换机',
+                'device_type': '交换机', 'vendor': 'H3C', 'model': 'S5130S',
+                'port': 22, 'connection_type': 'hybrid',
+                'snmp_version': 'v2c', 'snmp_community': DEMO_SECRET,
+            },
+            {
+                'ip': '192.0.2.13', 'name': '演示-边界路由器',
+                'device_type': '路由器', 'vendor': 'Cisco', 'model': 'ISR 4331',
+                'port': 2222, 'connection_type': 'auto', 'snmp_version': 'v3',
+                'snmp_username': 'demo-snmp-reader',
+                'snmp_security_level': 'authPriv',
+                'snmp_auth_protocol': 'sha256',
+                'snmp_auth_password': DEMO_SECRET,
+                'snmp_priv_protocol': 'aes128',
+                'snmp_priv_password': DEMO_SECRET,
+                'snmp_context_name': 'demo-context',
+            },
         )
         devices = {}
-        for ip, name, device_type, vendor, model, port in specs:
+        for spec in specs:
+            ip = spec['ip']
             devices[ip] = _upsert_asset(
                 Network_Device,
                 {'ip': ip},
                 {
-                    'device_name': name,
-                    'device_type': device_type,
-                    'model': model,
-                    'vendor': vendor,
-                    'connection_type': 'ssh',
-                    'port': port,
+                    'device_name': spec['name'],
+                    'device_type': spec['device_type'],
+                    'model': spec['model'],
+                    'vendor': spec['vendor'],
+                    'connection_type': spec['connection_type'],
+                    'port': spec['port'],
                     'username': 'demo-inspector',
                     'password': DEMO_SECRET,
+                    'snmp_version': spec.get('snmp_version', 'v2c'),
+                    'snmp_port': 161,
+                    'snmp_community': spec.get('snmp_community', ''),
+                    'snmp_security_level': spec.get(
+                        'snmp_security_level', 'noAuthNoPriv',
+                    ),
+                    'snmp_username': spec.get('snmp_username', ''),
+                    'snmp_auth_protocol': spec.get('snmp_auth_protocol', ''),
+                    'snmp_auth_password': spec.get('snmp_auth_password', ''),
+                    'snmp_priv_protocol': spec.get('snmp_priv_protocol', ''),
+                    'snmp_priv_password': spec.get('snmp_priv_password', ''),
+                    'snmp_context_name': spec.get('snmp_context_name', ''),
+                    'snmp_retries': 1,
                     'cpu_model': 'ARM Cortex-A72',
                     'memory_total_gb': 8,
                     'disk_total_gb': 64,

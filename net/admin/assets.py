@@ -56,7 +56,10 @@ class SecretPreservingModelForm(forms.ModelForm):
 
 
 class NetworkDeviceAdminForm(SecretPreservingModelForm):
-    secret_fields = ('password',)
+    secret_fields = (
+        'password', 'snmp_community', 'snmp_auth_password',
+        'snmp_priv_password',
+    )
 
     class Meta:
         model = Network_Device
@@ -122,8 +125,11 @@ class ComputerAdmin(admin.ModelAdmin):
 @admin.register(Network_Device)
 class NetworkDeviceAdmin(admin.ModelAdmin):
     form = NetworkDeviceAdminForm
-    list_display = ('device_name', 'ip', 'device_type', 'vendor', 'model', 'connection_type', 'port')
-    list_filter = ('device_type', 'vendor', 'connection_type')
+    list_display = (
+        'device_name', 'ip', 'device_type', 'vendor', 'model',
+        'connection_type', 'snmp_version', 'snmp_port', 'port',
+    )
+    list_filter = ('device_type', 'vendor', 'connection_type', 'snmp_version')
     search_fields = ('device_name', 'ip', 'device_type', 'vendor', 'model', 'connection_type')
 
 
