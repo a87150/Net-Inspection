@@ -15,9 +15,12 @@
 </head>
 <body class="app-shell">
     <a class="skip-link" href="#main-content">跳至主要内容</a>
-    <nav class="navbar navbar-expand-lg navbar-dark app-navbar" aria-label="主导航">
+    <nav class="navbar navbar-expand-lg navbar-dark app-navbar app-header" aria-label="主导航">
         <div class="container-fluid app-navbar__inner">
-            <a class="navbar-brand fw-semibold" href="{% url 'index' %}">网络巡检中心</a>
+            <a class="navbar-brand app-brand" href="{% url 'index' %}">
+                <span class="app-brand__mark" aria-hidden="true">N</span>
+                <span class="app-brand__copy"><strong>网络巡检中心</strong><small>Operations Console</small></span>
+            </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="切换主导航">
                 <span class="navbar-toggler-icon"></span>
             </button>
@@ -50,11 +53,11 @@
                     <li class="nav-item"><a class="nav-link" href="{% url 'task_list' %}">后台任务</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'alert_list' %}">告警记录</a></li>
                 </ul>
-                <span class="navbar-text small">终端与基础设施状态</span>
+                <span class="navbar-text app-navbar__context"><span class="status-dot status-dot--success" aria-hidden="true"></span>运维管理台</span>
             </div>
         </div>
     </nav>
-    <main class="container-fluid app-main" id="main-content" tabindex="-1">
+    <main class="container-fluid app-main app-content" id="main-content" tabindex="-1">
         {% if messages %}
         {% for message in messages %}
         <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show" role="alert">
@@ -65,6 +68,6 @@
         {% endif %}
         {% block content %}{% endblock %}
     </main>
-    <footer class="app-footer text-center small">Network Inspection Center</footer>
+    <footer class="app-footer"><span>Network Inspection Center</span><span>终端、基础设施与目录服务统一运维</span></footer>
 </body>
 </html>

@@ -14,7 +14,7 @@
 
 {% if domain_object_type == 'account' and can_manage_domain %}
 <div class="modal fade" id="domainAccountImportModal" tabindex="-1" aria-labelledby="domainAccountImportModalLabel" aria-hidden="true">
-    <div class="modal-dialog"><div class="modal-content"><form method="post" action="{% url 'domain_account_import' %}" enctype="multipart/form-data">
+    <div class="modal-dialog modal-dialog-scrollable modal-shell"><div class="modal-content"><form method="post" action="{% url 'domain_account_import' %}" enctype="multipart/form-data">
         {% csrf_token %}
         <div class="modal-header"><h2 class="modal-title fs-5" id="domainAccountImportModalLabel">批量导入域账号</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
         <div class="modal-body d-grid gap-3">
@@ -31,7 +31,7 @@
 
 <div data-table-workspace data-table-key="{{ table_definition.key }}">
 <div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
-<div class="card surface-card"><div class="table-responsive" role="region" aria-label="{{ item_name }}数据表" tabindex="0"><table class="table table-hover align-middle mb-0">
+<div class="card surface-card table-scroll-shell"><p class="table-scroll-hint">可横向滚动查看更多域对象字段</p><div class="table-responsive" role="region" aria-label="{{ item_name }}数据表" tabindex="0"><table class="table data-table table-hover align-middle mb-0">
     <thead><tr>
         {% if can_manage_domain %}<th class="text-center"><span class="visually-hidden">选择</span></th>{% endif %}
         {% for field in table_definition.fields %}
@@ -47,11 +47,11 @@
             {% else %}{{ field.label }}{% endif %}
         </th>
         {% endfor %}
-        <th>操作</th>
+        <th class="table-actions-column table-actions-cell">操作</th>
     </tr></thead>
     <tbody>
     {% for obj in page_obj %}
-    <tr>{% if can_manage_domain %}<td class="text-center"><input class="form-check-input" type="checkbox" value="{{ obj.pk }}" data-domain-target-checkbox aria-label="选择{{ obj }}"></td>{% endif %}{% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ obj|get_attr:field.source|format_table_value:field.kind }}</td>{% endfor %}<td class="text-end"><a class="btn btn-outline-dark btn-sm" href="{% url detail_route obj.pk %}">查看详情</a></td></tr>
+    <tr>{% if can_manage_domain %}<td class="text-center"><input class="form-check-input" type="checkbox" value="{{ obj.pk }}" data-domain-target-checkbox aria-label="选择{{ obj }}"></td>{% endif %}{% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ obj|get_attr:field.source|format_table_value:field.kind }}</td>{% endfor %}<td class="text-end table-actions-cell"><a class="btn btn-outline-dark btn-sm" href="{% url detail_route obj.pk %}">查看详情</a></td></tr>
     {% empty %}<tr><td colspan="20"><div class="empty-state"><strong>暂无{{ item_name }}</strong><span>请配置域控后执行同步。</span></div></td></tr>{% endfor %}
     </tbody>
 </table></div></div>

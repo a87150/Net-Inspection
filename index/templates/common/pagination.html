@@ -1,6 +1,6 @@
 {% load extras %}
 {% if page_obj.paginator.num_pages > 1 %}
-<nav class="mt-4" aria-label="分页"><ul class="pagination justify-content-center">
+<nav class="page-pagination" aria-label="分页"><ul class="pagination justify-content-center mb-0">
     {% if page_obj.has_previous %}<li class="page-item">{% if table_state.page_size %}{% query_transform request page=page_obj.previous_page_number page_size=table_state.page_size as previous_query %}{% else %}{% query_transform request page=page_obj.previous_page_number as previous_query %}{% endif %}<a class="page-link" data-page="previous" href="?{{ previous_query }}">上一页</a></li>{% endif %}
     <li class="page-item active"><span class="page-link text-white">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span></li>
     {% if page_obj.has_next %}<li class="page-item">{% if table_state.page_size %}{% query_transform request page=page_obj.next_page_number page_size=table_state.page_size as next_query %}{% else %}{% query_transform request page=page_obj.next_page_number as next_query %}{% endif %}<a class="page-link" data-page="next" href="?{{ next_query }}">下一页</a></li>{% endif %}

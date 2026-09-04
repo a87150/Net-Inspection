@@ -11,7 +11,18 @@
         <a class="btn btn-primary" href="{% url 'task_list' %}">后台任务</a>
     </div>
 </header>
-<div class="row g-4">
+<section class="dashboard-overview" aria-labelledby="dashboard-overview-title">
+    <div>
+        <span class="dashboard-overview__label">统一资产视图</span>
+        <h2 class="dashboard-overview__title" id="dashboard-overview-title">核心资源状态一屏掌握</h2>
+        <p class="dashboard-overview__description">从资产健康、目录状态到最近任务，快速定位需要关注的区域。</p>
+    </div>
+    <div class="dashboard-overview__shortcut" aria-label="快捷入口">
+        <a href="{% url 'error_records' %}"><span>异常记录</span><strong>查看待处理项</strong></a>
+        <a href="{% url 'task_list' %}"><span>执行中心</span><strong>跟踪后台任务</strong></a>
+    </div>
+</section>
+<div class="row g-4 dashboard-grid">
     {% for item in items %}
     <div class="col-12 col-md-6 col-xl-4">
         {% include 'dashboard/card.html' with item=item %}
@@ -19,7 +30,7 @@
     {% endfor %}
 </div>
 
-<div class="mt-4">
+<div class="mt-4 dashboard-task-region">
     {% include 'inspections/taskbar.html' %}
 </div>
 {% endblock %}

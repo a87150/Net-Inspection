@@ -26,6 +26,6 @@
         {% endfor %}
     </dl></div>
 </section>
-{% if history_url %}<section class="card card-body mt-3"><h2 class="h5">最新执行结果</h2>
+{% if history_url %}<section class="card surface-card card-body mt-3"><h2 class="h5">最新执行结果</h2>
 {% if latest_record %}<p>{{ latest_record.created_at|date:'Y-m-d H:i:s' }} · {{ latest_record.execution_status }} · {{ latest_record.task_source }} · 异常 {{ latest_record.error_count }}</p><p>{{ latest_record.summary }}</p><p>{{ latest_record.key_metrics }}</p><a href="{{ latest_url }}">查看本次结果</a>{% else %}<p>尚无执行记录。</p>{% endif %}</section>{% endif %}
 {% endblock %}

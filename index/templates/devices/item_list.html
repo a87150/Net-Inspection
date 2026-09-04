@@ -16,7 +16,7 @@
 {% if import_enabled %}{% include 'common/import_modal.html' %}{% endif %}
 <div data-table-workspace data-table-key="{{ table_definition.key }}">
 <div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
-<div class="card surface-card"><div class="table-responsive" role="region" aria-label="{{ item_name }}数据表" tabindex="0"><table class="table table-hover align-middle mb-0">
+<div class="card surface-card table-scroll-shell"><p class="table-scroll-hint">可横向滚动查看完整资产信息</p><div class="table-responsive" role="region" aria-label="{{ item_name }}数据表" tabindex="0"><table class="table data-table table-hover align-middle mb-0">
     <thead><tr>
         {% for field in table_definition.fields %}
         <th data-column-key="{{ field.key }}"{% if field.sortable %} aria-sort="{% if table_state.sort == field.key %}{% if table_state.order == 'asc' %}ascending{% else %}descending{% endif %}{% else %}none{% endif %}"{% endif %}{% if not field.default_visible %} hidden{% endif %}>
@@ -31,14 +31,14 @@
             {% else %}{{ field.label }}{% endif %}
         </th>
         {% endfor %}
-        {% if inspection_type %}<th>操作</th>{% endif %}
+        {% if inspection_type %}<th class="table-actions-column table-actions-cell">操作</th>{% endif %}
     </tr></thead>
     <tbody>
     {% for obj in page_obj %}
     <tr>
         {% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{% if field.key == 'latest_status' %}{% if obj.latest_status == 'normal' %}<span class="status-dot status-dot--success" aria-hidden="true"></span><span class="badge text-bg-success">正常</span>{% elif obj.latest_status == 'abnormal' and obj.latest_reachable is True %}<span class="status-dot status-dot--warning" aria-hidden="true"></span><span class="badge text-bg-warning">在线/采集异常</span>{% elif obj.latest_status == 'abnormal' %}<span class="status-dot status-dot--danger" aria-hidden="true"></span><span class="badge text-bg-danger">不可达</span>{% else %}<span class="status-dot status-dot--muted" aria-hidden="true"></span><span class="badge text-bg-secondary">未巡检</span>{% endif %}{% else %}{{ obj|get_attr:field.source|format_table_value:field.kind }}{% endif %}</td>{% endfor %}
         {% if inspection_type %}
-        <td class="text-end"><form method="post" action="{% url 'run_infrastructure_inspection' %}">
+        <td class="text-end table-actions-cell"><form method="post" action="{% url 'run_infrastructure_inspection' %}">
             {% csrf_token %}
             <input type="hidden" name="asset_type" value="{{ inspection_type }}">
             <input type="hidden" name="asset_id" value="{{ obj.pk }}">
@@ -53,7 +53,7 @@
 </div>
 {% if recent_records %}
 <section class="card surface-card mt-4"><div class="card-header surface-card__header"><h2 class="h5 mb-0">{{ item_name }}最近巡检</h2></div>
-<div class="table-responsive" role="region" aria-label="{{ item_name }}最近巡检" tabindex="0"><table class="table table-hover align-middle mb-0"><thead><tr><th>设备</th><th>结果</th><th>时间</th><th></th></tr></thead><tbody>
+<div class="table-responsive" role="region" aria-label="{{ item_name }}最近巡检" tabindex="0"><table class="table data-table table-hover align-middle mb-0"><thead><tr><th>设备</th><th>结果</th><th>时间</th><th></th></tr></thead><tbody>
 {% for record in recent_records %}<tr><td>{{ record.asset }}</td><td>{% if record.ok %}<span class="badge text-bg-success">{{ record.summary }}</span>{% else %}<span class="badge text-bg-danger">{{ record.summary }}</span>{% endif %}</td><td>{{ record.time|date:"Y-m-d H:i:s" }}</td><td><a href="{{ record.url }}" class="btn btn-outline-secondary btn-sm">查看详情</a></td></tr>{% endfor %}
 </tbody></table></div></section>
 {% endif %}

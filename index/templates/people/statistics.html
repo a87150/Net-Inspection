@@ -11,7 +11,7 @@
 
 <section aria-labelledby="people-overview-title" class="mb-4">
     <h2 class="visually-hidden" id="people-overview-title">总体统计</h2>
-    <div class="row g-3">
+    <div class="row g-3 metric-summary-grid">
         <div class="col-6 col-lg-3"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">人员总数</div><div class="h3 mb-0">{{ metrics.total }}</div></div></div></div>
         <div class="col-6 col-lg-3"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">在职人数</div><div class="h3 mb-0 text-success">{{ metrics.active }}</div></div></div></div>
         <div class="col-6 col-lg-3"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">离职人数</div><div class="h3 mb-0{% if metrics.departed %} text-danger{% endif %}">{{ metrics.departed }}</div></div></div></div>
@@ -25,7 +25,7 @@
 <section class="card surface-card" aria-labelledby="department-statistics-title">
     <div class="card-header surface-card__header"><div><p class="page-heading__eyebrow mb-1">组织分布</p><h2 class="h5 mb-0" id="department-statistics-title">部门统计</h2></div></div>
     <div class="table-responsive" role="region" aria-label="部门人员统计" tabindex="0">
-        <table class="table table-hover align-middle mb-0">
+        <table class="table data-table table-hover align-middle mb-0">
             <thead><tr><th>部门</th><th>人员总数</th><th>在职</th><th>离职</th><th>在职率</th></tr></thead>
             <tbody>{% for row in departments %}<tr><td class="fw-semibold">{{ row.department }}</td><td>{{ row.total }}</td><td class="text-success">{{ row.active }}</td><td{% if row.departed %} class="text-danger"{% endif %}>{{ row.departed }}</td><td>{{ row.active_rate|floatformat:1 }}%</td></tr>{% empty %}<tr><td colspan="5"><div class="empty-state"><strong>暂无人员数据</strong><span>导入或同步人员后将在这里生成统计。</span></div></td></tr>{% endfor %}</tbody>
         </table>

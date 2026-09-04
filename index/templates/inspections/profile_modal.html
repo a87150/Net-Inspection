@@ -1,5 +1,5 @@
 <div class="modal fade" id="profileConfigModal" data-auto-open="{{ profile_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="profileConfigModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell"><div class="modal-content">
         {% if task_project_kind == 'computers' %}
         <form method="post" action="{% url 'computer_analysis_profile_configure' %}">
         {% else %}
@@ -25,7 +25,7 @@
                 </div>
                 {% endif %}
                 {% if task_profiles %}<div class="mb-3"><label class="form-label" for="config-profile">编辑配置</label><select class="form-select" id="config-profile" name="profile_id">{% for profile in task_profiles %}<option value="{{ profile.pk }}"{% if profile.pk == task_default_profile.pk %} selected{% endif %}>{{ profile.name }}</option>{% endfor %}</select></div>{% endif %}
-                <div class="row g-3">
+                <div class="row g-3 modal-section">
                     {% if target_rule_form %}
                     <div class="col-12 border-bottom pb-3"><h3 class="h6">定时任务目标规则</h3>
                     <div class="row g-3"><div class="col-md-4">{{ target_rule_form.target_rule_mode.label_tag }} {{ target_rule_form.target_rule_mode }}</div>

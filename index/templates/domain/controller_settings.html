@@ -25,14 +25,14 @@
 
 {% if can_manage_domain %}
 <div class="modal fade" id="domainConfigModal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="domainConfigModalLabel" aria-describedby="domainConfigModalDescription" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell"><div class="modal-content">
         <form method="post">
             {% csrf_token %}
             <div class="modal-header"><h2 class="modal-title fs-5" id="domainConfigModalLabel">域控连接设置</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
             <div class="modal-body">
                 <p class="text-secondary" id="domainConfigModalDescription">配置域控连接、身份验证和对象筛选条件。</p>
                 {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
-                <div class="row g-4">
+                <div class="row g-4 modal-section">
                 {% for field in form %}
                     <div class="{% if field.name == 'user_filter' or field.name == 'computer_filter' or field.name == 'group_filter' or field.name == 'base_dn' %}col-12{% else %}col-md-6{% endif %}">
                         {% if field.name == 'use_ssl' %}<div class="form-check mt-4">{{ field }} <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label></div>
@@ -53,7 +53,7 @@
     </div></div>
 </div>
 
-{% else %}<div class="modal fade" id="domainConfigModal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="domainConfigModalLabel" aria-describedby="domainConfigModalDescription" aria-hidden="true"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h2 class="modal-title fs-5 visually-hidden" id="domainConfigModalLabel">需要域控运维权限</h2></div><div class="modal-body"><p id="domainConfigModalDescription" class="visually-hidden">当前账号不能修改该连接。</p></div></div></div></div>{% endif %}
+{% else %}<div class="modal fade" id="domainConfigModal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="domainConfigModalLabel" aria-describedby="domainConfigModalDescription" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable modal-shell"><div class="modal-content"><div class="modal-header"><h2 class="modal-title fs-5 visually-hidden" id="domainConfigModalLabel">需要域控运维权限</h2></div><div class="modal-body"><p id="domainConfigModalDescription" class="visually-hidden">当前账号不能修改该连接。</p></div></div></div></div>{% endif %}
 {% if open_domain_modal %}
 <script>document.addEventListener('DOMContentLoaded', function () { bootstrap.Modal.getOrCreateInstance(document.getElementById('domainConfigModal')).show(); });</script>
 {% endif %}

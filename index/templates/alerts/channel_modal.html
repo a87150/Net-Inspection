@@ -1,5 +1,5 @@
 <div class="modal fade" id="alertChannelModal" data-auto-open="{{ alert_channel_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="alertChannelModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell"><div class="modal-content">
         <form method="post" action="{% url 'alert_channel_save' %}">{% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
             {% if alert_edit_channel %}<input type="hidden" name="channel_id" value="{{ alert_edit_channel.pk }}">{% endif %}

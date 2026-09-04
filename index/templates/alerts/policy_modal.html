@@ -1,5 +1,5 @@
 <div class="modal fade" id="alertPolicyModal" data-auto-open="{{ alert_policy_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="alertPolicyModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell"><div class="modal-content">
         <form method="post" action="{% url 'alert_policy_save' %}">{% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}"><input type="hidden" name="scope" value="{{ alert_policy_scope }}"><input type="hidden" name="profile_id" value="{{ alert_policy_profile_id }}">
             <div class="modal-header"><h2 class="modal-title fs-5" id="alertPolicyModalLabel">{% if alert_policy_scope == 'default' %}默认{% else %}项目{% endif %}告警策略</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
