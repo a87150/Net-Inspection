@@ -18,6 +18,7 @@ from net.models import InspectionProfile, SecurityDevice, Network_Device, Server
 from net.inspections.queue import enqueue_task, claim_next_task, finish_task, recover_expired_tasks
 from net.inspections.executor import execute_target
 from net.infrastructure.collection import CollectionResult
+from net.infrastructure.sanitization import configuration_secrets, sanitize
 from net.inspections.worker import TaskWorker
 
 
@@ -197,6 +198,28 @@ class WorkerLifecycleTests(TransactionTestCase):
 
 
 class SanitizerPersistenceTests(TestCase):
+    def test_network_snmp_secrets_participate_in_runtime_sanitization(self):
+        device = Network_Device.objects.create(
+            ip='192.0.2.209',
+            username='ssh-user-secret',
+            password='ssh-password-secret',
+            snmp_community='community-secret',
+            snmp_auth_password='auth-password-secret',
+            snmp_priv_password='priv-password-secret',
+        )
+        secret_values = (
+            device.username,
+            device.password,
+            device.snmp_community,
+            device.snmp_auth_password,
+            device.snmp_priv_password,
+        )
+
+        scrubbed = sanitize(' '.join(secret_values), secrets=configuration_secrets())
+
+        for secret in secret_values:
+            self.assertNotIn(secret, scrubbed)
+
     def test_nested_and_exception_credentials_never_reach_results_or_outcomes(self):
         text = ('Authorization: Bearer bearer-original; Basic YWRtaW46cGFzcw== '
                 'https://url-user:url-pass@host/path?api_key=query-original&ok=1 '

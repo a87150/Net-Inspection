@@ -36,6 +36,9 @@ _ASSET_SPECS = {
         (
             'device_name', 'ip', 'device_type', 'model', 'vendor',
             'connection_type', 'port',
+            'snmp_version', 'snmp_port', 'snmp_security_level',
+            'snmp_username', 'snmp_auth_protocol', 'snmp_priv_protocol',
+            'snmp_context_name', 'snmp_retries',
         ),
     ),
     TaskTargetRun.TargetType.SERVER: (

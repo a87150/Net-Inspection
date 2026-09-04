@@ -1,5 +1,6 @@
 """End-to-end contracts for the infrastructure task Worker."""
 
+import json
 import threading
 import time
 from io import StringIO
@@ -102,6 +103,142 @@ class TaskWorkerTests(TransactionTestCase):
             server_type='linux',
             username='reader',
             password='worker-secret',
+        )
+
+    @patch('net.devices.network.collector.collect_network_ssh')
+    @patch('net.devices.network.collector.collect_network_snmp')
+    def test_worker_combines_hybrid_results_with_frozen_public_settings_and_live_secrets(
+        self, snmp_collect, ssh_collect,
+    ):
+        profile = InspectionProfile.objects.create(
+            name='混合巡检',
+            device_type=InspectionProfile.DeviceType.NETWORK_DEVICE,
+            selected_items=['cpu', 'logs'],
+            timeout_seconds=9,
+            concurrent_workers=1,
+        )
+        device = Network_Device.objects.create(
+            device_name='HYBRID-01',
+            ip='192.0.2.150',
+            vendor='cisco',
+            connection_type='hybrid',
+            port=2222,
+            username='queued-ssh-user',
+            password='queued-ssh-password',
+            snmp_version='v3',
+            snmp_port=1161,
+            snmp_community='queued-community-secret',
+            snmp_security_level='authPriv',
+            snmp_username='public-snmp-user',
+            snmp_auth_protocol='sha256',
+            snmp_auth_password='queued-auth-password',
+            snmp_priv_protocol='aes128',
+            snmp_priv_password='queued-priv-password',
+            snmp_context_name='tenant-a',
+            snmp_retries=3,
+        )
+        task = enqueue_task(profile, [device.pk], TaskRun.Source.MANUAL)
+        target = task.target_runs.get()
+        queued_snapshot = json.dumps(
+            [task.profile_snapshot, target.target_snapshot], ensure_ascii=False,
+        )
+        for secret in (
+            'queued-ssh-user', 'queued-ssh-password', 'queued-auth-password',
+            'queued-priv-password', 'queued-community-secret',
+        ):
+            self.assertNotIn(secret, queued_snapshot)
+        self.assertEqual(target.target_snapshot['connection_type'], 'hybrid')
+        self.assertEqual(target.target_snapshot['snmp_port'], 1161)
+        self.assertEqual(target.target_snapshot['snmp_context_name'], 'tenant-a')
+
+        device.username = 'live-ssh-user'
+        device.password = 'live-ssh-password'
+        device.snmp_community = 'live-community-secret'
+        device.snmp_auth_password = 'live-auth-password'
+        device.snmp_priv_password = 'live-priv-password'
+        device.connection_type = 'ssh'
+        device.snmp_port = 2161
+        device.save()
+        seen = {}
+
+        def snmp_result(asset, timeout, selected_items=None):
+            seen['snmp'] = (
+                asset.username, asset.password, asset.snmp_auth_password,
+                asset.snmp_priv_password, asset.snmp_community, asset.snmp_port, timeout,
+                list(selected_items or []),
+            )
+            return CollectionResult(
+                True,
+                'success',
+                data={'cpu': {'usage_percent': 17, 'notice': 'live-auth-password'}},
+            )
+
+        def ssh_result(asset, timeout, selected_items=None):
+            seen['ssh'] = (
+                asset.username, asset.password, timeout, list(selected_items or []),
+            )
+            return CollectionResult(
+                True, 'success', data={'logs': ['live-priv-password']},
+            )
+
+        snmp_collect.side_effect = snmp_result
+        ssh_collect.side_effect = ssh_result
+
+        TaskWorker(worker_id='hybrid-worker', threads=1, lease_seconds=10).run_once()
+
+        inspection = Network_Device_Inspection.objects.get()
+        self.assertEqual(inspection.status, 'success')
+        self.assertEqual(set(inspection.details), {'cpu', 'logs'})
+        self.assertEqual(seen['snmp'], (
+            'live-ssh-user', 'live-ssh-password', 'live-auth-password',
+            'live-priv-password', 'live-community-secret', 1161, 9, ['cpu'],
+        ))
+        self.assertEqual(seen['ssh'], (
+            'live-ssh-user', 'live-ssh-password', 9, ['logs'],
+        ))
+        persisted = json.dumps([
+            inspection.details,
+            inspection.raw_output,
+            task.target_runs.get().result_snapshot,
+        ], ensure_ascii=False)
+        for secret in (
+            'live-ssh-user', 'live-ssh-password', 'live-auth-password',
+            'live-priv-password', 'live-community-secret',
+        ):
+            self.assertNotIn(secret, persisted)
+
+    @patch('net.devices.network.collector.collect_network_ssh')
+    @patch('net.devices.network.collector.collect_network_snmp')
+    def test_worker_persists_partial_when_snmp_fails_and_ssh_succeeds(
+        self, snmp_collect, ssh_collect,
+    ):
+        profile = InspectionProfile.objects.create(
+            name='混合部分成功',
+            device_type=InspectionProfile.DeviceType.NETWORK_DEVICE,
+            selected_items=['cpu', 'logs'],
+            concurrent_workers=1,
+        )
+        device = Network_Device.objects.create(
+            ip='192.0.2.151',
+            connection_type='hybrid',
+            username='reader',
+            password='ssh-secret',
+            snmp_community='snmp-secret',
+        )
+        enqueue_task(profile, [device.pk], TaskRun.Source.MANUAL)
+        snmp_collect.return_value = CollectionResult(False, 'failed', 'SNMP unavailable')
+        ssh_collect.return_value = CollectionResult(
+            True, 'success', data={'logs': ['accepted']},
+        )
+
+        TaskWorker(worker_id='hybrid-partial', threads=1, lease_seconds=10).run_once()
+
+        inspection = Network_Device_Inspection.objects.get()
+        self.assertEqual(inspection.status, 'partial')
+        self.assertEqual(inspection.details, {'logs': ['accepted']})
+        self.assertEqual(
+            TaskRun.objects.get().target_runs.get().status,
+            TaskRun.Status.PARTIAL,
         )
 
     @patch('net.inspections.executor.collect_linux_ssh')
