@@ -122,6 +122,7 @@ class FilteredExportContractTests(TestCase):
         response = self.client.get(reverse('table_export', args=['networks']))
         exported = response.content.decode('utf-8-sig')
         headers = next(csv.reader(StringIO(exported)))
+        rows = list(csv.DictReader(StringIO(exported)))
         definition = get_table_definition('networks')
         field_keys = {field.key for field in definition.fields}
         field_labels = {field.label for field in definition.fields}
@@ -145,11 +146,16 @@ class FilteredExportContractTests(TestCase):
         self.assertTrue(secret_names.isdisjoint(admin_search_fields))
         self.assertTrue(secret_labels.isdisjoint(headers))
         self.assertTrue(secret_labels.isdisjoint(field_labels))
-        for secret in (
-            'ssh-password-private', 'community-private', 'auth-private',
-            'priv-private',
+        for header, secret in (
+            ('SSH密码', 'ssh-password-private'),
+            ('SNMP Community', 'community-private'),
+            ('认证密码', 'auth-private'),
+            ('加密密码', 'priv-private'),
         ):
-            self.assertNotIn(secret, exported)
+            with self.subTest(header=header):
+                self.assertNotIn(header, headers)
+                self.assertTrue(all(secret not in row.values() for row in rows))
+                self.assertNotIn(secret, exported)
 
     def test_export_uses_filter_and_ignores_page_size(self):
         People.objects.bulk_create([

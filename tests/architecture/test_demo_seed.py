@@ -231,7 +231,14 @@ class DeterministicDemoSeedTests(TestCase):
                     )
                 ),
                 'networks': tuple(
-                    Network_Device.objects.order_by('ip').values_list('ip', 'pk')
+                    Network_Device.objects.order_by('ip').values_list(
+                        'ip', 'pk', 'connection_type', 'snmp_version',
+                        'snmp_port', 'snmp_community', 'snmp_security_level',
+                        'snmp_username', 'snmp_auth_protocol',
+                        'snmp_auth_password', 'snmp_priv_protocol',
+                        'snmp_priv_password', 'snmp_context_name',
+                        'snmp_retries',
+                    )
                 ),
                 'servers': tuple(
                     Server.objects.order_by('ip').values_list('ip', 'pk')

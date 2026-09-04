@@ -1,5 +1,6 @@
 import asyncio
 import json
+import socket
 from unittest.mock import AsyncMock, patch, sentinel
 
 from django.test import SimpleTestCase
@@ -116,6 +117,7 @@ class NetworkSnmpCollectionTests(SimpleTestCase):
             scalars={
                 SYS_NAME: "core-sw-1",
                 SYS_DESCR: "Example Switch",
+                "1.3.6.1.2.1.1.2.0": "1.3.6.1.4.1.9.1.1208",
                 SYS_UPTIME: 12345,
             },
             tables={
@@ -139,6 +141,10 @@ class NetworkSnmpCollectionTests(SimpleTestCase):
         self.assertEqual(result.status, "success")
         self.assertEqual(result.data["device_info"]["system_name"], "core-sw-1")
         self.assertEqual(result.data["device_info"]["description"], "Example Switch")
+        self.assertEqual(
+            result.data["device_info"].get("object_id"),
+            "1.3.6.1.4.1.9.1.1208",
+        )
         self.assertEqual(result.data["device_info"]["uptime_ticks"], 12345)
         self.assertEqual(
             result.data["interface_status"]["interfaces"][0],
@@ -203,6 +209,45 @@ class NetworkSnmpCollectionTests(SimpleTestCase):
             },
         )
 
+    def test_host_resources_memory_aggregates_all_valid_physical_rows(self):
+        result = self.collect(
+            MemorySession(
+                tables={
+                    HR_STORAGE_TYPE: [
+                        ("7", PHYSICAL_MEMORY),
+                        ("8", PHYSICAL_MEMORY),
+                        ("9", "1.3.6.1.2.1.25.2.1.4"),
+                    ],
+                    HR_STORAGE_ALLOCATION_UNITS: [("7", 1024), ("8", 2048), ("9", 1)],
+                    HR_STORAGE_SIZE: [("7", 1000), ("8", 500), ("9", 9999)],
+                    HR_STORAGE_USED: [("7", 250), ("8", 100), ("9", 9999)],
+                },
+            ),
+            ["memory"],
+        )
+
+        self.assertEqual(result.data["memory"], {
+            "total_bytes": 2048000,
+            "used_bytes": 460800,
+            "usage_percent": 22.5,
+        })
+
+    def test_host_resources_memory_rejects_rows_with_used_above_total(self):
+        result = self.collect(
+            MemorySession(
+                tables={
+                    HR_STORAGE_TYPE: [("7", PHYSICAL_MEMORY)],
+                    HR_STORAGE_ALLOCATION_UNITS: [("7", 1024)],
+                    HR_STORAGE_SIZE: [("7", 100)],
+                    HR_STORAGE_USED: [("7", 101)],
+                },
+            ),
+            ["memory"],
+        )
+
+        self.assertEqual(result.status, "failed")
+        self.assertNotIn("memory", result.data)
+
     def test_entity_sensor_temperature_applies_scale_and_precision(self):
         result = self.collect(
             MemorySession(
@@ -218,6 +263,32 @@ class NetworkSnmpCollectionTests(SimpleTestCase):
         )
 
         self.assertEqual(result.data["temperature"], {"values_celsius": [42.5]})
+
+    def test_invalid_entity_sensor_numbers_only_leave_temperature_missing(self):
+        for scale, precision, raw_value in (
+            (10**6, 0, 42),
+            (9, 0, float("inf")),
+            (9, float("nan"), 42),
+            (9, 0, 10**100),
+        ):
+            with self.subTest(scale=scale, precision=precision, raw_value=raw_value):
+                result = self.collect(
+                    MemorySession(
+                        tables={
+                            HR_PROCESSOR_LOAD: [("1", 25)],
+                            ENT_SENSOR_TYPE: [("10", 8)],
+                            ENT_SENSOR_SCALE: [("10", scale)],
+                            ENT_SENSOR_PRECISION: [("10", precision)],
+                            ENT_SENSOR_VALUE: [("10", raw_value)],
+                            ENT_SENSOR_STATUS: [("10", 1)],
+                        },
+                    ),
+                    ["cpu", "temperature"],
+                )
+
+                self.assertEqual(result.status, "partial")
+                self.assertEqual(result.data["cpu"], {"usage_percent": 25.0})
+                self.assertNotIn("temperature", result.data)
 
     def test_q_bridge_vlan_names_are_normalized_by_vlan_id(self):
         result = self.collect(
@@ -365,6 +436,9 @@ class NetworkSnmpCollectionTests(SimpleTestCase):
         expected = {
             "authentication": (True, "SNMP authentication failed"),
             "timeout": (False, "SNMP request timed out"),
+            "unreachable": (False, "SNMP target unreachable"),
+            "dependency": (True, "SNMP dependency unavailable"),
+            "invalid_configuration": (True, "SNMP invalid configuration"),
             "response": (True, "SNMP response error"),
         }
         for category, (reachable, message) in expected.items():
@@ -382,6 +456,67 @@ class NetworkSnmpCollectionTests(SimpleTestCase):
                 self.assertNotIn("private-community", serialized)
                 self.assertNotIn("auth-secret", serialized)
                 self.assertNotIn("priv-secret", serialized)
+
+    def test_socket_and_dependency_exceptions_have_stable_categories(self):
+        cases = (
+            (socket.gaierror("private-community could not resolve"), "unreachable"),
+            (OSError("no route for auth-secret"), "unreachable"),
+            (ImportError("missing priv-secret dependency"), "dependency"),
+            (RuntimeError("device rejected private-community"), "response"),
+        )
+        for error, category in cases:
+            with self.subTest(error=type(error).__name__):
+                session = PySnmpSession(self.device, timeout=1)
+                session.target = object()
+                with patch(
+                    "net.devices.network.snmp.get_cmd",
+                    new=AsyncMock(side_effect=error),
+                ):
+                    with self.assertRaises(SnmpQueryError) as raised:
+                        asyncio.run(session.get(SYS_NAME))
+                asyncio.run(session.close())
+
+                self.assertEqual(raised.exception.category, category)
+                self.assertNotIn("private-community", str(raised.exception))
+                self.assertNotIn("auth-secret", str(raised.exception))
+                self.assertNotIn("priv-secret", str(raised.exception))
+
+    def test_unknown_snmp_configuration_fails_closed_without_secrets(self):
+        base = {
+            "snmp_version": "v3",
+            "snmp_security_level": "authPriv",
+            "snmp_auth_protocol": "sha256",
+            "snmp_priv_protocol": "aes128",
+        }
+        cases = (
+            ("snmp_version", "v1"),
+            ("snmp_security_level", "private-community"),
+            ("snmp_auth_protocol", "auth-secret"),
+            ("snmp_priv_protocol", "priv-secret"),
+        )
+        for field, invalid_value in cases:
+            with self.subTest(field=field):
+                for name, value in base.items():
+                    setattr(self.device, name, value)
+                self.device.snmp_username = "inspector"
+                setattr(self.device, field, invalid_value)
+                engine = MemoryEngine()
+                with patch("net.devices.network.snmp.SnmpEngine", return_value=engine):
+                    result = collect_network_snmp(
+                        self.device,
+                        selected_items=["device_info"],
+                        session_factory=PySnmpSession,
+                    )
+
+                serialized = json.dumps({
+                    "message": result.message,
+                    "data": result.data,
+                    "raw": result.raw,
+                })
+                self.assertEqual(result.status, "failed")
+                self.assertEqual(result.message, "SNMP invalid configuration")
+                self.assertTrue(engine.closed)
+                self.assertNotIn(invalid_value, serialized)
 
     def test_item_registry_contains_only_supported_public_items(self):
         self.assertEqual(
@@ -535,6 +670,8 @@ class NetworkSnmpCollectionTests(SimpleTestCase):
         for failing_dependency, version in (("ContextData", "v2c"), ("UsmUserData", "v3")):
             with self.subTest(failing_dependency=failing_dependency):
                 self.device.snmp_version = version
+                if version == "v3":
+                    self.device.snmp_username = "inspector"
                 engine = MemoryEngine()
                 with patch("net.devices.network.snmp.SnmpEngine", return_value=engine), patch(
                     f"net.devices.network.snmp.{failing_dependency}",
@@ -579,6 +716,7 @@ class NetworkSnmpCollectionTests(SimpleTestCase):
                 0,
                 ((ObjectIdentifier(SYS_DESCR), OctetString("Example Switch")),),
             ),
+            (None, rfc1905.errorStatus.clone(2), 1, ()),
             (
                 None,
                 0,

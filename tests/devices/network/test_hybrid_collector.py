@@ -64,6 +64,19 @@ class HybridNetworkCollectorTests(SimpleTestCase):
         self.assertEqual(self.ssh.selected_items, ['cpu', 'logs'])
         self.assertEqual(result.status, 'success')
 
+    def test_ssh_failed_config_object_is_retained_but_not_completed(self):
+        self.device.connection_type = 'ssh'
+        failed_config = {'status': 'failed', 'message': 'sanitized failure'}
+        self.ssh.result = CollectionResult(
+            True, 'failed', data={'config_info': failed_config},
+        )
+
+        result = self.collect(['config_info'])
+
+        self.assertEqual(result.status, 'failed')
+        self.assertEqual(result.data['config_info'], failed_config)
+        self.assertIn('config_info', result.message)
+
     def test_snmp_leaves_unsupported_ssh_only_item_explicitly_missing(self):
         self.device.connection_type = 'snmp'
         self.snmp.result = CollectionResult(
@@ -84,6 +97,18 @@ class HybridNetworkCollectorTests(SimpleTestCase):
         self.assertEqual(self.snmp.selected_items, ['cpu', 'interface_status'])
         self.assertEqual(self.ssh.selected_items, ['logs', 'config_info'])
         self.assertEqual(result.status, 'success')
+
+    def test_hybrid_failed_config_object_makes_successful_metrics_partial(self):
+        failed_config = {'status': 'unsupported', 'message': 'not supported'}
+        self.ssh.result = CollectionResult(
+            True, 'failed', data={'config_info': failed_config},
+        )
+
+        result = self.collect(['cpu', 'config_info'])
+
+        self.assertEqual(result.status, 'partial')
+        self.assertEqual(result.data['cpu'], {'usage_percent': 10})
+        self.assertEqual(result.data['config_info'], failed_config)
 
     def test_auto_falls_back_to_ssh_only_for_missing_snmp_items(self):
         self.device.connection_type = 'auto'
@@ -147,6 +172,33 @@ class HybridNetworkCollectorTests(SimpleTestCase):
         })
         self.assertEqual(result.duration_ms, 10)
         self.assertTrue(result.reachable)
+
+    def test_merge_allocates_suffixes_when_input_already_uses_protocol_prefixes(self):
+        result = _merge_network_results(
+            ['cpu', 'logs'],
+            [
+                ('snmp', CollectionResult(
+                    True, 'success', data={'cpu': {'usage_percent': 10}},
+                    raw={'shared': 'snmp shared'},
+                )),
+                ('ssh', CollectionResult(
+                    True, 'success', data={'logs': ['ok']},
+                    raw={
+                        'shared': 'ssh shared',
+                        'snmp:shared': 'ssh pre-prefixed',
+                        'ssh:shared': 'ssh second pre-prefixed',
+                    },
+                )),
+            ],
+        )
+
+        self.assertEqual(list(result.raw.values()), [
+            'snmp shared',
+            'ssh shared',
+            'ssh pre-prefixed',
+            'ssh second pre-prefixed',
+        ])
+        self.assertEqual(len(result.raw), 4)
 
     @patch('net.devices.network.collector.collect_network_ssh')
     def test_default_ssh_collector_reports_missing_credentials_without_transport(self, ssh):

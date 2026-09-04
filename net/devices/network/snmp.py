@@ -31,6 +31,7 @@ from net.infrastructure.collection import CollectionResult, Timer
 
 
 SYS_DESCR = "1.3.6.1.2.1.1.1.0"
+SYS_OBJECT_ID = "1.3.6.1.2.1.1.2.0"
 SYS_UPTIME = "1.3.6.1.2.1.1.3.0"
 SYS_NAME = "1.3.6.1.2.1.1.5.0"
 
@@ -217,10 +218,14 @@ def _parse_device_info(snapshot, vendor):
     values = {
         "system_name": _text(scalars.get(SYS_NAME)),
         "description": _text(scalars.get(SYS_DESCR)),
+        "object_id": _text(scalars.get(SYS_OBJECT_ID)),
         "uptime_ticks": _number(scalars.get(SYS_UPTIME)),
         "vendor": (vendor or "generic").strip().lower() or "generic",
     }
-    return values if any(values[key] is not None for key in ("system_name", "description", "uptime_ticks")) else None
+    return values if any(
+        values[key] is not None
+        for key in ("system_name", "description", "object_id", "uptime_ticks")
+    ) else None
 
 
 def _parse_cpu(snapshot, vendor):
@@ -250,20 +255,26 @@ def _parse_memory(snapshot, vendor):
         units = _table(snapshot, HR_STORAGE_ALLOCATION_UNITS)
         sizes = _table(snapshot, HR_STORAGE_SIZE)
         used_rows = _table(snapshot, HR_STORAGE_USED)
-        physical = next(
-            (index for index, value in types.items() if str(value).lstrip(".") == "1.3.6.1.2.1.25.2.1.2"),
-            None,
-        )
-        unit = _number(units.get(physical)) if physical is not None else None
-        size = _number(sizes.get(physical)) if physical is not None else None
-        used_size = _number(used_rows.get(physical)) if physical is not None else None
-        if unit is not None and size is not None and used_size is not None:
-            total, used = unit * size, unit * used_size
-        elif used_size is not None:
-            total_kb = _number(snapshot["scalars"].get(HR_MEMORY_SIZE))
-            total = total_kb * 1024 if total_kb is not None else None
-            used = used_size * (unit or 1)
-    if total is None or used is None or total <= 0 or used < 0:
+        physical_rows = []
+        for index, storage_type in types.items():
+            if str(storage_type).lstrip(".") != "1.3.6.1.2.1.25.2.1.2":
+                continue
+            unit = _valid_number(units.get(index), lambda value: value > 0)
+            size = _valid_number(sizes.get(index), lambda value: value >= 0)
+            used_size = _valid_number(used_rows.get(index), lambda value: value >= 0)
+            if unit is None or size is None or used_size is None or used_size > size:
+                continue
+            row_total = unit * size
+            row_used = unit * used_size
+            if math.isfinite(row_total) and math.isfinite(row_used) and row_total > 0:
+                physical_rows.append((row_total, row_used))
+        if physical_rows:
+            total = sum(row[0] for row in physical_rows)
+            used = sum(row[1] for row in physical_rows)
+    if (
+        total is None or used is None or not math.isfinite(total)
+        or not math.isfinite(used) or total <= 0 or used < 0 or used > total
+    ):
         return None
     return {
         "total_bytes": int(total),
@@ -284,15 +295,23 @@ def _parse_temperature(snapshot, vendor):
     statuses = _table(snapshot, ENT_SENSOR_STATUS)
     temperatures = []
     for index in sorted(values, key=_sort_index):
-        raw_value = _number(values[index])
-        scale = _number(scales.get(index))
-        precision = _number(precisions.get(index))
+        raw_value = _valid_number(
+            values[index], lambda value: value == int(value) and -(2**31) <= value < 2**31,
+        )
+        scale = _valid_number(
+            scales.get(index), lambda value: value == int(value) and 1 <= value <= 17,
+        )
+        precision = _valid_number(
+            precisions.get(index), lambda value: value == int(value) and -8 <= value <= 9,
+        )
         status = _number(statuses.get(index))
         if _number(types.get(index)) != 8 or raw_value is None or scale is None or precision is None:
             continue
         if status is not None and status != 1:
             continue
-        temperatures.append(raw_value * (10 ** (int(scale) - 9 - int(precision))))
+        temperature = raw_value * (10 ** (int(scale) - 9 - int(precision)))
+        if math.isfinite(temperature) and -273.15 <= temperature <= 1000:
+            temperatures.append(temperature)
     return {"values_celsius": temperatures} if temperatures else None
 
 
@@ -377,7 +396,11 @@ def parse_snmp_snapshot(snapshot, selected_items, vendor):
     data, raw, completed = {}, {}, set()
     registry = VENDOR_OIDS.get(_vendor_key(vendor), {})
     definitions = {
-        "device_info": (_parse_device_info, (SYS_NAME, SYS_DESCR, SYS_UPTIME), ()),
+        "device_info": (
+            _parse_device_info,
+            (SYS_NAME, SYS_DESCR, SYS_OBJECT_ID, SYS_UPTIME),
+            (),
+        ),
         "cpu": (_parse_cpu, registry.get("cpu", ()), (HR_PROCESSOR_LOAD,)),
         "memory": (
             _parse_memory,
@@ -442,23 +465,50 @@ class PySnmpSession:
         self.timeout = timeout
         self.engine = SnmpEngine()
         try:
+            version = getattr(device, "snmp_version", None)
+            security_level = getattr(device, "snmp_security_level", None)
+            auth_protocol = getattr(device, "snmp_auth_protocol", "") or ""
+            priv_protocol = getattr(device, "snmp_priv_protocol", "") or ""
+            if version not in {"v2c", "v3"}:
+                raise SnmpQueryError("invalid_configuration")
+            if security_level not in {"noAuthNoPriv", "authNoPriv", "authPriv"}:
+                raise SnmpQueryError("invalid_configuration")
+            if auth_protocol and auth_protocol not in self._AUTH_PROTOCOLS:
+                raise SnmpQueryError("invalid_configuration")
+            if priv_protocol and priv_protocol not in self._PRIV_PROTOCOLS:
+                raise SnmpQueryError("invalid_configuration")
+            if version == "v2c" and not getattr(device, "snmp_community", ""):
+                raise SnmpQueryError("invalid_configuration")
             self.context = ContextData(contextName=device.snmp_context_name or "")
-            if device.snmp_version == "v3":
-                uses_auth = device.snmp_security_level in {"authNoPriv", "authPriv"}
-                uses_priv = device.snmp_security_level == "authPriv"
+            if version == "v3":
+                uses_auth = security_level in {"authNoPriv", "authPriv"}
+                uses_priv = security_level == "authPriv"
+                if not getattr(device, "snmp_username", ""):
+                    raise SnmpQueryError("invalid_configuration")
+                if uses_auth and (
+                    not auth_protocol or not getattr(device, "snmp_auth_password", "")
+                ):
+                    raise SnmpQueryError("invalid_configuration")
+                if uses_priv and (
+                    not priv_protocol or not getattr(device, "snmp_priv_password", "")
+                ):
+                    raise SnmpQueryError("invalid_configuration")
                 self.credentials = UsmUserData(
                     device.snmp_username,
                     authKey=device.snmp_auth_password if uses_auth else None,
                     privKey=device.snmp_priv_password if uses_priv else None,
-                    authProtocol=self._AUTH_PROTOCOLS.get(device.snmp_auth_protocol) if uses_auth else None,
-                    privProtocol=self._PRIV_PROTOCOLS.get(device.snmp_priv_protocol) if uses_priv else None,
+                    authProtocol=self._AUTH_PROTOCOLS[auth_protocol] if uses_auth else None,
+                    privProtocol=self._PRIV_PROTOCOLS[priv_protocol] if uses_priv else None,
                 )
             else:
                 self.credentials = CommunityData(device.snmp_community, mpModel=1)
             self.target = None
-        except Exception:
+        except SnmpQueryError:
             self.engine.close_dispatcher()
             raise
+        except Exception as exc:
+            self.engine.close_dispatcher()
+            raise SnmpQueryError(self._category(exc)) from None
 
     async def _target(self):
         if self.target is None:
@@ -478,6 +528,12 @@ class PySnmpSession:
             numeric = int(error)
         except (TypeError, ValueError):
             numeric = None
+        if isinstance(error, ImportError):
+            return "dependency"
+        if isinstance(error, (TimeoutError, asyncio.TimeoutError)):
+            return "timeout"
+        if isinstance(error, OSError):
+            return "unreachable"
         if numeric == 2 or any(
             marker in compact
             for marker in ("nosuchname", "nosuchobject", "nosuchinstance", "endofmibview")
@@ -485,10 +541,18 @@ class PySnmpSession:
             return "unsupported"
         if any(word in identity for word in ("auth", "digest", "unknown usm user", "decrypt", "cipher")):
             return "authentication"
-        if isinstance(error, (TimeoutError, asyncio.TimeoutError)) or any(
+        if any(
             word in identity for word in ("timeout", "timed out", "no snmp response")
         ):
             return "timeout"
+        if any(
+            word in identity
+            for word in (
+                "name resolution", "name or service not known", "nodename nor servname",
+                "network unreachable", "host unreachable", "no route to host",
+            )
+        ):
+            return "unreachable"
         return "response"
 
     @classmethod
@@ -604,7 +668,7 @@ async def _collect_snapshot(device, timeout, selected_items, session_factory):
     try:
         session = session_factory(device, timeout)
         if "device_info" in requested:
-            for oid in (SYS_NAME, SYS_DESCR, SYS_UPTIME):
+            for oid in (SYS_NAME, SYS_DESCR, SYS_OBJECT_ID, SYS_UPTIME):
                 snapshot["scalars"][oid] = await _safe_get(session, oid)
         if "cpu" in requested:
             found = await _first_available(
@@ -654,6 +718,9 @@ async def _collect_snapshot(device, timeout, selected_items, session_factory):
 _ERROR_MESSAGES = {
     "authentication": "SNMP authentication failed",
     "timeout": "SNMP request timed out",
+    "unreachable": "SNMP target unreachable",
+    "dependency": "SNMP dependency unavailable",
+    "invalid_configuration": "SNMP invalid configuration",
     "response": "SNMP response error",
 }
 
@@ -674,15 +741,20 @@ def collect_network_snmp(device, timeout=12, selected_items=None, session_factor
     except SnmpQueryError as exc:
         category = exc.category if exc.category in _ERROR_MESSAGES else "response"
         return CollectionResult(
-            category != "timeout",
+            category not in {"timeout", "unreachable"},
             "failed",
             _ERROR_MESSAGES[category],
             duration_ms=getattr(timer, "duration_ms", 0),
         )
-    except (TimeoutError, asyncio.TimeoutError):
-        return CollectionResult(False, "failed", _ERROR_MESSAGES["timeout"], duration_ms=getattr(timer, "duration_ms", 0))
-    except Exception:
-        return CollectionResult(True, "failed", _ERROR_MESSAGES["response"], duration_ms=getattr(timer, "duration_ms", 0))
+    except Exception as exc:
+        category = PySnmpSession._category(exc)
+        category = category if category in _ERROR_MESSAGES else "response"
+        return CollectionResult(
+            category not in {"timeout", "unreachable"},
+            "failed",
+            _ERROR_MESSAGES[category],
+            duration_ms=getattr(timer, "duration_ms", 0),
+        )
 
 
 __all__ = [

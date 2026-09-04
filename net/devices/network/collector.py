@@ -16,6 +16,23 @@ def _ordered_unique(items):
     return list(dict.fromkeys(items))
 
 
+def _item_completed(value):
+    return not (
+        isinstance(value, dict)
+        and 'status' in value
+        and value.get('status') != 'success'
+    )
+
+
+def _allocate_raw_key(raw, preferred):
+    if preferred not in raw:
+        return preferred
+    suffix = 2
+    while f'{preferred}#{suffix}' in raw:
+        suffix += 1
+    return f'{preferred}#{suffix}'
+
+
 def _network_item_plan(mode, selected_items):
     """Return ordered SNMP/SSH selections and whether SNMP may fall back."""
     requested = _ordered_unique(_DEFAULT_ITEMS if selected_items is None else selected_items)
@@ -44,6 +61,7 @@ def _merge_network_results(requested, results):
     reachable = False
     duration_ms = 0
     messages = []
+    completed = set()
     for protocol, result in results:
         reachable = reachable or bool(result.reachable)
         duration_ms += max(0, int(result.duration_ms or 0))
@@ -51,16 +69,22 @@ def _merge_network_results(requested, results):
             messages.append(result.message)
         if isinstance(result.data, dict):
             for item, value in result.data.items():
-                if item in requested_set and item not in data:
+                if item not in requested_set:
+                    continue
+                value_completed = _item_completed(value)
+                if item not in data or (
+                    value_completed and not _item_completed(data[item])
+                ):
                     data[item] = value
+                if value_completed:
+                    completed.add(item)
         if isinstance(result.raw, dict):
             for key, value in result.raw.items():
-                merged_key = f'{protocol}:{key}' if raw_counts[key] > 1 else key
-                if merged_key not in raw:
-                    raw[merged_key] = value
+                preferred = f'{protocol}:{key}' if raw_counts[key] > 1 else key
+                raw[_allocate_raw_key(raw, preferred)] = value
 
-    missing = [item for item in requested if item not in data]
-    status = 'failed' if missing and not data else 'partial' if missing else 'success'
+    missing = [item for item in requested if item not in completed]
+    status = 'failed' if missing and not completed else 'partial' if missing else 'success'
     message = '缺少有效采集证据：' + ', '.join(missing) if missing else ''
     if messages:
         message = '; '.join(([message] if message else []) + messages)
@@ -108,7 +132,11 @@ def collect_network(
         results.append(('snmp', snmp_result))
         if auto_fallback:
             snmp_data = snmp_result.data if isinstance(snmp_result.data, dict) else {}
-            missing_snmp = [item for item in snmp_items if item not in snmp_data]
+            missing_snmp = [
+                item
+                for item in snmp_items
+                if item not in snmp_data or not _item_completed(snmp_data[item])
+            ]
             fallback = set(missing_snmp)
             ssh_items = [item for item in requested if item in SSH_ONLY_ITEMS or item in fallback]
 

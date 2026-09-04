@@ -101,7 +101,7 @@ class Network_Device(models.Model):
     snmp_priv_password = models.CharField(max_length=255, blank=True, default='')
     snmp_context_name = models.CharField(max_length=255, blank=True, default='')
     snmp_retries = models.PositiveSmallIntegerField(
-        default=1, validators=[MinValueValidator(0), MaxValueValidator(10)]
+        default=1, validators=[MinValueValidator(0), MaxValueValidator(5)]
     )
     cpu_model = models.CharField(max_length=255, blank=True, null=True)
     memory_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
