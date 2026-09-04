@@ -1,9 +1,12 @@
 import asyncio
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, sentinel
 
 from django.test import SimpleTestCase
-from pysnmp.proto.rfc1902 import Integer32
+from pysnmp.proto import errind, rfc1905
+from pysnmp.proto.rfc1902 import Integer32, ObjectIdentifier, OctetString
+
+import net.devices.network.snmp as snmp_module
 
 from net.devices.network.snmp import (
     ENT_SENSOR_PRECISION,
@@ -67,6 +70,25 @@ class MemorySession:
 
     async def close(self):
         return None
+
+
+class MemoryEngine:
+    def __init__(self):
+        self.closed = False
+
+    def close_dispatcher(self):
+        self.closed = True
+
+
+class PrettyStatus:
+    def __init__(self, text):
+        self.text = text
+
+    def __bool__(self):
+        return True
+
+    def prettyPrint(self):
+        return self.text
 
 
 class NetworkSnmpCollectionTests(SimpleTestCase):
@@ -219,6 +241,97 @@ class NetworkSnmpCollectionTests(SimpleTestCase):
         self.assertIn(first, session.get_queries)
         self.assertNotIn(second, session.get_queries)
 
+    def test_invalid_cpu_candidate_does_not_block_next_candidate(self):
+        first, second = VENDOR_OIDS["cisco"]["cpu"][:2]
+        self.device.vendor = "cisco"
+        session = MemorySession(scalars={first: 150, second: 23})
+
+        result = self.collect(session, ["cpu"])
+
+        self.assertEqual(result.data["cpu"], {"usage_percent": 23.0})
+        self.assertEqual(session.get_queries, [first, second])
+        self.assertNotIn(HR_PROCESSOR_LOAD, session.walk_queries)
+
+    def test_invalid_vendor_memory_values_use_host_resources_fallback(self):
+        total_oid = VENDOR_OIDS["cisco"]["memory_total"][0]
+        used_oid = VENDOR_OIDS["cisco"]["memory_used"][0]
+        self.device.vendor = "cisco"
+        session = MemorySession(
+            scalars={total_oid: 0, used_oid: -1},
+            tables={
+                HR_STORAGE_TYPE: [("7", PHYSICAL_MEMORY)],
+                HR_STORAGE_ALLOCATION_UNITS: [("7", 1024)],
+                HR_STORAGE_SIZE: [("7", 1000)],
+                HR_STORAGE_USED: [("7", 250)],
+            },
+        )
+
+        result = self.collect(session, ["memory"])
+
+        self.assertEqual(result.data["memory"]["usage_percent"], 25.0)
+        self.assertIn(HR_STORAGE_TYPE, session.walk_queries)
+
+    def test_vendor_memory_used_above_total_uses_host_resources_fallback(self):
+        total_oid = VENDOR_OIDS["cisco"]["memory_total"][0]
+        used_oid = VENDOR_OIDS["cisco"]["memory_used"][0]
+        self.device.vendor = "cisco"
+        session = MemorySession(
+            scalars={total_oid: 100, used_oid: 200},
+            tables={
+                HR_STORAGE_TYPE: [("7", PHYSICAL_MEMORY)],
+                HR_STORAGE_ALLOCATION_UNITS: [("7", 1)],
+                HR_STORAGE_SIZE: [("7", 100)],
+                HR_STORAGE_USED: [("7", 20)],
+            },
+        )
+
+        result = self.collect(session, ["memory"])
+
+        self.assertEqual(result.data["memory"]["usage_percent"], 20.0)
+        self.assertIn(HR_STORAGE_USED, session.walk_queries)
+
+    def test_invalid_vendor_temperature_uses_entity_sensor_fallback(self):
+        temperature_oid = VENDOR_OIDS["cisco"]["temperature"][0]
+        self.device.vendor = "cisco"
+        session = MemorySession(
+            scalars={temperature_oid: "not-a-temperature"},
+            tables={
+                ENT_SENSOR_TYPE: [("10", 8)],
+                ENT_SENSOR_SCALE: [("10", 9)],
+                ENT_SENSOR_PRECISION: [("10", 0)],
+                ENT_SENSOR_VALUE: [("10", 41)],
+                ENT_SENSOR_STATUS: [("10", 1)],
+            },
+        )
+
+        result = self.collect(session, ["temperature"])
+
+        self.assertEqual(result.data["temperature"], {"values_celsius": [41]})
+        self.assertIn(ENT_SENSOR_VALUE, session.walk_queries)
+
+    def test_interface_counters_without_identity_or_valid_status_are_incomplete(self):
+        result = self.collect(
+            MemorySession(
+                tables={
+                    IF_HC_IN: [("9", 1234)],
+                    IF_OPER_STATUS: [("9", 99)],
+                }
+            ),
+            ["interface_status"],
+        )
+
+        self.assertEqual(result.status, "failed")
+        self.assertNotIn("interface_status", result.data)
+
+    def test_blank_interface_identity_with_only_counters_is_incomplete(self):
+        result = self.collect(
+            MemorySession(tables={IF_NAME: [("9", "   ")], IF_HC_IN: [("9", 1234)]}),
+            ["interface_status"],
+        )
+
+        self.assertEqual(result.status, "failed")
+        self.assertNotIn("interface_status", result.data)
+
     def test_query_failures_have_fixed_categories_and_never_expose_secrets(self):
         expected = {
             "authentication": (True, "SNMP authentication failed"),
@@ -276,3 +389,181 @@ class NetworkSnmpCollectionTests(SimpleTestCase):
         asyncio.run(session.close())
 
         self.assertEqual(value, 7)
+
+    def test_pysnmp_error_indication_and_error_status_categories(self):
+        cases = (
+            (errind.requestTimedOut, 0, "timeout"),
+            (errind.authenticationFailure, 0, "authentication"),
+            (None, rfc1905.errorStatus.clone(5), "response"),
+        )
+        for indication, status, category in cases:
+            with self.subTest(category=category):
+                session = PySnmpSession(self.device, timeout=1)
+                session.target = object()
+                response = (indication, status, 1, ())
+                with patch(
+                    "net.devices.network.snmp.get_cmd",
+                    new=AsyncMock(return_value=response),
+                ):
+                    with self.assertRaises(SnmpQueryError) as raised:
+                        asyncio.run(session.get(SYS_NAME))
+                asyncio.run(session.close())
+                self.assertEqual(raised.exception.category, category)
+
+    def test_pysnmp_unsupported_error_status_formats_are_classified(self):
+        statuses = (
+            2,
+            rfc1905.errorStatus.clone(2),
+            "noSuchInstance",
+            PrettyStatus("endOfMibView"),
+        )
+        for status in statuses:
+            with self.subTest(status=str(status)):
+                session = PySnmpSession(self.device, timeout=1)
+                session.target = object()
+                response = (None, status, 1, ((ObjectIdentifier(SYS_NAME), OctetString("ignored")),))
+                with patch(
+                    "net.devices.network.snmp.get_cmd",
+                    new=AsyncMock(return_value=response),
+                ):
+                    with self.assertRaises(SnmpQueryError) as raised:
+                        asyncio.run(session.get(SYS_NAME))
+                asyncio.run(session.close())
+                self.assertEqual(raised.exception.category, "unsupported")
+
+    def test_pysnmp_exception_values_are_classified_as_unsupported(self):
+        for value in (rfc1905.NoSuchObject(), rfc1905.NoSuchInstance(), rfc1905.EndOfMibView()):
+            with self.subTest(value=type(value).__name__):
+                session = PySnmpSession(self.device, timeout=1)
+                session.target = object()
+                response = (None, 0, 0, ((ObjectIdentifier(SYS_NAME), value),))
+                with patch(
+                    "net.devices.network.snmp.get_cmd",
+                    new=AsyncMock(return_value=response),
+                ):
+                    with self.assertRaises(SnmpQueryError) as raised:
+                        asyncio.run(session.get(SYS_NAME))
+                asyncio.run(session.close())
+                self.assertEqual(raised.exception.category, "unsupported")
+
+    def test_bulk_walk_stops_before_oid_outside_requested_subtree(self):
+        session = PySnmpSession(self.device, timeout=1)
+        session.target = object()
+        response = (
+            None,
+            0,
+            0,
+            (
+                (ObjectIdentifier(IF_NAME + ".1"), OctetString("Gi0/1")),
+                (ObjectIdentifier(IF_DESCR + ".1"), OctetString("outside")),
+            ),
+        )
+        command = AsyncMock(return_value=response)
+
+        with patch("net.devices.network.snmp.bulk_cmd", new=command):
+            rows = asyncio.run(session.walk(IF_NAME))
+        asyncio.run(session.close())
+
+        self.assertEqual(rows, [("1", "Gi0/1")])
+        self.assertEqual(command.await_count, 1)
+
+    def test_v3_credentials_and_transport_target_use_device_settings(self):
+        self.device.snmp_version = "v3"
+        self.device.snmp_security_level = "authPriv"
+        self.device.snmp_username = "inspector"
+        self.device.snmp_auth_protocol = "sha256"
+        self.device.snmp_auth_password = "auth-secret"
+        self.device.snmp_priv_protocol = "aes128"
+        self.device.snmp_priv_password = "priv-secret"
+        self.device.snmp_context_name = "tenant-a"
+        self.device.snmp_port = 1161
+        self.device.snmp_retries = 3
+        session = PySnmpSession(self.device, timeout=4)
+        create_target = AsyncMock(return_value=sentinel.target)
+
+        with patch.object(snmp_module.UdpTransportTarget, "create", new=create_target):
+            target = asyncio.run(session._target())
+        asyncio.run(session.close())
+
+        self.assertIs(target, sentinel.target)
+        self.assertEqual(session.credentials.userName, "inspector")
+        self.assertEqual(session.credentials.authentication_key, "auth-secret")
+        self.assertEqual(
+            session.credentials.authentication_protocol,
+            snmp_module.usmHMAC192SHA256AuthProtocol,
+        )
+        self.assertEqual(session.credentials.privacy_key, "priv-secret")
+        self.assertEqual(
+            session.credentials.privacy_protocol,
+            snmp_module.usmAesCfb128Protocol,
+        )
+        self.assertEqual(str(session.context.contextName), "tenant-a")
+        create_target.assert_awaited_once_with(
+            ("192.0.2.20", 1161), timeout=4, retries=3
+        )
+
+    def test_constructor_failure_closes_dispatcher_through_factory_boundary(self):
+        for failing_dependency, version in (("ContextData", "v2c"), ("UsmUserData", "v3")):
+            with self.subTest(failing_dependency=failing_dependency):
+                self.device.snmp_version = version
+                engine = MemoryEngine()
+                with patch("net.devices.network.snmp.SnmpEngine", return_value=engine), patch(
+                    f"net.devices.network.snmp.{failing_dependency}",
+                    side_effect=RuntimeError("constructor failed"),
+                ):
+                    result = collect_network_snmp(
+                        self.device,
+                        selected_items=["device_info"],
+                        session_factory=PySnmpSession,
+                    )
+
+                self.assertEqual(result.status, "failed")
+                self.assertEqual(result.message, "SNMP response error")
+                self.assertTrue(engine.closed)
+
+    def test_dispatcher_closes_in_finally_when_query_fails(self):
+        engine = MemoryEngine()
+        with patch("net.devices.network.snmp.SnmpEngine", return_value=engine):
+            session = PySnmpSession(self.device, timeout=1)
+        session.target = object()
+        response = (errind.requestTimedOut, 0, 0, ())
+
+        with patch(
+            "net.devices.network.snmp.get_cmd",
+            new=AsyncMock(return_value=response),
+        ):
+            result = self.collect(session, ["device_info"])
+
+        self.assertEqual(result.message, "SNMP request timed out")
+        self.assertTrue(engine.closed)
+
+    def test_unsupported_oid_does_not_abort_other_oids_in_same_item(self):
+        engine = MemoryEngine()
+        with patch("net.devices.network.snmp.SnmpEngine", return_value=engine):
+            session = PySnmpSession(self.device, timeout=1)
+        session.target = object()
+        responses = (
+            (None, rfc1905.errorStatus.clone(2), 1, ()),
+            (
+                None,
+                0,
+                0,
+                ((ObjectIdentifier(SYS_DESCR), OctetString("Example Switch")),),
+            ),
+            (
+                None,
+                0,
+                0,
+                ((ObjectIdentifier(SYS_UPTIME), rfc1905.EndOfMibView()),),
+            ),
+        )
+
+        with patch(
+            "net.devices.network.snmp.get_cmd",
+            new=AsyncMock(side_effect=responses),
+        ):
+            result = self.collect(session, ["device_info"])
+
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.data["device_info"]["description"], "Example Switch")
+        self.assertTrue(engine.closed)

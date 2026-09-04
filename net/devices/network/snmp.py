@@ -2,6 +2,7 @@
 
 import asyncio
 import inspect
+import math
 
 from pysnmp.hlapi.v3arch.asyncio import (
     CommunityData,
@@ -24,6 +25,7 @@ from pysnmp.hlapi.v3arch.asyncio import (
     usmHMACMD5AuthProtocol,
     usmHMACSHAAuthProtocol,
 )
+from pysnmp.proto.rfc1905 import EndOfMibView, NoSuchInstance, NoSuchObject
 
 from net.infrastructure.collection import CollectionResult, Timer
 
@@ -197,9 +199,14 @@ def _raw_for(snapshot, scalar_oids=(), table_oids=()):
     return raw
 
 
-def _first_numeric(scalars, candidates):
+def _valid_number(value, predicate=lambda value: True):
+    number = _number(value)
+    return number if number is not None and math.isfinite(number) and predicate(number) else None
+
+
+def _first_numeric(scalars, candidates, predicate=lambda value: True):
     for oid in candidates:
-        value = _number(scalars.get(oid))
+        value = _valid_number(scalars.get(oid), predicate)
         if value is not None:
             return value
     return None
@@ -218,7 +225,7 @@ def _parse_device_info(snapshot, vendor):
 
 def _parse_cpu(snapshot, vendor):
     vendor_oids = VENDOR_OIDS.get(_vendor_key(vendor), {}).get("cpu", ())
-    usage = _first_numeric(snapshot["scalars"], vendor_oids)
+    usage = _first_numeric(snapshot["scalars"], vendor_oids, lambda value: 0 <= value <= 100)
     if usage is None:
         loads = [_number(value) for value in _table(snapshot, HR_PROCESSOR_LOAD).values()]
         loads = [value for value in loads if value is not None and 0 <= value <= 100]
@@ -228,8 +235,10 @@ def _parse_cpu(snapshot, vendor):
 
 def _parse_memory(snapshot, vendor):
     registry = VENDOR_OIDS.get(_vendor_key(vendor), {})
-    total = _first_numeric(snapshot["scalars"], registry.get("memory_total", ()))
-    used = _first_numeric(snapshot["scalars"], registry.get("memory_used", ()))
+    total = _first_numeric(snapshot["scalars"], registry.get("memory_total", ()), lambda value: value > 0)
+    used = _first_numeric(snapshot["scalars"], registry.get("memory_used", ()), lambda value: value >= 0)
+    if total is not None and used is not None and used > total:
+        used = None
     if total is None or used is None:
         types = _table(snapshot, HR_STORAGE_TYPE)
         units = _table(snapshot, HR_STORAGE_ALLOCATION_UNITS)
@@ -310,11 +319,12 @@ def _parse_interfaces(snapshot):
     for index in indexes:
         high_speed = _number(tables[IF_HIGH_SPEED].get(index))
         speed = _number(tables[IF_SPEED].get(index))
-        interfaces.append(
-            {
+        name = (_text(tables[IF_NAME].get(index)) or "").strip() or None
+        description = (_text(tables[IF_DESCR].get(index)) or "").strip() or None
+        interface = {
                 "index": index,
-                "name": _text(tables[IF_NAME].get(index)),
-                "description": _text(tables[IF_DESCR].get(index)),
+                "name": name,
+                "description": description,
                 "mac": _mac(tables[IF_MAC].get(index)),
                 "admin_status": _status(tables[IF_ADMIN_STATUS].get(index)),
                 "oper_status": _status(tables[IF_OPER_STATUS].get(index), operational=True),
@@ -326,7 +336,16 @@ def _parse_interfaces(snapshot):
                 "in_discards": _number(tables[IF_IN_DISCARDS].get(index)),
                 "out_discards": _number(tables[IF_OUT_DISCARDS].get(index)),
             }
-        )
+        if not any(
+            (
+                interface["name"],
+                interface["description"],
+                interface["admin_status"],
+                interface["oper_status"],
+            )
+        ):
+            continue
+        interfaces.append(interface)
     return {"interfaces": interfaces} if interfaces else None
 
 
@@ -390,6 +409,10 @@ def _plain_value(value):
     return number if number is not None else _text(value)
 
 
+def _is_unsupported_value(value):
+    return isinstance(value, (NoSuchObject, NoSuchInstance, EndOfMibView))
+
+
 class PySnmpSession:
     """Small PySNMP 7 asyncio boundary restricted to GET and BULK WALK."""
 
@@ -412,18 +435,24 @@ class PySnmpSession:
         self.device = device
         self.timeout = timeout
         self.engine = SnmpEngine()
-        self.context = ContextData(contextName=device.snmp_context_name or "")
-        if device.snmp_version == "v3":
-            self.credentials = UsmUserData(
-                device.snmp_username,
-                authKey=device.snmp_auth_password or None,
-                privKey=device.snmp_priv_password or None,
-                authProtocol=self._AUTH_PROTOCOLS.get(device.snmp_auth_protocol),
-                privProtocol=self._PRIV_PROTOCOLS.get(device.snmp_priv_protocol),
-            )
-        else:
-            self.credentials = CommunityData(device.snmp_community, mpModel=1)
-        self.target = None
+        try:
+            self.context = ContextData(contextName=device.snmp_context_name or "")
+            if device.snmp_version == "v3":
+                uses_auth = device.snmp_security_level in {"authNoPriv", "authPriv"}
+                uses_priv = device.snmp_security_level == "authPriv"
+                self.credentials = UsmUserData(
+                    device.snmp_username,
+                    authKey=device.snmp_auth_password if uses_auth else None,
+                    privKey=device.snmp_priv_password if uses_priv else None,
+                    authProtocol=self._AUTH_PROTOCOLS.get(device.snmp_auth_protocol) if uses_auth else None,
+                    privProtocol=self._PRIV_PROTOCOLS.get(device.snmp_priv_protocol) if uses_priv else None,
+                )
+            else:
+                self.credentials = CommunityData(device.snmp_community, mpModel=1)
+            self.target = None
+        except Exception:
+            self.engine.close_dispatcher()
+            raise
 
     async def _target(self):
         if self.target is None:
@@ -437,10 +466,21 @@ class PySnmpSession:
     @staticmethod
     def _category(error):
         text = str(error).lower()
-        if any(word in text for word in ("authentication", "authorization", "unknown user", "wrong digest", "decryption")):
+        identity = f"{type(error).__name__} {text}".lower()
+        compact = "".join(character for character in identity if character.isalnum())
+        try:
+            numeric = int(error)
+        except (TypeError, ValueError):
+            numeric = None
+        if numeric == 2 or any(
+            marker in compact
+            for marker in ("nosuchname", "nosuchobject", "nosuchinstance", "endofmibview")
+        ):
+            return "unsupported"
+        if any(word in identity for word in ("auth", "digest", "unknown usm user", "decrypt", "cipher")):
             return "authentication"
         if isinstance(error, (TimeoutError, asyncio.TimeoutError)) or any(
-            word in text for word in ("timeout", "timed out", "no snmp response")
+            word in identity for word in ("timeout", "timed out", "no snmp response")
         ):
             return "timeout"
         return "response"
@@ -448,12 +488,12 @@ class PySnmpSession:
     @classmethod
     def _check_response(cls, error_indication, error_status):
         if error_indication:
-            raise SnmpQueryError(cls._category(error_indication))
+            category = cls._category(error_indication)
+            raise SnmpQueryError(category)
         if error_status:
-            text = error_status.prettyPrint() if hasattr(error_status, "prettyPrint") else str(error_status)
-            if "no such" in text.lower():
-                return False
-            raise SnmpQueryError(cls._category(text))
+            value = error_status.prettyPrint() if hasattr(error_status, "prettyPrint") else error_status
+            category = cls._category(value)
+            raise SnmpQueryError(category)
         return True
 
     async def get(self, oid):
@@ -471,7 +511,10 @@ class PySnmpSession:
             raise SnmpQueryError(self._category(exc)) from None
         if not self._check_response(error_indication, error_status) or not var_binds:
             return None
-        return _plain_value(var_binds[0][1])
+        value = var_binds[0][1]
+        if _is_unsupported_value(value):
+            raise SnmpQueryError("unsupported")
+        return _plain_value(value)
 
     async def walk(self, oid):
         rows = []
@@ -495,7 +538,12 @@ class PySnmpSession:
                     instance_oid = str(var_bind[0])
                     if not instance_oid.startswith(oid + "."):
                         return rows
-                    value = _plain_value(var_bind[1])
+                    raw_value = var_bind[1]
+                    if _is_unsupported_value(raw_value):
+                        if rows:
+                            return rows
+                        raise SnmpQueryError("unsupported")
+                    value = _plain_value(raw_value)
                     if value is None:
                         return rows
                     rows.append((_suffix(oid, instance_oid), value))
@@ -531,32 +579,49 @@ async def _safe_walk(session, oid):
         raise
 
 
-async def _first_available(session, candidates, scalars):
+async def _first_available(session, candidates, scalars, predicate=lambda value: True):
     for oid in candidates:
         value = await _safe_get(session, oid)
-        if value is not None:
-            scalars[oid] = value
-            return value
+        normalized = _valid_number(value, predicate)
+        if normalized is not None:
+            scalars[oid] = normalized
+            return normalized
     return None
 
 
 async def _collect_snapshot(device, timeout, selected_items, session_factory):
-    session = session_factory(device, timeout)
+    session = None
     snapshot = {"scalars": {}, "tables": {}}
     vendor_registry = VENDOR_OIDS.get(_vendor_key(device.vendor), {})
     selection = _ITEM_ORDER if selected_items is None else selected_items
     requested = [item for item in selection if item in SNMP_ITEMS]
     try:
+        session = session_factory(device, timeout)
         if "device_info" in requested:
             for oid in (SYS_NAME, SYS_DESCR, SYS_UPTIME):
                 snapshot["scalars"][oid] = await _safe_get(session, oid)
         if "cpu" in requested:
-            found = await _first_available(session, vendor_registry.get("cpu", ()), snapshot["scalars"])
+            found = await _first_available(
+                session,
+                vendor_registry.get("cpu", ()),
+                snapshot["scalars"],
+                lambda value: 0 <= value <= 100,
+            )
             if found is None:
                 snapshot["tables"][HR_PROCESSOR_LOAD] = await _safe_walk(session, HR_PROCESSOR_LOAD)
         if "memory" in requested:
-            total = await _first_available(session, vendor_registry.get("memory_total", ()), snapshot["scalars"])
-            used = await _first_available(session, vendor_registry.get("memory_used", ()), snapshot["scalars"])
+            total = await _first_available(
+                session,
+                vendor_registry.get("memory_total", ()),
+                snapshot["scalars"],
+                lambda value: value > 0,
+            )
+            used = await _first_available(
+                session,
+                vendor_registry.get("memory_used", ()),
+                snapshot["scalars"],
+                lambda value: value >= 0 and (total is None or value <= total),
+            )
             if total is None or used is None:
                 snapshot["scalars"][HR_MEMORY_SIZE] = await _safe_get(session, HR_MEMORY_SIZE)
                 for oid in _MEMORY_TABLES:
@@ -573,7 +638,7 @@ async def _collect_snapshot(device, timeout, selected_items, session_factory):
             snapshot["tables"][QBRIDGE_VLAN_NAME] = await _safe_walk(session, QBRIDGE_VLAN_NAME)
         return snapshot
     finally:
-        close = getattr(session, "close", None)
+        close = getattr(session, "close", None) if session is not None else None
         if close:
             result = close()
             if inspect.isawaitable(result):
