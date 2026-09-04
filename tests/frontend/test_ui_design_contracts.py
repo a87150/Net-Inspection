@@ -71,6 +71,11 @@ class SharedInterfaceContractTests(TestCase):
         self.assertContains(response, 'modal-dialog-scrollable modal-shell')
         self.assertContains(response, 'modal-section')
 
+    def test_scheduled_target_rules_use_a_dedicated_glass_section(self):
+        response = self.client.get(reverse('asset_list', args=['networks']))
+
+        self.assertContains(response, 'inspection-config-section--targets')
+
     def test_domain_and_import_modals_use_shared_modal_shell(self):
         domain = self.client.get(reverse('domain_controller_settings'))
         people = self.client.get(reverse('asset_list', args=['people']))

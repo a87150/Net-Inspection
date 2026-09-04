@@ -167,16 +167,18 @@ body.app-shell {
 
 .surface-card {
     overflow: hidden;
-    border: 1px solid var(--color-border) !important;
+    border: 1px solid rgba(255, 255, 255, .72) !important;
     border-radius: var(--radius-lg);
-    background: var(--color-surface);
-    box-shadow: var(--shadow-surface);
+    background: linear-gradient(145deg, rgba(255, 255, 255, .86), rgba(239, 244, 255, .66));
+    box-shadow: 0 16px 38px rgba(20, 34, 60, .09), inset 0 1px 0 rgba(255, 255, 255, .86);
+    -webkit-backdrop-filter: blur(16px) saturate(125%);
+    backdrop-filter: blur(16px) saturate(125%);
 }
 
 .surface-card__header,
 .surface-card > .card-header {
     border-bottom: 1px solid var(--color-border);
-    background: var(--color-surface);
+    background: rgba(255, 255, 255, .46);
     padding: 1rem 1.25rem;
 }
 
@@ -196,7 +198,7 @@ a.metric-card:hover {
 
 .metric-card__footer {
     border: 0;
-    background: var(--color-surface);
+    background: rgba(255, 255, 255, .3);
 }
 
 .metric {
@@ -1194,6 +1196,19 @@ body.app-shell {
     background: rgba(255, 255, 255, .42);
 }
 
+.inspection-config-modal .inspection-config-section--targets {
+    position: relative;
+    border-color: rgba(129, 153, 198, .34) !important;
+    background: linear-gradient(145deg, rgba(255, 255, 255, .7), rgba(232, 240, 255, .5));
+    box-shadow: 0 10px 24px rgba(41, 70, 120, .08), inset 0 1px 0 rgba(255, 255, 255, .82);
+}
+
+.inspection-config-modal .inspection-config-section--targets h3 {
+    margin-bottom: 1rem;
+    color: var(--color-primary);
+    font-weight: 750;
+}
+
 .inspection-config-modal .modal-body legend,
 .task-run-modal legend {
     width: auto;
@@ -1239,9 +1254,10 @@ body.app-shell {
 
 .modal-section {
     padding: 1rem;
-    border: 1px solid var(--color-border);
+    border: 1px solid rgba(142, 162, 196, .26);
     border-radius: var(--radius);
-    background: #fbfcfe;
+    background: rgba(255, 255, 255, .5);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .64);
 }
 
 .modal-section > :last-child {
