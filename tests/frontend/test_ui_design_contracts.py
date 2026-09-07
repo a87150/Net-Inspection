@@ -1,10 +1,31 @@
 from pathlib import Path
+import re
+
+from django.contrib.staticfiles import finders
 
 from django.test import TestCase
 from django.urls import reverse
 
 
 class SharedInterfaceContractTests(TestCase):
+    def test_style_entrypoint_resolves_ordered_local_design_layers(self):
+        entrypoint = Path(finders.find('app/css/style.css'))
+        source = entrypoint.read_text(encoding='utf-8')
+        imports = re.findall(r'@import url\("([^"]+)"\);', source)
+
+        self.assertEqual(imports, [
+            'tokens.css',
+            'foundation.css',
+            'operations.css',
+            'modal-workflows.css',
+        ])
+        combined = ''.join(
+            (entrypoint.parent / name).read_text(encoding='utf-8')
+            for name in imports
+        )
+        for selector in (':root', '.app-navbar', '.data-table', '.glass-card', '.modal-surface'):
+            with self.subTest(selector=selector):
+                self.assertIn(selector, combined)
     def test_core_pages_use_shared_application_chrome(self):
         urls = (
             reverse('index'),
