@@ -131,3 +131,31 @@ class SharedInterfaceContractTests(TestCase):
         self.assertContains(response, 'alert-channel-management')
         self.assertContains(response, 'alert-channel-editor')
         self.assertNotContains(response, '渠道管理：</span>')
+
+
+class AdminVisualContractTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        self.admin_user = get_user_model().objects.create_superuser(
+            username='admin-theme-test',
+            email='admin-theme@example.test',
+            password='unused',
+        )
+
+    def test_admin_login_uses_the_operations_console_theme(self):
+        response = self.client.get(reverse('admin:login'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'admin-login-shell')
+        self.assertContains(response, 'app/css/admin.css')
+        self.assertContains(response, '网络巡检中心')
+
+    def test_admin_index_uses_the_operations_console_theme(self):
+        self.client.force_login(self.admin_user)
+        response = self.client.get(reverse('admin:index'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'admin-shell')
+        self.assertContains(response, 'app/css/admin.css')
+        self.assertContains(response, '运维管理台')

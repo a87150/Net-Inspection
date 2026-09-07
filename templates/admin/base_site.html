@@ -1,0 +1,16 @@
+{% extends "admin/base.html" %}
+{% load i18n static %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | 网络巡检中心{% endblock %}
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'app/css/admin.css' %}">{% endblock %}
+{% block bodyclass %}{{ block.super }} admin-shell{% endblock %}
+{% block branding %}
+<div id="site-name" class="admin-brand">
+    <a href="{% url 'admin:index' %}"><span class="admin-brand__eyebrow">OPERATIONS CONSOLE</span><strong>网络巡检中心</strong><span>运维管理台</span></a>
+</div>
+{% endblock %}
+{% block userlinks %}
+    <a href="{% url 'index' %}">返回运维总览</a> /
+    {{ block.super }}
+{% endblock %}
+{% block footer %}<span>网络巡检中心 · 企业运维管理</span>{% endblock %}
