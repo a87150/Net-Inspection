@@ -1,5 +1,6 @@
 from importlib.metadata import version
 from pathlib import Path
+import sys
 from unittest import TestCase
 
 
@@ -16,6 +17,7 @@ LATEST_STABLE_DIRECT_DEPENDENCIES = {
     "dnspython": "2.8.0",
     "paramiko": "5.0.0",
     "pysnmp": "7.1.29",
+    "smbprotocol": "1.17.0",
     "waitress": "3.0.2",
     "whitenoise": "6.12.0",
 }
@@ -27,7 +29,13 @@ def read_exact_requirements(path):
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
-        name, separator, required_version = line.partition("==")
+        pin, _, marker = line.partition(';')
+        if marker:
+            if marker.strip() != 'sys_platform == "win32"':
+                raise AssertionError(f'Unsupported dependency marker: {marker}')
+            if sys.platform != 'win32':
+                continue
+        name, separator, required_version = pin.strip().partition("==")
         if separator != "==":
             raise AssertionError(f"Dependency must use an exact pin: {line}")
         requirements[name] = required_version

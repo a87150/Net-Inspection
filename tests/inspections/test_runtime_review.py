@@ -9,10 +9,12 @@ from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from tests.devices.pc.helpers import create_log_file
+
 from net.models import (ComputerAnalysisProfile, ComputerLogFile, InspectionProfile,
                         Schedule, Server, Server_Inspection, TaskRun)
-from net.devices.pc.logs import ScanSummary
-from net.inspections.queue import enqueue_computer_scan_task
+from net.devices.pc.remote_ingestion import FetchSummary
+from net.inspections.queue import enqueue_computer_fetch_task
 from net.inspections.queue import claim_next_task
 from net.devices.pc import executor as scan_executor
 from net.inspections.executor import _begin_target
@@ -45,15 +47,14 @@ class ReviewUiTests(TestCase):
         self.cpu.refresh_from_db()
         self.assertEqual((self.cpu.name, self.cpu.selected_items, self.cpu.timeout_seconds), ('A CPU', ['cpu'], 60))
 
-    def test_switch_computer_profiles_loads_paths_range_and_schedule(self):
-        ComputerAnalysisProfile.objects.create(name='A', analysis_items=['activation'], scan_directories=['C:/a'])
-        other = ComputerAnalysisProfile.objects.create(name='B', analysis_items=['resource'], scan_directories=['C:/b', 'C:/c'], recursive=True, processed_directory='C:/b/done', failed_directory='C:/b/failed', file_time_mode='date_range', recent_days=None, range_start_date='2026-08-01', range_end_date='2026-08-31')
+    def test_switch_computer_profiles_loads_rules_and_schedule(self):
+        ComputerAnalysisProfile.objects.create(name='A', analysis_items=['activation'])
+        other = ComputerAnalysisProfile.objects.create(name='B', analysis_items=['resource'], cpu_temperature_max_celsius=91, site_ip_prefixes={'192.0.2': 'Test Site'})
         Schedule.objects.create(analysis_profile=other, kind='interval', interval_value=2, interval_unit='hours')
         response = self.client.get('/assets/computers/', {'task_profile': str(other.pk), 'task_modal': 'profile'})
         self.assertEqual(response.context['task_default_items'], ['resource'])
-        self.assertContains(response, 'C:/b\nC:/c')
-        self.assertContains(response, 'value="C:/b/done"')
-        self.assertContains(response, 'value="2026-08-01"')
+        self.assertContains(response, 'value="91"')
+        self.assertContains(response, 'Test Site')
         self.assertEqual(response.context['task_default_schedule'].interval_value, 2)
 
     def test_record_filters_resolve_deduplicated_assets(self):
@@ -124,13 +125,15 @@ class ScheduleUniquenessTests(TransactionTestCase):
 
 class ScanFenceTests(TransactionTestCase):
     def setUp(self):
+        from tests.devices.pc.test_source_models import valid_smb_source
+        valid_smb_source()
         profile = ComputerAnalysisProfile.objects.create(name='Scan', analysis_items=['activation'])
-        self.task = enqueue_computer_scan_task(profile, 'manual')
+        self.task = enqueue_computer_fetch_task(profile, 'manual')
         claim_next_task('scan-owner', 60)
         self.target = self.task.target_runs.get()
         _begin_target(self.target.pk, 'scan-owner')
-        log = ComputerLogFile.objects.create(source_path='fixture.json', modified_at=timezone.now(), content_hash='a'*64, import_status='imported')
-        self.summary = ScanSummary(imported=1, log_files=[log])
+        log = create_log_file(source_path='fixture.json', modified_at=timezone.now(), content_hash='a'*64, import_status='imported')
+        self.summary = FetchSummary(imported=1, log_files=[log])
 
     def test_lease_loss_immediately_before_child_enqueue_creates_no_orphan(self):
         original = scan_executor._enqueue_scanned_analyses

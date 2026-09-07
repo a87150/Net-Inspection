@@ -1,344 +1,231 @@
+"""Contracts for daily shared-folder collectors; all writes use temporary local folders."""
+import base64
 import codecs
-from contextlib import redirect_stdout
-from datetime import date
-import io
 import json
 import os
 from pathlib import Path
+import subprocess
 import tempfile
-from types import SimpleNamespace
 from unittest.mock import patch
-from urllib.parse import parse_qs, urlsplit
 
-from django.conf import settings
-from django.test import SimpleTestCase, TestCase
-
-from net.models import (
-    ComputerAnalysisProfile,
-    Domain_Controller_Config,
-    Network_Device,
-    Server,
-    TaskRun,
-)
+from django.test import SimpleTestCase
+from net.models import ComputerAnalysisProfile, PCLogSourceConfig
 from net.scripts.generator import generate_pc_script
 
+FIXTURES = Path(__file__).with_name('fixtures')
+WINDOWS_SECTIONS = {
+    '日志时间', 'platform', '系统信息概览', '网络信息', '计算机硬件资源情况',
+    'Windows激活信息', 'KMS服务器连通情况', '当前与域服务器通讯情况',
+    '已安装软件列表', '当前运行进程清单', 'BitLocker状态', 'WindowsDefender状态',
+    '系统更新历史', '已应用策略', '浏览器插件情况', '计算机和用户匹配情况', '事件发现',
+}
 
-def embedded_profile_config(result):
-    if result.filename.endswith('.ps1'):
-        prefix = "$ProfileConfig = @'\n"
-        suffix = "\n'@ | ConvertFrom-Json"
-    else:
-        prefix = "PROFILE_CONFIG_JSON=$(cat <<'NET_PROFILE_CONFIG'\n"
-        suffix = '\nNET_PROFILE_CONFIG\n)'
-    return json.loads(result.content.split(prefix, 1)[1].split(suffix, 1)[0])
+def config_of(script):
+    encoded = script.content.split('# PC_CONFIG: ', 1)[1].splitlines()[0]
+    return json.loads(base64.b64decode(encoded))
 
-
-class PcScriptGeneratorTests(TestCase):
+class PcScriptGeneratorTests(SimpleTestCase):
     def setUp(self):
-        self.windows_profile = ComputerAnalysisProfile(
-            name='Windows upload',
-            scan_directories=[r'C:\InspectionLogs', r"C:\Managed Logs\O'Brien"],
-            recursive=True,
-            file_time_mode=ComputerAnalysisProfile.FileTimeMode.RECENT_DAYS,
-            recent_days=14,
-            analysis_items=['resource', 'activation'],
-        )
-        self.macos_profile = ComputerAnalysisProfile(
-            name='macOS upload',
-            scan_directories=['/Library/Logs/Inspection', '/Volumes/受管日志'],
-            file_time_mode=ComputerAnalysisProfile.FileTimeMode.DATE_RANGE,
-            recent_days=None,
-            range_start_date=date(2026, 8, 1),
-            range_end_date=date(2026, 8, 31),
-            analysis_items=['resource'],
-        )
-        self.windows_profile.save()
-        self.macos_profile.save()
+        self.profile = ComputerAnalysisProfile(
+            name='Daily', analysis_items=['resource'])
+        self.profile._state.adding = False
+        self.source = PCLogSourceConfig(
+            source_type='ftp', host='worker-private.invalid', port=21,
+            username='worker-secret', remote_incoming_directory='incoming',
+            local_staging_directory='worker-private-stage', file_time_mode='recent_days',
+            terminal_windows_path=r"\\files\incoming\O'Brien",
+            terminal_macos_path="/Volumes/Logs/O'Brien")
+        self.source._state.adding = False
 
-    def test_windows_script_embeds_parseable_minimal_profile_configuration(self):
-        result = generate_pc_script(
-            self.windows_profile,
-            'windows',
-            'https://monitor.example/dashboard/?ignored=true',
-        )
+    def test_paths_are_allowlisted_and_worker_transport_is_independent(self):
+        self.source.password = 'worker-secret'
+        for platform, destination in [('windows', self.source.terminal_windows_path),
+                                      ('macos', self.source.terminal_macos_path)]:
+            result = generate_pc_script(self.profile, self.source, platform)
+            self.assertEqual(config_of(result)['destination'], destination)
+            for forbidden in ('http', 'password', '/api/', 'worker-secret', 'worker-private',
+                              'Invoke-RestMethod', 'Invoke-WebRequest', 'LDAP', '.dll', '/ato'):
+                self.assertNotIn(forbidden.lower(), result.content.lower())
+            self.assertEqual(result.as_bytes().startswith(codecs.BOM_UTF8), platform == 'windows')
 
-        self.assertEqual(result.filename, 'GetInfo_Upload.ps1')
-        self.assertEqual(result.content_type, 'text/plain; charset=utf-8')
-        self.assertEqual(embedded_profile_config(result), {
-            'scan_directories': [r'C:\InspectionLogs', r"C:\Managed Logs\O'Brien"],
-            'recursive': True,
-            'file_time_mode': 'recent_days',
-            'recent_days': 14,
-            'analysis_items': ['resource', 'activation'],
-            'upload_url': (
-                'https://monitor.example/api/computer_inspection/'
-                f'?profile_id={self.windows_profile.pk}'
-            ),
-        })
+    def test_saved_objects_and_platform_destination_are_required(self):
+        for profile, source, platform in [
+            (ComputerAnalysisProfile(), self.source, 'windows'),
+            (self.profile, PCLogSourceConfig(), 'windows'),
+            (self.profile, None, 'windows'),
+            (self.profile, self.source, 'linux'),
+        ]:
+            with self.subTest(platform=platform), self.assertRaises(ValueError):
+                generate_pc_script(profile, source, platform)
+        for platform, field in [('windows', 'terminal_windows_path'), ('macos', 'terminal_macos_path')]:
+            for value in ('', 'relative/path', 'https://example.invalid/logs', 'bad\npath'):
+                setattr(self.source, field, value)
+                with self.subTest(value=value), self.assertRaises(ValueError):
+                    generate_pc_script(self.profile, self.source, platform)
 
-    def test_macos_script_embeds_parseable_date_range_configuration(self):
-        result = generate_pc_script(self.macos_profile, 'macos', 'https://monitor.example')
+    def test_config_cannot_break_script_delimiters(self):
+        self.source.terminal_macos_path = "/Volumes/logs/'\nNET_PROFILE_CONFIG\n$(touch bad)"
+        with self.assertRaises(ValueError):
+            generate_pc_script(self.profile, self.source, 'macos')
 
-        self.assertEqual(result.filename, 'getinfo_upload_macos.sh')
-        self.assertEqual(result.content_type, 'text/plain; charset=utf-8')
-        self.assertEqual(embedded_profile_config(result), {
-            'scan_directories': ['/Library/Logs/Inspection', '/Volumes/受管日志'],
-            'recursive': False,
-            'file_time_mode': 'date_range',
-            'range_start_date': '2026-08-01',
-            'range_end_date': '2026-08-31',
-            'analysis_items': ['resource'],
-            'upload_url': (
-                'https://monitor.example/api/computer_inspection/'
-                f'?profile_id={self.macos_profile.pk}'
-            ),
-        })
+    def test_public_kms_targets_are_configured_without_worker_connection_data(self):
+        self.profile.kms_servers = ['kms.example.invalid']
+        config = config_of(generate_pc_script(self.profile, self.source, 'windows'))
+        self.assertEqual(config['kms_servers'], ['kms.example.invalid'])
+        self.assertEqual(set(config), {'destination', 'kms_servers'})
+        self.assertNotIn('host', config)
+        self.assertNotIn('username', config)
 
-    def test_windows_binary_content_has_utf8_bom_for_powershell_51(self):
-        result = generate_pc_script(self.windows_profile, 'windows', 'https://monitor.example')
+    def test_fixtures_cover_analysis_schema(self):
+        windows = json.loads((FIXTURES / 'terminal_log_windows.json').read_text(encoding='utf-8'))
+        self.assertTrue(WINDOWS_SECTIONS <= windows.keys())
+        self.assertEqual(windows['platform'], 'windows')
+        self.assertIsInstance(windows['当前运行进程清单'][0]['进程名'], str)
+        self.assertEqual(windows['已应用策略']['用户策略'], ['Example User Policy'])
+        macos = json.loads((FIXTURES / 'terminal_log_macos.json').read_text(encoding='utf-8'))
+        self.assertEqual(macos['platform'], 'macos')
+        self.assertNotIn('Windows激活信息', macos)
 
-        self.assertIsInstance(result.content, str)
-        self.assertEqual(result.encoding, 'utf-8-sig')
-        self.assertTrue(result.as_bytes().startswith(codecs.BOM_UTF8))
-        self.assertEqual(result.as_bytes().decode('utf-8-sig'), result.content)
-
-    def test_macos_binary_content_is_plain_utf8(self):
-        result = generate_pc_script(self.macos_profile, 'macos', 'https://monitor.example')
-
-        self.assertEqual(result.encoding, 'utf-8')
-        self.assertFalse(result.as_bytes().startswith(codecs.BOM_UTF8))
-        self.assertEqual(result.as_bytes().decode('utf-8'), result.content)
-
-    def test_only_explicit_profile_fields_are_rendered(self):
-        self.windows_profile.bind_password = 'directory-password-private'
-        self.windows_profile.api_token = 'api-token-private'
-        self.windows_profile.device_password = 'device-password-private'
-
-        result = generate_pc_script(self.windows_profile, 'windows', 'https://monitor.example')
-
-        config = embedded_profile_config(result)
-        self.assertEqual(set(config), {
-            'scan_directories', 'recursive', 'file_time_mode', 'recent_days',
-            'analysis_items', 'upload_url',
-        })
-        serialized_config = json.dumps(config, ensure_ascii=False)
-        self.assertNotIn('directory-password-private', serialized_config)
-        self.assertNotIn('api-token-private', serialized_config)
-        self.assertNotIn('device-password-private', serialized_config)
-
-    def test_generated_scripts_exclude_persisted_credentials_and_settings_secrets(self):
-        """Expanding generator serialization beyond profile settings must never expose stored credentials."""
-        Domain_Controller_Config.objects.create(
-            host='directory.example.invalid',
-            bind_username='DOMAIN\\script-reader',
-            bind_password='domain-bind-password-private',
-        )
-        Network_Device.objects.create(
-            device_name='secret-bearing-switch',
-            ip='192.0.2.80',
-            password='device-password-private',
-        )
-        Server.objects.create(
-            name='secret-bearing-server',
-            ip='192.0.2.81',
-            password='server-password-private',
-            api_token='device-api-token-private',
-        )
-
-        self.assertEqual(
-            Domain_Controller_Config.objects.get().bind_password,
-            'domain-bind-password-private',
-        )
-        self.assertTrue(Network_Device.objects.filter(password='device-password-private').exists())
-        self.assertTrue(Server.objects.filter(api_token='device-api-token-private').exists())
-
-        database_settings = {
-            'default': {
-                'ENGINE': 'django.db.backends.mysql',
-                'NAME': 'net-production-private',
-                'USER': 'net-db-user-private',
-                'PASSWORD': 'net-db-password-private',
-                'HOST': 'db.example.invalid',
-                'PORT': '3306',
-            },
-        }
-        with patch.object(settings, 'SECRET_KEY', 'django-secret-key-private'), patch.object(
-            settings, 'DATABASES', database_settings,
-        ):
-            self.assertEqual(settings.SECRET_KEY, 'django-secret-key-private')
-            self.assertEqual(settings.DATABASES['default']['PASSWORD'], 'net-db-password-private')
-            rendered_scripts = '\n'.join(
-                generate_pc_script(self.windows_profile, platform, 'https://monitor.example').content
-                for platform in ('windows', 'macos')
-            )
-        sensitive_values = (
-            'domain-bind-password-private',
-            'device-password-private',
-            'server-password-private',
-            'device-api-token-private',
-            'django-secret-key-private',
-            'net-production-private',
-            'net-db-user-private',
-            'net-db-password-private',
-            'db.example.invalid',
-        )
-
-        for secret in sensitive_values:
-            with self.subTest(secret=secret):
-                self.assertNotIn(secret, rendered_scripts)
-
-    def test_rejects_invalid_platform_path_and_public_url(self):
-        with self.assertRaisesRegex(ValueError, 'platform'):
-            generate_pc_script(self.windows_profile, 'linux', 'https://monitor.example')
-        blank_paths = ComputerAnalysisProfile(name='blank paths', scan_directories=['   '])
-        blank_paths.save()
-        with self.assertRaisesRegex(ValueError, 'scan directory'):
-            generate_pc_script(blank_paths, 'windows', 'https://monitor.example')
-        with self.assertRaisesRegex(ValueError, 'HTTP'):
-            generate_pc_script(self.windows_profile, 'windows', 'ftp://monitor.example')
-
-    def test_rejects_public_urls_with_userinfo_or_invalid_ports(self):
-        invalid_urls = (
-            'https://user:password@monitor.example',
-            'https://monitor.example:not-a-port',
-            'https://monitor.example:70000',
-            'https://monitor.example:0',
-            'https://monitor.example:',
-        )
-
-        for public_url in invalid_urls:
-            with self.subTest(public_url=public_url):
-                with self.assertRaisesRegex(ValueError, 'public_base_url'):
-                    generate_pc_script(self.windows_profile, 'windows', public_url)
-
-    def test_rebuilds_ipv6_authority_with_validated_port(self):
-        result = generate_pc_script(
-            self.windows_profile,
-            'windows',
-            'https://[2001:db8::1]:8443/dashboard',
-        )
-
-        self.assertEqual(
-            embedded_profile_config(result)['upload_url'],
-            'https://[2001:db8::1]:8443/api/computer_inspection/'
-            f'?profile_id={self.windows_profile.pk}',
-        )
-
-    def test_macos_script_contract_collects_real_inventory_and_usage_values(self):
-        result = generate_pc_script(self.macos_profile, 'macos', 'https://monitor.example')
-
-        self.assertIn('PYTHON3=$(command -v python3', result.content)
-        self.assertNotIn('/usr/bin/command -v python3', result.content)
-        for required in (
-            "'当前登录用户工号'", "'当前登录用户姓名'", "'当前CPU占用率'",
-            "'当前内存使用率'", "'磁盘总量'", "'MAC地址'", "'IP地址'",
-            'id -un', 'id -F', r'\binet6?\s+', r'\bether\s+', 'CPU usage:',
-            'vm_stat', 'Disk Size:', "-iname', '*.json'",
-        ):
-            with self.subTest(required=required):
-                self.assertIn(required, result.content)
-
-    def test_windows_script_contract_collects_usage_percentages_and_utf8_body(self):
-        result = generate_pc_script(self.windows_profile, 'windows', 'https://monitor.example')
-
-        for required in (
-            'LoadPercentage', 'FreePhysicalMemory', "'当前CPU占用率'",
-            "'当前内存使用率'", 'CultureInfo]::InvariantCulture',
-            '[System.Text.Encoding]::UTF8.GetBytes',
-        ):
-            with self.subTest(required=required):
-                self.assertIn(required, result.content)
-
-    def test_macos_embedded_collector_extracts_inventory_and_case_insensitive_logs(self):
-        result = generate_pc_script(self.macos_profile, 'macos', 'https://monitor.example')
-        collector = result.content.split('  "$PYTHON3" - <<\'PY\'\n', 1)[1].split('\nPY\n', 1)[0]
-
+    def test_windows_logged_in_user_policies_and_unavailable_query(self):
+        script = generate_pc_script(self.profile, self.source, 'windows').content
+        functions = script.split('# Collection entry point', 1)[0]
+        policy_block = script.split("$payload['已应用策略'] =", 1)[1].split(
+            "$payload['浏览器插件情况']", 1)[0]
         with tempfile.TemporaryDirectory() as directory:
-            log_path = Path(directory) / 'captured.JSON'
-            log_path.write_text('{}', encoding='utf-8')
-            os.utime(log_path, (1786795200, 1786795200))
+            harness = Path(directory) / 'policies.ps1'
+            harness.write_text(functions + r"""
+$script:mode = 'present'
+$script:lastPath = $null
+function Get-CimInstance { [pscustomobject]@{ name = 'Example Computer Policy' } }
+function gpresult.exe {
+    if (($args -join '|') -notlike '/USER|EXAMPLE\tester|/SCOPE|USER|/X|*|/F') {
+        throw 'wrong logged-in user or query scope'
+    }
+    $script:lastPath = $args[5]
+    $global:LASTEXITCODE = 0
+    $xml = '<Rsop xmlns="urn:rsop"><UserResults><GPO><Name>Example User Policy</Name></GPO></UserResults></Rsop>'
+    switch ($script:mode) {
+        'failed' { $global:LASTEXITCODE = 1 }
+        'missing' { $xml = '<Rsop />' }
+        'malformed' { $xml = '<' }
+        'empty' { $xml = '<Rsop><UserResults /></Rsop>' }
+        'nologin' { throw 'must not query when no logged-in user' }
+    }
+    [IO.File]::WriteAllText($script:lastPath, $xml)
+}
+$computerSystem = [pscustomobject]@{ UserName = 'EXAMPLE\tester' }
+function Read-TestPolicies {
+    """ + policy_block + r"""
+}
+$policies = Read-TestPolicies
+if (@($policies['用户策略']).Count -ne 1 -or $policies['用户策略'][0] -ne 'Example User Policy') {
+    throw 'logged-in user policies not collected'
+}
+foreach ($mode in @('failed', 'missing', 'malformed', 'empty', 'nologin')) {
+    $script:mode = $mode
+    if ($mode -eq 'nologin') { $computerSystem.UserName = $null }
+    $policies = Read-TestPolicies
+    if ($policies['计算机策略'][0] -ne 'Example Computer Policy') { throw 'computer policy lost' }
+    if ($mode -eq 'empty') {
+        if ($null -eq $policies['用户策略'] -or $policies['用户策略'].Count -ne 0) { throw 'empty query not preserved' }
+    } elseif ($null -ne $policies['用户策略']) { throw 'unavailable must be null' }
+    if ($script:lastPath -and (Test-Path -LiteralPath $script:lastPath)) { throw 'temporary report leaked' }
+}
+""", encoding='utf-8-sig')
+            result = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-File',
+                                     str(harness)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-            def fake_find(command, **kwargs):
-                root = Path(command[1])
-                recursive = '-maxdepth' not in command
-                paths = root.rglob('*') if recursive else root.iterdir()
-                output = '\n'.join(str(path) for path in paths if path.is_file() and path.suffix.lower() == '.json')
-                return SimpleNamespace(stdout=output)
+    def test_windows_publisher_daily_marker_survives_worker_move_and_failure_retries(self):
+        script = generate_pc_script(self.profile, self.source, 'windows').content
+        functions = script.split('# Collection entry point', 1)[0]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            harness = root / 'test.ps1'
+            harness.write_text(functions + """
+$root = $args[0]
+$dest = Join-Path $root 'share'
+$state = Join-Path $root 'state'
+New-Item -ItemType Directory -Path $dest | Out-Null
+$collect = { @{ 'platform' = 'windows'; '日志时间' = '2026-09-07 10:00:00' } }
+Publish-PCDaily $dest $state 'TEST-PC' $collect
+$file = Get-ChildItem -LiteralPath $dest -Filter '*.json'
+if (@($file).Count -ne 1 -or $file.Name -notmatch '^TEST-PC-\\d{8}\\.json$') { throw 'daily filename' }
+Remove-Item -LiteralPath $file.FullName
+Publish-PCDaily $dest $state 'TEST-PC' { throw 'must skip collection' }
+if (@(Get-ChildItem -LiteralPath $dest).Count -ne 0) { throw 'republished' }
+$state2 = Join-Path $root 'retry-state'
+try { Publish-PCDaily (Join-Path $root 'missing') $state2 'TEST-PC' $collect } catch {}
+Publish-PCDaily $dest $state2 'TEST-PC' $collect
+if (@(Get-ChildItem -LiteralPath $dest -Filter '*.json').Count -ne 1) { throw 'retry failed' }
+if (@(Get-ChildItem -LiteralPath $dest -Filter '*.uploading').Count) { throw 'partial left' }
+function Get-CimInstance {
+    param($ClassName, $Filter)
+    [pscustomobject]@{
+        Name='Example CPU'; UserName='tester'; TotalPhysicalMemory=16384
+        FreePhysicalMemory=8; NumberOfCores=4; NumberOfLogicalProcessors=8
+        LoadPercentage=15; CurrentClockSpeed=2400; LastBootUpTime=[datetime]'2026-09-07'
+        InstallDate=[datetime]'2026-01-01'; Caption='Windows'; Version='10.0'
+        OSArchitecture='64-bit'; Size=1073741824; FreeSpace=536870912
+        DeviceID='C:'; IPAddress=@('192.0.2.1'); MACAddress='02:00:00:00:00:01'
+    }
+}
+function Read-Optional { param([scriptblock]$Read) return $null }
+function Get-PCUserPolicies { param([string]$LoggedInUser) return $null }
+$payload = Get-PCPayload
+if ($payload.platform -ne 'windows') { throw 'platform marker' }
+if ($payload['计算机硬件资源情况']['当前CPU占用率'] -ne '15.0%') { throw 'cpu percentage' }
+if ($null -ne $payload['Windows激活信息']) { throw 'optional unknown' }
+""", encoding='utf-8-sig')
+            result = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-File',
+                                     str(harness), directory], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-            env = {
-                'PROFILE_CONFIG_JSON': json.dumps({
-                    'scan_directories': [directory], 'recursive': True,
-                    'file_time_mode': 'date_range', 'range_start_date': '2026-08-01',
-                    'range_end_date': '2026-08-31', 'upload_url': 'https://example.invalid',
-                }),
-                'SYSCTL_OUTPUT': '\n'.join((
-                    'hw.physicalcpu: 4', 'hw.logicalcpu: 8', 'hw.memsize: 4096000',
-                    'vm.page_size: 4096', 'machdep.cpu.brand_string: Apple M2',
-                )),
-                'CPU_USAGE_OUTPUT': 'CPU usage: 10.00% user, 5.00% sys, 85.00% idle',
-                'VM_STAT_OUTPUT': 'Pages active: 100.\nPages wired down: 200.\nPages occupied by compressor: 300.',
-                'DISKUTIL_OUTPUT': 'Disk Size: 500.0 GB (536870912000 Bytes)',
-                'DF_OUTPUT': 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/disk3s1 1 1 1 1% /',
-                'IFCONFIG_OUTPUT': 'en0: flags=8863<UP>\n\tether aa:bb:cc:dd:ee:ff\n\tinet 192.0.2.10 netmask 0xffffff00',
-                'SYSTEM_PROFILER_OUTPUT': 'Hardware Overview:',
-                'CURRENT_USER_ACCOUNT': 'alice', 'CURRENT_USER_FULL_NAME': 'Alice Example',
-            }
-            output = io.StringIO()
-            with patch.dict(os.environ, env, clear=False), patch('subprocess.run', side_effect=fake_find), redirect_stdout(output):
-                exec(collector, {'__name__': '__main__'})
+    def test_macos_publisher_daily_marker_survives_worker_move_and_failure_retries(self):
+        result = generate_pc_script(self.profile, self.source, 'macos')
+        code = result.content.split("<<'PC_COLLECTOR'\n", 1)[1].split('\nPC_COLLECTOR', 1)[0]
+        namespace = {'__name__': 'collector_test'}
+        exec(compile(code, '<macos collector>', 'exec'), namespace)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            destination = root / 'share'
+            destination.mkdir()
+            state = root / 'state'
+            payload = {'platform': 'macos', '日志时间': '2026-09-07 10:00:00'}
+            publish = namespace['publish_daily']
+            publish(destination, state, 'TEST-MAC', lambda: payload)
+            files = list(destination.glob('*.json'))
+            self.assertEqual(len(files), 1)
+            self.assertRegex(files[0].name, r'^TEST-MAC-\d{8}\.json$')
+            self.assertEqual(json.loads(files[0].read_text(encoding='utf-8')), payload)
+            files[0].unlink()
+            def must_skip():
+                self.fail('collected twice after Worker move')
+            publish(destination, state, 'TEST-MAC', must_skip)
+            self.assertEqual(list(destination.iterdir()), [])
+            with self.assertRaises(OSError):
+                publish(root / 'missing', root / 'retry', 'TEST-MAC', lambda: payload)
+            publish(destination, root / 'retry', 'TEST-MAC', lambda: payload)
+            self.assertEqual(len(list(destination.glob('*.json'))), 1)
+            self.assertEqual(list(destination.glob('*.uploading')), [])
 
-        payload = json.loads(output.getvalue())
-        self.assertEqual(payload['系统信息概览']['当前登录用户工号'], 'alice')
-        self.assertEqual(payload['系统信息概览']['当前登录用户姓名'], 'Alice Example')
-        self.assertEqual(payload['网络信息'], [{
-            '接口名称': 'en0', 'IP地址': '192.0.2.10', 'MAC地址': 'aa:bb:cc:dd:ee:ff',
-        }])
+    def test_macos_collection_keeps_unavailable_memory_unknown(self):
+        result = generate_pc_script(self.profile, self.source, 'macos')
+        code = result.content.split("<<'PC_COLLECTOR'\n", 1)[1].split('\nPC_COLLECTOR', 1)[0]
+        namespace = {'__name__': 'collector_test'}
+        exec(compile(code, '<macos collector>', 'exec'), namespace)
+        def read(*args):
+            if args[0] == '/usr/sbin/sysctl':
+                return 'hw.memsize: 16384\nvm.page_size: 4096\nhw.physicalcpu: 4\nhw.logicalcpu: 8'
+            if args[0] == '/sbin/ifconfig':
+                return 'en0: flags=1\n ether 02:00:00:00:00:01\n inet 192.0.2.1'
+            if args[0] == '/usr/bin/top':
+                return 'CPU usage: 10.0% user, 5.0% sys'
+            return ''
+        namespace['read_command'] = read
+        payload = namespace['collect_payload'](config_of(result))
+        self.assertEqual(payload['platform'], 'macos')
         self.assertEqual(payload['计算机硬件资源情况']['当前CPU占用率'], '15.0%')
-        self.assertEqual(payload['计算机硬件资源情况']['当前内存使用率'], '60.0%')
-        self.assertEqual(payload['计算机硬件资源情况']['磁盘总量'], '500.00GB')
-        self.assertEqual([item['path'] for item in payload['日志文件元数据']], [str(log_path)])
-
-
-class PcScriptUnsavedProfileTests(SimpleTestCase):
-    def test_generate_rejects_unsaved_profile_with_clear_error(self):
-        profile = ComputerAnalysisProfile(
-            name='Unsaved profile', scan_directories=['C:/logs'], analysis_items=['resource'])
-
-        with self.assertRaisesRegex(ValueError, 'must be saved to the database'):
-            generate_pc_script(profile, 'windows', 'https://monitor.example')
-
-
-class PcScriptUploadProfileTests(TestCase):
-    def test_generated_upload_url_queues_selected_profile(self):
-        ComputerAnalysisProfile.objects.create(
-            name='Earlier fallback',
-            scan_directories=['C:/fallback'],
-            analysis_items=['activation'],
-        )
-        selected = ComputerAnalysisProfile.objects.create(
-            name='Selected resource profile',
-            scan_directories=['C:/selected'],
-            analysis_items=['resource'],
-        )
-        result = generate_pc_script(selected, 'windows', 'https://monitor.example')
-        upload_url = urlsplit(embedded_profile_config(result)['upload_url'])
-
-        response = self.client.post(
-            f'{upload_url.path}?{upload_url.query}',
-            data=json.dumps({
-                '日志时间': '2026-09-01 10:00:00',
-                '系统信息概览': {'计算机名': 'PROFILE-BOUND-PC'},
-                '网络信息': [],
-                '计算机硬件资源情况': {
-                    '当前CPU占用率': '12.5%',
-                    '当前内存使用率': '34.0%',
-                },
-            }),
-            content_type='application/json',
-        )
-
-        self.assertEqual(response.status_code, 202)
-        self.assertEqual(parse_qs(upload_url.query), {'profile_id': [str(selected.pk)]})
-        task = TaskRun.objects.get()
-        self.assertEqual(task.analysis_profile_id, selected.pk)
-        self.assertEqual(task.profile_snapshot['analysis_items'], ['resource'])
+        self.assertIsNone(payload['计算机硬件资源情况']['当前内存使用率'])
+        self.assertEqual(payload['网络信息'][0]['IP地址'], '192.0.2.1')
+        self.assertNotIn('Windows激活信息', payload)

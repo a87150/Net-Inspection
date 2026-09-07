@@ -34,6 +34,7 @@ from net.models import (
     AlertPolicy,
     InspectionProfile,
     ComputerAnalysisProfile,
+    PCLogSourceConfig,
     PeopleSyncSource,
     Schedule,
     TaskRun,
@@ -527,6 +528,15 @@ class Command(BaseCommand):
                     People.objects.filter(pk=person.pk).update(sync_source=source)
 
     def _seed_tasks(self, anchor, networks):
+        from django.conf import settings
+        PCLogSourceConfig.objects.get_or_create(pk=1, defaults={
+            'source_type': 'smb', 'host': 'files.example.invalid', 'port': 445,
+            'username': 'demo-reader', 'share_name': 'logs',
+            'remote_incoming_directory': 'incoming', 'file_time_mode': 'recent_days',
+            'local_staging_directory': str(settings.BASE_DIR / 'runtime' / 'pc-staging'),
+            'terminal_windows_path': r'\\files.example.invalid\logs\incoming',
+            'terminal_macos_path': '/Volumes/Logs/incoming',
+        })
         profiles = {}
         for suffix, name, device_type, items in (
             ('network', '演示网络巡检', 'network_device', ['device_info', 'config_info']),
@@ -541,10 +551,7 @@ class Command(BaseCommand):
         analysis, _ = ComputerAnalysisProfile.objects.update_or_create(
             pk=_demo_uuid('demo-profile-analysis'), defaults={
                 'name': '演示日志分析', 'analysis_items': ['resource', 'event_findings'],
-                'scan_directories': [], 'processed_directory': '', 'failed_directory': '',
-                'file_time_mode': 'recent_days', 'recent_days': 7,
-                'range_start_date': None, 'range_end_date': None,
-                'recursive': False, 'concurrent_workers': 4, 'is_enabled': True,
+                'concurrent_workers': 4, 'is_enabled': True,
             },
         )
         schedule, _ = Schedule.objects.update_or_create(
@@ -923,10 +930,16 @@ class Command(BaseCommand):
                 _demo_hash(f'computer-log-{index}'),
                 {
                     'modified_at': event_time - timedelta(minutes=1),
+                    'computer': computer,
+                    'collected_date': timezone.localdate(event_time - timedelta(days=index)),
+                    'platform': 'windows',
+                    'source_protocol': 'smb',
+                    'remote_source_path': f'incoming/{computer_name}-{index}.json',
                     'import_status': 'imported',
                     'archived_path': f'demo://archive/{computer_name}-{index}.json',
                     'parse_error': '',
                     'payload': {
+                        '日志时间': (event_time - timedelta(days=index)).isoformat(),
                         '系统信息概览': {
                             '计算机名': computer_name,
                             '操作系统': computer.os,

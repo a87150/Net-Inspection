@@ -3,6 +3,15 @@
 from django.db import migrations, models
 
 
+def retire_unidentified_development_logs(apps, schema_editor):
+    # Old development evidence has no daily identity. Keep it readable, but do
+    # not claim it is a formally imported daily log under the new contract.
+    apps.get_model('net', 'ComputerLogFile').objects.filter(
+        models.Q(computer__isnull=True) | models.Q(collected_date__isnull=True),
+        import_status='imported',
+    ).update(import_status='legacy')
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -33,6 +42,7 @@ class Migration(migrations.Migration):
             name='active_identity_marker',
             field=models.GeneratedField(db_persist=True, expression=models.Case(models.When(stage__in=('discovered', 'downloaded', 'imported', 'archive_pending'), then=models.Value(1)), default=models.Value(None)), output_field=models.PositiveSmallIntegerField()),
         ),
+        migrations.RunPython(retire_unidentified_development_logs, migrations.RunPython.noop),
         migrations.AddConstraint(
             model_name='computerlogfile',
             constraint=models.CheckConstraint(condition=models.Q(models.Q(('import_status', 'imported'), _negated=True), models.Q(('computer__isnull', False), ('collected_date__isnull', False)), _connector='OR'), name='net_pc_import_identity_ck'),

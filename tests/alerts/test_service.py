@@ -6,6 +6,8 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.utils import timezone
 
+from tests.devices.pc.helpers import create_log_file
+
 from net.models import (
     AlertChannel,
     AlertDelivery,
@@ -196,12 +198,11 @@ class AlertServiceTests(TestCase):
         from net.alerts.service import process_target_findings
 
         profile = ComputerAnalysisProfile.objects.create(
-            name='computer alert profile', analysis_items=['activation'], scan_directories=['C:/logs'],
-        )
+            name='computer alert profile', analysis_items=['activation'], )
         computer = Computer.objects.create(computer_name='PC-ALERT')
 
         def analyzed_target(suffix, *, exceptions):
-            log = ComputerLogFile.objects.create(
+            log = create_log_file(
                 source_path=f'C:/logs/{suffix}.json', modified_at=timezone.now(),
                 content_hash=suffix * 64, import_status='imported', payload={},
             )
@@ -318,9 +319,8 @@ class AlertServiceTests(TestCase):
         for _ in range(9):
             self.target()
         profile = ComputerAnalysisProfile.objects.create(
-            name='generic failure profile', analysis_items=['activation'], scan_directories=['C:/logs'],
-        )
-        log = ComputerLogFile.objects.create(
+            name='generic failure profile', analysis_items=['activation'], )
+        log = create_log_file(
             source_path='C:/logs/generic.json', modified_at=timezone.now(),
             content_hash='f' * 64, import_status='imported', payload={},
         )

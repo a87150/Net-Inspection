@@ -21,7 +21,7 @@ from net.models import (
     TaskRun,
 )
 
-from .queue import enqueue_computer_scan_task, enqueue_task
+from .queue import enqueue_computer_fetch_task, enqueue_task
 
 
 _ASSET_MODELS = {
@@ -216,7 +216,7 @@ def _enqueue_due_schedules(now):
                     from net.people.tasks import enqueue_people_sync_task
                     task = enqueue_people_sync_task(schedule, available_at=now)
                 elif isinstance(profile, ComputerAnalysisProfile):
-                    task = enqueue_computer_scan_task(
+                    task = enqueue_computer_fetch_task(
                         profile, TaskRun.Source.SCHEDULED, overrides=overrides,
                     )
                 else:

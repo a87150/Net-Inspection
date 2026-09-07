@@ -233,6 +233,7 @@ class ComputerLogTransfer(models.Model):
         related_name='transfers',
     )
     remote_source_path = models.CharField(max_length=512)
+    source_snapshot = models.JSONField(default=dict, blank=True)
     remote_archive_path = models.TextField(blank=True)
     local_staging_path = models.TextField(blank=True)
     remote_size = models.PositiveBigIntegerField(default=0)

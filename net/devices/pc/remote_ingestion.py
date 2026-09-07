@@ -1,9 +1,16 @@
 """Durable remote transfer orchestration; remote moves happen only after DB commit."""
 from copy import deepcopy
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from queue import SimpleQueue
+from threading import local
 from dataclasses import dataclass, field
 import hashlib
 from pathlib import Path
 import posixpath
+import re
+import time
 from uuid import uuid4
 
 from django.core.exceptions import ValidationError
@@ -13,6 +20,7 @@ from django.utils import timezone
 from net.models import ComputerLogTransfer
 from .connectors.base import PCLogConnectionError, RemoteFileChanged, select_entries
 from .connectors.factory import build_connector
+from .configuration import source_snapshot, source_from_snapshot, ORIGIN_FIELDS
 from .logs import (
     MAX_LOG_FILE_BYTES, LogLeaseLost, _isolated_retry, _reject_links,
     check_log_lease, import_log_bytes,
@@ -52,6 +60,26 @@ def _save_transfer(transfer, target, **values):
         current.save(update_fields=[*values, 'updated_at'])
         return current
     return _isolated_retry(save)
+
+
+def _clean_stale_staging(root, target):
+    """Only retire our old UUID temp files, never operator files or live downloads."""
+    protected = set(ComputerLogTransfer.objects.filter(
+        task_target__task__status__in=['queued', 'running'],
+    ).values_list('local_staging_path', flat=True))
+    cutoff = time.time() - 86400
+    for path in root.iterdir():
+        check_log_lease(target)
+        if not re.fullmatch(r'[0-9a-f]{32}(?:\.verify)?\.part', path.name):
+            continue
+        if str(path) in protected or path.is_symlink():
+            continue
+        try:
+            _reject_links(path)
+            if path.is_file() and path.stat().st_mtime < cutoff:
+                path.unlink()
+        except (OSError, ValidationError):
+            continue
 
 
 def _archive_name(source, transfer):
@@ -114,8 +142,14 @@ def recover_remote_archives(source, *, connector=None, task_target=None):
         ).select_related('log_file').order_by('pk')
         for transfer in pending.iterator(chunk_size=100):
             check_log_lease(task_target)
+            frozen = transfer.source_snapshot
+            if frozen and any(frozen.get(key) != getattr(source, key) for key in ORIGIN_FIELDS):
+                summary.skipped += 1
+                summary.errors.append(f'传输 {transfer.pk} 属于旧日志服务器，未在当前服务器执行归档。')
+                continue
             try:
-                transfer = _archive_one(source, connector, transfer, root, task_target)
+                archive_source = source_from_snapshot(frozen) if frozen else source
+                transfer = _archive_one(archive_source, connector, transfer, root, task_target)
             except LogLeaseLost:
                 raise
             except (PCLogConnectionError, OSError, ValidationError, DatabaseError):
@@ -129,7 +163,55 @@ def recover_remote_archives(source, *, connector=None, task_target=None):
             connector.close()
 
 
-def fetch_remote_logs(source, *, task_target, now=None, connector=None):
+@contextmanager
+def _prefetch_downloads(source, entries, root, workers, target):
+    workers = max(1, min(64, int(workers)))
+    if workers == 1 or len(entries) <= 1:
+        yield ((entry, root / (uuid4().hex + '.part'), None) for entry in entries)
+        return
+    clients, paths = [], []
+    pool = None
+    try:
+        available = SimpleQueue()
+        for _ in range(min(workers, len(entries))):
+            # Resolve credentials before crossing a thread boundary. Each thread
+            # owns one independent protocol connection for this bounded batch.
+            client = build_connector(deepcopy(source))
+            clients.append(client)
+            available.put(client)
+        thread = local()
+        def download(entry, path):
+            if not hasattr(thread, 'client'):
+                thread.client = available.get()
+            return thread.client.download(entry.path, path)
+        pool = ThreadPoolExecutor(max_workers=len(clients), thread_name_prefix='pc-log-download')
+        def results():
+            pending = deque()
+            iterator = iter(entries)
+            def submit():
+                entry = next(iterator, None)
+                if entry is None:
+                    return
+                check_log_lease(target)
+                path = root / (uuid4().hex + '.part')
+                paths.append(path)
+                pending.append((entry, path, pool.submit(download, entry, path)))
+            for _ in clients:
+                submit()
+            while pending:
+                yield pending.popleft()
+                submit()
+        yield results()
+    finally:
+        if pool is not None:
+            pool.shutdown(wait=True, cancel_futures=True)
+        for client in clients:
+            client.close()
+        for path in paths:
+            path.unlink(missing_ok=True)
+
+
+def fetch_remote_logs(source, *, task_target, now=None, connector=None, max_download_workers=1):
     source = deepcopy(source)
     now = now or timezone.now()
     if timezone.is_naive(now):
@@ -139,11 +221,13 @@ def fetch_remote_logs(source, *, task_target, now=None, connector=None):
     try:
         root = _staging_root(source)
         check_log_lease(task_target)
+        _clean_stale_staging(root, task_target)
         summary = recover_remote_archives(source, connector=connector, task_target=task_target)
         handled = {transfer.remote_source_path for transfer in summary.transfers
                    if transfer.stage in ComputerLogTransfer.ACTIVE_STAGES}
         entries = select_entries(source, connector.list_json(), now=now)
         summary.discovered = len(entries)
+        candidates = []
         for entry in entries:
             check_log_lease(task_target)
             if entry.path in handled:
@@ -154,61 +238,74 @@ def fetch_remote_logs(source, *, task_target, now=None, connector=None):
                 summary.errors.append('日志路径过长或文件超过大小限制，源文件已保留。')
                 continue
 
-            def claim():
-                check_log_lease(task_target, lock=True)
-                existing = ComputerLogTransfer.objects.select_for_update().filter(
-                    source_id=source.pk, remote_source_path=entry.path, observed_mtime=entry.modified_at,
-                    stage__in=ComputerLogTransfer.ACTIVE_STAGES).first()
-                if existing is None:
-                    existing = ComputerLogTransfer.objects.create(
-                        source_id=source.pk, task_target=task_target, remote_source_path=entry.path,
-                        remote_size=entry.size, observed_mtime=entry.modified_at)
-                existing.task_target = task_target
-                existing.attempt_count += 1
-                existing.save(update_fields=['task_target', 'attempt_count', 'updated_at'])
-                return existing
+            candidates.append(entry)
 
-            transfer = _isolated_retry(claim)
-            temporary = root / (uuid4().hex + '.part')
-            try:
-                transfer = _save_transfer(transfer, task_target, local_staging_path=str(temporary))
-                downloaded = connector.download(entry.path, temporary)
-                check_log_lease(task_target)
-                if downloaded != entry or temporary.stat().st_size != entry.size:
-                    raise RemoteFileChanged('发现与下载的日志版本不一致，保留源文件。')
-                transfer = _save_transfer(transfer, task_target, stage='downloaded')
-                summary.downloaded += 1
-                transfer.task_target = task_target
-                outcome = import_log_bytes(
-                    raw=temporary.read_bytes(), source_path=str(temporary), modified_at=entry.modified_at,
-                    source_protocol=('ftps' if source.source_type == 'ftp' and source.ftp_use_tls
-                                     else source.source_type),
-                    remote_source_path=entry.path, transfer=transfer)
-                transfer.refresh_from_db()
-                if outcome.status == 'imported':
-                    summary.imported += 1
-                    summary.log_files.append(outcome.log_file)
-                elif outcome.status == 'failed_schema':
-                    summary.failed += 1
-                else:
-                    summary.duplicate += 1
+        workers = max_download_workers if owned else 1
+        with _prefetch_downloads(source, candidates, root, workers, task_target) as downloads:
+            for entry, temporary, future in downloads:
+                def claim():
+                    check_log_lease(task_target, lock=True)
+                    existing = ComputerLogTransfer.objects.select_for_update().filter(
+                        source_id=source.pk, remote_source_path=entry.path, observed_mtime=entry.modified_at,
+                        stage__in=ComputerLogTransfer.ACTIVE_STAGES).first()
+                    if existing is not None and existing.source_snapshot and any(
+                        existing.source_snapshot.get(key) != getattr(source, key) for key in ORIGIN_FIELDS
+                    ):
+                        existing.stage = 'failed'
+                        existing.error_message = '日志服务器配置已更换，保留旧传输记录，不在新服务器恢复旧归档。'
+                        existing.save(update_fields=['stage', 'error_message', 'updated_at'])
+                        existing = None
+                    if existing is None:
+                        existing = ComputerLogTransfer.objects.create(
+                            source_id=source.pk, task_target=task_target, remote_source_path=entry.path,
+                            remote_size=entry.size, observed_mtime=entry.modified_at,
+                            source_snapshot=source_snapshot(source))
+                    existing.task_target = task_target
+                    existing.attempt_count += 1
+                    existing.save(update_fields=['task_target', 'attempt_count', 'updated_at'])
+                    return existing
+
+                transfer = _isolated_retry(claim)
                 try:
-                    transfer = _archive_one(source, connector, transfer, root, task_target)
+                    transfer = _save_transfer(transfer, task_target, local_staging_path=str(temporary))
+                    downloaded = (future.result() if future is not None
+                                  else connector.download(entry.path, temporary))
+                    check_log_lease(task_target)
+                    if downloaded != entry or temporary.stat().st_size != entry.size:
+                        raise RemoteFileChanged('发现与下载的日志版本不一致，保留源文件。')
+                    transfer = _save_transfer(transfer, task_target, stage='downloaded')
+                    summary.downloaded += 1
+                    transfer.task_target = task_target
+                    outcome = import_log_bytes(
+                        raw=temporary.read_bytes(), source_path=str(temporary), modified_at=entry.modified_at,
+                        source_protocol=('ftps' if source.source_type == 'ftp' and source.ftp_use_tls
+                                         else source.source_type),
+                        remote_source_path=entry.path, transfer=transfer)
+                    transfer.refresh_from_db()
+                    if outcome.status == 'imported':
+                        summary.imported += 1
+                        summary.log_files.append(outcome.log_file)
+                    elif outcome.status == 'failed_schema':
+                        summary.failed += 1
+                    else:
+                        summary.duplicate += 1
+                    try:
+                        transfer = _archive_one(source, connector, transfer, root, task_target)
+                    except LogLeaseLost:
+                        raise
+                    except (PCLogConnectionError, OSError, ValidationError, DatabaseError):
+                        summary.move_failures += 1
+                        summary.errors.append(f'传输 {transfer.pk} 已入库，但归档失败，将自动重试。')
                 except LogLeaseLost:
                     raise
-                except (PCLogConnectionError, OSError, ValidationError, DatabaseError):
-                    summary.move_failures += 1
-                    summary.errors.append(f'传输 {transfer.pk} 已入库，但归档失败，将自动重试。')
-            except LogLeaseLost:
-                raise
-            except (PCLogConnectionError, OSError, ValidationError):
-                summary.skipped += 1
-                summary.errors.append(f'传输 {transfer.pk} 获取失败，远程源文件已保留。')
-                transfer = _save_transfer(
-                    transfer, task_target, stage='failed', error_message='获取失败，源文件保留待重试。')
-            finally:
-                temporary.unlink(missing_ok=True)
-            summary.transfers.append(transfer)
+                except (PCLogConnectionError, OSError, ValidationError):
+                    summary.skipped += 1
+                    summary.errors.append(f'传输 {transfer.pk} 获取失败，远程源文件已保留。')
+                    transfer = _save_transfer(
+                        transfer, task_target, stage='failed', error_message='获取失败，源文件保留待重试。')
+                finally:
+                    temporary.unlink(missing_ok=True)
+                summary.transfers.append(transfer)
         return summary
     finally:
         if owned:

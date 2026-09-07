@@ -16,10 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from net.api.views import ComputerInspectionView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/computer_inspection/', ComputerInspectionView.as_view(), name='computer_inspection'),
     path('', include('index.urls')),
 ]

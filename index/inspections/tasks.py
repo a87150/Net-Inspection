@@ -36,7 +36,7 @@ from net.models import (
     TaskTargetRun,
 )
 from net.inspections.executor import _database_guard
-from net.inspections.queue import cancel_task, enqueue_computer_scan_task, enqueue_task
+from net.inspections.queue import cancel_task, enqueue_computer_fetch_task, enqueue_task
 
 
 PROJECTS = {
@@ -105,14 +105,43 @@ def task_modal_context(request, project_kind, *, allow_target_selection=False, t
         for value in values
         if key in ('q', 'target') or key.startswith('filter_')
     ]
+    pc_source = pc_source_form = pc_analysis_form = None
+    if project_kind == 'computers':
+        from django.conf import settings
+        from net.models import PCLogSourceConfig
+        from index.devices.pc.forms import PCLogSourceForm
+        pc_source = PCLogSourceConfig.load()
+        pc_source_form = PCLogSourceForm(instance=pc_source, initial={
+            'source_type': getattr(pc_source, 'source_type', 'smb'),
+            'port': getattr(pc_source, 'port', 445),
+            'remote_incoming_directory': getattr(pc_source, 'remote_incoming_directory', 'incoming'),
+            'file_time_mode': getattr(pc_source, 'file_time_mode', 'recent_days'),
+            'local_staging_directory': getattr(pc_source, 'local_staging_directory',
+                                               str(settings.BASE_DIR / 'runtime' / 'pc-staging')),
+        })
+        pc_analysis_form = ComputerAnalysisProfileConfigForm(
+            instance=default_profile,
+            schedule=_schedule_for_profile(default_profile) if default_profile else None,
+            initial={'name': getattr(default_profile, 'name', 'PC 默认分析'),
+                     'concurrent_workers': getattr(default_profile, 'concurrent_workers', 4)})
+        from django import forms
+        for field in pc_analysis_form.fields.values():
+            if isinstance(field.widget, forms.CheckboxSelectMultiple):
+                continue
+            field.widget.attrs['class'] = ('form-check-input' if isinstance(field.widget, forms.CheckboxInput)
+                                          else 'form-select' if isinstance(field.widget, forms.Select)
+                                          else 'form-control')
+        pc_analysis_form.fields['daily_time'].widget = forms.TimeInput(attrs={'type': 'time', 'class': 'form-control'})
     return {
+        'pc_log_source': pc_source,
+        'pc_log_source_form': pc_source_form,
+        'pc_analysis_form': pc_analysis_form,
         'target_rule_form': (InspectionProfileConfigForm(device_type=PROJECTS[project_kind][0], instance=default_profile)
                              if project_kind in PROJECTS else None),
         'task_project_kind': project_kind,
         'task_target_source': target_source,
         'task_selected_ids': request.GET.get('task_targets', '').split(','),
         'task_target_mode': request.GET.get('task_mode', 'all'),
-        'task_scan_directories_text': '\n'.join(getattr(default_profile, 'scan_directories', [])),
         'task_profiles': profiles,
         'task_default_profile': default_profile,
         'task_default_items': (
@@ -225,7 +254,7 @@ def manual_task_create(request):
     if not request.POST.get('target_mode'):
         try:
             if isinstance(profile, ComputerAnalysisProfile):
-                task = enqueue_computer_scan_task(profile, TaskRun.Source.MANUAL)
+                task = enqueue_computer_fetch_task(profile, TaskRun.Source.MANUAL)
             else:
                 from net.inspections.schedules import _selected_target_ids
                 task = enqueue_task(
@@ -254,8 +283,8 @@ def manual_task_create(request):
             'concurrent_workers': cleaned['concurrent_workers'],
         }
     try:
-        if isinstance(profile, ComputerAnalysisProfile) and cleaned['target_mode'] == 'scan':
-            task = enqueue_computer_scan_task(
+        if isinstance(profile, ComputerAnalysisProfile) and cleaned['target_mode'] == 'fetch':
+            task = enqueue_computer_fetch_task(
                 profile, TaskRun.Source.MANUAL, overrides=overrides,
             )
         else:
@@ -441,6 +470,8 @@ def task_cancel(request, pk):
 
 
 def _target_result_url(target):
+    if target.analysis_handoff_task_id:
+        return reverse('task_detail', args=[target.analysis_handoff_task_id])
     route_map = {
         'computer_analysis': ('computer_analysis_detail', (target.result_id,)),
         'network_device_inspection': ('record_detail', ('networks', target.result_id)),

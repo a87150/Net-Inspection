@@ -6,7 +6,7 @@ from net.devices.pc.connectors.base import PCLogConnectionError
 from net.devices.pc.remote_ingestion import fetch_remote_logs, recover_remote_archives
 from net.devices.pc.logs import LogLeaseLost
 from net.models import ComputerLogFile, ComputerLogTransfer, ComputerAnalysisProfile
-from net.inspections.queue import enqueue_computer_scan_task, claim_next_task, cancel_task
+from net.inspections.queue import enqueue_computer_fetch_task, claim_next_task, cancel_task
 from .connector_fakes import memory_connector
 from .test_source_models import valid_smb_source
 from .test_remote_import import payload
@@ -21,6 +21,82 @@ class RemoteIngestionTests(TestCase):
     def fetch(self, connector, **kwargs):
         return fetch_remote_logs(self.source, connector=connector,
                                  now=connector.modified_at, task_target=kwargs.get('task_target'))
+
+    def test_changed_server_does_not_reuse_old_pending_transfer(self):
+        old = memory_connector({'incoming/a.json': payload()})
+        old.fail_moves = True
+        self.fetch(old)
+        previous = ComputerLogTransfer.objects.get()
+        self.source.host = 'replacement.test'
+        self.source.save()
+        new = memory_connector({'incoming/a.json': payload(name='PC02')})
+        new.modified_at = old.modified_at
+        summary = self.fetch(new)
+        previous.refresh_from_db()
+        self.assertEqual(summary.imported, 1)
+        self.assertEqual(previous.stage, 'failed')
+        self.assertEqual(ComputerLogTransfer.objects.count(), 2)
+        self.assertTrue(all(p.startswith('processed/') for p in new.paths))
+
+    def test_only_old_owned_staging_files_are_cleaned(self):
+        import os
+        import time
+        root = Path(self.folder.name)
+        stale = root / ('a' * 32 + '.part')
+        fresh = root / ('b' * 32 + '.part')
+        unrelated = root / 'operator-note.part'
+        for file in (stale, fresh, unrelated):
+            file.write_bytes(b'temporary')
+        old = time.time() - 2 * 86400
+        for file in (stale, unrelated):
+            os.utime(file, (old, old))
+        self.fetch(memory_connector({}))
+        self.assertFalse(stale.exists())
+        self.assertTrue(fresh.exists())
+        self.assertTrue(unrelated.exists())
+
+    def test_recovery_keeps_original_archive_directory(self):
+        connector = memory_connector({'incoming/a.json': payload()})
+        with patch('net.devices.pc.remote_ingestion._archive_one',
+                   side_effect=PCLogConnectionError('interrupted before archive path')):
+            self.fetch(connector)
+        self.source.remote_processed_directory = 'new-processed'
+        self.source.save()
+        recover_remote_archives(self.source, connector=connector)
+        self.assertTrue(all(p.startswith('processed/') for p in connector.paths))
+
+    def test_parallel_downloads_are_bounded_and_use_independent_connections(self):
+        import threading
+        import time
+        backend = memory_connector({f'incoming/{i}.json': payload(name=f'PC{i}') for i in range(4)})
+        backend.modified_at = __import__('django.utils.timezone', fromlist=['now']).now()
+        lock = threading.Lock()
+        state = {'active': 0, 'maximum': 0}
+        clients = []
+        def factory(source):
+            client = memory_connector({})
+            client.files = backend.files
+            client.modified_at = backend.modified_at
+            original = client.download
+            def download(path, destination):
+                with lock:
+                    state['active'] += 1
+                    state['maximum'] = max(state['maximum'], state['active'])
+                try:
+                    time.sleep(0.025)
+                    return original(path, destination)
+                finally:
+                    with lock:
+                        state['active'] -= 1
+            client.download = download
+            clients.append(client)
+            return client
+        with patch('net.devices.pc.remote_ingestion.build_connector', side_effect=factory):
+            summary = fetch_remote_logs(self.source, task_target=None, max_download_workers=2)
+        self.assertEqual(summary.imported, 4)
+        self.assertEqual(state['maximum'], 2)
+        self.assertEqual(len(clients), 3)  # listing/archive connection plus two download workers
+        self.assertEqual(list(Path(self.folder.name).iterdir()), [])
 
     def test_daily_duplicate_archives_both_files_but_imports_once(self):
         connector = memory_connector({'incoming/a.json': payload(), 'incoming/b.json': payload(hour=12)})
@@ -53,8 +129,8 @@ class RemoteIngestionTests(TestCase):
         self.assertEqual(ComputerLogTransfer.objects.get().stage, 'completed')
 
     def test_cancel_during_download_does_not_import_or_move(self):
-        profile = ComputerAnalysisProfile.objects.create(name='test', scan_directories=[self.folder.name])
-        task = enqueue_computer_scan_task(profile, 'manual')
+        profile = ComputerAnalysisProfile.objects.create(name='test')
+        task = enqueue_computer_fetch_task(profile, 'manual')
         claim_next_task('fetch-worker', 60)
         task.refresh_from_db()
         target = task.target_runs.get()

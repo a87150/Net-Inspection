@@ -136,9 +136,9 @@ class SecurityStatusTests(TestCase):
         record = self.device.inspections.get()
         target.refresh_from_db()
         task.refresh_from_db()
-        # The approved queue counts a partial target as non-success; a batch
-        # containing no fully successful targets aggregates to failed.
-        self.assertEqual(task.status, 'failed')
+        # A partially collected target retains partial aggregate status even
+        # when the batch has no fully successful targets (baseline 3c376f6).
+        self.assertEqual(task.status, 'partial')
         self.assertEqual(target.status, 'partial')
         self.assertEqual(record.raw_output, collected.raw)
         self.assertEqual(record.details, collected.data)

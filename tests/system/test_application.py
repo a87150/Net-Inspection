@@ -20,7 +20,6 @@ from net.models import (
     ComputerAnalysis,
     ComputerAnalysisProfile,
     ComputerLogFile,
-    Computer_Inspection,
     Domain_Account,
     Domain_Computer,
     Domain_Controller_Config,
@@ -152,30 +151,40 @@ class InspectionRuleTests(TestCase):
         self.assertEqual(issues[0]['问题类型'], '系统版本过旧')
 
 
-class ComputerInspectionApiTests(TestCase):
+class ComputerRemoteEvidenceTests(TestCase):
     def setUp(self):
-        self.client = APIClient()
-        self.url = reverse('computer_inspection')
-        ComputerAnalysisProfile.objects.create(name='Upload tests', analysis_items=['activation', 'bitlocker', 'defender', 'patches', 'resource'])
+        self.profile = ComputerAnalysisProfile.objects.create(
+            name='Remote system tests', analysis_items=['activation', 'bitlocker', 'defender', 'patches', 'resource'])
 
-    def execute_uploads(self):
+    def ingest_and_queue(self, payload):
+        from tests.devices.pc.helpers import import_payload
+        from net.inspections.queue import enqueue_task
+        outcome = import_payload(payload)
+        task = enqueue_task(self.profile, [outcome.log_file.pk], 'manual') if outcome.status == 'imported' else None
+        return outcome, task
+
+    def execute(self):
         from net.inspections.queue import claim_next_task, finish_task
         from net.devices.pc.executor import execute_computer_target
-        while (task := claim_next_task('upload-test', 60)) is not None:
+        while (task := claim_next_task('remote-system', 60)) is not None:
             for target in task.target_runs.all():
-                execute_computer_target(target, worker_id='upload-test')
-            finish_task(task.pk, 'upload-test')
+                execute_computer_target(target, worker_id='remote-system')
+            finish_task(task.pk, 'remote-system')
 
-    def test_valid_payload_creates_inventory_and_inspection(self):
+    def test_retired_direct_upload_endpoint_is_404_and_does_not_write(self):
+        import json
+        response = self.client.post('/api/computer_inspection/', json.dumps(valid_payload()), content_type='application/json')
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Computer.objects.exists())
+        self.assertFalse(ComputerLogFile.objects.exists())
+        self.assertFalse(TaskRun.objects.exists())
+
+    def test_remote_evidence_creates_inventory_then_worker_analysis_and_pages(self):
         payload = valid_payload()
-        response = self.client.post(self.url, payload, format='json')
-        self.assertEqual(response.status_code, 202)
-        self.assertEqual(Computer_Inspection.objects.count(), 0)
-        self.execute_uploads()
-        self.assertEqual(Computer.objects.count(), 1)
-        self.assertEqual(Domain_Computer.objects.count(), 0)
-        self.assertEqual(Computer_Inspection.objects.count(), 1)
-        self.assertEqual(Error_Computer.objects.count(), 0)
+        outcome, task = self.ingest_and_queue(payload)
+        self.assertEqual(outcome.status, 'imported')
+        self.assertFalse(ComputerAnalysis.objects.exists())
+        self.execute()
         computer = Computer.objects.get(computer_name='PC-001')
         self.assertEqual(computer.login_account, 'H000001')
         self.assertEqual(computer.ip_addresses, '192.0.2.10')
@@ -184,100 +193,66 @@ class ComputerInspectionApiTests(TestCase):
         self.assertEqual(computer.os_build, '10.0.26100.4770')
         self.assertEqual(computer.system_installed_at, '2025-01-02 03:04:05')
         analysis = ComputerAnalysis.objects.get()
-        self.assertEqual(
-            analysis.log_file.payload['系统信息概览']['开机时间'],
-            payload['系统信息概览']['开机时间'],
-        )
+        self.assertEqual(analysis.status, 'success')
+        self.assertFalse(Domain_Computer.objects.exists())
+        self.assertFalse(Error_Computer.objects.exists())
+        self.assertEqual(analysis.log_file.payload, payload)
         self.assertEqual(analysis.details['resource']['当前CPU温度'], '48°C')
         self.assertEqual(analysis.details['resource']['当前CPU占用率'], '10%')
-        self.assertEqual(analysis.details['resource']['当前内存容量'], '16GB')
-        self.assertEqual(analysis.details['resource']['当前内存使用率'], '61%')
-        inspection_id = analysis.pk
-        self.assertEqual(self.client.get(reverse('computer_inspection_list')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('computer_inspection_detail', args=[inspection_id])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('computer_error_list')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('item_list', args=['computers'])).status_code, 200)
+        for name, args in [('computer_analysis_list', []), ('computer_analysis_detail', [analysis.pk]),
+                           ('computer_error_list', []), ('item_list', ['computers'])]:
+            self.assertEqual(self.client.get(reverse(name, args=args)).status_code, 200)
 
-    def test_same_payload_is_idempotent(self):
+    def test_duplicate_remote_bytes_do_not_create_new_evidence_or_queue(self):
         payload = valid_payload()
-        self.assertEqual(self.client.post(self.url, payload, format='json').status_code, 202)
-        self.execute_uploads()
-        response = self.client.post(self.url, payload, format='json')
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.data['created'])
-        self.assertEqual(Computer_Inspection.objects.count(), 1)
-
-    def test_retry_preserves_queued_receipt_when_existing_log_has_no_analysis(self):
-        payload = valid_payload('PC-ZERO-ANALYSIS')
-        self.assertEqual(self.client.post(self.url, payload, format='json').status_code, 202)
-        log_file = ComputerLogFile.objects.get()
-        self.client.raise_request_exception = False
-
-        response = self.client.post(self.url, payload, format='json')
-
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.data['created'])
-        self.assertEqual(ComputerLogFile.objects.count(), 1)
-        self.assertEqual(log_file.analyses.count(), 0)
-        self.assertEqual(response.data['task_id'], str(log_file.upload_task_id))
+        first, task = self.ingest_and_queue(payload)
+        duplicate, second_task = self.ingest_and_queue(payload)
+        self.assertEqual(duplicate.status, 'duplicate_content')
+        self.assertEqual(first.log_file.pk, duplicate.log_file.pk)
+        self.assertIsNone(second_task)
         self.assertEqual(TaskRun.objects.count(), 1)
-        self.execute_uploads()
-        self.assertEqual(log_file.analyses.count(), 1)
+        self.assertFalse(ComputerAnalysis.objects.exists())
+        self.execute()
+        self.assertEqual(ComputerAnalysis.objects.count(), 1)
 
-    def test_retry_keeps_original_receipt_and_multiple_analysis_history(self):
-        payload = valid_payload('PC-MULTIPLE-ANALYSES')
-        self.assertEqual(self.client.post(self.url, payload, format='json').status_code, 202)
-        self.execute_uploads()
+    def test_reanalysis_preserves_original_evidence_and_multiple_history(self):
+        from net.inspections.queue import enqueue_task
+        first, task = self.ingest_and_queue(valid_payload())
+        self.execute()
         original = ComputerAnalysis.objects.get()
-        latest = ComputerAnalysis.objects.create(
-            computer=original.computer,
-            log_file=original.log_file,
-            summary='重新分析结果',
-        )
-        now = timezone.now()
-        ComputerAnalysis.objects.filter(pk=original.pk).update(
-            created_at=now - timedelta(minutes=1),
-        )
-        ComputerAnalysis.objects.filter(pk=latest.pk).update(created_at=now)
-        self.client.raise_request_exception = False
-
-        response = self.client.post(self.url, payload, format='json')
-
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.data['created'])
+        enqueue_task(self.profile, [first.log_file.pk], 'manual')
+        self.execute()
         self.assertEqual(ComputerLogFile.objects.count(), 1)
         self.assertEqual(ComputerAnalysis.objects.count(), 2)
-        self.assertEqual(response.data['task_id'], str(original.log_file.upload_task_id))
+        original.refresh_from_db()
+        self.assertEqual(original.task_target.task_id, task.pk)
+        self.assertEqual(original.log_file_id, first.log_file.pk)
 
-    def test_older_upload_does_not_replace_newer_snapshot(self):
-        newer_time = timezone.localtime().replace(microsecond=0)
-        newer_payload = valid_payload('PC-LATEST', newer_time)
-        newer_payload['系统信息概览']['当前登录用户工号'] = 'NEWER'
-        newer_payload['网络信息'] = [{'IP地址': '192.0.2.99', 'MAC地址': 'AA-BB-CC-DD-EE-99'}]
-        newer_payload['计算机硬件资源情况']['当前CPU占用率'] = '77%'
-        self.assertEqual(self.client.post(self.url, newer_payload, format='json').status_code, 202)
-
-        older_payload = valid_payload('PC-LATEST', newer_time - timedelta(minutes=5))
-        older_payload['系统信息概览']['当前登录用户工号'] = 'OLDER'
-        older_payload['网络信息'] = [{'IP地址': '192.0.2.10', 'MAC地址': 'AA-BB-CC-DD-EE-10'}]
-        older_payload['计算机硬件资源情况']['当前CPU占用率'] = '12%'
-        self.assertEqual(self.client.post(self.url, older_payload, format='json').status_code, 202)
-        self.execute_uploads()
-
+    def test_older_remote_day_does_not_replace_newer_inventory(self):
+        now = timezone.localtime().replace(microsecond=0)
+        newer = valid_payload('PC-LATEST', now)
+        newer['系统信息概览']['当前登录用户工号'] = 'NEWER'
+        newer['网络信息'] = [{'IP地址': '192.0.2.99', 'MAC地址': 'AA-BB-CC-DD-EE-99'}]
+        self.ingest_and_queue(newer)
+        older = valid_payload('PC-LATEST', now - timedelta(days=1))
+        older['系统信息概览']['当前登录用户工号'] = 'OLDER'
+        self.ingest_and_queue(older)
+        self.execute()
         computer = Computer.objects.get(computer_name='PC-LATEST')
-        self.assertEqual(computer.last_report_at, newer_time)
+        self.assertEqual(computer.last_report_at, now)
         self.assertEqual(computer.login_account, 'NEWER')
         self.assertEqual(computer.ip_addresses, '192.0.2.99')
-        self.assertEqual(computer.mac_addresses, 'AA-BB-CC-DD-EE-99')
-        latest_analysis = ComputerAnalysis.objects.order_by('-log_file__modified_at').first()
-        self.assertEqual(
-            latest_analysis.details['resource']['当前CPU占用率'],
-            '77%',
-        )
+        self.assertEqual(ComputerAnalysis.objects.count(), 2)
 
-    def test_missing_computer_name_returns_400(self):
-        response = self.client.post(self.url, {'系统信息概览': {}}, format='json')
-        self.assertEqual(response.status_code, 400)
+    def test_missing_computer_name_is_retained_as_failed_remote_evidence(self):
+        from tests.devices.pc.helpers import import_payload
+        payload = valid_payload()
+        payload['系统信息概览'] = {}
+        outcome = import_payload(payload)
+        self.assertEqual(outcome.status, 'failed_schema')
+        self.assertIn('计算机名', outcome.log_file.parse_error)
+        self.assertFalse(Computer.objects.exists())
+        self.assertFalse(TaskRun.objects.exists())
 
 
 class ComputerSnapshotTests(TestCase):
@@ -998,7 +973,7 @@ class VisualStructureTests(TestCase):
             self.client.get(reverse('domain_account_list')),
             self.client.get(reverse('inspection_records')),
             self.client.get(reverse('error_records')),
-            self.client.get(reverse('computer_inspection_list')),
+            self.client.get(reverse('computer_analysis_list')),
             self.client.get(reverse('computer_error_list')),
         ]
 
@@ -1039,7 +1014,7 @@ class VisualStructureTests(TestCase):
         self.assertTrue(self._elements_with_class(empty_page, 'div', 'empty-state'))
 
     def test_dedicated_computer_record_pages_use_shared_table_surfaces(self):
-        for route_name in ('computer_inspection_list', 'computer_error_list'):
+        for route_name in ('computer_analysis_list', 'computer_error_list'):
             with self.subTest(route_name=route_name):
                 document = parse_response_html(self.client.get(reverse(route_name)))
                 self.assertTrue(
@@ -1639,7 +1614,7 @@ class RecordWorkspaceTests(TestCase):
             error_message='连接超时',
         )
 
-        response = self.client.get(reverse('computer_inspection_list'))
+        response = self.client.get(reverse('computer_analysis_list'))
 
         self.assertEqual(list(response.context['page_obj'].object_list), [analysis])
 
@@ -1802,7 +1777,7 @@ class RecordWorkspaceTests(TestCase):
             inspection=inspection, error_type='磁盘异常', error_message='空间不足',
         )
 
-        inspection_response = self.client.get(reverse('computer_inspection_list'))
+        inspection_response = self.client.get(reverse('computer_analysis_list'))
         error_response = self.client.get(reverse('computer_error_list'))
         inspection_document = parse_response_html(inspection_response)
         error_document = parse_response_html(error_response)
@@ -1832,7 +1807,7 @@ class RecordWorkspaceTests(TestCase):
         ])
 
         inspection_response = self.client.get(
-            reverse('computer_inspection_list'), {'page_size': '50'},
+            reverse('computer_analysis_list'), {'page_size': '50'},
         )
         error_response = self.client.get(
             reverse('computer_error_list'), {'page_size': '50'},
@@ -1850,7 +1825,7 @@ class RecordWorkspaceTests(TestCase):
             inspection=abnormal, error_type='测试异常', error_message='异常',
         )
 
-        response = self.client.get(reverse('computer_inspection_list'), {
+        response = self.client.get(reverse('computer_analysis_list'), {
             'filter_computer_name': 'ABNORMAL',
             'filter_status': 'failed',
             'filter_created_at_from': timezone.localdate().isoformat(),
@@ -1906,10 +1881,10 @@ class RecordWorkspaceTests(TestCase):
             inspection=abnormal, error_type='测试异常', error_message='异常',
         )
 
-        normal_response = self.client.get(reverse('computer_inspection_list'), {
+        normal_response = self.client.get(reverse('computer_analysis_list'), {
             'filter_status': 'normal',
         })
-        abnormal_response = self.client.get(reverse('computer_inspection_list'), {
+        abnormal_response = self.client.get(reverse('computer_analysis_list'), {
             'filter_status': 'abnormal',
         })
         document = parse_response_html(normal_response)
@@ -1961,7 +1936,7 @@ class DemoDataCommandTests(TestCase):
         self.assertEqual(first_counts, second_counts)
         self.assertEqual(People.objects.get(pk=existing.pk).name, '真实人员')
         self.assertGreater(first_counts['computers'], 0)
-        self.assertGreater(Computer_Inspection.objects.count(), 0)
+        self.assertGreater(ComputerAnalysis.objects.count(), 0)
         self.assertGreater(Error_Computer.objects.count(), 0)
         self.assertGreater(Error_Network_Device.objects.count(), 0)
         self.assertGreater(Error_Server.objects.count(), 0)

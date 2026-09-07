@@ -156,6 +156,17 @@ def check_system_version(data, current_issues, minimum_release=None):
     minimum_release = minimum_release or os.getenv('MIN_WINDOWS_RELEASE', '23H2')
     version = (data.get('系统信息概览') or {}).get('系统主要版本名', '')
     actual_key = _release_key(version)
+    if not actual_key:
+        # The terminal producer reports the OS caption and its numeric build.
+        system = data.get('系统信息概览') or {}
+        release = re.search(r'\b(\d{2}H[12])\b', str(version), flags=re.IGNORECASE)
+        if release:
+            actual_key = _release_key(release[1])
+        elif re.match(r'^(?:microsoft\s+)?windows\b', str(version).strip(), re.IGNORECASE):
+            build = re.fullmatch(r'10\.0\.(\d+)(?:\.\d+)?', str(system.get('系统详细版本', '')).strip())
+            releases = {19044: '21H2', 19045: '22H2', 22000: '21H2',
+                        22621: '22H2', 22631: '23H2', 26100: '24H2'}
+            actual_key = _release_key(releases.get(int(build[1]))) if build else None
     minimum_key = _release_key(minimum_release)
     if not actual_key:
         add_issue(current_issues, '系统版本数据缺失', f'无法识别系统版本：{version or "空"}')
@@ -175,7 +186,7 @@ def check_activation(data, current_issues, expected_kms_servers=()):
     product_text = f"{activation.get('描述', '')} {activation.get('产品密钥通道', '')}".upper()
     if 'KMS' in product_text:
         kms_status = data.get('KMS服务器连通情况', '')
-        if kms_status != '正常通讯':
+        if normalize_windows_state(kms_status) != 'known':
             problems.append(f'KMS服务器通讯状态：{kms_status or "未知"}')
         kms_ip = activation.get('KMS 计算机 IP 地址', '')
         kms_name = activation.get('已注册的 KMS 计算机名称', '')
@@ -240,3 +251,88 @@ def extract_network_info(data, field):
         for item in network_info
         if isinstance(item, dict) and item.get(field)
     )
+
+
+def normalize_windows_state(value):
+    text = str(value or '').strip().casefold()
+    if text in {'正常', '正常通讯', '成功', 'true', 'ok', 'success', 'healthy'}:
+        return 'known'
+    if text in {'失败', '无法访问', '未加入域', 'false', 'failed', 'error'}:
+        return 'failed'
+    return 'unknown'
+
+
+def _measurement(value, kind):
+    if isinstance(value, bool):
+        return None
+    match = re.fullmatch(r'([+-]?\d+(?:\.\d+)?)\s*([a-z°℃℉]*)',
+                         str(value).strip(), flags=re.IGNORECASE)
+    if not match:
+        return None
+    number, unit = float(match[1]), match[2].casefold()
+    if kind == 'temperature':
+        if unit in {'f', '°f', '℉'}:
+            number = (number - 32) * 5 / 9
+        elif unit not in {'', 'c', '°c', '℃'}:
+            return None
+        return number if -100 <= number <= 250 else None
+    factors = {'': 1, 'mhz': 1, 'ghz': 1000, 'khz': .001, 'hz': .000001}
+    return number * factors[unit] if unit in factors and number > 0 else None
+
+
+def check_remote_item(item, payload, issues, rules):
+    """Evaluate producer evidence without collapsing unknown into an empty success."""
+    from net.devices.pc.enrichment import normalize_login
+
+    fields = {'browser_extensions': '浏览器插件情况', 'group_policy': '已应用策略',
+              'identity_match': '系统信息概览', 'domain_trust': '当前与域服务器通讯情况',
+              'cpu_health': '计算机硬件资源情况'}
+    field = fields[item]
+    evidence = payload.get(field)
+    result = {'evidence': evidence, 'data_state': 'known'}
+    if item == 'domain_trust':
+        result['data_state'] = normalize_windows_state(evidence) if field in payload else 'missing'
+        if result['data_state'] == 'failed':
+            add_issue(issues, '域信任问题', f'域通讯/信任状态：{evidence}')
+    elif item == 'cpu_health':
+        hardware = evidence if isinstance(evidence, dict) else {}
+        temperature = _measurement(hardware.get('当前CPU温度'), 'temperature')
+        frequency = _measurement(hardware.get('当前CPU频率'), 'frequency')
+        result.update(temperature_celsius=temperature, frequency_mhz=frequency,
+                      temperature_max_celsius=rules['cpu_temperature_max_celsius'])
+        if temperature is None or frequency is None:
+            result['data_state'] = 'partial' if temperature is not None or frequency is not None else 'unknown'
+        if temperature is not None and temperature > rules['cpu_temperature_max_celsius']:
+            add_issue(issues, 'CPU温度问题', f"CPU 温度 {temperature:g}°C 超过阈值 {rules['cpu_temperature_max_celsius']}°C")
+    elif item == 'identity_match':
+        system = evidence if isinstance(evidence, dict) else {}
+        login = normalize_login(system.get('当前登录用户工号'))
+        name = system.get('计算机名')
+        result.update(login_identifier=login, reported_match=payload.get('计算机和用户匹配情况'))
+        if not login or not isinstance(name, str) or not name.strip() or login.casefold() in {'未知', 'unknown', '未采集'}:
+            result['data_state'] = 'unknown'
+        elif login.casefold() != name.strip().casefold():
+            result['data_state'] = 'failed'
+            add_issue(issues, '计算机和用户不匹配', f'计算机名 {name} 与登录标识 {login} 不匹配')
+    else:
+        def collected(values):
+            return isinstance(values, list) and all(
+                isinstance(value, str) and bool(value.strip())
+                and value.strip().casefold() not in {
+                    '未知', '检测失败', '获取失败', '未采集', 'unknown', 'unavailable',
+                } for value in values)
+        if not isinstance(evidence, dict) or not evidence:
+            result['data_state'] = 'unknown'
+        elif item == 'group_policy':
+            states = [collected(evidence.get(key)) for key in ('计算机策略', '用户策略')]
+            result['data_state'] = 'known' if all(states) else 'partial' if any(states) else 'unknown'
+        elif not all(isinstance(key, str) and key.strip() and collected(values)
+                     for key, values in evidence.items()):
+            result['data_state'] = 'unknown'
+    if field not in payload:
+        result['data_state'] = 'missing'
+    if result['data_state'] in {'missing', 'unknown', 'partial'}:
+        issues.append({'问题类型': f'{item}数据缺失或未知',
+                       '详细问题': f"所选项目 {item} 数据状态为 {result['data_state']}，不能判定正常。",
+                       'data_state': result['data_state']})
+    return result

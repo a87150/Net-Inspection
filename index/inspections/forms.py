@@ -29,6 +29,9 @@ _ANALYSIS_LABELS = {
     'domain': '域状态', 'resource': '资源使用情况',
     'event_findings': '事件发现', 'system': '系统版本',
     'uptime': '连续开机时间',
+    'browser_extensions': '浏览器扩展', 'identity_match': '账号与电脑名匹配',
+    'cpu_health': 'CPU 温度与频率', 'domain_trust': '域连接状态',
+    'group_policy': '计算机与用户组策略',
 }
 
 
@@ -196,22 +199,6 @@ class InspectionProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
 class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
     profile_id = forms.UUIDField(required=False, widget=forms.HiddenInput)
     name = forms.CharField(max_length=255, label='配置名称')
-    scan_directories_text = forms.CharField(
-        required=False,
-        widget=forms.Textarea,
-        label='扫描目录',
-        help_text='每行一个服务器上的绝对目录。',
-    )
-    recursive = forms.BooleanField(required=False, label='递归扫描子目录')
-    processed_directory = forms.CharField(required=False, widget=forms.TextInput, label='已处理目录')
-    failed_directory = forms.CharField(required=False, widget=forms.TextInput, label='失败目录')
-    file_time_mode = forms.ChoiceField(
-        choices=ComputerAnalysisProfile.FileTimeMode.choices,
-        label='文件时间范围',
-    )
-    recent_days = forms.IntegerField(required=False, min_value=1, max_value=3650, label='最近 N 天')
-    range_start_date = forms.DateField(required=False, label='开始日期')
-    range_end_date = forms.DateField(required=False, label='结束日期')
     analysis_items = forms.MultipleChoiceField(
         choices=analysis_item_choices(),
         widget=forms.CheckboxSelectMultiple,
@@ -240,6 +227,11 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
     memory_max_percent = forms.IntegerField(
         required=False, min_value=1, max_value=100, label='内存报警阈值（%）',
     )
+    cpu_temperature_max_celsius = forms.IntegerField(
+        required=False, min_value=1, max_value=150, label='CPU 温度阈值（℃）',
+    )
+    site_ip_prefixes = forms.JSONField(required=False, label='IP 网段与站点映射',
+                                      help_text='JSON 对象，例如 {"10.10.0.0/16": "长沙"}。')
     kms_servers_text = forms.CharField(
         required=False, widget=forms.Textarea, label='KMS 服务器',
     )
@@ -257,14 +249,6 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
             self.initial.update({
                 'profile_id': instance.pk,
                 'name': instance.name,
-                'scan_directories_text': '\n'.join(instance.scan_directories),
-                'recursive': instance.recursive,
-                'processed_directory': instance.processed_directory,
-                'failed_directory': instance.failed_directory,
-                'file_time_mode': instance.file_time_mode,
-                'recent_days': instance.recent_days,
-                'range_start_date': instance.range_start_date,
-                'range_end_date': instance.range_end_date,
                 'analysis_items': instance.analysis_items,
                 'software_policy_path': instance.software_policy_path,
                 'minimum_windows_release': instance.minimum_windows_release,
@@ -274,6 +258,8 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
                 'uptime_max_hours': instance.uptime_max_hours,
                 'cpu_max_percent': instance.cpu_max_percent,
                 'memory_max_percent': instance.memory_max_percent,
+                'cpu_temperature_max_celsius': instance.cpu_temperature_max_celsius,
+                'site_ip_prefixes': instance.site_ip_prefixes,
                 'kms_servers_text': '\n'.join(instance.kms_servers),
                 'concurrent_workers': instance.concurrent_workers,
             })
@@ -286,13 +272,6 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
                 'daily_time': schedule.daily_time,
             })
 
-    def clean_scan_directories_text(self):
-        directories = [
-            line.strip() for line in self.cleaned_data['scan_directories_text'].splitlines()
-            if line.strip()
-        ]
-        return directories
-
     def clean_kms_servers_text(self):
         return [
             line.strip()
@@ -301,51 +280,23 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
         ]
 
     def _configured_value(self, name, default):
-        if name in self.data:
+        if name in self.data and self.cleaned_data.get(name) is not None:
             return self.cleaned_data[name]
         return getattr(self.instance, name, default) if self.instance is not None else default
 
     def clean(self):
         cleaned = super().clean()
         self._clean_schedule()
-        mode = cleaned.get('file_time_mode')
-        if cleaned.get('schedule_enabled') and not cleaned.get('scan_directories_text'):
-            self.add_error('scan_directories_text', '启用定时扫描时至少需要一个扫描目录。')
-        if mode == ComputerAnalysisProfile.FileTimeMode.RECENT_DAYS:
-            if cleaned.get('recent_days') is None:
-                self.add_error('recent_days', '最近天数模式必须设置天数。')
-        elif mode == ComputerAnalysisProfile.FileTimeMode.DATE_RANGE:
-            start, end = cleaned.get('range_start_date'), cleaned.get('range_end_date')
-            if start is None:
-                self.add_error('range_start_date', '指定日期模式必须设置开始日期。')
-            if end is None:
-                self.add_error('range_end_date', '指定日期模式必须设置结束日期。')
-            if start is not None and end is not None and start > end:
-                self.add_error('range_end_date', '结束日期不能早于开始日期。')
+        if cleaned.get('schedule_enabled'):
+            from net.models import PCLogSourceConfig
+            if PCLogSourceConfig.load() is None:
+                self.add_error('schedule_enabled', '请先保存日志来源，再启用定时执行。')
         return cleaned
 
     def profile_values(self):
         cleaned = self.cleaned_data
-        mode = cleaned['file_time_mode']
         return {
             'name': cleaned['name'],
-            'scan_directories': cleaned['scan_directories_text'],
-            'recursive': cleaned['recursive'],
-            'processed_directory': cleaned['processed_directory'],
-            'failed_directory': cleaned['failed_directory'],
-            'file_time_mode': mode,
-            'recent_days': (
-                cleaned['recent_days']
-                if mode == ComputerAnalysisProfile.FileTimeMode.RECENT_DAYS else None
-            ),
-            'range_start_date': (
-                cleaned['range_start_date']
-                if mode == ComputerAnalysisProfile.FileTimeMode.DATE_RANGE else None
-            ),
-            'range_end_date': (
-                cleaned['range_end_date']
-                if mode == ComputerAnalysisProfile.FileTimeMode.DATE_RANGE else None
-            ),
             'analysis_items': cleaned['analysis_items'],
             'software_policy_path': self._configured_value('software_policy_path', ''),
             'minimum_windows_release': self._configured_value('minimum_windows_release', '23H2'),
@@ -355,6 +306,8 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
             'uptime_max_hours': self._configured_value('uptime_max_hours', 168),
             'cpu_max_percent': self._configured_value('cpu_max_percent', 90),
             'memory_max_percent': self._configured_value('memory_max_percent', 90),
+            'cpu_temperature_max_celsius': self._configured_value('cpu_temperature_max_celsius', 85) or 85,
+            'site_ip_prefixes': self._configured_value('site_ip_prefixes', {}) or {},
             'kms_servers': (
                 cleaned['kms_servers_text']
                 if 'kms_servers_text' in self.data
@@ -371,7 +324,7 @@ class ManualTaskForm(forms.Form):
             ('all', '全部资产'),
             ('selected', '已选资产'),
             ('filtered', '当前筛选结果'),
-            ('scan', '扫描并分析新日志'),
+            ('fetch', '获取并分析远程日志'),
         ),
     )
     selected_items = forms.MultipleChoiceField(
@@ -399,10 +352,10 @@ class ManualTaskForm(forms.Form):
 
     def clean_target_mode(self):
         mode = self.cleaned_data['target_mode']
-        if isinstance(self.profile, InspectionProfile) and mode == 'scan':
+        if isinstance(self.profile, InspectionProfile) and mode == 'fetch':
             raise ValidationError('设备巡检不支持扫描模式。')
         if isinstance(self.profile, ComputerAnalysisProfile) and mode not in {
-            'all', 'selected', 'filtered', 'scan',
+            'all', 'selected', 'filtered', 'fetch',
         }:
             raise ValidationError('计算机分析目标范围无效。')
         return mode

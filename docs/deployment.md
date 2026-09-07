@@ -2,39 +2,27 @@
 
 本页补充生产 Web/Worker 部署的 PC 采集脚本部分。基础服务注册和环境变量示例见 [Windows / NSSM](../deploy/windows/README.md) 与 [Linux / systemd](../deploy/linux/systemd/README.md)。
 
-## 公共地址与反向代理
+## PC 来源与采集脚本
 
-生产环境首选显式设置 `NET_PUBLIC_BASE_URL` 为终端可访问的单一 HTTP(S) origin，例如：
+新版 PC 仅从统一汇总共享目录获取 JSON，旧上传 API 不再提供。详细配置步骤见 [README 的 PC 日志章节](../README.md#pc-共享日志获取与分析)。
 
-```powershell
-$env:NET_PUBLIC_BASE_URL = 'https://inspection.example.com'
-```
+管理员在 PC 配置窗口保存 SMB 或 FTP/FTPS 来源、读取/归档目录、日期范围与终端写入路径。Windows 使用 UNC 路径；macOS 使用已挂载的 /Volumes 路径。后台密码仅加密保存在数据库，脚本不含该密码。若 Worker 使用 FTP，必须保证 FTP 目录和终端写入路径对应同一批文件。
 
-下载脚本把它转换为 `https://inspection.example.com/api/computer_inspection/?profile_id=<UUID>`；它不能包含路径、查询参数、片段或 userinfo。显式地址优先于请求推导的地址，能避免 TLS 终止代理向 Django 转发内部 HTTP/内部 host 时生成错误上传地址。
+Web 和 Worker 使用相同数据库及稳定的 PC_LOG_SOURCE_ENCRYPTION_KEY（有效 Fernet 密钥）；另需单独配置域控操作密钥。加密密钥与数据库应分别备份。更换密钥必须先重新配置凭据，不可直接丢弃旧值。
 
-`NET_TRUST_PROXY_HEADERS` 默认关闭。只有在下列条件同时满足时才设为 `true`、`yes` 或 `1`：反向代理由本部署团队信任并会重写 `X-Forwarded-Proto` 和 `X-Forwarded-Host`，该代理是 Django 的唯一/受控入口，而且 `DJANGO_ALLOWED_HOSTS` 只包含正确的公开 host（及必要端口）。开启后 Django 才信任这些 forwarded headers；未满足条件时保持关闭并使用 `NET_PUBLIC_BASE_URL`。不要让客户端可直连 Django 后仍开启该开关。
+终端脚本从已保存的配置下载，仅管理员可下载，响应禁止缓存。修改终端写入路径后须重新下载部署；分析规则由 Worker 配置决定，不需要重新分发脚本。Windows 脚本兼容 PowerShell 5.1，UTF-8 BOM；macOS 使用 sh、Python 3 与系统自带工具。两者以固定本地账号按日运行，不内嵌后台登录密码。
 
-## 配置、下载和权限
+采集先写 .uploading 再重命名 JSON；成功发布后保存每日标记。共享不可写时不会标记成功，可重试。服务器按 PC 与日志日期去重，每天保留第一份有效日志。已选检查的数据未知会明确显示缺失，不自动视为正常。
 
-1. 在 PC 的“分析配置”中保存 profile，并设置至少一个扫描目录、扫描递归选项和文件时间范围。每次下载都绑定**所选且已保存** profile 的 UUID；配置以后修改，必须重新下载脚本才会得到新配置。
-2. 使用 Windows 本机路径（例如 `C:\InspectionLogs`）建立 Windows profile，使用 macOS POSIX 路径（例如 `/Library/Logs/Inspection`）建立 macOS profile。同一 profile 的路径原样嵌入两个模板；因此跨平台路径不同的环境必须分别保存 profile，不能把 Windows 路径用于 macOS 或反之。
-3. 登录用户才能从 `GET /tasks/profiles/computer/<profile UUID>/scripts/windows/` 或 `.../macos/` 下载。成功响应是附件，带 `X-Content-Type-Options: nosniff` 和 `Cache-Control: no-store`。请在上层认证、HTTPS 和网络访问控制下使用；不要把下载 URL 或已下载文件放入共享缓存。
+Worker 获取文件后先提交数据库，再归档远程文件；已处理/失败目录必须与汇总目录位于同一共享或 FTP 文件系统，并允许重命名。暂存目录必须位于 Worker 本机，不能放在 static/staticfiles。定时执行和手动执行使用同一获取任务链，分析可多线程。
 
-脚本只序列化扫描目录、递归和时间范围、分析项目、上传 URL 与 profile UUID；不会带入域控绑定密码、设备密码/API token、Django `SECRET_KEY` 或数据库凭据。
+## 上线检查
 
-## 运行前置条件
+先在页面测试连接和预览：连接测试会创建、移动、删除专用测试文件；预览只读列目录。确认服务器、目录和日期范围无误，再人工执行获取。查看获取任务的导入/重复/失败/归档失败数量，以及后续分析子任务。
 
-Windows 下载文件名为 `GetInfo_Upload.ps1`，采用 UTF-8 **BOM**，以兼容 Windows PowerShell 5.1。以可读取扫描目录、可在首个扫描目录创建失败 JSON 的 Windows 帐号运行；主机必须能访问上传 URL，并提供 PowerShell/WMI（CIM）与网络查询所需系统组件。执行策略限制时由管理员按本组织策略放行，不要绕过策略或把脚本改为携带凭据。
+本地自动化使用模拟 SMB/FTP，不能代替真实网络权限、FTPS 证书及 Windows/macOS 终端验证。部署时分别检查终端写入权限、Worker 读取和归档权限，并用测试设备的日志验证整条链路。不要把生产账号或日志内容放入公开截图。
 
-macOS 下载文件名为 `getinfo_upload_macos.sh`，是无 BOM 的 UTF-8 POSIX shell 文件。使用有读取目录和写入首个扫描目录权限的帐号运行；需要 `sh`、`python3`、`curl`，以及系统自带的 `system_profiler`、`sysctl`、`diskutil`、`df`、`ifconfig`、`find`。下载后赋予执行权限，例如 `chmod 700 getinfo_upload_macos.sh`，再执行 `./getinfo_upload_macos.sh`。
-
-两种脚本都会收集主机、系统、CPU/内存/磁盘、网络与时间范围内 JSON 日志元数据，并以 UTF-8 JSON POST 到 `/api/computer_inspection/`。上传失败时，脚本会把完整 JSON 保留到第一个配置的扫描目录，并返回非零退出状态；修复网络、DNS、TLS、认证或服务问题后，可审阅该 JSON 再重新运行/重传。保留目录应由 Worker 帐号和端点帐号按实际职责分别授权，且不得放在静态文件目录。
-
-## Worker 消费与上线检查
-
-上传 API 成功返回 `202` 表示已接收并入队，不表示分析已完成。独立 Worker（`manage.py run_task_worker`）消费任务、提取并脱敏证据，按上传 URL 中的 profile UUID 使用分析项目，创建分析结果及必要告警；在任务详情查看最终状态。Web 与 Worker 必须指向同一生产数据库和同一 profile 数据。
-
-自动化测试覆盖生成、profile 绑定、下载登录保护、BOM/no-store 与静态秘密扫描，但不等同于真实端点环境验证。部署前仍必须在真实 Windows PowerShell 5.1 主机和真实 macOS 主机做 smoke test：从登录后的页面下载对应脚本，确认路径权限与 UTF-8/BOM、上传 URL 和 TLS，制造一次可控上传失败确认 JSON 留存，再确认 Worker 将一次成功上传消费为预期分析记录。不要在演示数据库或未受控的生产资产上执行该测试。
+NET_TRUST_PROXY_HEADERS 仍只应在受控反向代理会重写相关头时启用；PC 脚本已不依赖 Web 公共地址。
 
 ## 网络设备 SNMP / SSH 巡检
 

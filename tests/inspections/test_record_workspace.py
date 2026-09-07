@@ -6,6 +6,8 @@ from django.test import TestCase
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
+from tests.devices.pc.helpers import create_log_file
+
 from net.models import (
     Computer,
     ComputerAnalysis,
@@ -26,7 +28,6 @@ class ProjectRecordWorkspaceTests(TestCase):
     def setUp(self):
         self.analysis_profile = ComputerAnalysisProfile.objects.create(
             name='记录页分析配置',
-            scan_directories=['C:/logs'],
             analysis_items=['system'],
         )
         self.network_profile = InspectionProfile.objects.create(
@@ -83,7 +84,7 @@ class ProjectRecordWorkspaceTests(TestCase):
 
     def make_analysis(self, name, *, task, target, status=RecordStatus.SUCCESS):
         computer = Computer.objects.create(computer_name=name)
-        log = ComputerLogFile.objects.create(
+        log = create_log_file(
             source_path=f'C:/logs/{name}.json',
             modified_at=timezone.now(),
             content_hash=hashlib.sha256(name.encode()).hexdigest(),
@@ -147,8 +148,8 @@ class ProjectRecordWorkspaceTests(TestCase):
         )
         scan_task, _ = self.make_task(
             profile=self.analysis_profile,
-            task_type=TaskRun.TaskType.COMPUTER_SCAN,
-            target_type=TaskTargetRun.TargetType.COMPUTER_SCAN,
+            task_type=TaskRun.TaskType.COMPUTER_FETCH,
+            target_type=TaskTargetRun.TargetType.COMPUTER_SOURCE,
             target_id='scan-wrapper',
         )
         latest_task, latest_target = self.make_task(

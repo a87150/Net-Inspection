@@ -5,7 +5,7 @@ from net.models import TaskRun
 
 HOME_TASK_TYPES = (
     TaskRun.TaskType.INSPECTION,
-    TaskRun.TaskType.COMPUTER_SCAN,
+    TaskRun.TaskType.COMPUTER_FETCH,
     TaskRun.TaskType.COMPUTER_ANALYSIS,
 )
 
@@ -53,8 +53,8 @@ def _target_outcome(task, target):
     if target.status in {TaskRun.Status.FAILED, TaskRun.Status.PARTIAL}:
         return 'abnormal'
     if target.status == TaskRun.Status.SUCCESS:
-        if task.task_type == TaskRun.TaskType.COMPUTER_SCAN:
-            return 'scan_success'
+        if task.task_type == TaskRun.TaskType.COMPUTER_FETCH:
+            return 'fetch_success'
         result_status = (
             target.result_snapshot.get('status')
             if isinstance(target.result_snapshot, dict) else None
@@ -71,7 +71,7 @@ def summarize_task(task) -> dict:
         'abnormal': 0,
         'pending': 0,
         'cancelled': 0,
-        'scan_success': 0,
+        'fetch_success': 0,
     }
     for target in targets:
         counts[_target_outcome(task, target)] += 1

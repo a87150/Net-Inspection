@@ -63,17 +63,15 @@ class FinalDemoTests(TestCase):
         Schedule.objects.filter(pk=_demo_uuid('demo-schedule-daily')).update(
             kind='interval', daily_time=None, interval_value=5, interval_unit='minutes', is_enabled=True)
         ComputerAnalysisProfile.objects.update(
-            file_time_mode='date_range', recent_days=None,
-            range_start_date=date(2026, 8, 1), range_end_date=date(2026, 8, 2))
+            analysis_items=['activation'], concurrent_workers=1)
         self.seed(reset=True)
         interval = Schedule.objects.get(pk=_demo_uuid('demo-schedule-interval'))
         daily = Schedule.objects.get(pk=_demo_uuid('demo-schedule-daily'))
         self.assertEqual((interval.kind, interval.interval_value, interval.daily_time), ('interval', 30, None))
         self.assertEqual((daily.kind, daily.interval_value, daily.interval_unit), ('daily', None, ''))
         analysis = ComputerAnalysisProfile.objects.get(pk=_demo_uuid('demo-profile-analysis'))
-        self.assertEqual((analysis.file_time_mode, analysis.recent_days), ('recent_days', 7))
-        self.assertIsNone(analysis.range_start_date)
-        self.assertIsNone(analysis.range_end_date)
+        self.assertEqual(analysis.analysis_items, ['resource', 'event_findings'])
+        self.assertEqual(analysis.concurrent_workers, 4)
         for instance in (interval, daily, analysis):
             instance.full_clean()
 

@@ -360,13 +360,5 @@ def computer_error_list(request):
     })
 
 
-def computer_inspection_list(request):
-    return computer_analysis_list(request)
-
-
-def computer_inspection_detail(request, pk):
-    return computer_analysis_detail(request, pk)
-
-
 def infrastructure_inspection_detail(request, category, pk):
     return record_detail(request, category, pk)

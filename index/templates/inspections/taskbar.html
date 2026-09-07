@@ -18,7 +18,7 @@
                 <td>{{ summary.source_label }}</td>
                 <td class="text-nowrap">{{ summary.task.created_at|date:'Y-m-d H:i:s' }}</td>
                 <td class="text-nowrap">{{ summary.task.finished_at|date:'Y-m-d H:i:s'|default:'—' }}</td>
-                <td>{{ summary.total }}{% if summary.scan_success %}<span class="inspection-taskbar__scan-note">扫描成功 {{ summary.scan_success }}</span>{% endif %}{% if summary.integrity_warning %}<span class="inspection-taskbar__integrity-warning">{{ summary.integrity_warning }}</span>{% endif %}</td>
+                <td>{{ summary.total }}{% if summary.fetch_success %}<span class="inspection-taskbar__scan-note">获取成功 {{ summary.fetch_success }}</span>{% endif %}{% if summary.integrity_warning %}<span class="inspection-taskbar__integrity-warning">{{ summary.integrity_warning }}</span>{% endif %}</td>
                 <td><span class="text-success">{{ summary.normal }}</span></td>
                 <td><span{% if summary.abnormal %} class="text-danger fw-semibold"{% endif %}>{{ summary.abnormal }}</span></td>
                 <td>{{ summary.pending }}</td>

@@ -15,10 +15,11 @@ from django.db import close_old_connections, connections
 from net.models import TaskRun
 
 from net.devices.pc.executor import (
-    execute_computer_scan_target,
+    execute_computer_fetch_target,
     execute_computer_target,
-    persist_computer_scan_failure,
+    persist_computer_fetch_failure,
     persist_computer_execution_failure,
+    reconcile_pending_analysis_handoffs,
 )
 from net.domain.executor import (
     aggregate_domain_operation,
@@ -101,8 +102,11 @@ class TaskWorker:
                     )
                 if task_type in TaskRun.PEOPLE_TASK_TYPES:
                     executor = execute_people_target
-                elif task_type == TaskRun.TaskType.COMPUTER_SCAN:
-                    executor = execute_computer_scan_target
+                elif task_type == TaskRun.TaskType.COMPUTER_FETCH:
+                    return execute_computer_fetch_target(
+                        target, worker_id=self.worker_id, lease_guard=lease_guard,
+                        max_download_workers=self._max_workers(target.task),
+                    )
                 elif task_type == TaskRun.TaskType.COMPUTER_ANALYSIS:
                     executor = execute_computer_target
                 else:
@@ -119,8 +123,8 @@ class TaskWorker:
                             )
                         if task_type in TaskRun.PEOPLE_TASK_TYPES:
                             persist_failure = persist_people_failure
-                        elif task_type == TaskRun.TaskType.COMPUTER_SCAN:
-                            persist_failure = persist_computer_scan_failure
+                        elif task_type == TaskRun.TaskType.COMPUTER_FETCH:
+                            persist_failure = persist_computer_fetch_failure
                         elif task_type == TaskRun.TaskType.COMPUTER_ANALYSIS:
                             persist_failure = persist_computer_execution_failure
                         else:
@@ -279,6 +283,7 @@ class TaskWorker:
                 return False
             with _database_guard():
                 recover_expired_tasks()
+                handoffs = reconcile_pending_analysis_handoffs(limit=self.threads * 4)
                 if stop_event.is_set():
                     return False
                 enqueue_due_schedules()
@@ -295,7 +300,7 @@ class TaskWorker:
             # lease-claimed and occur outside the record transaction.
             reconcile_terminal_targets(limit=max(1, self.threads * 8))
             delivered = deliver_due_alerts(limit=self.threads)
-            return task is not None or bool(delivered)
+            return task is not None or bool(delivered) or bool(handoffs)
         finally:
             try:
                 close_old_connections()

@@ -6,7 +6,8 @@ from django.test import SimpleTestCase
 class DeviceBoundaryTests(SimpleTestCase):
     ENTRY_POINTS = (
         ("net.devices.pc.analysis", "analyze_log"),
-        ("net.devices.pc.logs", "scan_log_directory"),
+        ("net.devices.pc.logs", "import_log_bytes"),
+        ("net.devices.pc.remote_ingestion", "fetch_remote_logs"),
         ("net.devices.pc.snapshot", "extract_computer_snapshot"),
         ("net.devices.pc.executor", "execute_computer_target"),
         ("net.infrastructure.collection", "CollectionResult"),

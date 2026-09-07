@@ -1,7 +1,11 @@
 from django.urls import path
 from . import views
+from index.devices.pc import source as pc_source_views
 
 urlpatterns = [
+    path('computers/source/save/', pc_source_views.pc_log_source_save, name='pc_log_source_save'),
+    path('computers/source/test/', pc_source_views.pc_log_source_test, name='pc_log_source_test'),
+    path('computers/source/preview/', pc_source_views.pc_log_source_preview, name='pc_log_source_preview'),
     path('', views.index, name='index'),
     path('assets/<str:kind>/', views.asset_list, name='asset_list'),
     path('assets/<str:kind>/configurations.zip', views.configuration_zip, name='configuration_zip'),
@@ -15,8 +19,6 @@ urlpatterns = [
     path('computers/logs/<int:pk>/', views.computer_log_detail, name='computer_log_detail'),
     path('computers/logs/<int:pk>/analyze/', views.computer_log_analyze, name='computer_log_analyze'),
     path('computers/analyses/<uuid:pk>/', views.computer_analysis_detail, name='computer_analysis_detail'),
-    path('computers_inspection_list/', views.computer_inspection_list, name='computer_inspection_list'),
-    path('computer_inspection/<uuid:pk>/', views.computer_inspection_detail, name='computer_inspection_detail'),
     path('computers_errors/', views.computer_error_list, name='computer_error_list'),
     path('actions/run-infrastructure-inspection/', views.run_infrastructure_inspection, name='run_infrastructure_inspection'),
     path('tasks/', views.task_list, name='task_list'),

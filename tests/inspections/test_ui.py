@@ -23,6 +23,8 @@ from net.inspections.queue import enqueue_task
 
 class TaskUiTestCase(TestCase):
     def setUp(self):
+        from tests.devices.pc.test_source_models import valid_smb_source
+        self.log_source = valid_smb_source()
         self.linux = Server.objects.create(
             name='Linux 应用服务器', ip='192.0.2.210', server_type='linux',
         )
@@ -38,9 +40,6 @@ class TaskUiTestCase(TestCase):
         )
         self.log_profile = ComputerAnalysisProfile.objects.create(
             name='计算机默认分析',
-            scan_directories=['C:/inspection-logs'],
-            processed_directory='C:/inspection-logs/processed',
-            failed_directory='C:/inspection-logs/failed',
             analysis_items=['activation', 'resource'],
             concurrent_workers=2,
         )
@@ -60,8 +59,9 @@ class TaskUiTestCase(TestCase):
                 self.assertContains(response, 'data-bs-target="#runTaskModal"')
                 self.assertContains(response, 'data-bs-target="#profileConfigModal"')
 
-    def test_computer_pages_offer_manual_analysis_and_scan_range_controls(self):
-        """A computer page without this form would force scan/analysis back into Web requests."""
+    def test_computer_pages_offer_remote_source_and_analysis_controls(self):
+        """Operators can configure remote fetching separately from analysis rules."""
+        self.client.force_login(get_user_model().objects.create_user('pc-config-admin', is_staff=True))
         for url in (
             reverse('asset_list', args=['computers']),
             reverse('computer_analysis_list'),
@@ -72,7 +72,7 @@ class TaskUiTestCase(TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertContains(response, '手动执行分析')
                 self.assertContains(response, '分析配置')
-                self.assertContains(response, '扫描目录')
+                self.assertContains(response, '汇总日志目录')
                 self.assertContains(response, '最近 N 天')
                 self.assertContains(response, '指定起止日期')
                 self.assertContains(response, '最低 Windows 版本')
@@ -80,7 +80,8 @@ class TaskUiTestCase(TestCase):
                 self.assertContains(response, 'CPU 报警阈值')
                 self.assertContains(response, 'KMS 服务器')
                 html = response.content.decode()
-                self.assertEqual(html.count('>保存配置</button>'), 1)
+                self.assertEqual(html.count('>保存分析与定时配置</button>'), 1)
+                self.assertEqual(html.count('>保存日志来源</button>'), 1)
                 self.assertNotIn('profile-config-save-top', html)
                 self.assertContains(response, 'id="profileConfigModal"')
         css = Path(settings.BASE_DIR, 'static/app/css/style.css').read_text(encoding='utf-8')
@@ -270,19 +271,19 @@ class TaskUiTestCase(TestCase):
         self.assertEqual(self.server_profile.timeout_seconds, 120)
         self.assertEqual(self.server_profile.concurrent_workers, 5)
 
-    def test_computer_scan_action_enqueues_worker_owned_scan_without_reading_files_inline(self):
-        """Calling the scanner in this view would block the request and violate the Worker boundary."""
+    def test_computer_fetch_action_enqueues_worker_owned_remote_work(self):
+        """The HTTP action only queues the singleton source for the Worker."""
         response = self.post_manual({
             'profile_id': str(self.log_profile.pk),
-            'target_mode': 'scan',
+            'target_mode': 'fetch',
             'selected_items': ['activation'],
             'next': reverse('computer_analysis_list'),
         })
 
         self.assertEqual(response.status_code, 302)
         task = TaskRun.objects.get()
-        self.assertEqual(task.task_type, 'computer_scan')
-        self.assertEqual(task.target_runs.get().target_type, 'computer_scan')
+        self.assertEqual(task.task_type, 'computer_fetch')
+        self.assertEqual(task.target_runs.get().target_type, 'computer_source')
         self.assertEqual(task.selected_items_snapshot, ['activation'])
 
     def test_task_list_and_detail_show_progress_errors_and_filtered_export(self):

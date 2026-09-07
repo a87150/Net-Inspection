@@ -1,0 +1,52 @@
+{% load static %}
+<div class="modal fade inspection-config-modal" id="profileConfigModal" data-auto-open="{{ profile_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="profileConfigModalLabel" aria-hidden="true">
+ <div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+  <div class="modal-header"><h2 class="modal-title fs-5" id="profileConfigModalLabel">PC 日志来源与分析配置</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+  <div class="modal-body" style="overflow-y:auto;max-height:75vh">
+   <p class="text-secondary small">终端每天写入汇总目录；后台 Worker 获取 JSON 后入库、分析并归档。已入队任务使用固定配置。</p>
+   {% if request.user.is_staff or request.user.is_superuser %}
+   <section class="card card-body mb-3">
+    <h3 class="h6">1. 日志来源（全局共用）</h3>
+    <form method="post" action="{% url 'pc_log_source_save' %}" data-pc-source-form>{% csrf_token %}
+      <div class="row g-3">{% for field in pc_log_source_form %}
+       <div class="col-md-6" data-source-field="{{ field.name }}">
+        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+        {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}{{ field.errors }}
+       </div>{% endfor %}</div>
+      <button class="btn btn-primary mt-3" type="submit">保存日志来源</button>
+    </form>
+    {% if pc_log_source %}
+    <div class="d-flex flex-wrap gap-2 mt-3">
+     <form method="post" action="{% url 'pc_log_source_test' %}">{% csrf_token %}<button class="btn btn-outline-primary" type="submit">测试连接</button></form>
+     <form method="post" action="{% url 'pc_log_source_preview' %}">{% csrf_token %}<button class="btn btn-outline-primary" type="submit">预览日志</button></form>
+    </div>
+    <p class="small text-secondary mt-2 mb-0">两个按钮使用已保存设置。测试连接会创建并清理专用测试文件；预览仅列目录。{% if pc_log_source.last_tested_at %}最近测试：{{ pc_log_source.last_tested_at|date:"Y-m-d H:i" }}。{% endif %}{{ pc_log_source.public_last_test_error }}</p>
+    {% endif %}
+   </section>
+   {% else %}<p class="alert alert-secondary">日志连接设置与采集脚本下载需要管理员权限。</p>{% endif %}
+   <section class="card card-body">
+    <h3 class="h6">2. 分析项目、阈值与定时执行</h3>
+    <p class="small text-secondary">macOS 自动跳过 Windows 专用检查，显示“不适用”；其它已选择但未采集的数据会明确提示缺失。</p>
+    {% if task_profiles %}<div class="mb-3"><label class="form-label" for="pc-profile-switch">编辑配置</label>
+    <select id="pc-profile-switch" class="form-select" data-pc-profile-switch>{% for profile in task_profiles %}<option value="{{ profile.pk }}"{% if profile.pk == task_default_profile.pk %} selected{% endif %}>{{ profile.name }}</option>{% endfor %}</select></div>{% endif %}
+    <form method="post" action="{% url 'computer_analysis_profile_configure' %}">{% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      {{ pc_analysis_form.profile_id }}
+      <div class="row g-3">{% for field in pc_analysis_form.visible_fields %}
+       <div class="{% if field.name == 'analysis_items' %}col-12{% else %}col-md-6{% endif %}">
+         <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+         {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}{{ field.errors }}
+       </div>{% endfor %}</div>
+      <button type="submit" class="btn btn-primary mt-3">保存分析与定时配置</button>
+    </form>
+    {% if pc_log_source and task_default_profile %}
+      {% if request.user.is_staff or request.user.is_superuser %}
+      <div class="d-flex gap-2 mt-3"><a class="btn btn-outline-secondary" href="{% url 'pc_script_download' task_default_profile.pk 'windows' %}">下载 Windows 采集脚本</a><a class="btn btn-outline-secondary" href="{% url 'pc_script_download' task_default_profile.pk 'macos' %}">下载 macOS 采集脚本</a></div>
+      {% endif %}
+    {% endif %}
+   </section>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">关闭</button></div>
+ </div></div>
+</div>
+<script src="{% static 'app/js/pc_source.js' %}" defer></script>

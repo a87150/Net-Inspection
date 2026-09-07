@@ -10,6 +10,8 @@ from django.core.management import call_command
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 
+from tests.devices.pc.helpers import create_log_file
+
 from net.models import (
     ComputerAnalysisProfile,
     ComputerLogFile,
@@ -363,10 +365,9 @@ class TaskWorkerTests(TransactionTestCase):
     def test_worker_claims_computer_analysis_tasks_and_isolates_invalid_log_evidence(self):
         profile = ComputerAnalysisProfile.objects.create(
             name='尚未启用的分析器',
-            scan_directories=['C:/logs'],
             analysis_items=['activation'],
         )
-        log_file = ComputerLogFile.objects.create(
+        log_file = create_log_file(
             source_path='C:/logs/pc.json',
             modified_at='2026-08-31T00:00:00+08:00',
             content_hash='a' * 64,

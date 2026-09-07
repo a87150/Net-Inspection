@@ -12,7 +12,7 @@
         {% if import_enabled %}<button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#importModal">{% if item_key == 'people' %}导入人员{% else %}导入设备{% endif %}</button>{% endif %}
         {% if task_project_kind %}
         <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#profileConfigModal">{{ task_config_label }}</button>
-        {% if item_key == 'computers' and task_default_profile and task_default_profile.is_enabled and task_default_profile.scan_directories %}
+        {% if item_key == 'computers' and task_default_profile and task_default_profile.is_enabled and pc_log_source %}
         <a class="btn btn-outline-primary" href="{% url 'pc_script_download' task_default_profile.pk 'windows' %}">下载 Windows 采集脚本</a>
         <a class="btn btn-outline-primary" href="{% url 'pc_script_download' task_default_profile.pk 'macos' %}">下载 macOS 采集脚本</a>
         {% endif %}
@@ -24,7 +24,7 @@
 {% if collection_hint %}<div class="alert alert-info"><strong>采集方式：</strong>{{ collection_hint }}</div>{% endif %}
 {% if item_key == 'networks' or item_key == 'monitors' %}<div class="alert alert-secondary">配置下载仅使用最近成功的已保存配置项，不连接设备。{% if item_key == 'monitors' %}当前支持 Dahua / 大华 Network 具名可读配置节；{% else %}当前支持 Cisco / 思科、H3C / 华三的当前运行配置；{% endif %}脱敏快照非完整恢复备份，二进制或未知配置不支持。</div>{% endif %}
 {% if data_source_note %}<div class="alert alert-info">{{ data_source_note }}</div>{% endif %}
-{% if item_key == 'computers' and not task_default_profile.scan_directories %}<div class="alert alert-warning">请先配置扫描目录，再下载 PC 采集脚本。<a href="{% url 'computer_analysis_list' %}?task_modal=profile">前往分析配置</a></div>{% endif %}
+{% if item_key == 'computers' and not pc_log_source %}<div class="alert alert-warning">请先保存日志来源，再下载 PC 采集脚本。<a href="{% url 'computer_analysis_list' %}?task_modal=profile">前往分析配置</a></div>{% endif %}
 {% if import_enabled %}{% include 'common/import_modal.html' %}{% endif %}
 {% if people_operation %}{% include 'integrations/preview_modal.html' %}{% endif %}
 {% if personnel_api_import %}{% include 'integrations/task_notifications.html' %}{% endif %}

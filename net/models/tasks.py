@@ -115,34 +115,9 @@ class InspectionProfile(models.Model):
 
 
 class ComputerAnalysisProfile(models.Model):
-    class FileTimeMode(models.TextChoices):
-        RECENT_DAYS = 'recent_days', '最近 N 天'
-        DATE_RANGE = 'date_range', '指定起止日期'
-
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255, unique=True)
     is_enabled = models.BooleanField(default=True)
-    scan_directories = models.JSONField(
-        default=list,
-        blank=True,
-        validators=[validate_string_list],
-    )
-    recursive = models.BooleanField(default=False)
-    processed_directory = models.TextField(blank=True)
-    failed_directory = models.TextField(blank=True)
-    file_time_mode = models.CharField(
-        max_length=20,
-        choices=FileTimeMode.choices,
-        default=FileTimeMode.RECENT_DAYS,
-    )
-    recent_days = models.PositiveSmallIntegerField(
-        null=True,
-        blank=True,
-        default=7,
-        validators=[MinValueValidator(1), MaxValueValidator(3650)],
-    )
-    range_start_date = models.DateField(null=True, blank=True)
-    range_end_date = models.DateField(null=True, blank=True)
     analysis_items = models.JSONField(
         default=list,
         blank=True,
@@ -165,6 +140,10 @@ class ComputerAnalysisProfile(models.Model):
     cpu_max_percent = models.PositiveSmallIntegerField(
         default=90, validators=[MinValueValidator(1), MaxValueValidator(100)],
     )
+    cpu_temperature_max_celsius = models.PositiveSmallIntegerField(
+        default=85, validators=[MinValueValidator(1), MaxValueValidator(150)],
+    )
+    site_ip_prefixes = models.JSONField(default=dict, blank=True, validators=[validate_json_object])
     memory_max_percent = models.PositiveSmallIntegerField(
         default=90, validators=[MinValueValidator(1), MaxValueValidator(100)],
     )
@@ -188,32 +167,11 @@ class ComputerAnalysisProfile(models.Model):
     def clean(self):
         super().clean()
         errors = {}
-        for field_name in ('scan_directories', 'analysis_items', 'kms_servers'):
+        for field_name in ('analysis_items', 'kms_servers'):
             try:
                 validate_string_list(getattr(self, field_name))
             except ValidationError as exc:
                 errors[field_name] = exc.messages
-        if self.file_time_mode == self.FileTimeMode.RECENT_DAYS:
-            if self.recent_days is None:
-                errors['recent_days'] = '最近天数模式必须设置天数。'
-            if self.range_start_date is not None:
-                errors['range_start_date'] = '最近天数模式不能设置开始日期。'
-            if self.range_end_date is not None:
-                errors['range_end_date'] = '最近天数模式不能设置结束日期。'
-        elif self.file_time_mode == self.FileTimeMode.DATE_RANGE:
-            if self.recent_days is not None:
-                errors['recent_days'] = '指定日期模式不能设置最近天数。'
-            if self.range_start_date is None:
-                errors['range_start_date'] = '指定日期模式必须设置开始日期。'
-            if self.range_end_date is None:
-                errors['range_end_date'] = '指定日期模式必须设置结束日期。'
-            if (
-                self.range_start_date is not None
-                and self.range_end_date is not None
-                and self.range_start_date > self.range_end_date
-            ):
-                errors['range_start_date'] = '开始日期不能晚于结束日期。'
-                errors['range_end_date'] = '结束日期不能早于开始日期。'
         if errors:
             raise ValidationError(errors)
 
@@ -354,7 +312,7 @@ class TaskRun(models.Model):
     class TaskType(models.TextChoices):
         INSPECTION = 'inspection', '设备巡检'
         COMPUTER_ANALYSIS = 'computer_analysis', '计算机日志分析'
-        COMPUTER_SCAN = 'computer_scan', '计算机日志扫描'
+        COMPUTER_FETCH = 'computer_fetch', 'PC 日志获取'
         PEOPLE_TEST = 'people_test', '人员目录连接测试'
         PEOPLE_PREVIEW = 'people_preview', '人员目录同步预览'
         PEOPLE_SYNC = 'people_sync', '人员自动同步'
@@ -400,6 +358,9 @@ class TaskRun(models.Model):
 
     @classmethod
     def build_scope_key(cls, *, task_type, profile_id, target_scope_snapshot):
+        if task_type == cls.TaskType.COMPUTER_FETCH:
+            # All analysis profiles share the same singleton remote inbox.
+            profile_id = 'pc-log-source'
         canonical = {
             'profile_id': str(profile_id),
             'targets': _normalize_target_identities(target_scope_snapshot),
@@ -514,7 +475,7 @@ class TaskRun(models.Model):
                     | models.Q(task_type='inspection', people_source__isnull=True,
                                inspection_profile__isnull=False, analysis_profile__isnull=True,
                                people_applied_at__isnull=True)
-                    | models.Q(task_type__in=('computer_analysis', 'computer_scan'),
+                    | models.Q(task_type__in=('computer_analysis', 'computer_fetch'),
                                people_source__isnull=True, inspection_profile__isnull=True,
                                analysis_profile__isnull=False,
                                people_applied_at__isnull=True)
@@ -682,7 +643,7 @@ class TaskRun(models.Model):
                 errors['analysis_profile'] = '设备巡检任务不能关联分析配置。'
         elif self.task_type in {
             self.TaskType.COMPUTER_ANALYSIS,
-            self.TaskType.COMPUTER_SCAN,
+            self.TaskType.COMPUTER_FETCH,
         }:
             if not has_analysis:
                 errors['analysis_profile'] = '计算机日志任务必须关联分析配置。'
@@ -702,7 +663,7 @@ class TaskRun(models.Model):
                 errors['schedule'] = '定时任务必须使用计划关联的巡检配置。'
             if self.task_type in {
                 self.TaskType.COMPUTER_ANALYSIS,
-                self.TaskType.COMPUTER_SCAN,
+                self.TaskType.COMPUTER_FETCH,
             } and schedule.analysis_profile_id != self.analysis_profile_id:
                 errors['schedule'] = '定时任务必须使用计划关联的分析配置。'
             if (
@@ -820,13 +781,13 @@ class TaskRun(models.Model):
 
 
 class TaskTargetRun(models.Model):
-    scan_logs = models.ManyToManyField('net.ComputerLogFile', blank=True, related_name='intended_scans')
+    fetched_logs = models.ManyToManyField('net.ComputerLogFile', blank=True, related_name='intended_scans')
     class TargetType(models.TextChoices):
         NETWORK_DEVICE = 'network_device', '网络设备'
         SERVER = 'server', '服务器'
         MONITOR = 'monitor', '安防设备'
         COMPUTER_LOG = 'computer_log', '计算机日志'
-        COMPUTER_SCAN = 'computer_scan', '计算机日志扫描'
+        COMPUTER_SOURCE = 'computer_source', 'PC 日志来源'
         PEOPLE_SOURCE = 'people_source', '人员目录来源'
         DOMAIN_ACCOUNT = 'domain_account', '域账号'
         DOMAIN_COMPUTER = 'domain_computer', '域计算机'
@@ -866,6 +827,11 @@ class TaskTargetRun(models.Model):
     finished_at = models.DateTimeField(null=True, blank=True)
     result_type = models.CharField(max_length=64, blank=True)
     result_id = models.CharField(max_length=64, blank=True)
+    # Recovery linkage is distinct from the immutable original execution result.
+    analysis_handoff_task = models.ForeignKey(
+        'net.TaskRun', null=True, blank=True, on_delete=models.PROTECT,
+        related_name='recovered_fetch_targets', editable=False,
+    )
     result_snapshot = models.JSONField(
         default=dict,
         blank=True,
@@ -929,8 +895,8 @@ class TaskTargetRun(models.Model):
                     errors['target_id'] = '目标必须是任务绑定的人员目录来源。'
             elif task.task_type == TaskRun.TaskType.COMPUTER_ANALYSIS:
                 expected_target_type = self.TargetType.COMPUTER_LOG
-            elif task.task_type == TaskRun.TaskType.COMPUTER_SCAN:
-                expected_target_type = self.TargetType.COMPUTER_SCAN
+            elif task.task_type == TaskRun.TaskType.COMPUTER_FETCH:
+                expected_target_type = self.TargetType.COMPUTER_SOURCE
             elif task.task_type == TaskRun.TaskType.INSPECTION:
                 profile_snapshot = task.profile_snapshot
                 scope_snapshot = task.target_scope_snapshot

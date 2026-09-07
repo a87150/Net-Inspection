@@ -21,9 +21,11 @@ from net.devices.pc.checks import (
     check_system_version,
     check_update_history,
     check_uptime,
+    check_remote_item,
     load_config_as_dict,
     parse_local_datetime,
 )
+from net.devices.pc.enrichment import build_pc_enrichment
 
 
 ANALYSIS_ITEMS = frozenset({
@@ -38,12 +40,23 @@ ANALYSIS_ITEMS = frozenset({
     'event_findings',
     'system',
     'uptime',
+    'browser_extensions', 'identity_match', 'cpu_health', 'domain_trust', 'group_policy',
 })
+
+WINDOWS_ONLY_ITEMS = frozenset({'activation', 'bitlocker', 'defender', 'patches',
+                                'domain', 'domain_trust', 'group_policy'})
+REMOTE_ITEMS = frozenset({'browser_extensions', 'identity_match', 'cpu_health',
+                          'domain_trust', 'group_policy'})
+
+
+def analysis_items_for_platform(items, platform):
+    """Use this when presenting default selectable items for a platform."""
+    return [item for item in items if platform != 'macos' or item not in WINDOWS_ONLY_ITEMS]
+
 
 # A present empty collection means collected/no entries. Missing keys, null,
 # wrong shapes and unknown values must never be silently converted to [].
-# The shipped legacy PS uploader lacks processes/domain/events: selecting them
-# explicitly reports missing until a producer supplies this documented schema.
+# Older producers may omit sections that newer terminal producers supply.
 ITEM_FIELDS = {
     'activation': ('Windows激活信息',),
     'software': ('已安装软件列表',),
@@ -107,13 +120,11 @@ def _schema_state(item, payload):
         valid = _valid_rows(volumes, lambda row: _known_text(row.get('卷')) and _known_text(row.get('转换状态')))
     elif item == 'defender':
         valid = _known_text(value.get('当前病毒库版本')) and bool(parse_local_datetime(value.get('上次更新时间')))
-    elif item == 'domain':
-        valid = payload[keys[1]] in ('正常通讯', '无法访问', '未加入域')
     elif item == 'resource':
         valid = all(
             isinstance(value.get(key), str) and
-            re.fullmatch(r'(?:\d+(?:\.\d+)?)%', value[key]) is not None and
-            0 <= float(value[key][:-1]) <= 100
+            re.fullmatch(r'\s*(?:\d+(?:\.\d+)?)\s*%\s*', value[key]) is not None and
+            0 <= float(value[key].strip()[:-1]) <= 100
             for key in ('当前CPU占用率', '当前内存使用率')
         )
     elif item == 'system':
@@ -170,7 +181,16 @@ def _event_findings(payload, issues):
     return findings
 
 
-def _details_for_item(item, payload, issues, rules, collected_at):
+def _details_for_item(item, payload, issues, rules, collected_at, platform='windows'):
+    if platform == 'macos' and item in WINDOWS_ONLY_ITEMS:
+        return {'data_state': 'not_applicable', 'platform': platform}
+    if item in REMOTE_ITEMS:
+        return check_remote_item(item, payload, issues, rules)
+    if item == 'domain':
+        return {
+            'domain_trust': check_remote_item('domain_trust', payload, issues, rules),
+            'group_policy': check_remote_item('group_policy', payload, issues, rules),
+        }
     state = _schema_state(item, payload)
     if state != 'known':
         issues.append({
@@ -216,13 +236,6 @@ def _details_for_item(item, payload, issues, rules, collected_at):
         if rules['configured']:
             check_update_history(payload, issues, collected_at, rules['patch_max_days'])
         return patches
-    if item == 'domain':
-        if payload['当前与域服务器通讯情况'] == '无法访问':
-            _issue(issues, '域通讯问题', '无法访问域服务器')
-        return {
-            '已应用策略': _as_dict(payload.get('已应用策略')),
-            '当前与域服务器通讯情况': payload.get('当前与域服务器通讯情况', ''),
-        }
     if item == 'resource':
         if rules['configured']:
             check_resource(
@@ -232,7 +245,8 @@ def _details_for_item(item, payload, issues, rules, collected_at):
     if item == 'event_findings':
         return _event_findings(payload, issues)
     if item == 'system':
-        check_system_version(payload, issues, rules['minimum_windows_release'])
+        if platform != 'macos':
+            check_system_version(payload, issues, rules['minimum_windows_release'])
         return _as_dict(payload.get('系统信息概览'))
     if item == 'uptime':
         check_uptime(payload, issues, collected_at, rules['uptime_max_hours'])
@@ -262,6 +276,8 @@ def _analysis_rules(value):
         'patch_max_days': supplied.get('patch_max_days', 30),
         'uptime_max_hours': supplied.get('uptime_max_hours', 168),
         'cpu_max_percent': supplied.get('cpu_max_percent', 90),
+        'cpu_temperature_max_celsius': supplied.get('cpu_temperature_max_celsius', 85),
+        'site_ip_prefixes': supplied.get('site_ip_prefixes'),
         'memory_max_percent': supplied.get('memory_max_percent', 90),
         'kms_servers': list(supplied.get('kms_servers') or []),
     }
@@ -285,11 +301,20 @@ def analyze_log(
     computer = _computer_for_payload(payload)
     now = timezone.now()
     issues = []
-    details = {}
+    platform = str(log_file.platform or payload.get('platform') or '').casefold()
+    if not platform:
+        platform = 'macos' if 'macos' in str(_as_dict(payload.get('系统信息概览')).get('系统主要版本名', '')).casefold() else 'windows'
+    details = {
+        'platform': platform,
+        'rules': configured_rules,
+        'enrichment': build_pc_enrichment(
+            computer, payload, site_ip_prefixes=configured_rules['site_ip_prefixes'],
+        ),
+    }
     for item in selected_items:
         item_issues = []
         details[item] = _details_for_item(
-            item, payload, item_issues, configured_rules, log_file.modified_at,
+            item, payload, item_issues, configured_rules, log_file.modified_at, platform,
         )
         issues.extend({**issue, 'analysis_item': item} for issue in item_issues)
     status = RecordStatus.FAILED if issues else RecordStatus.SUCCESS

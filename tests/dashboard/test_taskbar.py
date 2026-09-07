@@ -140,7 +140,6 @@ class HomeTaskbarTests(TestCase):
         """Counting a successful scan as normal would overstate PC analysis health."""
         profile = ComputerAnalysisProfile.objects.create(
             name='首页分析配置',
-            scan_directories=['C:/logs'],
             analysis_items=['activation'],
         )
         analysis_task = TaskRun.objects.create(
@@ -182,17 +181,17 @@ class HomeTaskbarTests(TestCase):
             status=TaskRun.Status.CANCELLED,
         )
         scan_task = TaskRun.objects.create(
-            task_type=TaskRun.TaskType.COMPUTER_SCAN,
+            task_type=TaskRun.TaskType.COMPUTER_FETCH,
             source=TaskRun.Source.MANUAL,
             analysis_profile=profile,
             total_targets=1,
             target_scope_snapshot={
-                'targets': [{'target_type': 'computer_scan', 'target_id': 'scan'}],
+                'targets': [{'target_type': 'computer_source', 'target_id': 'scan'}],
             },
         )
         TaskTargetRun.objects.create(
             task=scan_task,
-            target_type=TaskTargetRun.TargetType.COMPUTER_SCAN,
+            target_type=TaskTargetRun.TargetType.COMPUTER_SOURCE,
             target_id='scan',
             status=TaskRun.Status.SUCCESS,
         )
@@ -212,7 +211,7 @@ class HomeTaskbarTests(TestCase):
             },
             {'total': 4, 'normal': 1, 'abnormal': 1, 'pending': 1, 'cancelled': 1},
         )
-        self.assertEqual(scan['scan_success'], 1)
+        self.assertEqual(scan['fetch_success'], 1)
         self.assertEqual(scan['normal'], 0)
         self.assertEqual(scan['abnormal'], 0)
 
@@ -250,7 +249,7 @@ class HomeTaskbarTests(TestCase):
         self.assertEqual(
             sum(
                 summary[key]
-                for key in ('normal', 'abnormal', 'pending', 'cancelled', 'scan_success')
+                for key in ('normal', 'abnormal', 'pending', 'cancelled', 'fetch_success')
             ),
             summary['total'],
         )
@@ -293,7 +292,7 @@ class HomeTaskbarTests(TestCase):
         self.assertEqual(
             sum(
                 summary[key]
-                for key in ('normal', 'abnormal', 'pending', 'cancelled', 'scan_success')
+                for key in ('normal', 'abnormal', 'pending', 'cancelled', 'fetch_success')
             ),
             summary['total'],
         )

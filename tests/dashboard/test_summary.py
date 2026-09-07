@@ -25,11 +25,13 @@ from net.models import (
     Server_Inspection,
 )
 from net.dashboard.assets import build_asset_card_summaries
+from tests.devices.pc.helpers import create_log_file
 
 
 class DashboardSummaryTests(TestCase):
     def _analysis(self, computer, name, *, status=RecordStatus.SUCCESS, created_at):
-        log_file = ComputerLogFile.objects.create(
+        log_file = create_log_file(
+            computer=computer,
             source_path=f'C:/logs/{name}.json',
             modified_at=created_at,
             content_hash=hashlib.sha256(name.encode()).hexdigest(),

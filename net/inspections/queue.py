@@ -87,20 +87,6 @@ def _task_context_for_profile(profile):
             {
                 'id': str(profile.pk),
                 'name': profile.name,
-                'scan_directories': list(profile.scan_directories),
-                'recursive': profile.recursive,
-                'processed_directory': profile.processed_directory,
-                'failed_directory': profile.failed_directory,
-                'file_time_mode': profile.file_time_mode,
-                'recent_days': profile.recent_days,
-                'range_start_date': (
-                    profile.range_start_date.isoformat()
-                    if profile.range_start_date is not None else None
-                ),
-                'range_end_date': (
-                    profile.range_end_date.isoformat()
-                    if profile.range_end_date is not None else None
-                ),
                 'analysis_items': list(profile.analysis_items),
                 'software_policy_path': profile.software_policy_path,
                 'minimum_windows_release': profile.minimum_windows_release,
@@ -109,6 +95,8 @@ def _task_context_for_profile(profile):
                 'patch_max_days': profile.patch_max_days,
                 'uptime_max_hours': profile.uptime_max_hours,
                 'cpu_max_percent': profile.cpu_max_percent,
+                'cpu_temperature_max_celsius': profile.cpu_temperature_max_celsius,
+                'site_ip_prefixes': profile.site_ip_prefixes,
                 'memory_max_percent': profile.memory_max_percent,
                 'kms_servers': list(profile.kms_servers),
                 'concurrent_workers': profile.concurrent_workers,
@@ -311,15 +299,15 @@ def enqueue_task(profile, target_ids, source, overrides=None, *, _frozen_parent=
     return task
 
 
-def enqueue_computer_scan_task(profile, source, overrides=None):
-    """Queue one Worker-owned scan of an analysis profile's configured folders.
+def enqueue_computer_fetch_task(profile, source, overrides=None):
+    """Queue a Worker-owned fetch of the singleton remote inbox.
 
-    A scan has one synthetic profile target.  This preserves normal task leases,
+    A fetch has one synthetic source target. This preserves normal task leases,
     progress and duplicate-scope protection without allowing a Web request or
     schedule poller to touch the filesystem.
     """
     if not isinstance(profile, ComputerAnalysisProfile):
-        raise ValidationError({'profile': '日志扫描必须使用计算机日志分析配置。'})
+        raise ValidationError({'profile': '日志获取必须使用计算机日志分析配置。'})
     if profile.pk is None:
         raise ValidationError({'profile': '配置必须先保存。'})
     if not profile.is_enabled:
@@ -360,14 +348,21 @@ def enqueue_computer_scan_task(profile, source, overrides=None):
     _task_type, _target_type, _profile_items, profile_snapshot = (
         _task_context_for_profile(profile)
     )
+    from net.models import PCLogSourceConfig
+    from net.devices.pc.configuration import source_snapshot
+    log_source = PCLogSourceConfig.load()
+    if log_source is None:
+        raise ValidationError('请先保存 PC 日志来源配置。')
+    log_source.full_clean()
+    profile_snapshot['log_source'] = source_snapshot(log_source)
     target_scope_snapshot = {
         'targets': [{
-            'target_type': TaskTargetRun.TargetType.COMPUTER_SCAN,
-            'target_id': str(profile.pk),
+            'target_type': TaskTargetRun.TargetType.COMPUTER_SOURCE,
+            'target_id': str(log_source.pk),
         }],
     }
     task = TaskRun(
-        task_type=TaskRun.TaskType.COMPUTER_SCAN,
+        task_type=TaskRun.TaskType.COMPUTER_FETCH,
         source=source,
         analysis_profile=profile,
         schedule=schedule,
@@ -387,25 +382,29 @@ def enqueue_computer_scan_task(profile, source, overrides=None):
     )
     task.active_scope_key = task.scope_key
     if TaskRun.objects.filter(active_scope_key=task.scope_key).exists():
-        raise ValidationError({'profile': '当前配置已有活动扫描任务。'})
+        raise ValidationError({'profile': '当前配置已有活动获取任务。'})
     task.full_clean()
     target = TaskTargetRun(
         task=task,
-        target_type=TaskTargetRun.TargetType.COMPUTER_SCAN,
-        target_id=str(profile.pk),
+        target_type=TaskTargetRun.TargetType.COMPUTER_SOURCE,
+        target_id=str(log_source.pk),
         target_snapshot={
             'profile_id': str(profile.pk),
             'profile_name': profile.name,
+            'source': source_snapshot(log_source),
         },
     )
     _validate_target_before_enqueue(target)
     try:
         with transaction.atomic():
+            current_source = PCLogSourceConfig.objects.select_for_update().get(pk=1)
+            if source_snapshot(current_source) != profile_snapshot['log_source']:
+                raise ValidationError('日志来源刚刚发生变化，请重新创建任务。')
             task.save()
             target.save()
     except IntegrityError as exc:
         if TaskRun.objects.filter(active_scope_key=task.scope_key).exists():
-            raise ValidationError({'profile': '当前配置已有活动扫描任务。'}) from exc
+            raise ValidationError({'profile': '当前配置已有活动获取任务。'}) from exc
         raise
     return task
 
@@ -440,11 +439,19 @@ def _recover_expired_locked(now):
                     continue
                 target.status = TaskRun.Status.FAILED
                 target.finished_at = now
+                handoff_fields = set()
+                if task.task_type == TaskRun.TaskType.COMPUTER_FETCH and target.fetched_logs.exists():
+                    # The fetch retry budget must not erase already committed
+                    # analysis intent. Worker reconciles this DB-only outbox.
+                    target.result_snapshot = {
+                        **target.result_snapshot, 'analysis_handoff_pending': True,
+                    }
+                    handoff_fields.add('result_snapshot')
                 target.error_message = (
                     f'{target.error_message}\n' if target.error_message else ''
                 ) + '任务租约过期且已达到最大重试次数。'
                 save_target(target, {
-                    'status', 'finished_at', 'error_message',
+                    'status', 'finished_at', 'error_message', *handoff_fields,
                 })
             _finish_locked(task, now=now, target_runs=target_runs)
             _aggregate_domain_operation(task)

@@ -16,7 +16,7 @@ def _raw_value(record, source):
         return record.get(source)
     value = record
     for part in source.split('__'):
-        value = getattr(value, part, None)
+        value = value.get(part) if isinstance(value, Mapping) else getattr(value, part, None)
         if value is None:
             break
     return value

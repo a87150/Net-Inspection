@@ -4,6 +4,8 @@ from unittest.mock import patch
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.utils import timezone
+from tests.devices.pc.helpers import create_log_file
+
 from net.models import (Computer, ComputerAnalysisProfile, ComputerLogFile, InspectionProfile,
                         People, Schedule, Server, Server_Inspection, TaskRun)
 from net.inspections.schedules import enqueue_due_schedules
@@ -102,7 +104,7 @@ class FinalOperatorTests(TestCase):
     def test_log_detail_enqueues_only_and_failure_is_read_only(self):
         Computer.objects.create(computer_name='LOG-UI')
         profile = ComputerAnalysisProfile.objects.create(name='log UI', analysis_items=['activation'])
-        log = ComputerLogFile.objects.create(source_path='fixture.json', modified_at=timezone.now(),
+        log = create_log_file(source_path='fixture.json', modified_at=timezone.now(),
             content_hash='c'*64, import_status='imported', payload={'系统信息概览': {'计算机名': 'LOG-UI'}})
         detail = f'/computers/logs/{log.pk}/'
         self.assertContains(self.client.get('/computers/logs/'), 'fixture.json')
@@ -113,7 +115,7 @@ class FinalOperatorTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(log.analyses.count(), 0)
         self.assertEqual(TaskRun.objects.get().task_type, 'computer_analysis')
-        failed = ComputerLogFile.objects.create(source_path='failed.json', modified_at=timezone.now(),
+        failed = create_log_file(source_path='failed.json', modified_at=timezone.now(),
             content_hash='d'*64, import_status='failed', parse_error='bad JSON')
         self.assertContains(self.client.get(f'/computers/logs/{failed.pk}/'), 'bad JSON')
         self.assertEqual(self.client.post(f'/computers/logs/{failed.pk}/analyze/', {'profile_id': profile.pk,
@@ -138,7 +140,7 @@ class FinalOperatorTests(TestCase):
     def test_analysis_list_renders_shared_summary_columns(self):
         from net.devices.pc.analysis import analyze_log
         Computer.objects.create(computer_name='METRICS')
-        log = ComputerLogFile.objects.create(source_path='metrics.json', modified_at=timezone.now(),
+        log = create_log_file(source_path='metrics.json', modified_at=timezone.now(),
             content_hash='e'*64, import_status='imported', payload={'系统信息概览': {'计算机名': 'METRICS'},
             '计算机硬件资源情况': {'当前CPU占用率': '23%', '当前内存使用率': '34%'}})
         analyze_log(log, ['resource', 'activation'])

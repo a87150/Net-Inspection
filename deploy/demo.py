@@ -24,8 +24,17 @@ def prepare(runtime):
         raise ValueError('Refusing an unowned nonempty demo runtime directory.')
     runtime.mkdir(parents=True, exist_ok=True)
     marker.write_text('Network Inspection isolated demo v1\n', encoding='utf-8')
-    for name in ('logs', 'incoming', 'incoming/processed', 'incoming/failed'):
+    for name in ('logs', 'pc-staging'):
         (runtime / name).mkdir(parents=True, exist_ok=True)
+    if not os.environ.get('PC_LOG_SOURCE_ENCRYPTION_KEY'):
+        from cryptography.fernet import Fernet
+        key_path = runtime / '.pc-log-source.key'
+        try:
+            with key_path.open('x', encoding='ascii') as key_file:
+                key_file.write(Fernet.generate_key().decode('ascii'))
+        except FileExistsError:
+            pass
+        os.environ['PC_LOG_SOURCE_ENCRYPTION_KEY'] = key_path.read_text(encoding='ascii').strip()
     # Deliberately override inherited production/old-database settings.
     os.environ.update({
         'DJANGO_SETTINGS_MODULE': 'net.settings', 'DJANGO_DEBUG': 'false',

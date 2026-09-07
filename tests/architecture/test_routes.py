@@ -67,6 +67,7 @@ class DetailRouteTests(TestCase):
 
         payload = {'computer_name': self.computer.computer_name}
         self.log_file = ComputerLogFile.objects.create(
+            computer=self.computer, collected_date=timezone.localdate(),
             source_path='C:/logs/route.json',
             modified_at=timezone.now(),
             content_hash=hashlib.sha256(b'route-test').hexdigest(),
@@ -169,6 +170,7 @@ class DetailRouteTests(TestCase):
     def test_computer_history_filter_submission_keeps_asset_scope(self):
         other_computer = Computer.objects.create(computer_name='PC-ROUTE-OTHER')
         other_log = ComputerLogFile.objects.create(
+            computer=other_computer, collected_date=timezone.localdate(),
             source_path='C:/logs/route-other.json',
             modified_at=timezone.now(),
             content_hash=hashlib.sha256(b'route-test-other').hexdigest(),

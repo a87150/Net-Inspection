@@ -9,6 +9,22 @@
     <div class="page-heading__copy"><p class="page-heading__eyebrow">日志分析记录</p><h1 class="page-heading__title">{{ analysis.computer.computer_name }} 分析详情</h1><p class="page-heading__description">日志时间：{{ analysis.log_file.modified_at|date:'Y-m-d H:i:s'|default:'未知' }}</p></div>
     <div class="page-heading__actions"><a href="{% url 'computer_analysis_list' %}" class="btn btn-outline-secondary">返回日志分析记录</a></div>
 </header>
+{% if analysis.details.enrichment %}
+{% with enrichment=analysis.details.enrichment %}
+<section class="card border-0 shadow-sm mb-4" aria-label="人员与目录快照">
+    <div class="card-header">分析时人员与目录快照</div>
+    <div class="card-body">
+        <dl class="row mb-0">
+            <dt class="col-sm-3">登录标识 / 工号</dt><dd class="col-sm-9">{{ enrichment.login_identifier|default:'未知' }} / {{ enrichment.employee_number|default:'未匹配' }}</dd>
+            <dt class="col-sm-3">人员 / 部门</dt><dd class="col-sm-9">{{ enrichment.personnel_name|default:'未匹配' }} / {{ enrichment.department|default:'未知' }}</dd>
+            <dt class="col-sm-3">用户 OU</dt><dd class="col-sm-9">{{ enrichment.user_ou|default:'未匹配' }}</dd>
+            <dt class="col-sm-3">计算机 OU</dt><dd class="col-sm-9">{{ enrichment.computer_ou|default:'未匹配' }}</dd>
+            <dt class="col-sm-3">场地</dt><dd class="col-sm-9">{% if enrichment.site %}{{ enrichment.site }}{% elif enrichment.sites %}多场地：{{ enrichment.sites|join:'、' }}{% else %}未匹配{% endif %}</dd>
+        </dl>
+    </div>
+</section>
+{% endwith %}
+{% endif %}
 {% if analysis.errors.all %}<div class="card border-danger mb-4"><div class="card-header text-bg-danger">发现 {{ analysis.errors.count }} 项问题</div><ul class="list-group list-group-flush">{% for error in analysis.errors.all %}<li class="list-group-item"><strong>{{ error.error_type }}</strong><div class="text-secondary mt-1">{{ error.error_message }}</div></li>{% endfor %}</ul></div>{% else %}<div class="alert alert-success">本次分析未发现问题。</div>{% endif %}
 <div class="card border-0 shadow-sm mb-4"><div class="card-body"><div class="row g-3"><div class="col-md-4"><div class="metric-label">登录用户</div><div>{{ analysis.computer.user_name|default:'-' }}</div></div><div class="col-md-4"><div class="metric-label">结果</div><div>{{ analysis.get_status_display }}</div></div><div class="col-md-4"><div class="metric-label">入库时间</div><div>{{ analysis.created_at|date:'Y-m-d H:i:s' }}</div></div></div></div></div>
 <div class="accordion shadow-sm" id="analysisDetails">{% for title, value in detail_fields %}{% if value %}<div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#analysis-{{ forloop.counter }}">{{ title }}</button></h2><div id="analysis-{{ forloop.counter }}" class="accordion-collapse collapse" data-bs-parent="#analysisDetails"><div class="accordion-body"><pre class="json-view mb-0">{{ value|pretty_json }}</pre></div></div></div>{% endif %}{% endfor %}</div>

@@ -66,7 +66,7 @@ class TaskRunAdmin(admin.ModelAdmin):
         return False
 
 
-TASK_TARGET_READONLY_FIELDS = ('id', 'task', 'target_type', 'target_id', 'target_snapshot', 'execution_scope_key', 'status', 'attempt_count', 'started_at', 'finished_at', 'result_type', 'result_id', 'result_snapshot', 'error_message', 'alert_processed_at', 'alert_attempted_at', 'alert_processing_error', 'created_at', 'updated_at', 'scan_logs')
+TASK_TARGET_READONLY_FIELDS = ('id', 'task', 'target_type', 'target_id', 'target_snapshot', 'execution_scope_key', 'status', 'attempt_count', 'started_at', 'finished_at', 'result_type', 'result_id', 'result_snapshot', 'error_message', 'alert_processed_at', 'alert_attempted_at', 'alert_processing_error', 'created_at', 'updated_at', 'fetched_logs')
 
 
 @admin.register(TaskTargetRun)

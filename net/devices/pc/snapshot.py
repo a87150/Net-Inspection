@@ -99,7 +99,7 @@ def extract_computer_snapshot(
     inventory = {
         'manufacturer': _first_text(system, '制造商', 'manufacturer') or _first_text(hardware, '制造商', 'manufacturer'),
         'model': _first_text(system, '型号', 'model') or _first_text(hardware, '型号', 'model'),
-        'serial_number': _first_text(system, '序列号', 'serial_number') or _first_text(hardware, '序列号', 'serial_number'),
+        'serial_number': _first_text(system, '序列号', 'BIOS序列号', 'serial_number') or _first_text(hardware, '序列号', 'serial_number'),
         'architecture': _first_text(system, '系统架构', 'architecture') or _first_text(hardware, '系统架构', 'architecture'),
         'cpu_model': _first_text(hardware, 'CPU型号', 'CPU 型号', 'cpu_model'),
         'cpu_physical_core_count': _non_negative_integer(_first_text(

@@ -53,14 +53,8 @@ class TaskProfileContractTests(SimpleTestCase):
             {
                 'name',
                 'is_enabled',
-                'scan_directories',
-                'recursive',
-                'processed_directory',
-                'failed_directory',
-                'file_time_mode',
-                'recent_days',
-                'range_start_date',
-                'range_end_date',
+                'cpu_temperature_max_celsius',
+                'site_ip_prefixes',
                 'analysis_items',
                 'software_policy_path',
                 'minimum_windows_release',
@@ -85,12 +79,12 @@ class TaskProfileContractTests(SimpleTestCase):
 
         analysis_first = ComputerAnalysisProfile()
         analysis_second = ComputerAnalysisProfile()
-        analysis_first.scan_directories.append('C:/logs')
+        analysis_first.site_ip_prefixes['192.0.2'] = 'Site'
         analysis_first.analysis_items.append('activation')
 
         self.assertEqual(second.selected_items, [])
         self.assertEqual(second.target_selector, {})
-        self.assertEqual(analysis_second.scan_directories, [])
+        self.assertEqual(analysis_second.site_ip_prefixes, {})
         self.assertEqual(analysis_second.analysis_items, [])
         self.assertEqual(analysis_second.kms_servers, [])
 
@@ -126,7 +120,7 @@ class TaskProfileContractTests(SimpleTestCase):
         )
         analysis = ComputerAnalysisProfile(
             name='终端日志分析',
-            scan_directories={},
+            kms_servers={},
             analysis_items={},
         )
 
@@ -141,7 +135,7 @@ class TaskProfileContractTests(SimpleTestCase):
         )
         self.assertEqual(
             set(analysis_error.exception.message_dict),
-            {'scan_directories', 'analysis_items'},
+            {'kms_servers', 'analysis_items'},
         )
 
     def test_profile_limits_timeout_and_concurrency_to_positive_values(self):
@@ -160,21 +154,19 @@ class TaskProfileContractTests(SimpleTestCase):
             {'timeout_seconds', 'concurrent_workers'},
         )
 
-    def test_computer_analysis_recent_days_mode_requires_a_positive_window(self):
-        profile = ComputerAnalysisProfile(
-            name='终端日志分析',
+    def test_computer_source_recent_days_mode_requires_a_window(self):
+        profile = net_models.PCLogSourceConfig(
             file_time_mode='recent_days',
             recent_days=None,
         )
 
         with self.assertRaises(ValidationError) as caught:
-            profile.full_clean(validate_unique=False, validate_constraints=False)
+            profile.clean()
 
         self.assertEqual(set(caught.exception.message_dict), {'recent_days'})
 
-    def test_computer_analysis_date_range_requires_ordered_boundaries(self):
-        profile = ComputerAnalysisProfile(
-            name='终端日志分析',
+    def test_computer_source_date_range_requires_ordered_boundaries(self):
+        profile = net_models.PCLogSourceConfig(
             file_time_mode='date_range',
             recent_days=None,
             range_start_date=date(2026, 8, 31),
@@ -182,7 +174,7 @@ class TaskProfileContractTests(SimpleTestCase):
         )
 
         with self.assertRaises(ValidationError) as caught:
-            profile.full_clean(validate_unique=False, validate_constraints=False)
+            profile.clean()
 
         self.assertEqual(
             set(caught.exception.message_dict),
@@ -192,7 +184,7 @@ class TaskProfileContractTests(SimpleTestCase):
     def test_computer_analysis_profile_requires_list_json_contracts(self):
         profile = ComputerAnalysisProfile(
             name='终端日志分析',
-            scan_directories={'path': 'C:/logs'},
+            kms_servers={'server': 'kms.test'},
             analysis_items=['activation', 1],
         )
 
@@ -201,7 +193,7 @@ class TaskProfileContractTests(SimpleTestCase):
 
         self.assertEqual(
             set(caught.exception.message_dict),
-            {'scan_directories', 'analysis_items'},
+            {'kms_servers', 'analysis_items'},
         )
 
 
@@ -255,7 +247,7 @@ class ScheduleContractTests(SimpleTestCase):
 
         self.assertEqual(
             set(caught.exception.message_dict),
-            {'inspection_profile', 'analysis_profile'},
+            {'inspection_profile', 'analysis_profile', 'people_source'},
         )
 
     def test_interval_schedule_requires_interval_fields_only(self):

@@ -30,7 +30,9 @@ def computer_log_detail(request, pk):
     profile = next((item for item in profiles if str(item.pk) == request.GET.get('profile_id')), profiles[0] if profiles else None)
     form = ManualTaskForm(profile=profile, initial={'selected_items': profile.analysis_items}) if profile else None
     return render(request, 'devices/pc/log_detail.html', {'log': log, 'profiles': profiles, 'profile': profile,
-        'form': form, 'analyses': log.analyses.order_by('-created_at', '-pk'), 'archives': log.archives.order_by('-created_at')})
+        'form': form, 'analyses': log.analyses.order_by('-created_at', '-pk'),
+        'transfers': log.transfers.select_related('source', 'task_target').order_by('-created_at'),
+        'archives': log.archives.order_by('-created_at')})
 
 
 @require_POST

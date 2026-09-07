@@ -16,7 +16,10 @@ from net.models import (
     TaskTargetRun,
 )
 from net.devices.pc.analysis import analyze_log
-from net.devices.pc.logs import ScanSummary, scan_log_directory
+from net.devices.pc.logs import LogLeaseLost
+from net.devices.pc.remote_ingestion import FetchSummary, fetch_remote_logs
+from net.devices.pc.configuration import source_from_snapshot
+from net.devices.pc.connectors.base import PCLogConnectionError
 from net.infrastructure.sanitization import sanitize
 from net.inspections.queue import enqueue_task
 from net.inspections.state import save_target
@@ -33,20 +36,10 @@ def _snapshot_profile(task):
     """Rebuild the scan configuration from the immutable task snapshot."""
     snapshot = task.profile_snapshot if isinstance(task.profile_snapshot, dict) else {}
     if task.analysis_profile_id is None:
-        raise ValidationError({'profile': '日志扫描任务缺少分析配置。'})
+        raise ValidationError({'profile': '日志获取任务缺少分析配置。'})
     profile = ComputerAnalysisProfile.objects.get(pk=task.analysis_profile_id)
     profile.name = str(snapshot.get('name') or profile.name)
     profile.is_enabled = True
-    profile.scan_directories = list(snapshot.get('scan_directories') or [])
-    profile.recursive = bool(snapshot.get('recursive'))
-    profile.processed_directory = str(snapshot.get('processed_directory') or '')
-    profile.failed_directory = str(snapshot.get('failed_directory') or '')
-    profile.file_time_mode = snapshot.get(
-        'file_time_mode', ComputerAnalysisProfile.FileTimeMode.RECENT_DAYS,
-    )
-    profile.recent_days = snapshot.get('recent_days')
-    profile.range_start_date = _snapshot_date(snapshot.get('range_start_date'))
-    profile.range_end_date = _snapshot_date(snapshot.get('range_end_date'))
     profile.analysis_items = list(snapshot.get('analysis_items') or [])
     profile.software_policy_path = str(snapshot.get('software_policy_path') or '')
     profile.minimum_windows_release = str(snapshot.get('minimum_windows_release') or '')
@@ -55,6 +48,8 @@ def _snapshot_profile(task):
     profile.patch_max_days = snapshot.get('patch_max_days', 30)
     profile.uptime_max_hours = snapshot.get('uptime_max_hours', 168)
     profile.cpu_max_percent = snapshot.get('cpu_max_percent', 90)
+    profile.cpu_temperature_max_celsius = snapshot.get('cpu_temperature_max_celsius', 85)
+    profile.site_ip_prefixes = snapshot.get('site_ip_prefixes', {})
     profile.memory_max_percent = snapshot.get('memory_max_percent', 90)
     profile.kms_servers = list(snapshot.get('kms_servers') or [])
     profile.concurrent_workers = snapshot.get('concurrent_workers', 1)
@@ -75,14 +70,14 @@ def _snapshot_date(value):
 
 
 def _scan_status(summary, log_ids):
-    if summary.failed or summary.move_failures:
+    if summary.failed or summary.move_failures or summary.errors:
         return TaskRun.Status.PARTIAL if log_ids else TaskRun.Status.FAILED
     return TaskRun.Status.SUCCESS
 
 
 def _scan_message(summary):
     message = (
-        f'扫描完成：导入 {summary.imported}，重复 {summary.duplicate}，'
+        f'获取完成：导入 {summary.imported}，重复 {summary.duplicate}，'
         f'失败 {summary.failed}，跳过 {summary.skipped}，移动失败 {summary.move_failures}。'
     )
     if summary.errors:
@@ -111,6 +106,40 @@ def _persist_scan(target_run_id, worker_id, summary, lease_guard=None):
         return ExecutionOutcome(str(target_run_id), TaskRun.Status.RUNNING, stale=True)
 
 
+def reconcile_pending_analysis_handoffs(*, limit=20):
+    """Drain committed analysis intent after exhausted fetches, without network IO."""
+    ids = list(TaskTargetRun.objects.filter(
+        task__task_type=TaskRun.TaskType.COMPUTER_FETCH,
+        task__status=TaskRun.Status.FAILED,
+        analysis_handoff_task__isnull=True,
+        result_snapshot__analysis_handoff_pending=True,
+    ).order_by('created_at').values_list('pk', flat=True)[:limit])
+    restored = 0
+    for identity in ids:
+        try:
+            with transaction.atomic():
+                # Same parent-then-target lock order as queue recovery.
+                task_id = TaskTargetRun.objects.values_list('task_id', flat=True).get(pk=identity)
+                task = TaskRun.objects.select_for_update().get(pk=task_id)
+                target = TaskTargetRun.objects.select_for_update().get(pk=identity)
+                if (task.status != TaskRun.Status.FAILED or target.analysis_handoff_task_id
+                        or not target.result_snapshot.get('analysis_handoff_pending')):
+                    continue
+                log_ids = list(target.fetched_logs.filter(import_status='imported').values_list('pk', flat=True))
+                child = _enqueue_scanned_analyses(task, log_ids)
+                if child is None:
+                    continue
+                target.analysis_handoff_task = child
+                target.error_message += '\n已入库日志的分析交接已恢复；获取任务仍保留失败状态。'
+                save_target(target, {'analysis_handoff_task', 'error_message'})
+                restored += 1
+        except ValidationError:
+            # A currently overlapping analysis may block insertion; retain the
+            # visible pending flag for the next Worker poll, not another fetch.
+            continue
+    return restored
+
+
 def _persist_scan_atomic(target_run_id, worker_id, summary, lease_guard):
     with _database_guard():
         with transaction.atomic():
@@ -135,7 +164,7 @@ def _persist_scan_atomic(target_run_id, worker_id, summary, lease_guard):
                 str(log_file.pk)
                 for log_file in summary.log_files
                 if log_file.import_status == 'imported'
-            } | {str(pk) for pk in target.scan_logs.values_list('pk', flat=True)})
+            } | {str(pk) for pk in target.fetched_logs.values_list('pk', flat=True)})
             # Queue insertion and parent link share a commit boundary. A child
             # cannot become visible to a Worker before this lease-fenced link.
             child_task = _enqueue_scanned_analyses(task, log_ids)
@@ -155,9 +184,11 @@ def _persist_scan_atomic(target_run_id, worker_id, summary, lease_guard):
             target.result_type = 'computer_analysis_task' if child_task is not None else ''
             target.result_id = str(child_task.pk) if child_task is not None else ''
             target.result_snapshot = {
-                'result_type': 'computer_scan',
+                'result_type': 'computer_fetch',
                 'analysis_task_id': str(child_task.pk) if child_task is not None else '',
                 'imported': summary.imported,
+                'discovered': summary.discovered,
+                'downloaded': summary.downloaded,
                 'duplicate': summary.duplicate,
                 'failed': summary.failed,
                 'skipped': summary.skipped,
@@ -175,33 +206,36 @@ def _persist_scan_atomic(target_run_id, worker_id, summary, lease_guard):
             )
 
 
-def execute_computer_scan_target(target_run, *, worker_id, lease_guard=None):
-    """Scan server folders under a Worker lease, then queue imported logs."""
+def execute_computer_fetch_target(target_run, *, worker_id, lease_guard=None, max_download_workers=1):
+    """Fetch the remote inbox under a Worker lease, then queue imported logs."""
     target_run_id = _target_id(target_run)
     started = _begin_target(target_run_id, worker_id, lease_guard)
     if started is None:
         return ExecutionOutcome(target_run_id, TaskRun.Status.QUEUED, stale=True)
     if started.status in _TERMINAL_STATUSES:
         return ExecutionOutcome(target_run_id, started.status)
-    if started.target_type != TaskTargetRun.TargetType.COMPUTER_SCAN:
-        return _failure(target_run_id, worker_id, '日志扫描任务包含无效目标类型。', lease_guard)
+    if started.target_type != TaskTargetRun.TargetType.COMPUTER_SOURCE:
+        return _failure(target_run_id, worker_id, '日志获取任务包含无效目标类型。', lease_guard)
     if lease_guard is not None and lease_guard.is_set():
         return ExecutionOutcome(target_run_id, started.status, stale=True)
     try:
-        summary = scan_log_directory(_snapshot_profile(started.task), scan_target=started)
-    except (ValidationError, OSError, ValueError, TypeError) as exc:
-        if not started.scan_logs.exists():
-            return _failure(target_run_id, worker_id, f'日志扫描失败：{exc}', lease_guard)
+        source = source_from_snapshot(started.task.profile_snapshot.get('log_source'))
+        summary = fetch_remote_logs(source, task_target=started, max_download_workers=max_download_workers)
+    except LogLeaseLost:
+        return ExecutionOutcome(target_run_id, started.status, stale=True)
+    except (ValidationError, PCLogConnectionError, OSError, ValueError, TypeError) as exc:
+        if not started.fetched_logs.exists():
+            return _failure(target_run_id, worker_id, f'日志获取失败：{exc}', lease_guard)
         # An unavailable input directory cannot erase committed import intent.
         # Handoff uses persisted evidence only, and reports the scan as partial.
-        summary = ScanSummary(failed=1, errors=[f'日志扫描失败：{exc}'])
+        summary = FetchSummary(failed=1, errors=[f'日志获取失败：{exc}'])
     return _persist_scan(target_run_id, worker_id, summary, lease_guard)
 
 
-def persist_computer_scan_failure(target_run, *, worker_id, error, lease_guard=None):
+def persist_computer_fetch_failure(target_run, *, worker_id, error, lease_guard=None):
     """Record unexpected scan executor errors behind the same lease fence."""
     target_run_id = _target_id(target_run)
-    if TaskTargetRun.objects.filter(pk=target_run_id, scan_logs__isnull=False).exists():
+    if TaskTargetRun.objects.filter(pk=target_run_id, fetched_logs__isnull=False).exists():
         # Imported evidence already has an immutable handoff obligation. A
         # transient enqueue/link failure must remain eligible for lease replay.
         return ExecutionOutcome(target_run_id, TaskRun.Status.RUNNING, stale=True)
@@ -211,7 +245,7 @@ def persist_computer_scan_failure(target_run, *, worker_id, error, lease_guard=N
     return _failure(
         target_run_id,
         worker_id,
-        f'日志扫描执行失败：{sanitize(str(error))}',
+        f'日志获取执行失败：{sanitize(str(error))}',
         lease_guard,
     )
 

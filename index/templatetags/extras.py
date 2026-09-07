@@ -9,7 +9,9 @@ register = template.Library()
 
 @register.filter
 def get_attr(obj, attr_name):
-    return getattr(obj, attr_name, '')
+    for part in attr_name.split('__'):
+        obj = obj.get(part, '') if isinstance(obj, dict) else getattr(obj, part, '')
+    return obj
 
 
 @register.filter

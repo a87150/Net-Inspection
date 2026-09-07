@@ -17,6 +17,8 @@ from django.db.models.query import QuerySet
 from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 
+from tests.devices.pc.helpers import create_log_file
+
 from net.models import Computer, ComputerAnalysisProfile, ComputerLogFile, RecordStatus
 from net.devices.pc.analysis import analyze_log
 from net.devices.pc import logs as computer_logs
@@ -30,15 +32,15 @@ class SelectedItemSchemaTests(TestCase):
         'bitlocker': {'BitLocker状态': {'磁盘卷信息': [{'卷': 'C', '转换状态': '完全加密'}]}},
         'defender': {'WindowsDefender状态': {'当前病毒库版本': '1.2.3', '上次更新时间': '2026-08-31 09:00:00'}},
         'patches': {'系统更新历史': [{'补丁名称': 'KB123', '日期': '2026-08-31 09:00:00'}]},
-        'domain': {'已应用策略': {}, '当前与域服务器通讯情况': '正常通讯'},
+        'domain': {'已应用策略': {'计算机策略': [], '用户策略': []}, '当前与域服务器通讯情况': '正常通讯'},
         'resource': {'计算机硬件资源情况': {'当前CPU占用率': '23%', '当前内存使用率': '48%'}},
         'event_findings': {'事件发现': [{'级别': 'Information', '消息': 'Started'}]},
     }
 
     def setUp(self):
-        Computer.objects.create(computer_name='SCHEMA-PC')
-        self.log = ComputerLogFile.objects.create(
-            source_path='fixture.json', modified_at=timezone.now(),
+        computer = Computer.objects.create(computer_name='SCHEMA-PC')
+        self.log = create_log_file(
+            computer=computer, source_path='fixture.json', modified_at=timezone.now(),
             content_hash='a' * 64, import_status='imported', payload={},
         )
 
@@ -68,7 +70,7 @@ class SelectedItemSchemaTests(TestCase):
                 result = self.analyze(item, fields)
                 self.assertEqual(result.status, RecordStatus.SUCCESS)
                 self.assertEqual(result.exceptions, [])
-                self.assertEqual(set(result.details), {item})
+                self.assertEqual(set(result.details) - {'enrichment', 'rules', 'platform'}, {item})
 
     def test_present_empty_collections_are_distinct_from_missing(self):
         for item, key in (
@@ -105,329 +107,118 @@ class SelectedItemSchemaTests(TestCase):
         self.assertEqual(result.details['event_findings'], [])
 
 
-class ScannerReviewTests(TransactionTestCase):
+class RemoteImporterReviewTests(TransactionTestCase):
     def setUp(self):
         self.tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(self.tempdir.cleanup)
-        self.root = Path(self.tempdir.name)
-        self.source = self.root / 'log.json'
-        self.raw = json.dumps({'系统信息概览': {'计算机名': 'RACE-PC'}}).encode()
-        self.source.write_bytes(self.raw)
-        self.profile = ComputerAnalysisProfile.objects.create(
-            name='review', scan_directories=[str(self.root)], analysis_items=['activation'],
-        )
+        from tests.devices.pc.test_source_models import valid_smb_source
+        from tests.devices.pc.connector_fakes import MemoryConnector
+        self.source = valid_smb_source(local_staging_directory=self.tempdir.name)
+        self.raw = json.dumps({'日志时间': '2026-09-07 10:00:00',
+                               '系统信息概览': {'计算机名': 'RACE-PC'}}).encode()
+        self.connector = MemoryConnector({'incoming/log.json': self.raw})
+        self.connector.modified_at = timezone.now()
 
-    def scan(self):
-        # NTFS timestamp updates can be slightly ahead of the process clock.
-        # Range semantics have dedicated fixed-time tests; races use a stable window.
-        return computer_logs.scan_log_directory(self.profile, now=timezone.now() + timedelta(seconds=1))
+    def fetch(self):
+        from net.devices.pc.remote_ingestion import fetch_remote_logs
+        return fetch_remote_logs(self.source, task_target=None, connector=self.connector)
 
-    def test_growth_after_stat_is_transient_and_keeps_source_without_evidence(self):
-        original = computer_logs._file_metadata
+    def ingest(self, raw):
+        from tests.devices.pc.helpers import import_payload
+        return import_payload(raw)
 
-        def grow(path):
-            metadata = original(path)
-            path.write_bytes(b'x' * 257)
-            return metadata
+    def test_changed_source_before_archive_retains_original_evidence_and_remote_source(self):
+        self.connector.after_download = lambda: self.connector.files.update({'incoming/log.json': self.raw + b' '})
+        result = self.fetch()
+        self.assertEqual(result.imported, 1)
+        self.assertEqual(result.move_failures, 1)
+        self.assertIn('incoming/log.json', self.connector.files)
+        self.assertEqual(ComputerLogFile.objects.get().content_hash, hashlib.sha256(self.raw).hexdigest())
 
-        with patch.object(computer_logs, 'MAX_LOG_FILE_BYTES', 256), patch.object(
-            computer_logs, '_file_metadata', side_effect=grow,
-        ):
-            with self.assertRaises(ValidationError):
-                computer_logs.import_log_file(self.profile, self.source)
-        self.assertEqual(ComputerLogFile.objects.count(), 0)
-        self.assertEqual(self.source.stat().st_size, 257)
-
-    def test_descriptor_read_is_bounded_and_rejects_mutation_during_read(self):
-        original = os.read
-        limits = []
-
-        def changing_read(fd, size):
-            limits.append(size)
-            raw = original(fd, size)
-            self.source.write_bytes(self.raw + b' ')
-            return raw
-
-        with patch.object(computer_logs, 'MAX_LOG_FILE_BYTES', 256), patch('os.read', side_effect=changing_read):
-            with self.assertRaises(ValidationError):
-                computer_logs.import_log_file(self.profile, self.source)
-        self.assertTrue(limits)
-        self.assertLessEqual(max(limits), 257)
-        self.assertEqual(ComputerLogFile.objects.count(), 0)
-        self.assertTrue(self.source.exists())
-
-    def test_replaced_identity_between_stat_and_read_is_rejected_even_with_same_bytes(self):
-        original = computer_logs._file_metadata
-
-        def replace(path):
-            metadata = original(path)
-            other = self.root / 'replacement.tmp'
-            other.write_bytes(self.raw)
-            os.utime(other, ns=(metadata[0].st_atime_ns, metadata[0].st_mtime_ns))
-            os.replace(other, path)
-            return metadata
-
-        with patch.object(computer_logs, '_file_metadata', side_effect=replace):
-            with self.assertRaises(ValidationError):
-                computer_logs.import_log_file(self.profile, self.source)
-        self.assertTrue(self.source.exists())
-        self.assertEqual(ComputerLogFile.objects.count(), 0)
-
-    def test_changed_source_between_import_and_archive_stays_for_retry(self):
-        original = computer_logs._move_safely
-        changed = json.dumps({'系统信息概览': {'计算机名': 'CHANGED-PC'}}).encode()
-
-        def mutate(*args, **kwargs):
-            self.source.write_bytes(changed)
-            return original(*args, **kwargs)
-
-        with patch.object(computer_logs, '_move_safely', side_effect=mutate):
-            summary = self.scan()
-        self.assertEqual(summary.move_failures, 1)
-        self.assertEqual(self.source.read_bytes(), changed)
-        log = ComputerLogFile.objects.get()
-        self.assertEqual(log.content_hash, hashlib.sha256(self.raw).hexdigest())
-        self.assertFalse(list((self.root / 'processed').glob('*.json')))
-        retried = self.scan()
-        self.assertEqual(retried.imported, 1)
-        self.assertEqual(ComputerLogFile.objects.count(), 2)
-
-    def test_database_failure_after_move_recovers_from_durable_pending_path(self):
-        original = ComputerLogFile.save
-
-        def fail_archive_save(instance, *args, **kwargs):
-            if 'archived_path' in (kwargs.get('update_fields') or []):
-                raise DatabaseError('database temporarily unavailable')
-            return original(instance, *args, **kwargs)
-
-        with patch.object(ComputerLogFile, 'save', new=fail_archive_save):
-            summary = self.scan()
-        self.assertEqual(summary.move_failures, 1)
-        self.assertFalse(self.source.exists())
-        log = ComputerLogFile.objects.get()
-        pending = log.archives.get()
-        self.assertEqual(pending.status, 'pending')
-        self.assertEqual(Path(pending.destination_path).read_bytes(), self.raw)
-        self.scan()
-        log.refresh_from_db()
-        pending.refresh_from_db()
-        self.assertEqual(pending.status, 'completed')
-        self.assertEqual(log.archived_path, pending.destination_path)
+    def test_failed_archive_retries_without_duplicate_evidence(self):
+        self.connector.fail_moves = True
+        first = self.fetch()
+        self.assertEqual(first.imported, 1)
+        self.assertEqual(first.move_failures, 1)
+        self.assertIn('incoming/log.json', self.connector.files)
+        self.connector.fail_moves = False
+        self.fetch()
         self.assertEqual(ComputerLogFile.objects.count(), 1)
+        self.assertNotIn('incoming/log.json', self.connector.files)
+        self.assertEqual(len(self.connector.moves), 1)
 
-    def test_failed_move_has_pending_metadata_and_retries_without_new_evidence(self):
-        with patch.object(computer_logs, '_move_safely', side_effect=OSError('offline')):
-            summary = self.scan()
-        self.assertEqual(summary.move_failures, 1)
-        self.assertEqual(self.source.read_bytes(), self.raw)
-        log = ComputerLogFile.objects.get()
-        pending = log.archives.get()
-        self.assertEqual(pending.status, 'pending')
-        self.assertFalse(Path(pending.destination_path).exists())
-        self.scan()
-        self.assertFalse(self.source.exists())
-        pending.refresh_from_db()
-        self.assertEqual(pending.status, 'completed')
+    def test_archive_completion_failure_recovers_durable_transfer(self):
+        from net.devices.pc import remote_ingestion
+        original = remote_ingestion._save_transfer
+        def save(transfer, target, **values):
+            if values.get('stage') == 'completed':
+                raise DatabaseError('crash after remote move')
+            return original(transfer, target, **values)
+        with patch.object(remote_ingestion, '_save_transfer', side_effect=save):
+            self.fetch()
+        self.assertEqual(len(self.connector.moves), 1)
+        self.fetch()
         self.assertEqual(ComputerLogFile.objects.count(), 1)
+        self.assertEqual(len(self.connector.moves), 1)
 
-    def test_concurrent_malformed_and_static_invalid_imports_dedupe(self):
+    def test_concurrent_failed_payload_imports_deduplicate(self):
         for raw in (b'{broken', b'{"not_system_info":true}'):
-            with self.subTest(raw=raw):
-                self.source.write_bytes(raw)
-                start = threading.Barrier(2)
-
-                def run():
-                    connections['default'].close()
-                    try:
-                        start.wait(timeout=5)
-                        return computer_logs.import_log_file(self.profile, self.source).pk
-                    finally:
-                        connections['default'].close()
-
-                with ThreadPoolExecutor(max_workers=2) as pool:
-                    futures = [pool.submit(run) for _ in range(2)]
-                    ids = [future.result(timeout=10) for future in futures]
-                self.assertEqual(ids[0], ids[1])
-                row = ComputerLogFile.objects.get(pk=ids[0])
-                self.assertEqual(row.import_status, 'failed')
-                self.assertTrue(row.parse_error)
-        self.assertEqual(ComputerLogFile.objects.count(), 2)
+            barrier = threading.Barrier(2)
+            def ingest():
+                connections.close_all()
+                try:
+                    barrier.wait(timeout=5)
+                    return self.ingest(raw).log_file.pk
+                finally:
+                    connections.close_all()
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                futures = [pool.submit(ingest), pool.submit(ingest)]
+                ids = [future.result(timeout=10) for future in futures]
+            self.assertEqual(ids[0], ids[1])
+            self.assertEqual(ComputerLogFile.objects.get(pk=ids[0]).import_status, 'failed')
         self.assertFalse(Computer.objects.exists())
 
-    def test_hash_conflict_restarts_transaction_before_lookup_for_all_payload_kinds(self):
-        # InnoDB loser sees IntegrityError while the winning row is invisible in
-        # the old snapshot. Publish that winner only AFTER a real outer rollback.
-        db = connections['default']
+    def test_unique_conflict_retries_whole_transaction_for_valid_and_failed_evidence(self):
         for raw in (self.raw, b'{broken', b'{"not_system_info":true}'):
-            with self.subTest(raw=raw):
-                self.source.write_bytes(raw)
-                original_create, original_rollback = QuerySet.create, db.rollback
-                winner = {}
-                raced = False
+            original_create = QuerySet.create
+            attempts = []
+            def insert(queryset, **kwargs):
+                if queryset.model is ComputerLogFile:
+                    attempts.append(connections['default'].in_atomic_block)
+                    if len(attempts) == 1:
+                        raise IntegrityError('concurrent insert')
+                return original_create(queryset, **kwargs)
+            with patch.object(QuerySet, 'create', new=insert):
+                result = self.ingest(raw)
+            self.assertEqual(attempts, [True, True])
+            self.assertEqual(result.log_file.content_hash, hashlib.sha256(raw).hexdigest())
+            self.assertEqual(ComputerLogFile.objects.filter(content_hash=result.log_file.content_hash).count(), 1)
 
-                def insert(queryset, **kwargs):
-                    nonlocal raced
-                    if queryset.model is ComputerLogFile and not raced:
-                        raced = True
-                        winner.update(kwargs)
-                        raise IntegrityError(1062, 'Duplicate entry for content_hash')
-                    return original_create(queryset, **kwargs)
-
-                def rollback():
-                    original_rollback()
-                    if winner:
-                        # Connection is outside the failed atomic block; publish
-                        # using autocommit, just as a different MySQL connection.
-                        db.set_autocommit(True)
-                        if raw == self.raw:
-                            Computer.objects.get_or_create(computer_name='RACE-PC')
-                        original_create(ComputerLogFile.objects.all(), **winner)
-                        winner.clear()
-
-                with patch.object(QuerySet, 'create', new=insert), patch.object(db, 'rollback', side_effect=rollback):
-                    result = computer_logs.import_log_file(self.profile, self.source)
-                self.assertEqual(result._import_outcome, 'duplicate')
-                self.assertFalse(winner)
-                self.assertEqual(ComputerLogFile.objects.filter(content_hash=hashlib.sha256(raw).hexdigest()).count(), 1)
-
-    def test_import_refuses_outer_transaction_so_retry_never_reuses_snapshot(self):
+    def test_import_and_fetch_refuse_outer_transaction(self):
         with transaction.atomic():
             with self.assertRaises((ValidationError, RuntimeError)):
-                computer_logs.import_log_file(self.profile, self.source)
+                self.ingest(self.raw)
+            with self.assertRaises((ValidationError, RuntimeError)):
+                self.fetch()
         self.assertFalse(ComputerLogFile.objects.exists())
+        self.assertIn('incoming/log.json', self.connector.files)
 
-    def test_persistent_expected_conflict_does_not_abort_other_candidates(self):
-        second = self.root / 'second.json'
-        second.write_bytes(json.dumps({'系统信息概览': {'计算机名': 'SECOND'}}).encode())
-        original = QuerySet.create
+    def test_one_bad_candidate_does_not_abort_other_remote_files(self):
+        from net.devices.pc.connectors.base import PCLogConnectionError
+        self.connector.files['incoming/bad.json'] = PCLogConnectionError('download unavailable')
+        result = self.fetch()
+        self.assertEqual(result.imported, 1)
+        self.assertEqual(result.skipped, 1)
+        self.assertIn('incoming/bad.json', self.connector.files)
 
-        def conflict(queryset, **kwargs):
-            if queryset.model is ComputerLogFile and kwargs.get('content_hash') == hashlib.sha256(self.raw).hexdigest():
-                raise IntegrityError(1062, 'duplicate race')
-            return original(queryset, **kwargs)
-
-        with patch.object(QuerySet, 'create', new=conflict):
-            result = self.scan()
-        self.assertTrue(self.source.exists())
-        self.assertEqual(result.failed, 1)
-        self.assertEqual(result.imported, 1, result)
-        self.assertEqual(ComputerLogFile.objects.count(), 1)
-        self.assertFalse(Computer.objects.filter(computer_name='RACE-PC').exists())
-
-    def test_archive_rechecks_bytes_even_when_size_and_mtime_are_unchanged(self):
-        original = computer_logs._move_safely
-
-        def mutate(*args, **kwargs):
-            stat = self.source.stat()
-            self.source.write_bytes(self.raw.replace(b'RACE-PC', b'FAKE-PC'))
-            os.utime(self.source, ns=(stat.st_atime_ns, stat.st_mtime_ns))
-            return original(*args, **kwargs)
-
-        with patch.object(computer_logs, '_move_safely', side_effect=mutate):
-            result = self.scan()
-        self.assertEqual(result.move_failures, 1)
-        self.assertIn(b'FAKE-PC', self.source.read_bytes())
-        self.assertFalse(list((self.root / 'processed').glob('*.json')))
-        self.scan()
-        self.assertEqual(ComputerLogFile.objects.count(), 2)
-
-    def test_destination_created_at_rename_boundary_is_never_overwritten(self):
-        original = computer_logs._rename_noreplace
-        destinations = []
-
-        def collide(source, destination):
-            Path(destination).write_bytes(b'existing evidence')
-            destinations.append(destination)
-            return original(source, destination)
-
-        with patch.object(computer_logs, '_rename_noreplace', side_effect=collide):
-            result = self.scan()
-        self.assertEqual(result.move_failures, 1)
-        self.assertEqual(Path(destinations[0]).read_bytes(), b'existing evidence')
-        self.assertEqual(self.source.read_bytes(), self.raw)
-
-    def test_changed_in_rename_window_is_restored_and_retried(self):
-        original = computer_logs._rename_noreplace
-        changed_once = False
-
-        def mutate(source, destination):
-            nonlocal changed_once
-            if not changed_once:
-                changed_once = True
-                Path(source).write_bytes(self.raw.replace(b'RACE-PC', b'LATE-PC'))
-            return original(source, destination)
-
-        with patch.object(computer_logs, '_rename_noreplace', side_effect=mutate):
-            result = self.scan()
-        self.assertEqual(result.move_failures, 1)
-        self.assertIn(b'LATE-PC', self.source.read_bytes())
-        self.scan()
-        self.assertEqual(ComputerLogFile.objects.count(), 2)
-
-    def test_pending_move_failure_after_rename_and_new_source_never_strands_changed_bytes(self):
-        original = computer_logs._rename_noreplace
-        changed_once = False
-
-        def mutate(source, destination):
-            nonlocal changed_once
-            result = original(source, destination)
-            if not changed_once:
-                changed_once = True
-                Path(destination).write_bytes(self.raw.replace(b'RACE-PC', b'LATE-PC'))
-                self.source.write_bytes(self.raw.replace(b'RACE-PC', b'NEXT-PC'))
-            return result
-
-        with patch.object(computer_logs, '_rename_noreplace', side_effect=mutate):
-            self.scan()
-        self.scan()
-        names = {row.payload['系统信息概览']['计算机名'] for row in ComputerLogFile.objects.all()}
-        self.assertEqual(names, {'RACE-PC', 'LATE-PC', 'NEXT-PC'})
-
-    def test_profile_is_snapshotted_before_import(self):
-        second = self.root / 'second.json'
-        second.write_bytes(self.raw.replace(b'RACE-PC', b'NEXT-PC'))
-        original = computer_logs.import_log_file
-
-        def import_and_edit(profile, path, **kwargs):
-            row = original(profile, path, **kwargs)
-            self.profile.scan_directories = [str(self.root / 'does-not-exist')]
-            return row
-
-        with patch.object(computer_logs, 'import_log_file', side_effect=import_and_edit):
-            result = self.scan()
-        self.assertEqual(result.imported, 2, result)
-        self.assertFalse(result.errors)
-
-    def test_recursive_and_direct_import_reject_linked_directory_components(self):
-        actual = self.root / 'actual'
-        actual.mkdir()
-        linked = self.root / 'linked'
-        try:
-            linked.symlink_to(actual, target_is_directory=True)
-        except OSError as exc:
-            if os.name != 'nt':
-                self.skipTest(f'Symlink creation unavailable: {exc}')
-            subprocess.run(['cmd', '/c', 'mklink', '/J', str(linked), str(actual)],
-                           check=True, capture_output=True)
-        (actual / 'linked.json').write_bytes(self.raw)
-        with self.assertRaises(ValidationError):
-            computer_logs.import_log_file(self.profile, linked / 'linked.json')
-
-    def test_pending_reconciliation_refuses_outer_transaction_before_moving(self):
-        with patch.object(computer_logs, '_move_safely', side_effect=OSError('offline')):
-            self.scan()
-        with transaction.atomic():
-            with self.assertRaises((ValidationError, RuntimeError)):
-                self.scan()
-        self.assertTrue(self.source.exists())
-
-    def test_nonfinite_and_excessively_nested_json_are_failed_evidence_not_poll_crashes(self):
+    def test_nonfinite_and_excessively_nested_json_are_failed_evidence(self):
         for raw in (b'{"value":NaN}', b'{"value":' + b'[' * 2000 + b']' * 2000 + b'}'):
-            with self.subTest(raw=raw[:20]):
-                self.source.write_bytes(raw)
-                result = self.scan()
-                self.assertEqual(result.failed, 1, result)
-                log = ComputerLogFile.objects.get(content_hash=hashlib.sha256(raw).hexdigest())
-                self.assertEqual(log.import_status, 'failed')
-                self.assertTrue(log.parse_error)
-                self.assertEqual(Path(log.archived_path).read_bytes(), raw)
+            result = self.ingest(raw)
+            self.assertEqual(result.status, 'failed_schema')
+            self.assertTrue(result.log_file.parse_error)
+
+    def test_size_limit_is_enforced_before_database_import(self):
+        with patch.object(computer_logs, 'MAX_LOG_FILE_BYTES', 8):
+            with self.assertRaises(ValidationError):
+                self.ingest(self.raw)
+        self.assertFalse(ComputerLogFile.objects.exists())

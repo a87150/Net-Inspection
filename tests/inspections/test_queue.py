@@ -5,6 +5,8 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 
+from tests.devices.pc.helpers import create_log_file
+
 from net.models import (
     ComputerAnalysisProfile,
     ComputerLogFile,
@@ -267,7 +269,6 @@ class ComputerAnalysisEnqueueTests(TestCase):
 
         profile = ComputerAnalysisProfile.objects.create(
             name='计算机日志分析',
-            scan_directories=['C:/inspection-logs'],
             analysis_items=['patches', 'defender'],
             software_policy_path='config/software-policy.ini',
             minimum_windows_release='24H2',
@@ -279,7 +280,7 @@ class ComputerAnalysisEnqueueTests(TestCase):
             memory_max_percent=80,
             kms_servers=['kms1.example.test', '192.0.2.10'],
         )
-        log = ComputerLogFile.objects.create(
+        log = create_log_file(
             source_path='C:/inspection-logs/PC-01.json',
             modified_at=timezone.now(),
             content_hash='a' * 64,

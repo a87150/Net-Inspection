@@ -15,10 +15,7 @@ from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-COMPUTER_UPLOAD_PROFILE_ID = os.getenv('COMPUTER_UPLOAD_PROFILE_ID', '')
-# Production deployments should set this explicit public HTTP(S) origin instead
-# of relying on a request-derived origin behind a reverse proxy.
-NET_PUBLIC_BASE_URL = os.getenv('NET_PUBLIC_BASE_URL', '')
+# Stable service encryption keys; the Web and Worker must share each value.
 DOMAIN_OPERATION_ENCRYPTION_KEY = os.getenv('DOMAIN_OPERATION_ENCRYPTION_KEY', '')
 PC_LOG_SOURCE_ENCRYPTION_KEY = os.getenv('PC_LOG_SOURCE_ENCRYPTION_KEY', '')
 # Forwarded host and scheme are trusted only when the deployment explicitly
