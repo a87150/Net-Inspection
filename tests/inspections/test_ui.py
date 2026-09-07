@@ -84,8 +84,8 @@ class TaskUiTestCase(TestCase):
                 self.assertEqual(html.count('>保存日志来源</button>'), 1)
                 self.assertNotIn('profile-config-save-top', html)
                 self.assertContains(response, 'id="profileConfigModal"')
-        css = Path(settings.BASE_DIR, 'static/app/css/style.css').read_text(encoding='utf-8')
-        self.assertIn('#profileConfigModal .modal-body', css)
+        css = Path(settings.BASE_DIR, 'static/app/css/modal-workflows.css').read_text(encoding='utf-8')
+        self.assertIn('.modal-body--scroll', css)
         self.assertIn('overflow-y: auto', css)
 
     def test_manual_selected_enqueue_snapshots_filtered_targets_items_and_concurrency(self):
