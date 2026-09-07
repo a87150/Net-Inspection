@@ -185,3 +185,25 @@ class AdminVisualContractTests(TestCase):
         self.assertContains(response, 'id="content-main"')
         self.assertContains(response, 'id="content-related"')
         self.assertContains(response, 'app-brand__copy')
+    def test_admin_theme_is_loaded_after_django_page_and_responsive_styles(self):
+        self.client.force_login(self.admin_user)
+        response = self.client.get(reverse('admin:index'))
+        html = response.content.decode(response.charset)
+
+        self.assertLess(html.index('admin/css/dashboard.css'), html.index('app/css/admin.css'))
+        self.assertLess(html.index('admin/css/responsive.css'), html.index('app/css/admin.css'))
+
+    def test_admin_list_and_change_pages_keep_the_shared_shell(self):
+        self.client.force_login(self.admin_user)
+        urls = (
+            reverse('admin:auth_user_changelist'),
+            reverse('admin:auth_user_change', args=[self.admin_user.pk]),
+        )
+
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'app-navbar app-header')
+                self.assertContains(response, 'app/css/admin.css')
+                self.assertContains(response, '返回运维总览')

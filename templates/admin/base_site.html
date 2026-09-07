@@ -2,7 +2,8 @@
 {% load i18n static %}
 
 {% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | 网络巡检中心{% endblock %}
-{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'app/css/style.css' %}"><link rel="stylesheet" href="{% static 'app/css/admin.css' %}">{% endblock %}
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'app/css/style.css' %}">{% endblock %}
+{% block finalstyle %}<link rel="stylesheet" href="{% static 'app/css/admin.css' %}">{% endblock %}
 {% block bodyclass %}{{ block.super }} app-shell admin-shell{% endblock %}
 {% block branding %}<a class="navbar-brand app-brand" href="{% url 'admin:index' %}"><span class="app-brand__copy"><strong>网络巡检中心</strong><small>Operations Console</small></span></a>{% endblock %}
 {% block userlinks %}
