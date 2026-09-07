@@ -5,6 +5,20 @@ from django.contrib import admin
 
 from net.models import Computer, Domain_Account, Domain_Computer, Domain_Group, Domain_Controller_Config, Network_Device, People, SecurityDevice, Server
 
+MASKED_SECRET = '••••••••'
+
+
+class MaskedSecretInput(forms.PasswordInput):
+    """Render a fixed marker for stored secrets without exposing their value."""
+
+    def __init__(self, attrs=None):
+        super().__init__(attrs=attrs, render_value=True)
+
+    def get_context(self, name, value, attrs):
+        if value and value != MASKED_SECRET:
+            value = ''
+        return super().get_context(name, value, attrs)
+
 
 class DomainControllerConfigAdminForm(forms.ModelForm):
     """Treat the bind password as write-only while retaining a saved value."""
@@ -12,18 +26,22 @@ class DomainControllerConfigAdminForm(forms.ModelForm):
     class Meta:
         model = Domain_Controller_Config
         fields = '__all__'
-        widgets = {'bind_password': forms.PasswordInput(render_value=False, attrs={'autocomplete': 'new-password'})}
+        widgets = {'bind_password': MaskedSecretInput(attrs={'autocomplete': 'new-password', 'data-secret-mask': 'true'})}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         password = self.fields['bind_password']
         password.required = False
-        password.widget = forms.PasswordInput(render_value=False, attrs={'autocomplete': 'new-password'})
-        self.initial['bind_password'] = ''
+        password.widget = MaskedSecretInput(
+            attrs={'autocomplete': 'new-password', 'data-secret-mask': 'true'},
+        )
+        self.initial['bind_password'] = (
+            MASKED_SECRET if self.instance.pk and self.instance.bind_password else ''
+        )
 
     def clean(self):
         cleaned = super().clean()
-        if not cleaned.get('bind_password') and self.instance.pk and self.instance.bind_password:
+        if cleaned.get('bind_password') in ('', MASKED_SECRET) and self.instance.pk and self.instance.bind_password:
             cleaned['bind_password'] = self.instance.bind_password
         return cleaned
 
@@ -38,11 +56,12 @@ class SecretPreservingModelForm(forms.ModelForm):
         existing = bool(self.instance and self.instance.pk)
         for name in self.secret_fields:
             field = self.fields[name]
-            field.widget = forms.PasswordInput(
-                render_value=False,
-                attrs={'autocomplete': 'new-password'},
+            field.widget = MaskedSecretInput(
+                attrs={'autocomplete': 'new-password', 'data-secret-mask': 'true'},
             )
-            self.initial[name] = ''
+            self.initial[name] = (
+                MASKED_SECRET if existing and getattr(self.instance, name, '') else ''
+            )
             if existing:
                 field.required = False
 
@@ -50,7 +69,7 @@ class SecretPreservingModelForm(forms.ModelForm):
         cleaned = super().clean()
         if self.instance and self.instance.pk:
             for name in self.secret_fields:
-                if not cleaned.get(name):
+                if cleaned.get(name) in ('', MASKED_SECRET):
                     cleaned[name] = getattr(self.instance, name)
         return cleaned
 

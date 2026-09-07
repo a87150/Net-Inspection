@@ -148,6 +148,8 @@ class AdminVisualContractTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'admin-login-shell')
+        self.assertContains(response, 'app-shell')
+        self.assertContains(response, 'app/css/style.css')
         self.assertContains(response, 'app/css/admin.css')
         self.assertContains(response, '网络巡检中心')
 
@@ -157,5 +159,7 @@ class AdminVisualContractTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'admin-shell')
+        self.assertContains(response, 'app-shell')
+        self.assertContains(response, 'app/css/style.css')
         self.assertContains(response, 'app/css/admin.css')
         self.assertContains(response, '运维管理台')

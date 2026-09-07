@@ -144,8 +144,8 @@ class AdminRegistryTests(TestCase):
                 visible = set(model_admin.list_display) | set(model_admin.search_fields)
                 self.assertFalse(forbidden & visible)
 
-    def test_domain_bind_password_is_blank_and_preserved_by_admin_form(self):
-        """Editing other configuration never renders or clears the saved password."""
+    def test_domain_bind_password_is_masked_and_preserved_by_admin_form(self):
+        """The fixed marker must retain the secret without exposing its true value."""
         config = Domain_Controller_Config.objects.create(
             name='Primary domain', host='ldap.example.test', port=636,
             use_ssl=True, base_dn='DC=example,DC=test', bind_username='svc-domain',
@@ -155,13 +155,14 @@ class AdminRegistryTests(TestCase):
         form_class = config_admin.get_form(request=None, obj=config)
         form = form_class(instance=config)
 
-        self.assertEqual(form.initial['bind_password'], '')
+        self.assertEqual(form.initial['bind_password'], '••••••••')
         self.assertFalse(form.fields['bind_password'].required)
+        self.assertTrue(form.fields['bind_password'].widget.render_value)
 
         bound = form_class(data={
             'name': 'Renamed domain', 'host': 'ldap.example.test', 'port': 636,
             'use_ssl': 'on', 'base_dn': 'DC=example,DC=test',
-            'bind_username': 'svc-domain', 'bind_password': '',
+            'bind_username': 'svc-domain', 'bind_password': '••••••••',
             'user_filter': '(&(objectCategory=person)(objectClass=user))',
             'computer_filter': '(objectCategory=computer)',
             'group_filter': '(objectCategory=group)',
@@ -247,10 +248,16 @@ class AdminSecretFormTests(TestCase):
             with self.subTest(model=type(instance).__name__):
                 response = self.client.get(self.change_url(instance))
                 self.assertEqual(response.status_code, 200)
+                self.assertContains(response, '••••••••')
+                self.assertContains(response, 'data-secret-mask="true"')
                 for value in secrets.values():
                     self.assertNotContains(response, value)
 
-                response = self.client.post(self.change_url(instance), blank_data)
+                masked_data = {
+                    **blank_data,
+                    **{field: '••••••••' for field in secrets},
+                }
+                response = self.client.post(self.change_url(instance), masked_data)
                 self.assertEqual(response.status_code, 302, response.content.decode())
                 instance.refresh_from_db()
                 for field, value in secrets.items():
