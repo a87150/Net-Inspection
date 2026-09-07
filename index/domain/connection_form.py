@@ -1,6 +1,7 @@
 from django import forms
 
 from net.models import Domain_Controller_Config
+from net.secret_masks import MaskedSecretInput
 
 
 class DomainControllerConfigForm(forms.ModelForm):
@@ -12,10 +13,7 @@ class DomainControllerConfigForm(forms.ModelForm):
             'group_filter',
         ]
         widgets = {
-            'bind_password': forms.PasswordInput(
-                render_value=False,
-                attrs={'autocomplete': 'new-password'},
-            ),
+            'bind_password': MaskedSecretInput(attrs={'autocomplete': 'new-password', 'data-secret-mask': 'true'}),
             'user_filter': forms.TextInput(),
             'computer_filter': forms.TextInput(),
             'group_filter': forms.TextInput(),

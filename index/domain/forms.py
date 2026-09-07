@@ -3,6 +3,7 @@
 from django import forms
 
 from index.domain.connection_form import DomainControllerConfigForm as _BaseDomainControllerConfigForm
+from net.secret_masks import MASKED_SECRET, MaskedSecretInput
 
 
 class DomainControllerConfigForm(_BaseDomainControllerConfigForm):
@@ -12,15 +13,15 @@ class DomainControllerConfigForm(_BaseDomainControllerConfigForm):
         super().__init__(*args, **kwargs)
         password_field = self.fields['bind_password']
         password_field.required = False
-        password_field.widget = forms.PasswordInput(
-            render_value=False,
-            attrs={
-                'autocomplete': 'new-password',
-                'class': 'form-control',
-            },
-        )
+        password_field.widget = MaskedSecretInput(attrs={
+            'autocomplete': 'new-password',
+            'class': 'form-control',
+            'data-secret-mask': 'true',
+        })
         if not self.is_bound:
-            self.initial['bind_password'] = ''
+            self.initial['bind_password'] = (
+                MASKED_SECRET if self.instance and self.instance.pk and self.instance.bind_password else ''
+            )
 
     def clean(self):
         # Bypass the base form's required-password check so an existing
@@ -33,7 +34,7 @@ class DomainControllerConfigForm(_BaseDomainControllerConfigForm):
                 self.add_error(name, '该字段不能为空。')
 
         password = cleaned.get('bind_password')
-        if not password:
+        if not password or password == MASKED_SECRET:
             if self.instance and self.instance.pk and self.instance.bind_password:
                 cleaned['bind_password'] = self.instance.bind_password
             else:

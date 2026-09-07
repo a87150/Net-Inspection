@@ -320,7 +320,7 @@ class AlertChannelSecretFormTests(TestCase):
             'secret': self.SECRET,
         })
         form = FeishuAlertChannelForm(instance=channel)
-        self.assertNotIn('secret', form.initial)
+        self.assertEqual(form.initial['secret'], '••••••••')
         self.assertNotIn(self.SECRET, form.as_p())
         saved = FeishuAlertChannelForm(data={
             'name': channel.name,
@@ -379,7 +379,7 @@ class AlertChannelSecretFormTests(TestCase):
             'recipients': ['ops@example.com'],
         })
         form = EmailAlertChannelForm(instance=channel)
-        self.assertNotIn('password', form.initial)
+        self.assertEqual(form.initial['password'], '••••••••')
         self.assertNotIn(self.SECRET, form.as_p())
 
         invalid = EmailAlertChannelForm(data={

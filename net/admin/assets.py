@@ -1,23 +1,11 @@
 """Admin registrations for editable inventory and directory configuration."""
 
 from django import forms
+from net.secret_masks import MASKED_SECRET, MaskedSecretInput
 from django.contrib import admin
 
 from net.models import Computer, Domain_Account, Domain_Computer, Domain_Group, Domain_Controller_Config, Network_Device, People, SecurityDevice, Server
 
-MASKED_SECRET = '••••••••'
-
-
-class MaskedSecretInput(forms.PasswordInput):
-    """Render a fixed marker for stored secrets without exposing their value."""
-
-    def __init__(self, attrs=None):
-        super().__init__(attrs=attrs, render_value=True)
-
-    def get_context(self, name, value, attrs):
-        if value and value != MASKED_SECRET:
-            value = ''
-        return super().get_context(name, value, attrs)
 
 
 class DomainControllerConfigAdminForm(forms.ModelForm):

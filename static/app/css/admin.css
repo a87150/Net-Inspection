@@ -125,3 +125,13 @@ body.admin-shell {
     .admin-shell .object-tools { float: none; margin: .65rem 0 0; }
     .admin-login-card { padding: 1.4rem; }
 }
+/* The Admin template now uses the same application shell as the dashboard. */
+.admin-shell #header { min-height: 4rem; padding: 0; }
+.admin-shell #header .app-navbar__inner { width: 100%; }
+.admin-shell .admin-brand .app-brand__copy { gap: .2rem; }
+.admin-shell .admin-breadcrumbs { border-bottom: 1px solid rgba(142,162,196,.18); background: rgba(255,255,255,.42); }
+.admin-shell .admin-breadcrumbs .app-main { padding-top: 0; padding-bottom: 0; }
+.admin-shell .breadcrumbs { padding: .8rem 0; border: 0; background: transparent; }
+.admin-shell #main { margin: 0 auto; max-width: 1600px; }
+.admin-shell #footer { max-width: none; margin: 2rem 0 0; padding: 0; }
+.admin-shell #footer .app-main { padding-top: 1rem; padding-bottom: 1.5rem; }

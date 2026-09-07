@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 
 from net.models import AlertChannel
+from net.secret_masks import MASKED_SECRET, MaskedSecretInput
 
 
 class _AlertChannelForm(forms.Form):
@@ -29,7 +30,10 @@ class _AlertChannelForm(forms.Form):
             })
             self._set_safe_initials()
         for name in ('webhook_url', 'secret', 'password'):
-            self.initial.pop(name, None)
+            if self.existing_settings.get(name):
+                self.initial[name] = MASKED_SECRET
+            else:
+                self.initial.pop(name, None)
 
     def _set_safe_initials(self):
         """Subclasses expose only non-secret settings in initial form data."""
@@ -63,7 +67,7 @@ class _AlertChannelForm(forms.Form):
 
     def _secret_or_existing(self, cleaned, key):
         replacement = cleaned.get(self.secret_field_name, '')
-        if replacement:
+        if replacement and replacement != MASKED_SECRET:
             return replacement
         return self.existing_settings.get(key, '')
 
@@ -84,17 +88,19 @@ class FeishuAlertChannelForm(_AlertChannelForm):
     secret_field_name = 'secret'
 
     webhook_url = forms.CharField(
-        max_length=2048, required=False, widget=forms.PasswordInput(render_value=False),
-        label='飞书 Webhook（留空保持不变）',
+        max_length=2048, required=False, widget=MaskedSecretInput(attrs={'autocomplete': 'new-password', 'data-secret-mask': 'true'}),
+        label='飞书 Webhook（星号或留空保持不变）',
     )
     secret = forms.CharField(
         required=False,
-        widget=forms.PasswordInput(render_value=False),
-        label='签名密钥（留空保持不变）',
+        widget=MaskedSecretInput(attrs={'autocomplete': 'new-password', 'data-secret-mask': 'true'}),
+        label='签名密钥（星号或留空保持不变）',
     )
 
     def clean_webhook_url(self):
         value = self.cleaned_data['webhook_url'].strip()
+        if value == MASKED_SECRET:
+            value = self.existing_settings.get('webhook_url', '')
         if not value and not self.instance._state.adding:
             value = self.existing_settings.get('webhook_url', '')
         if not value:
@@ -111,8 +117,8 @@ class FeishuAlertChannelForm(_AlertChannelForm):
 class DingTalkAlertChannelForm(FeishuAlertChannelForm):
     channel_type = AlertChannel.ChannelType.DINGTALK
     webhook_url = forms.CharField(
-        max_length=2048, required=False, widget=forms.PasswordInput(render_value=False),
-        label='钉钉 Webhook（留空保持不变）',
+        max_length=2048, required=False, widget=MaskedSecretInput(attrs={'autocomplete': 'new-password', 'data-secret-mask': 'true'}),
+        label='钉钉 Webhook（星号或留空保持不变）',
     )
 
 
@@ -127,8 +133,8 @@ class EmailAlertChannelForm(_AlertChannelForm):
     username = forms.CharField(required=False, max_length=255, label='SMTP 账号')
     password = forms.CharField(
         required=False,
-        widget=forms.PasswordInput(render_value=False),
-        label='SMTP 密码（留空保持不变）',
+        widget=MaskedSecretInput(attrs={'autocomplete': 'new-password', 'data-secret-mask': 'true'}),
+        label='SMTP 密码（星号或留空保持不变）',
     )
     from_email = forms.EmailField(label='发件人邮箱')
     recipients = forms.CharField(label='收件人（逗号分隔）')

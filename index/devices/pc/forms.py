@@ -6,12 +6,13 @@ from net.models import PCLogSourceConfig, TaskRun
 from net.devices.pc.configuration import SOURCE_FIELDS
 from net.devices.pc.connectors.base import normalize_path, within
 from net.devices.pc.credentials import load_pc_source_secret, store_pc_source_secret
+from net.secret_masks import MASKED_SECRET, MaskedSecretInput
 
 
 class PCLogSourceForm(forms.ModelForm):
     password = forms.CharField(required=False, label='连接密码',
-                               widget=forms.PasswordInput(render_value=False),
-                               help_text='留空保留已保存密码；只在后台连接时使用，不写入采集脚本。')
+                               widget=MaskedSecretInput(attrs={'autocomplete': 'new-password', 'data-secret-mask': 'true'}),
+                               help_text='已保存密码会显示为星号；保留星号或留空均会保留原密码。')
 
     class Meta:
         model = PCLogSourceConfig
@@ -47,6 +48,12 @@ class PCLogSourceForm(forms.ModelForm):
             field.widget.attrs['class'] = ('form-check-input' if isinstance(field.widget, forms.CheckboxInput)
                                           else 'form-select' if isinstance(field.widget, forms.Select)
                                           else 'form-control')
+        if self.instance and self.instance.pk:
+            try:
+                has_password = bool(load_pc_source_secret(self.instance))
+            except ValidationError:
+                has_password = False
+            self.initial['password'] = MASKED_SECRET if has_password else ''
         self.fields['port'].min_value = 1
         self.fields['port'].max_value = 65535
 
@@ -99,7 +106,7 @@ class PCLogSourceForm(forms.ModelForm):
             if TaskRun.objects.filter(task_type='computer_fetch', status__in=TaskRun.ACTIVE_STATUSES).exists():
                 raise ValidationError('有日志获取任务正在排队或执行，请结束任务后再修改来源。')
             password = self.cleaned_data.get('password')
-            if not password:
+            if not password or password == MASKED_SECRET:
                 if previous is None:
                     raise ValidationError('首次配置必须填写连接密码。')
                 password = load_pc_source_secret(previous)

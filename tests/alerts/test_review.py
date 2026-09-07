@@ -21,7 +21,7 @@ class WebhookCredentialTests(TestCase):
                     name=kind, channel_type=kind, settings={'webhook_url': url, 'secret': 'saved-signing-key'},
                 )
                 initial = form_class(instance=channel)
-                self.assertNotIn('webhook_url', initial.initial)
+                self.assertEqual(initial.initial['webhook_url'], '••••••••')
                 self.assertNotIn('stored-private-token', initial.as_p())
                 form = form_class(instance=channel, data={'name': kind, 'is_enabled': 'on', 'webhook_url': '', 'secret': ''})
                 self.assertTrue(form.is_valid(), form.errors)

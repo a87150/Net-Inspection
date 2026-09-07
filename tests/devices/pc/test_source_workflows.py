@@ -21,10 +21,13 @@ class SourceWorkflowTests(TestCase):
         self.client.force_login(self.admin)
 
     def values(self):
-        return {**self.source.public_data(), 'password': '', 'source_type': 'ftp',
+        return {**self.source.public_data(), 'password': '••••••••', 'source_type': 'ftp',
                 'host': 'new.test', 'port': 21, 'domain': '', 'share_name': ''}
 
-    def test_blank_password_survives_protocol_and_host_change(self):
+    def test_masked_password_survives_protocol_and_host_change(self):
+        display = PCLogSourceForm(instance=self.source)
+        self.assertIn('••••••••', display.as_p())
+        self.assertNotIn('saved-secret', display.as_p())
         form = PCLogSourceForm(self.values(), instance=self.source)
         self.assertTrue(form.is_valid(), form.errors)
         saved = form.save()
