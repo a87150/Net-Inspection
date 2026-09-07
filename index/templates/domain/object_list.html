@@ -13,7 +13,7 @@
 {% include 'domain/operation_modal.html' %}
 
 {% if domain_object_type == 'account' and can_manage_domain %}
-<div class="modal fade domain-account-import-modal" id="domainAccountImportModal" tabindex="-1" aria-labelledby="domainAccountImportModalLabel" aria-hidden="true">
+<div class="modal fade domain-account-import-modal" id="domainAccountImportModal" data-auto-open="{% if request.GET.domain_modal == 'account_import' %}true{% else %}false{% endif %}" tabindex="-1" aria-labelledby="domainAccountImportModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface"><form method="post" action="{% url 'domain_account_import' %}" enctype="multipart/form-data">
         {% csrf_token %}
         <div class="modal-header"><h2 class="modal-title fs-5" id="domainAccountImportModalLabel">批量导入域账号</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>

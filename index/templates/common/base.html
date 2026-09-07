@@ -10,6 +10,7 @@
     <script defer src="{% static 'vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
     <script defer src="{% static 'app/js/common/table_tools.js' %}"></script>
     <script defer src="{% static 'app/js/common/table_workspace.js' %}"></script>
+    <script defer src="{% static 'app/js/common/modal_feedback.js' %}"></script>
     <script defer src="{% static 'app/js/inspections/task_ui.js' %}"></script>
     <script defer src="{% static 'app/js/people/import_tasks.js' %}"></script>
 </head>
@@ -59,7 +60,7 @@
     <main class="container-fluid app-main app-content" id="main-content" tabindex="-1">
         {% if messages %}
         {% for message in messages %}
-        <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show" role="alert">
+        <div data-flash-message class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show" role="alert">
             {{ message }}
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="关闭"></button>
         </div>

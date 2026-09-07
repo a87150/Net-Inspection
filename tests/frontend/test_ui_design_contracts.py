@@ -211,6 +211,44 @@ class AdminVisualContractTests(TestCase):
                 self.assertContains(response, '返回运维总览')
 
 class ModalVisualContractTests(TestCase):
+    def test_shared_shell_loads_modal_feedback_controller(self):
+        response = self.client.get(reverse('asset_list', args=['networks']))
+
+        self.assertContains(response, 'app/js/common/modal_feedback.js')
+
+    def test_domain_redirect_marks_reopened_dialog_for_inline_feedback(self):
+        response = self.client.get(reverse('domain_controller_settings') + '?modal=1')
+
+        self.assertContains(response, 'id="domainConfigModal"')
+        self.assertContains(response, 'data-auto-open="true"')
+
+    def test_invalid_domain_account_import_reopens_the_import_dialog(self):
+        response = self.client.post(reverse('domain_account_import'), {})
+
+        self.assertRedirects(
+            response,
+            reverse('domain_account_list') + '?domain_modal=account_import',
+            fetch_redirect_response=False,
+        )
+        page = self.client.get(response.url)
+        self.assertContains(page, 'id="domainAccountImportModal"')
+        self.assertContains(page, 'data-auto-open="true"')
+
+    def test_invalid_domain_operation_reopens_the_operation_dialog(self):
+        response = self.client.post(reverse('domain_operation_create'), {
+            'object_type': 'account',
+            'action': 'disable',
+        })
+
+        self.assertRedirects(
+            response,
+            reverse('domain_account_list') + '?domain_modal=operation',
+            fetch_redirect_response=False,
+        )
+        page = self.client.get(response.url)
+        self.assertContains(page, 'id="domainOperationModal"')
+        self.assertContains(page, 'data-auto-open="true"')
+
     def setUp(self):
         from django.contrib.auth import get_user_model
 

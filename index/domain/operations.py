@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import permission_required
 from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponse
 from django.shortcuts import redirect
+from django.urls import reverse
 from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_POST
 
@@ -46,7 +47,7 @@ def domain_operation_create(request):
             return redirect('task_detail', pk=operation.task_id)
     else:
         messages.error(request, '域控操作参数无效，未创建任务。')
-    return redirect(_list_route(object_type))
+    return redirect(f'{reverse(_list_route(object_type))}?domain_modal=operation')
 
 
 @permission_required('net.manage_domain_operations', raise_exception=True)
@@ -84,7 +85,7 @@ def domain_account_import(request):
             return redirect('task_list')
     else:
         messages.error(request, '域账号表格校验失败，未创建任务。')
-    return redirect('domain_account_list')
+    return redirect(f'{reverse("domain_account_list")}?domain_modal=account_import')
 
 
 @permission_required('net.manage_domain_operations', raise_exception=True)
