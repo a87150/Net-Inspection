@@ -20,6 +20,7 @@ from net.models import (
     ComputerAnalysisProfile,
     ComputerLogArchive,
     ComputerLogFile,
+    ComputerLogTransfer,
     DomainOperation,
     Domain_Account,
     Domain_Computer,
@@ -35,6 +36,7 @@ from net.models import (
     Network_Device_Inspection,
     People,
     PeopleSyncSource,
+    PCLogSourceConfig,
     Schedule,
     Server,
     Server_Inspection,
@@ -57,6 +59,7 @@ REQUIRED_ADMIN_MODELS = (
     DomainOperation,
     ComputerLogFile,
     ComputerLogArchive,
+    ComputerLogTransfer,
     ComputerAnalysis,
     Network_Device_Inspection,
     Server_Inspection,
@@ -77,6 +80,7 @@ REQUIRED_ADMIN_MODELS = (
     AlertDelivery,
     AlertTestSend,
     PeopleSyncSource,
+    PCLogSourceConfig,
 )
 
 
@@ -90,6 +94,12 @@ class AdminRegistryTests(TestCase):
     def test_domain_operation_secret_is_never_registered(self):
         """The encrypted one-time password payload has no admin surface."""
         self.assertNotIn(DomainOperationSecret, admin.site._registry)
+
+    def test_pc_source_credential_is_never_registered(self):
+        """Registering the encrypted PC source credential invites accidental secret exposure."""
+        from net.models.pc_sources import PCLogSourceCredential
+
+        self.assertNotIn(PCLogSourceCredential, admin.site._registry)
 
     def test_tasks_and_audits_keep_generated_fields_read_only(self):
         """Changing snapshots, task results, or audit history in admin is a bug."""

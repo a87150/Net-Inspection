@@ -53,8 +53,26 @@ class DynamicRecord(models.Model):
 
 
 class ComputerLogFile(models.Model):
-    upload_task = models.OneToOneField('net.TaskRun', null=True, blank=True, on_delete=models.PROTECT,
-                                      related_name='uploaded_log')
+    class Platform(models.TextChoices):
+        WINDOWS = 'windows', 'Windows'
+        MACOS = 'macos', 'macOS'
+
+    class SourceProtocol(models.TextChoices):
+        SMB = 'smb', 'SMB'
+        FTP = 'ftp', 'FTP'
+        FTPS = 'ftps', 'FTPS'
+
+    computer = models.ForeignKey(
+        Computer,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name='log_files',
+    )
+    collected_date = models.DateField(null=True, blank=True)
+    platform = models.CharField(max_length=20, choices=Platform.choices, blank=True)
+    source_protocol = models.CharField(max_length=8, choices=SourceProtocol.choices, blank=True)
+    remote_source_path = models.TextField(blank=True)
     source_path = models.TextField()
     modified_at = models.DateTimeField()
     content_hash = models.CharField(max_length=64, unique=True)
@@ -64,6 +82,19 @@ class ComputerLogFile(models.Model):
     parse_error = models.TextField(blank=True)
     payload = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=('computer', 'collected_date'),
+                condition=models.Q(
+                    computer__isnull=False,
+                    collected_date__isnull=False,
+                    import_status='imported',
+                ),
+                name='net_pc_imported_log_daily_uniq',
+            ),
+        ]
 
 
 class ComputerLogArchive(models.Model):

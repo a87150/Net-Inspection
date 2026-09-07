@@ -6,6 +6,7 @@ from .domain import (
 )
 from .integrations import PeopleSyncSource
 from .people import People
+from .pc_sources import ComputerLogTransfer, PCLogSourceConfig
 from .records import (
     ComputerAnalysis, ComputerLogArchive, ComputerLogFile, Error_Computer,
     Error_Monitor, Error_Network_Device, Error_Server, Monitor_Inspection,
@@ -18,7 +19,7 @@ Computer_Inspection = ComputerAnalysis
 __all__ = [
     'People', 'Domain_Account', 'Domain_Computer', 'Domain_Group', 'Computer', 'Network_Device',
     'Server', 'SecurityDevice', 'Domain_Controller_Config', 'DomainOperation',
-    'RecordStatus', 'ComputerLogFile',
+    'RecordStatus', 'ComputerLogFile', 'PCLogSourceConfig', 'ComputerLogTransfer',
     'ComputerLogArchive', 'ComputerAnalysis', 'Computer_Inspection',
     'Network_Device_Inspection', 'Server_Inspection', 'Monitor_Inspection',
     'Error_Computer', 'Error_Network_Device', 'Error_Server', 'Error_Monitor',

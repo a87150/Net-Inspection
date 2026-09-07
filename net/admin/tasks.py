@@ -2,7 +2,10 @@
 
 from django.contrib import admin
 
-from net.models import ComputerAnalysisProfile, InspectionProfile, PeopleSyncSource, Schedule, TaskRun, TaskTargetRun
+from net.models import (
+    ComputerAnalysisProfile, InspectionProfile, PCLogSourceConfig,
+    PeopleSyncSource, Schedule, TaskRun, TaskTargetRun,
+)
 
 
 @admin.register(InspectionProfile)
@@ -16,11 +19,22 @@ class InspectionProfileAdmin(admin.ModelAdmin):
 
 @admin.register(ComputerAnalysisProfile)
 class ComputerAnalysisProfileAdmin(admin.ModelAdmin):
-    list_display = ('name', 'is_enabled', 'file_time_mode', 'concurrent_workers', 'updated_at')
-    list_filter = ('is_enabled', 'file_time_mode', 'alert_policy_mode', 'recursive')
-    search_fields = ('name', 'processed_directory', 'failed_directory')
+    list_display = ('name', 'is_enabled', 'concurrent_workers', 'updated_at')
+    list_filter = ('is_enabled', 'alert_policy_mode')
+    search_fields = ('name',)
     readonly_fields = ('created_at', 'updated_at')
     date_hierarchy = 'updated_at'
+
+
+@admin.register(PCLogSourceConfig)
+class PCLogSourceConfigAdmin(admin.ModelAdmin):
+    list_display = ('host', 'source_type', 'port', 'username', 'last_tested_at')
+    list_filter = ('source_type', 'ftp_use_tls', 'recursive')
+    search_fields = ('host', 'username', 'domain', 'share_name')
+    readonly_fields = ('id', 'last_tested_at', 'last_test_error')
+
+    def has_add_permission(self, request):
+        return PCLogSourceConfig.load() is None
 
 
 @admin.register(Schedule)

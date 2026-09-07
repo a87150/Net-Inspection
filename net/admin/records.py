@@ -2,7 +2,11 @@
 
 from django.contrib import admin
 
-from net.models import (ComputerAnalysis, ComputerLogArchive, ComputerLogFile, Error_Computer, Error_Monitor, Error_Network_Device, Error_Server, Monitor_Inspection, Network_Device_Inspection, Server_Inspection)
+from net.models import (
+    ComputerAnalysis, ComputerLogArchive, ComputerLogFile, ComputerLogTransfer,
+    Error_Computer, Error_Monitor, Error_Network_Device, Error_Server,
+    Monitor_Inspection, Network_Device_Inspection, Server_Inspection,
+)
 
 
 class GeneratedRecordAdmin(admin.ModelAdmin):
@@ -13,12 +17,28 @@ class GeneratedRecordAdmin(admin.ModelAdmin):
 
 @admin.register(ComputerLogFile)
 class ComputerLogFileAdmin(admin.ModelAdmin):
-    list_display = ('content_hash', 'source_path', 'modified_at', 'file_size', 'import_status', 'created_at')
-    list_filter = ('import_status',)
-    search_fields = ('content_hash', 'source_path', 'archived_path', 'parse_error')
-    readonly_fields = ('id', 'upload_task', 'source_path', 'modified_at', 'content_hash', 'file_size', 'import_status', 'archived_path', 'parse_error', 'payload', 'created_at')
-    raw_id_fields = ('upload_task',)
+    list_display = ('content_hash', 'computer', 'collected_date', 'platform', 'source_protocol', 'import_status', 'created_at')
+    list_filter = ('import_status', 'platform', 'source_protocol')
+    search_fields = ('content_hash', 'computer__computer_name', 'source_path', 'remote_source_path', 'archived_path', 'parse_error')
+    readonly_fields = ('id', 'computer', 'collected_date', 'platform', 'source_protocol', 'remote_source_path', 'source_path', 'modified_at', 'content_hash', 'file_size', 'import_status', 'archived_path', 'parse_error', 'payload', 'created_at')
+    raw_id_fields = ('computer',)
     date_hierarchy = 'created_at'
+
+
+@admin.register(ComputerLogTransfer)
+class ComputerLogTransferAdmin(admin.ModelAdmin):
+    list_display = ('remote_source_path', 'source', 'stage', 'attempt_count', 'updated_at')
+    list_filter = ('stage', 'source__source_type')
+    search_fields = ('remote_source_path', 'remote_archive_path', 'content_hash', 'error_message')
+    readonly_fields = ('source', 'task_target', 'log_file', 'remote_source_path', 'remote_archive_path', 'local_staging_path', 'remote_size', 'observed_mtime', 'content_hash', 'stage', 'attempt_count', 'error_message', 'created_at', 'updated_at')
+    raw_id_fields = ('source', 'task_target', 'log_file')
+    date_hierarchy = 'created_at'
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(ComputerLogArchive)
