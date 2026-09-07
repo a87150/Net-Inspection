@@ -169,3 +169,19 @@ body.admin-shell {
     width: min(100%, 74rem);
     margin-inline: auto;
 }
+
+/* Admin uses the homepage navbar components directly. */
+.admin-shell #header { padding: 0; }
+.admin-shell #header .app-navbar__inner { width: 100%; }
+.admin-shell #branding { display: block; min-width: 0; }
+.admin-shell #header .navbar-brand { margin-right: clamp(1rem, 2vw, 2rem); }
+.admin-shell #header #user-tools { margin: 0; gap: 0; text-align: left; }
+.admin-shell #header #user-tools .nav-link { color: var(--color-nav-muted); }
+.admin-shell #header #user-tools form { display: block; margin: 0; }
+.admin-shell #header #user-tools button.nav-link { width: 100%; text-align: left; }
+.admin-shell .admin-navbar-user { padding: .5rem .75rem; white-space: nowrap; }
+.admin-shell .admin-navbar-user strong { color: #fff; font-weight: 700; }
+.admin-shell #user-tools .theme-toggle { display: inline-grid; width: 2.55rem; height: 2.35rem; place-items: center; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-nav-muted); }
+.admin-shell #user-tools .theme-toggle:hover,
+.admin-shell #user-tools .theme-toggle:focus-visible { background: rgba(255, 255, 255, .09); color: #fff; outline: 0; }
+.admin-shell #user-tools .theme-toggle svg { width: 1rem; height: 1rem; fill: currentColor; }

@@ -4,7 +4,7 @@
 <head>
 <title>{% block title %}{% endblock %}</title>
 <meta name="color-scheme" content="light dark" />
-<link rel="stylesheet" href="{% block stylesheet %}{% static "admin/css/base.css" %}{% endblock %}" {% csp_nonce_attr %}>
+<link rel="stylesheet" href="{% static 'vendor/bootstrap/css/bootstrap.min.css' %}"><link rel="stylesheet" href="{% block stylesheet %}{% static "admin/css/base.css" %}{% endblock %}" {% csp_nonce_attr %}>
 {% block dark-mode-vars %}
   <link rel="stylesheet" href="{% static "admin/css/dark_mode.css" %}" {% csp_nonce_attr %}>
   <script src="{% static "admin/js/theme.js" %}" {% csp_nonce_attr %}></script>
@@ -34,28 +34,27 @@
     {% if not is_popup %}
     <!-- Header -->
     {% block header %}
-      <header id="header" class="app-navbar app-header"><div class="container-fluid app-navbar__inner">
-        <div id="branding" class="app-brand">
-        {% block branding %}{% endblock %}
+      <header id="header" class="navbar navbar-expand-lg navbar-dark app-navbar app-header">
+        <div class="container-fluid app-navbar__inner">
+          <div id="branding">{% block branding %}{% endblock %}</div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#adminNav" aria-controls="adminNav" aria-expanded="false" aria-label="{% translate 'Toggle navigation' %}"><span class="navbar-toggler-icon"></span></button>
+          <div class="collapse navbar-collapse" id="adminNav">
+            {% block usertools %}{% if has_permission %}
+            <ul id="user-tools" class="navbar-nav ms-auto align-items-lg-center">
+              <li class="nav-item"><span class="navbar-text admin-navbar-user">{% block welcome-msg %}{% translate 'Welcome,' %} <strong>{% firstof user.get_short_name user.get_username %}</strong>{% endblock %}</span></li>
+              {% block userlinks %}
+              {% if site_url %}<li class="nav-item"><a class="nav-link" href="{{ site_url }}">{% translate 'View site' %}</a></li>{% endif %}
+              {% if user.is_active and user.is_staff %}{% url 'django-admindocs-docroot' as docsroot %}{% if docsroot %}<li class="nav-item"><a class="nav-link" href="{{ docsroot }}">{% translate 'Documentation' %}</a></li>{% endif %}{% endif %}
+              {% if user.has_usable_password %}<li class="nav-item"><a class="nav-link" href="{% url 'admin:password_change' %}">{% translate 'Change password' %}</a></li>{% endif %}
+              <li class="nav-item"><form id="logout-form" method="post" action="{% url 'admin:logout' %}">{% csrf_token %}<button class="nav-link" type="submit">{% translate 'Log out' %}</button></form></li>
+              <li class="nav-item">{% include "admin/color_theme_toggle.html" %}</li>
+              {% endblock %}
+            </ul>
+            {% endif %}{% endblock %}
+            {% block nav-global %}{% endblock %}
+          </div>
         </div>
-        {% block usertools %}
-        {% if has_permission %}
-        <div id="user-tools" class="admin-user-tools">
-            <span class="admin-user-tools__welcome">{% block welcome-msg %}{% translate 'Welcome,' %} <strong>{% firstof user.get_short_name user.get_username %}</strong>{% endblock %}</span>
-            <nav class="admin-user-tools__links" aria-label="{% translate 'User tools' %}">
-                {% block userlinks %}
-                    {% if site_url %}<a class="admin-top-action" href="{{ site_url }}">{% translate 'View site' %}</a>{% endif %}
-                    {% if user.is_active and user.is_staff %}{% url 'django-admindocs-docroot' as docsroot %}{% if docsroot %}<a class="admin-top-action" href="{{ docsroot }}">{% translate 'Documentation' %}</a>{% endif %}{% endif %}
-                    {% if user.has_usable_password %}<a class="admin-top-action" href="{% url 'admin:password_change' %}">{% translate 'Change password' %}</a>{% endif %}
-                    <form id="logout-form" method="post" action="{% url 'admin:logout' %}">{% csrf_token %}<button class="admin-top-action" type="submit">{% translate 'Log out' %}</button></form>
-                    {% include "admin/color_theme_toggle.html" %}
-                {% endblock %}
-            </nav>
-        </div>
-        {% endif %}
-        {% endblock %}
-        {% block nav-global %}{% endblock %}
-      </div></header>
+      </header>
     {% endblock %}
     <!-- END Header -->
     {% block nav-breadcrumbs %}
@@ -114,6 +113,6 @@
   <symbol viewBox="0 0 24 24" id="icon-sun"><path d="M0 0h24v24H0z" fill="currentColor"/><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z"/></symbol>
 </svg>
 <!-- END SVGs -->
-{% block extrabody %}{% endblock extrabody %}
+<script defer src="{% static 'vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>{% block extrabody %}{% endblock extrabody %}
 </body>
 </html>

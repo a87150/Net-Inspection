@@ -4,12 +4,11 @@
 {% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | 网络巡检中心{% endblock %}
 {% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'app/css/style.css' %}"><link rel="stylesheet" href="{% static 'app/css/admin.css' %}">{% endblock %}
 {% block bodyclass %}{{ block.super }} app-shell admin-shell{% endblock %}
-{% block branding %}<div id="site-name" class="admin-brand"><a class="app-brand__copy" href="{% url 'admin:index' %}"><strong>网络巡检中心</strong><small>Operations Console · 运维管理台</small></a></div>{% endblock %}
+{% block branding %}<a class="navbar-brand app-brand" href="{% url 'admin:index' %}"><span class="app-brand__copy"><strong>网络巡检中心</strong><small>Operations Console</small></span></a>{% endblock %}
 {% block userlinks %}
-<a class="admin-top-action" href="{% url 'index' %}">返回运维总览</a>
-
-{% if user.has_usable_password %}<a class="admin-top-action" href="{% url 'admin:password_change' %}">{% translate 'Change password' %}</a>{% endif %}
-<form id="logout-form" method="post" action="{% url 'admin:logout' %}">{% csrf_token %}<button class="admin-top-action admin-top-action--logout" type="submit">{% translate 'Log out' %}</button></form>
-{% include "admin/color_theme_toggle.html" %}
+<li class="nav-item"><a class="nav-link" href="{% url 'index' %}">返回运维总览</a></li>
+{% if user.has_usable_password %}<li class="nav-item"><a class="nav-link" href="{% url 'admin:password_change' %}">{% translate 'Change password' %}</a></li>{% endif %}
+<li class="nav-item"><form id="logout-form" method="post" action="{% url 'admin:logout' %}">{% csrf_token %}<button class="nav-link" type="submit">{% translate 'Log out' %}</button></form></li>
+<li class="nav-item">{% include "admin/color_theme_toggle.html" %}</li>
 {% endblock %}
 {% block footer %}<span>网络巡检中心 · 企业运维管理</span>{% endblock %}
