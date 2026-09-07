@@ -207,3 +207,51 @@ class AdminVisualContractTests(TestCase):
                 self.assertContains(response, 'app-navbar app-header')
                 self.assertContains(response, 'app/css/admin.css')
                 self.assertContains(response, '返回运维总览')
+
+class ModalVisualContractTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        self.admin_user = get_user_model().objects.create_superuser(
+            username='modal-theme-test',
+            email='modal-theme@example.test',
+            password='unused',
+        )
+        self.client.force_login(self.admin_user)
+
+    def test_major_modal_pages_use_the_shared_glass_surface(self):
+        urls = (
+            reverse('asset_list', args=['people']),
+            reverse('asset_list', args=['computers']),
+            reverse('asset_list', args=['networks']),
+            reverse('domain_controller_settings'),
+            reverse('domain_account_list'),
+            reverse('alert_list'),
+        )
+
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'modal-surface')
+                self.assertContains(response, 'modal-body--scroll')
+
+    def test_domain_connection_modal_has_grouped_configuration_sections(self):
+        response = self.client.get(reverse('domain_controller_settings'))
+
+        self.assertContains(response, 'domain-config-modal')
+        self.assertContains(response, 'data-domain-config-section="connection"')
+        self.assertContains(response, 'data-domain-config-section="authentication"')
+        self.assertContains(response, 'data-domain-config-section="directory"')
+        self.assertContains(response, 'data-domain-config-section="filters"')
+        self.assertContains(response, 'modal-footer--sticky')
+
+    def test_import_and_operation_modals_use_section_cards_and_sticky_actions(self):
+        people = self.client.get(reverse('asset_list', args=['people']))
+        accounts = self.client.get(reverse('domain_account_list'))
+
+        self.assertContains(people, 'import-config-modal')
+        self.assertContains(people, 'import-config-section')
+        self.assertContains(accounts, 'domain-account-import-modal')
+        self.assertContains(accounts, 'domain-operation-modal')
+        self.assertContains(accounts, 'modal-footer--sticky', count=2)

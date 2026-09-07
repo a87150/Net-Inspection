@@ -1,7 +1,7 @@
-<div class="modal fade" id="importModal" data-auto-open="{{ open_import_modal|yesno:'true,false' }}" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="importModalLabel" aria-describedby="importModalDescription" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell"><div class="modal-content">
+<div class="modal fade import-config-modal" id="importModal" data-auto-open="{{ open_import_modal|yesno:'true,false' }}" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="importModalLabel" aria-describedby="importModalDescription" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
         <div class="modal-header"><h2 class="modal-title fs-5" id="importModalLabel">导入{{ item_name }}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
-        <div class="modal-body d-grid gap-4">
+        <div class="modal-body modal-body--scroll d-grid gap-4">
             <p class="visually-hidden" id="importModalDescription">向当前{{ item_name }}列表导入数据。</p>
             {% if people_import_error %}<div class="alert alert-danger mb-0" role="alert">{{ people_import_error }}</div>{% endif %}
             {% if personnel_api_import %}
@@ -11,7 +11,7 @@
             </ul>
             <div class="tab-content">
             {% endif %}
-            <section class="modal-section{% if personnel_api_import %} tab-pane fade{% if people_active_tab == 'csv' %} show active{% endif %}{% endif %}"{% if personnel_api_import %} id="people-panel-csv" role="tabpanel" aria-labelledby="people-tab-csv"{% endif %}>
+            <section class="modal-section import-config-section{% if personnel_api_import %} tab-pane fade{% if people_active_tab == 'csv' %} show active{% endif %}{% endif %}"{% if personnel_api_import %} id="people-panel-csv" role="tabpanel" aria-labelledby="people-tab-csv"{% endif %}>
                 <h3 class="h6">从文件导入</h3>
                 <p class="text-secondary small">此入口只接受{{ item_name }}模板。请先下载模板，填写后再上传。</p>
                 <div class="d-flex flex-wrap gap-2 mb-3">

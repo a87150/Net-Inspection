@@ -13,18 +13,16 @@
 {% include 'domain/operation_modal.html' %}
 
 {% if domain_object_type == 'account' and can_manage_domain %}
-<div class="modal fade" id="domainAccountImportModal" tabindex="-1" aria-labelledby="domainAccountImportModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-scrollable modal-shell"><div class="modal-content"><form method="post" action="{% url 'domain_account_import' %}" enctype="multipart/form-data">
+<div class="modal fade domain-account-import-modal" id="domainAccountImportModal" tabindex="-1" aria-labelledby="domainAccountImportModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface"><form method="post" action="{% url 'domain_account_import' %}" enctype="multipart/form-data">
         {% csrf_token %}
         <div class="modal-header"><h2 class="modal-title fs-5" id="domainAccountImportModalLabel">批量导入域账号</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
-        <div class="modal-body d-grid gap-3">
-            <div><label class="form-label" for="domain-account-import-file">账号表格</label><input class="form-control" id="domain-account-import-file" type="file" name="file" accept=".csv,.xlsx" required><div class="form-text">必填列：用户DN、登录名、显示名称；最多 500 行。</div></div>
-            <div class="d-flex gap-2"><a href="{% url 'domain_account_import_template' 'csv' %}">下载 CSV 模板</a><a href="{% url 'domain_account_import_template' 'xlsx' %}">下载 Excel 模板</a></div>
-            <div><label class="form-label" for="domain-account-import-password">统一初始密码</label><input class="form-control" id="domain-account-import-password" type="password" name="initial_password" autocomplete="new-password" required></div>
-            <div><label class="form-label" for="domain-account-import-password-confirm">确认初始密码</label><input class="form-control" id="domain-account-import-password-confirm" type="password" name="initial_password_confirm" autocomplete="new-password" required></div>
+        <div class="modal-body modal-body--scroll d-grid gap-3">
+            <section class="config-section-card import-config-section"><div class="config-section-heading"><span class="config-section-index">01</span><div><h3>上传账号表格</h3><p>下载模板并按规定字段填写，单次最多处理 500 行。</p></div></div><div><label class="form-label" for="domain-account-import-file">账号表格</label><input class="form-control" id="domain-account-import-file" type="file" name="file" accept=".csv,.xlsx" required><div class="form-text">必填列：用户DN、登录名、显示名称；最多 500 行。</div></div><div class="d-flex flex-wrap gap-2 mt-3"><a class="btn btn-outline-secondary btn-sm" href="{% url 'domain_account_import_template' 'csv' %}">下载 CSV 模板</a><a class="btn btn-outline-secondary btn-sm" href="{% url 'domain_account_import_template' 'xlsx' %}">下载 Excel 模板</a></div></section>
+            <section class="config-section-card import-config-section"><div class="config-section-heading"><span class="config-section-index">02</span><div><h3>初始密码</h3><p>为本批账号设置统一初始密码，并再次输入确认。</p></div></div><div class="row g-3"><div class="col-md-6"><label class="form-label" for="domain-account-import-password">统一初始密码</label><input class="form-control" id="domain-account-import-password" type="password" name="initial_password" autocomplete="new-password" required></div><div class="col-md-6"><label class="form-label" for="domain-account-import-password-confirm">确认初始密码</label><input class="form-control" id="domain-account-import-password-confirm" type="password" name="initial_password_confirm" autocomplete="new-password" required></div></div></section>
             <p class="small text-secondary mb-0">文件只在本次请求内解析；密码不写入表格和任务快照。</p>
         </div>
-        <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">校验并创建任务</button></div>
+        <div class="modal-footer modal-footer--sticky"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">校验并创建任务</button></div>
     </form></div></div>
 </div>
 {% endif %}

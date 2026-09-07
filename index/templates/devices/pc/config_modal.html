@@ -1,8 +1,8 @@
 {% load static %}
 <div class="modal fade inspection-config-modal" id="profileConfigModal" data-auto-open="{{ profile_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="profileConfigModalLabel" aria-hidden="true">
- <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell"><div class="modal-content">
+ <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
   <div class="modal-header"><h2 class="modal-title fs-5" id="profileConfigModalLabel">PC 日志来源与分析配置</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
-  <div class="modal-body">
+  <div class="modal-body modal-body--scroll">
    <p class="text-secondary small">终端每天写入汇总目录，由后台获取、分析并归档。配置修改只影响后续任务。</p>
    <div class="inspection-config-layout">
    {% if request.user.is_staff or request.user.is_superuser %}
@@ -68,7 +68,7 @@
    </form>
    </div>
   </div>
-  <div class="modal-footer">
+  <div class="modal-footer modal-footer--sticky">
    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
    {% if request.user.is_staff or request.user.is_superuser %}<button class="btn btn-outline-primary" type="submit" form="pc-source-config-form">保存日志来源</button>{% endif %}
    <button class="btn btn-primary" type="submit" form="pc-analysis-config-form">保存分析与定时配置</button>

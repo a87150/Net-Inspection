@@ -1,7 +1,7 @@
-<div class="modal fade" id="peoplePreviewModal" data-auto-open="true" tabindex="-1" aria-labelledby="peoplePreviewLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell"><div class="modal-content">
+<div class="modal fade import-preview-modal" id="peoplePreviewModal" data-auto-open="true" tabindex="-1" aria-labelledby="peoplePreviewLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
         <div class="modal-header"><h2 class="modal-title fs-5" id="peoplePreviewLabel">{{ people_operation.get_task_type_display }}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
-        <div class="modal-body d-grid gap-3">
+        <div class="modal-body modal-body--scroll d-grid gap-3">
             {% if people_operation_error %}<div class="alert alert-danger mb-0" role="alert">{{ people_operation_error }}</div>{% endif %}
             <p class="mb-0">{{ people_operation_source.name }} · {{ people_operation_source.source_key }}</p>
             <div role="status">状态：{{ people_operation.get_status_display }} · {{ people_operation.completed_targets }} / {{ people_operation.total_targets }}<div class="small text-secondary">目录操作不参与设备告警处理。</div></div>

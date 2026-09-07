@@ -24,26 +24,46 @@
 </section>
 
 {% if can_manage_domain %}
-<div class="modal fade" id="domainConfigModal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="domainConfigModalLabel" aria-describedby="domainConfigModalDescription" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell"><div class="modal-content">
+<div class="modal fade domain-config-modal" id="domainConfigModal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="domainConfigModalLabel" aria-describedby="domainConfigModalDescription" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
         <form method="post">
             {% csrf_token %}
-            <div class="modal-header"><h2 class="modal-title fs-5" id="domainConfigModalLabel">域控连接设置</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
-            <div class="modal-body">
-                <p class="text-secondary" id="domainConfigModalDescription">配置域控连接、身份验证和对象筛选条件。</p>
-                {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
-                <div class="row g-4 modal-section">
-                {% for field in form %}
-                    <div class="{% if field.name == 'user_filter' or field.name == 'computer_filter' or field.name == 'group_filter' or field.name == 'base_dn' %}col-12{% else %}col-md-6{% endif %}">
-                        {% if field.name == 'use_ssl' %}<div class="form-check mt-4">{{ field }} <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label></div>
-                        {% else %}<label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% endif %}
-                        {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
-                        {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
-                    </div>
-                {% endfor %}
+            <div class="modal-header"><div><p class="page-heading__eyebrow mb-1">目录服务配置</p><h2 class="modal-title fs-5" id="domainConfigModalLabel">域控连接设置</h2></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+            <div class="modal-body modal-body--scroll">
+                <p class="text-secondary mb-4" id="domainConfigModalDescription">按用途分区维护连接、身份验证、目录范围和对象筛选条件。</p>
+                {% if form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+                <div class="config-modal-grid">
+                    <section class="config-section-card" data-domain-config-section="connection">
+                        <div class="config-section-heading"><span class="config-section-index">01</span><div><h3>连接信息</h3><p>设置配置名称、服务器地址、端口和加密方式。</p></div></div>
+                        <div class="row g-3">
+                            <div class="col-md-6"><label class="form-label" for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>{{ form.name }}{% for error in form.name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                            <div class="col-md-6"><label class="form-label" for="{{ form.host.id_for_label }}">{{ form.host.label }}</label>{{ form.host }}{% for error in form.host.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                            <div class="col-md-6"><label class="form-label" for="{{ form.port.id_for_label }}">{{ form.port.label }}</label>{{ form.port }}{% if form.port.help_text %}<div class="form-text">{{ form.port.help_text }}</div>{% endif %}{% for error in form.port.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                            <div class="col-md-6 d-flex align-items-center"><div class="form-check config-toggle-card">{{ form.use_ssl }}<label class="form-check-label" for="{{ form.use_ssl.id_for_label }}"><strong>{{ form.use_ssl.label }}</strong><span>{{ form.use_ssl.help_text }}</span></label></div>{% for error in form.use_ssl.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                        </div>
+                    </section>
+                    <section class="config-section-card" data-domain-config-section="authentication">
+                        <div class="config-section-heading"><span class="config-section-index">02</span><div><h3>身份验证</h3><p>填写用于读取目录对象的绑定账号；已保存密码会显示为星号。</p></div></div>
+                        <div class="row g-3">
+                            <div class="col-md-6"><label class="form-label" for="{{ form.bind_username.id_for_label }}">{{ form.bind_username.label }}</label>{{ form.bind_username }}{% if form.bind_username.help_text %}<div class="form-text">{{ form.bind_username.help_text }}</div>{% endif %}{% for error in form.bind_username.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                            <div class="col-md-6"><label class="form-label" for="{{ form.bind_password.id_for_label }}">{{ form.bind_password.label }}</label>{{ form.bind_password }}{% if form.bind_password.help_text %}<div class="form-text">{{ form.bind_password.help_text }}</div>{% endif %}{% for error in form.bind_password.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                        </div>
+                    </section>
+                    <section class="config-section-card" data-domain-config-section="directory">
+                        <div class="config-section-heading"><span class="config-section-index">03</span><div><h3>目录范围</h3><p>限定账号、计算机和分组的统一搜索根目录。</p></div></div>
+                        <label class="form-label" for="{{ form.base_dn.id_for_label }}">{{ form.base_dn.label }}</label>{{ form.base_dn }}{% if form.base_dn.help_text %}<div class="form-text">{{ form.base_dn.help_text }}</div>{% endif %}{% for error in form.base_dn.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </section>
+                    <section class="config-section-card" data-domain-config-section="filters">
+                        <div class="config-section-heading"><span class="config-section-index">04</span><div><h3>对象筛选</h3><p>分别设置域账号、域计算机和域分组的 LDAP 筛选器。</p></div></div>
+                        <div class="row g-3">
+                            <div class="col-12"><label class="form-label" for="{{ form.user_filter.id_for_label }}">{{ form.user_filter.label }}</label>{{ form.user_filter }}{% for error in form.user_filter.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                            <div class="col-12"><label class="form-label" for="{{ form.computer_filter.id_for_label }}">{{ form.computer_filter.label }}</label>{{ form.computer_filter }}{% for error in form.computer_filter.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                            <div class="col-12"><label class="form-label" for="{{ form.group_filter.id_for_label }}">{{ form.group_filter.label }}</label>{{ form.group_filter }}{% for error in form.group_filter.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                        </div>
+                    </section>
                 </div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer modal-footer--sticky">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
                 <button class="btn btn-outline-secondary" name="action" value="save">保存配置</button>
                 <button class="btn btn-outline-primary" name="action" value="test">测试连接</button>
@@ -52,8 +72,7 @@
         </form>
     </div></div>
 </div>
-
-{% else %}<div class="modal fade" id="domainConfigModal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="domainConfigModalLabel" aria-describedby="domainConfigModalDescription" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable modal-shell"><div class="modal-content"><div class="modal-header"><h2 class="modal-title fs-5 visually-hidden" id="domainConfigModalLabel">需要域控运维权限</h2></div><div class="modal-body"><p id="domainConfigModalDescription" class="visually-hidden">当前账号不能修改该连接。</p></div></div></div></div>{% endif %}
+{% else %}<div class="modal fade domain-config-modal" id="domainConfigModal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="domainConfigModalLabel" aria-describedby="domainConfigModalDescription" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface"><div class="modal-header"><h2 class="modal-title fs-5 visually-hidden" id="domainConfigModalLabel">需要域控运维权限</h2></div><div class="modal-body modal-body--scroll"><p id="domainConfigModalDescription" class="visually-hidden">当前账号不能修改该连接。</p></div></div></div></div>{% endif %}
 {% if open_domain_modal %}
 <script>document.addEventListener('DOMContentLoaded', function () { bootstrap.Modal.getOrCreateInstance(document.getElementById('domainConfigModal')).show(); });</script>
 {% endif %}
