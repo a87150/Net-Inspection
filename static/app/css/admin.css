@@ -201,3 +201,9 @@ body.admin-shell {
 .admin-shell.dashboard #content-related {
     margin-top: 1rem;
 }
+
+/* Remove Django's 300px right-sidebar reservation before centering the dashboard column. */
+.admin-shell.dashboard #content.colMS {
+    width: 100%;
+    margin-right: 0;
+}
