@@ -50,6 +50,10 @@ class PCLogSourceConfig(models.Model):
                 condition=models.Q(id=1),
                 name='net_pc_log_source_singleton_ck',
             ),
+            models.CheckConstraint(
+                condition=models.Q(source_type__in=('smb', 'ftp')),
+                name='net_pc_log_source_type_ck',
+            ),
         ]
 
     @classmethod
@@ -94,6 +98,15 @@ class PCLogSourceConfig(models.Model):
         if errors:
             raise ValidationError(errors)
 
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get('update_fields')
+        if self.last_test_error and (
+            update_fields is None or 'last_test_error' in update_fields
+        ):
+            from net.devices.pc.credentials import sanitize_pc_source_error
+            self.last_test_error = sanitize_pc_source_error(self, self.last_test_error)
+        super().save(*args, **kwargs)
+
     def public_data(self):
         return {
             'id': self.pk,
@@ -118,8 +131,12 @@ class PCLogSourceConfig(models.Model):
             'ftp_passive': self.ftp_passive,
             'ftp_use_tls': self.ftp_use_tls,
             'last_tested_at': self.last_tested_at.isoformat() if self.last_tested_at else None,
-            'last_test_error': self.last_test_error,
+            'last_test_error': self._public_last_test_error(),
         }
+
+    def _public_last_test_error(self):
+        from net.devices.pc.credentials import sanitize_pc_source_error
+        return sanitize_pc_source_error(self, self.last_test_error)
 
     def __str__(self):
         return f'{self.get_source_type_display()} {self.host}:{self.port}'
@@ -179,6 +196,22 @@ class ComputerLogTransfer(models.Model):
     observed_mtime = models.DateTimeField()
     content_hash = models.CharField(max_length=64, blank=True)
     stage = models.CharField(max_length=20, choices=Stage.choices, default=Stage.DISCOVERED)
+    active_identity_marker = models.GeneratedField(
+        expression=models.Case(
+            models.When(
+                stage__in=(
+                    'discovered',
+                    'downloaded',
+                    'imported',
+                    'archive_pending',
+                ),
+                then=models.Value(1),
+            ),
+            default=models.Value(None),
+        ),
+        output_field=models.PositiveSmallIntegerField(),
+        db_persist=True,
+    )
     attempt_count = models.PositiveIntegerField(default=0)
     error_message = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -187,14 +220,11 @@ class ComputerLogTransfer(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=('source', 'remote_source_path', 'observed_mtime'),
-                condition=models.Q(
-                    stage__in=(
-                        'discovered',
-                        'downloaded',
-                        'imported',
-                        'archive_pending',
-                    ),
+                fields=(
+                    'source',
+                    'remote_source_path',
+                    'observed_mtime',
+                    'active_identity_marker',
                 ),
                 name='net_pc_transfer_active_identity_uniq',
             ),
@@ -202,3 +232,13 @@ class ComputerLogTransfer(models.Model):
         indexes = [
             models.Index(fields=('source', 'stage'), name='net_pc_xfer_source_stage_idx'),
         ]
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get('update_fields')
+        if self.error_message and (
+            update_fields is None or 'error_message' in update_fields
+        ):
+            from net.devices.pc.credentials import sanitize_pc_source_error
+            source = self.source if self.source_id else None
+            self.error_message = sanitize_pc_source_error(source, self.error_message)
+        super().save(*args, **kwargs)

@@ -78,6 +78,14 @@ class ComputerLogFile(models.Model):
     content_hash = models.CharField(max_length=64, unique=True)
     file_size = models.PositiveBigIntegerField(default=0)
     import_status = models.CharField(max_length=20)
+    daily_import_marker = models.GeneratedField(
+        expression=models.Case(
+            models.When(import_status='imported', then=models.Value(1)),
+            default=models.Value(None),
+        ),
+        output_field=models.PositiveSmallIntegerField(),
+        db_persist=True,
+    )
     archived_path = models.TextField(blank=True)
     parse_error = models.TextField(blank=True)
     payload = models.JSONField(null=True, blank=True)
@@ -85,13 +93,18 @@ class ComputerLogFile(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(
-                fields=('computer', 'collected_date'),
-                condition=models.Q(
-                    computer__isnull=False,
-                    collected_date__isnull=False,
-                    import_status='imported',
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(import_status='imported')
+                    | (
+                        models.Q(computer__isnull=False)
+                        & models.Q(collected_date__isnull=False)
+                    )
                 ),
+                name='net_pc_import_identity_ck',
+            ),
+            models.UniqueConstraint(
+                fields=('computer', 'collected_date', 'daily_import_marker'),
                 name='net_pc_imported_log_daily_uniq',
             ),
         ]

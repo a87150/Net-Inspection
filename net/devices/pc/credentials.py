@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
+from net.infrastructure.sanitization import sanitize
 from net.models.pc_sources import PCLogSourceCredential
 
 
@@ -45,3 +46,13 @@ def load_pc_source_secret(source):
         return _secret_fernet().decrypt(bytes(credential.encrypted_payload)).decode('utf-8')
     except (InvalidToken, UnicodeDecodeError, ValidationError):
         raise ValidationError('PC 日志来源密码不可用。') from None
+
+def sanitize_pc_source_error(source, value):
+    """Redact both labeled credentials and the exact saved source password."""
+    secrets = ()
+    if source is not None:
+        try:
+            secrets = (load_pc_source_secret(source),)
+        except ValidationError:
+            pass
+    return sanitize(str(value or ''), secrets=secrets)

@@ -101,3 +101,60 @@ class PCLogSourceModelTests(TestCase):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 ComputerLogTransfer.objects.create(**transfer_fields)
+    def test_database_constraints_are_unconditional_for_mysql_compatibility(self):
+        """Conditional unique indexes are silently skipped by the production MySQL backend."""
+        daily = next(
+            constraint for constraint in ComputerLogFile._meta.constraints
+            if constraint.name == 'net_pc_imported_log_daily_uniq'
+        )
+        transfer = next(
+            constraint for constraint in ComputerLogTransfer._meta.constraints
+            if constraint.name == 'net_pc_transfer_active_identity_uniq'
+        )
+
+        self.assertIsNone(daily.condition)
+        self.assertIsNone(transfer.condition)
+        self.assertTrue(ComputerLogFile._meta.get_field('daily_import_marker').generated)
+        self.assertTrue(ComputerLogTransfer._meta.get_field('active_identity_marker').generated)
+
+    def test_imported_log_requires_daily_identity(self):
+        """An imported row without a computer and collection date cannot be deduplicated."""
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                ComputerLogFile.objects.create(
+                    source_path='remote://missing-identity.json',
+                    modified_at=datetime(2026, 9, 4, tzinfo=timezone.utc),
+                    content_hash='c' * 64,
+                    file_size=42,
+                    import_status='imported',
+                    platform='windows',
+                    source_protocol='smb',
+                    remote_source_path='incoming/missing-identity.json',
+                )
+
+    def test_database_rejects_an_unknown_source_protocol(self):
+        """Choices alone do not protect direct ORM or database writes."""
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                valid_smb_source(source_type='webdav')
+
+    def test_persisted_connection_errors_redact_the_saved_password(self):
+        """Raw protocol exceptions must not expose credentials through admin or public data."""
+        source = valid_smb_source()
+        store_pc_source_secret(source, 'transport-private')
+        source.last_test_error = 'login password=transport-private; echoed transport-private'
+        source.save(update_fields=['last_test_error'])
+        source.refresh_from_db()
+
+        transfer = ComputerLogTransfer.objects.create(
+            source=source,
+            remote_source_path='incoming/PC-SOURCE-01-20260904.json',
+            observed_mtime=datetime(2026, 9, 4, tzinfo=timezone.utc),
+            error_message='connection password=transport-private; echoed transport-private',
+        )
+
+        self.assertNotIn('transport-private', source.last_test_error)
+        self.assertNotIn('transport-private', str(source.public_data()))
+        self.assertNotIn('transport-private', transfer.error_message)
+        self.assertIn('[REDACTED]', source.last_test_error)
+        self.assertIn('[REDACTED]', transfer.error_message)
