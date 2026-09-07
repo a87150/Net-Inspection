@@ -41,29 +41,16 @@
         {% block usertools %}
         {% if has_permission %}
         <div id="user-tools" class="admin-user-tools">
-            {% block welcome-msg %}
-                {% translate 'Welcome,' %}
-                <strong>{% firstof user.get_short_name user.get_username %}</strong>.
-            {% endblock %}
-            {% block userlinks %}
-                {% if site_url %}
-                    <a href="{{ site_url }}">{% translate 'View site' %}</a> /
-                {% endif %}
-                {% if user.is_active and user.is_staff %}
-                    {% url 'django-admindocs-docroot' as docsroot %}
-                    {% if docsroot %}
-                        <a href="{{ docsroot }}">{% translate 'Documentation' %}</a> /
-                    {% endif %}
-                {% endif %}
-                {% if user.has_usable_password %}
-                <a href="{% url 'admin:password_change' %}">{% translate 'Change password' %}</a> /
-                {% endif %}
-                <form id="logout-form" method="post" action="{% url 'admin:logout' %}">
-                    {% csrf_token %}
-                    <button type="submit">{% translate 'Log out' %}</button>
-                </form>
-                {% include "admin/color_theme_toggle.html" %}
-            {% endblock %}
+            <span class="admin-user-tools__welcome">{% block welcome-msg %}{% translate 'Welcome,' %} <strong>{% firstof user.get_short_name user.get_username %}</strong>{% endblock %}</span>
+            <nav class="admin-user-tools__links" aria-label="{% translate 'User tools' %}">
+                {% block userlinks %}
+                    {% if site_url %}<a class="admin-top-action" href="{{ site_url }}">{% translate 'View site' %}</a>{% endif %}
+                    {% if user.is_active and user.is_staff %}{% url 'django-admindocs-docroot' as docsroot %}{% if docsroot %}<a class="admin-top-action" href="{{ docsroot }}">{% translate 'Documentation' %}</a>{% endif %}{% endif %}
+                    {% if user.has_usable_password %}<a class="admin-top-action" href="{% url 'admin:password_change' %}">{% translate 'Change password' %}</a>{% endif %}
+                    <form id="logout-form" method="post" action="{% url 'admin:logout' %}">{% csrf_token %}<button class="admin-top-action" type="submit">{% translate 'Log out' %}</button></form>
+                    {% include "admin/color_theme_toggle.html" %}
+                {% endblock %}
+            </nav>
         </div>
         {% endif %}
         {% endblock %}

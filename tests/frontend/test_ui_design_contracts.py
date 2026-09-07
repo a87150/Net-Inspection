@@ -36,6 +36,9 @@ class SharedInterfaceContractTests(TestCase):
 
         self.assertContains(response, f'href="{reverse("admin:index")}"')
         self.assertContains(response, '运维管理台')
+        self.assertContains(response, 'admin-user-tools__links')
+        self.assertContains(response, 'admin-top-action')
+        self.assertContains(response, 'app-brand__copy')
 
     def test_dashboard_exposes_scan_friendly_overview_and_task_table(self):
         response = self.client.get(reverse('index'))
@@ -169,3 +172,6 @@ class AdminVisualContractTests(TestCase):
         self.assertContains(response, 'app/css/style.css')
         self.assertContains(response, 'app/css/admin.css')
         self.assertContains(response, '运维管理台')
+        self.assertContains(response, 'admin-user-tools__links')
+        self.assertContains(response, 'admin-top-action')
+        self.assertContains(response, 'app-brand__copy')

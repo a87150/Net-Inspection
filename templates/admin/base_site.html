@@ -6,7 +6,10 @@
 {% block bodyclass %}{{ block.super }} app-shell admin-shell{% endblock %}
 {% block branding %}<div id="site-name" class="admin-brand"><a class="app-brand__copy" href="{% url 'admin:index' %}"><strong>网络巡检中心</strong><small>Operations Console · 运维管理台</small></a></div>{% endblock %}
 {% block userlinks %}
-    <a href="{% url 'index' %}">返回运维总览</a> /
-    {{ block.super }}
+<a class="admin-top-action" href="{% url 'index' %}">返回运维总览</a>
+
+{% if user.has_usable_password %}<a class="admin-top-action" href="{% url 'admin:password_change' %}">{% translate 'Change password' %}</a>{% endif %}
+<form id="logout-form" method="post" action="{% url 'admin:logout' %}">{% csrf_token %}<button class="admin-top-action admin-top-action--logout" type="submit">{% translate 'Log out' %}</button></form>
+{% include "admin/color_theme_toggle.html" %}
 {% endblock %}
 {% block footer %}<span>网络巡检中心 · 企业运维管理</span>{% endblock %}
