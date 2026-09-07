@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from django.test import TestCase
 from django.urls import reverse
 
@@ -255,3 +257,14 @@ class ModalVisualContractTests(TestCase):
         self.assertContains(accounts, 'domain-account-import-modal')
         self.assertContains(accounts, 'domain-operation-modal')
         self.assertContains(accounts, 'modal-footer--sticky', count=2)
+
+class PcListActionContractTests(TestCase):
+    def test_pc_list_header_does_not_offer_script_downloads(self):
+        template_path = Path(__file__).resolve().parents[2] / 'index' / 'templates' / 'devices' / 'list.html'
+        html = template_path.read_text(encoding='utf-8')
+        actions_start = html.index('<div class="page-heading__actions">')
+        actions_end = html.index('</header>', actions_start)
+        header_actions = html[actions_start:actions_end]
+
+        self.assertNotIn('下载 Windows 采集脚本', header_actions)
+        self.assertNotIn('下载 macOS 采集脚本', header_actions)

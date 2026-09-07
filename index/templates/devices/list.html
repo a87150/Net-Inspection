@@ -12,10 +12,6 @@
         {% if import_enabled %}<button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#importModal">{% if item_key == 'people' %}导入人员{% else %}导入设备{% endif %}</button>{% endif %}
         {% if task_project_kind %}
         <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#profileConfigModal">{{ task_config_label }}</button>
-        {% if item_key == 'computers' and task_default_profile and task_default_profile.is_enabled and pc_log_source %}
-        <a class="btn btn-outline-primary" href="{% url 'pc_script_download' task_default_profile.pk 'windows' %}">下载 Windows 采集脚本</a>
-        <a class="btn btn-outline-primary" href="{% url 'pc_script_download' task_default_profile.pk 'macos' %}">下载 macOS 采集脚本</a>
-        {% endif %}
         <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#alertPolicyModal">告警配置</button>
         <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#runTaskModal">{{ task_action_label }}</button>
         {% endif %}
