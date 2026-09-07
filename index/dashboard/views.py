@@ -1,6 +1,7 @@
 from django.core.paginator import Paginator
 from django.shortcuts import render
 from django.urls import reverse
+from django.utils import timezone
 
 from net.dashboard.assets import (
     DASHBOARD_SUMMARY_ERROR_MESSAGE,
@@ -46,6 +47,41 @@ def _domain_summary_values(account_summary, computer_summary, group_summary):
         'distribution_group_total': group_summary['abnormal'],
     }
 
+
+def _dashboard_attention_score(item):
+    """Sort presentation only: load errors, abnormalities, unchecked, healthy."""
+    if item.get('error'):
+        return (0, 0)
+    if item['key'] == 'domain':
+        attention_count = item.get('account_abnormal', 0) + item.get('computer_abnormal', 0)
+    elif item['key'] in {'computers', 'networks', 'servers', 'monitors'}:
+        attention_count = item.get('bad', item.get('abnormal', 0))
+    else:
+        attention_count = 0
+    if attention_count:
+        return (1, -attention_count)
+    if item.get('unchecked', 0):
+        return (2, -item['unchecked'])
+    return (3, 0)
+
+
+def _with_card_actions(item):
+    item = dict(item)
+    secondary = []
+    if item.get('manual_action_label'):
+        primary = {'label': item['manual_action_label'], 'url': f"{item['list_url']}?task_modal=run"}
+        secondary.append({'label': f"{item['name']}列表", 'url': item['list_url']})
+    elif item.get('target_url'):
+        primary = {'label': '进入管理', 'url': item['target_url']}
+    else:
+        primary = {'label': f"查看{item['name']}", 'url': item['list_url']}
+    if item.get('record_url'):
+        secondary.append({'label': item['record_label'], 'url': item['record_url']})
+    if item.get('detail_url'):
+        secondary.append({'label': item['detail_label'], 'url': item['detail_url']})
+    item['primary_action'] = primary
+    item['secondary_actions'] = secondary
+    return item
 
 def index(request):
     summaries = {
@@ -140,6 +176,8 @@ def index(request):
             'record_label': '巡检记录',
         },
     ]
+    items = [_with_card_actions(item) for item in items]
+    items.sort(key=_dashboard_attention_score)
     task_page = Paginator(inspection_task_queryset(), 10).get_page(
         request.GET.get('task_page'),
     )
@@ -147,4 +185,6 @@ def index(request):
     return render(request, 'dashboard/index.html', {
         'items': items,
         'task_page': task_page,
+        'has_tasks': bool(task_page.object_list),
+        'refreshed_at': timezone.now(),
     })

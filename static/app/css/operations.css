@@ -1009,3 +1009,16 @@ code {
     .table-row-actions { justify-content: flex-start; }
     .page-pagination .pagination { justify-content: flex-start !important; }
 }
+/* Dashboard hierarchy: one obvious action and compact inactive task state. */
+.dashboard-refreshed-at { margin: 0; color: var(--color-text-muted); font-size: .78rem; white-space: nowrap; }
+.metric-card__actions { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; gap: .7rem; align-items: center; }
+.metric-card__secondary-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.metric-card__last-run { grid-column: 1 / -1; }
+.dashboard-task-region--empty { padding: 1rem 1.1rem; border: 1px solid rgba(255, 255, 255, .72); border-radius: var(--radius-lg); background: rgba(255, 255, 255, .72); box-shadow: var(--shadow-surface); backdrop-filter: blur(16px); }
+.dashboard-task-region--empty > summary { color: var(--color-text-muted); cursor: pointer; font-weight: 700; }
+@media (max-width: 575.98px) {
+    .dashboard-refreshed-at { width: 100%; }
+    .metric-card__actions { grid-template-columns: 1fr; }
+    .metric-card__primary-action { width: 100%; }
+    .metric-card__last-run { grid-column: 1; text-align: left !important; }
+}

@@ -24,11 +24,9 @@
         {% endif %}
     </div>
     <div class="card-footer metric-card__footer metric-card__actions px-4 pb-4 d-flex gap-2 flex-wrap align-items-center justify-content-end">
-        {% if item.target_url %}<a href="{{ item.target_url }}" class="btn btn-outline-secondary btn-sm">进入管理</a>{% endif %}
-        {% if item.list_url %}<a href="{{ item.list_url }}" class="btn btn-outline-secondary btn-sm">{{ item.name }}列表</a>{% endif %}
-        {% if item.record_url %}<a href="{{ item.record_url }}" class="btn btn-outline-dark btn-sm">{{ item.record_label }}</a>{% endif %}
-        {% if item.detail_url %}<a href="{{ item.detail_url }}" class="btn btn-outline-dark btn-sm">{{ item.detail_label }}</a>{% endif %}
-        {% if item.manual_action_label %}<a class="btn btn-primary btn-sm metric-card__primary-action" href="{{ item.list_url }}?task_modal=run">{{ item.manual_action_label }}</a>{% endif %}
+        <div class="metric-card__secondary-actions">
+            {% for action in item.secondary_actions %}<a href="{{ action.url }}" class="btn btn-outline-secondary btn-sm">{{ action.label }}</a>{% endfor %}
+        </div>
+        <a class="btn btn-primary btn-sm metric-card__primary-action" href="{{ item.primary_action.url }}">{{ item.primary_action.label }}</a>
         {% if item.last_run_label %}<p class="metric-card__last-run text-secondary mb-0 text-end">{{ item.last_run_label }}：{{ item.last_run_at|date:'Y-m-d H:i'|default:'暂无' }}</p>{% endif %}
-    </div>
-</section>
+    </div></section>

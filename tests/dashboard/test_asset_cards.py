@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.test import TestCase
 from django.urls import reverse
 
@@ -42,3 +44,43 @@ class AssetDashboardUiTests(TestCase):
 
         self.assertContains(response, 'PC 数据由 PowerShell 自动采集上报。')
         self.assertNotContains(response, '计算机数据由 PowerShell 自动采集上报。')
+class DashboardHierarchyTests(TestCase):
+    def summaries(self):
+        common = {'total': 10, 'normal': 10, 'abnormal': 0, 'unchecked': 0, 'last_run_at': None}
+        return [
+            {'key': 'people', **common},
+            {'key': 'domain_accounts', **common},
+            {'key': 'domain_computers', **common},
+            {'key': 'domain_groups', **common},
+            {'key': 'computers', **common},
+            {'key': 'networks', **common, 'normal': 6, 'abnormal': 4},
+            {'key': 'servers', **common, 'normal': 9, 'abnormal': 1},
+            {'key': 'monitors', **common},
+        ]
+
+    def test_actionable_cards_are_ordered_before_healthy_cards(self):
+        with patch('index.dashboard.views.build_asset_card_summaries', return_value=self.summaries()):
+            response = self.client.get(reverse('index'))
+
+        keys = [item['key'] for item in response.context['items']]
+        self.assertEqual(keys[:2], ['networks', 'servers'])
+
+    def test_every_card_has_one_primary_action_and_compact_secondary_actions(self):
+        with patch('index.dashboard.views.build_asset_card_summaries', return_value=self.summaries()):
+            response = self.client.get(reverse('index'))
+
+        for item in response.context['items']:
+            with self.subTest(card=item['key']):
+                self.assertTrue(item['primary_action']['url'])
+                self.assertIn('secondary_actions', item)
+        self.assertContains(response, 'metric-card__primary-action', count=6)
+        self.assertContains(response, 'metric-card__secondary-actions')
+        self.assertContains(response, 'dashboard-refreshed-at')
+
+    def test_empty_task_region_is_collapsed_but_remains_available(self):
+        with patch('index.dashboard.views.build_asset_card_summaries', return_value=self.summaries()):
+            response = self.client.get(reverse('index'))
+
+        self.assertContains(response, 'dashboard-task-region--empty')
+        self.assertContains(response, '暂无任务，展开查看执行中心')
+        self.assertContains(response, 'inspection-taskbar')

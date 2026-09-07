@@ -7,6 +7,7 @@
         <h1 class="page-heading__title">设备状态概览</h1>
         <p class="page-heading__description">全部资产、最新执行记录与异常统一总览</p>
     </div>
+    <p class="dashboard-refreshed-at">页面更新于 {{ refreshed_at|date:'Y-m-d H:i:s' }}</p>
 </header>
 <section class="dashboard-overview" aria-labelledby="dashboard-overview-title">
     <div>
@@ -27,7 +28,11 @@
     {% endfor %}
 </div>
 
-<div class="mt-4 dashboard-task-region">
-    {% include 'inspections/taskbar.html' %}
-</div>
-{% endblock %}
+{% if has_tasks %}
+<div class="mt-4 dashboard-task-region">{% include 'inspections/taskbar.html' %}</div>
+{% else %}
+<details class="mt-4 dashboard-task-region dashboard-task-region--empty">
+    <summary>暂无任务，展开查看执行中心</summary>
+    <div class="mt-3">{% include 'inspections/taskbar.html' %}</div>
+</details>
+{% endif %}{% endblock %}
