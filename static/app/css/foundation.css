@@ -745,3 +745,23 @@ details > summary {
         transition-duration: .01ms !important;
     }
 }
+/* Keyboard and validation affordances shared by pages and dialogs. */
+:where(a, button, input, select, textarea, summary):focus-visible {
+    outline: 3px solid rgba(49, 87, 213, .34);
+    outline-offset: 2px;
+}
+:where(.form-control, .form-select)[aria-invalid="true"] {
+    border-color: var(--color-danger);
+    box-shadow: 0 0 0 .2rem rgba(188, 57, 75, .12);
+}
+.btn:not(.btn-sm), .form-control:not(.form-control-sm), .form-select:not(.form-select-sm) {
+    min-height: 2.65rem;
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+    }
+}

@@ -6,13 +6,13 @@
 
     <div class="table-filter-bar">
         <div class="table-filter-field table-filter-field--keyword">
-            <label class="form-label small text-secondary">关键字</label>
-            <input class="form-control" name="{{ table_state.parameter_names.q }}" value="{{ table_state.q }}" placeholder="名称、地址或其他关键字">
+            <label class="form-label small text-secondary" for="{{ table_definition.key }}-keyword-filter">关键字</label>
+            <input class="form-control" id="{{ table_definition.key }}-keyword-filter" name="{{ table_state.parameter_names.q }}" value="{{ table_state.q }}" placeholder="名称、地址或其他关键字">
         </div>
         {% if status_options %}
         <div class="table-filter-field">
-            <label class="form-label small text-secondary">状态</label>
-            <select class="form-select" name="{{ table_state.parameter_names.status }}">
+            <label class="form-label small text-secondary" for="{{ table_definition.key }}-status-filter">状态</label>
+            <select class="form-select" id="{{ table_definition.key }}-status-filter" name="{{ table_state.parameter_names.status }}">
                 <option value="">全部状态</option>
                 {% for value, label in status_options %}<option value="{{ value }}"{% if table_state.status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
             </select>

@@ -284,3 +284,21 @@ body.admin-shell {
     .admin-shell .object-tools { float: none; margin: .65rem 0 0; }
     .admin-login-card { padding: 1.4rem; }
 }
+/* Keep Django admin chrome aligned with the operations console. */
+.admin-shell #header #user-tools { gap: .25rem; }
+.admin-shell #header #user-tools .nav-link { min-height: 2.65rem; font-weight: 650; }
+.admin-shell.dashboard #content-main { margin-inline: auto; }
+.admin-shell.dashboard #content-main .module { width: min(100%, 74rem); margin-inline: auto; }
+.admin-shell .module,
+.admin-shell .inline-group,
+.admin-shell .submit-row,
+.admin-shell #changelist-filter,
+.admin-shell #changelist-form,
+.admin-shell #toolbar {
+    border-color: rgba(255, 255, 255, .72);
+    background: rgba(255, 255, 255, .78);
+    backdrop-filter: blur(18px) saturate(130%);
+    -webkit-backdrop-filter: blur(18px) saturate(130%);
+}
+.admin-shell .errornote,
+.admin-shell ul.errorlist { color: #84283a; }
