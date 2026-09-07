@@ -18,6 +18,11 @@ class Migration(migrations.Migration):
             model_name='computerlogtransfer',
             name='net_pc_transfer_active_identity_uniq',
         ),
+        migrations.AlterField(
+            model_name='computerlogtransfer',
+            name='remote_source_path',
+            field=models.CharField(max_length=512),
+        ),
         migrations.AddField(
             model_name='computerlogfile',
             name='daily_import_marker',

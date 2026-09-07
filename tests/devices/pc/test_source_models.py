@@ -116,6 +116,10 @@ class PCLogSourceModelTests(TestCase):
         self.assertIsNone(transfer.condition)
         self.assertTrue(ComputerLogFile._meta.get_field('daily_import_marker').generated)
         self.assertTrue(ComputerLogTransfer._meta.get_field('active_identity_marker').generated)
+        self.assertEqual(
+            ComputerLogTransfer._meta.get_field('remote_source_path').max_length,
+            512,
+        )
 
     def test_imported_log_requires_daily_identity(self):
         """An imported row without a computer and collection date cannot be deduplicated."""
@@ -156,5 +160,30 @@ class PCLogSourceModelTests(TestCase):
         self.assertNotIn('transport-private', source.last_test_error)
         self.assertNotIn('transport-private', str(source.public_data()))
         self.assertNotIn('transport-private', transfer.error_message)
+        self.assertNotIn('transport-private', transfer.public_error_message())
         self.assertIn('[REDACTED]', source.last_test_error)
         self.assertIn('[REDACTED]', transfer.error_message)
+
+        with self.assertRaises(ValidationError):
+            PCLogSourceConfig.objects.filter(pk=source.pk).update(
+                last_test_error='transport-private',
+            )
+        with self.assertRaises(ValidationError):
+            ComputerLogTransfer.objects.filter(pk=transfer.pk).update(
+                error_message='transport-private',
+            )
+        with self.assertRaises(ValidationError):
+            ComputerLogTransfer.objects.bulk_update(
+                [transfer],
+                ['error_message'],
+            )
+
+        bulk_transfer = ComputerLogTransfer(
+            source=source,
+            remote_source_path='incoming/PC-SOURCE-02-20260904.json',
+            observed_mtime=datetime(2026, 9, 4, tzinfo=timezone.utc),
+            error_message='bulk password=transport-private',
+        )
+        ComputerLogTransfer.objects.bulk_create([bulk_transfer])
+        bulk_transfer.refresh_from_db()
+        self.assertNotIn('transport-private', bulk_transfer.error_message)

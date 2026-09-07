@@ -31,7 +31,8 @@ class PCLogSourceConfigAdmin(admin.ModelAdmin):
     list_display = ('host', 'source_type', 'port', 'username', 'last_tested_at')
     list_filter = ('source_type', 'ftp_use_tls', 'recursive')
     search_fields = ('host', 'username', 'domain', 'share_name')
-    readonly_fields = ('id', 'last_tested_at', 'last_test_error')
+    readonly_fields = ('id', 'last_tested_at', 'public_last_test_error')
+    exclude = ('last_test_error',)
 
     def has_add_permission(self, request):
         return PCLogSourceConfig.load() is None

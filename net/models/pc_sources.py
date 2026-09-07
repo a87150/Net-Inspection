@@ -3,6 +3,40 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 
+class _SanitizedErrorQuerySet(models.QuerySet):
+    error_field = ''
+    sanitizer_method = ''
+
+    def update(self, **kwargs):
+        if self.error_field in kwargs:
+            raise ValidationError(
+                f'{self.error_field} 必须通过模型实例保存以执行凭据脱敏。'
+            )
+        return super().update(**kwargs)
+
+    def bulk_create(self, objs, **kwargs):
+        for obj in objs:
+            getattr(obj, self.sanitizer_method)()
+        return super().bulk_create(objs, **kwargs)
+
+    def bulk_update(self, objs, fields, **kwargs):
+        if self.error_field in fields:
+            raise ValidationError(
+                f'{self.error_field} 不支持批量更新，请逐条保存以执行凭据脱敏。'
+            )
+        return super().bulk_update(objs, fields, **kwargs)
+
+
+class PCLogSourceQuerySet(_SanitizedErrorQuerySet):
+    error_field = 'last_test_error'
+    sanitizer_method = '_sanitize_last_test_error'
+
+
+class ComputerLogTransferQuerySet(_SanitizedErrorQuerySet):
+    error_field = 'error_message'
+    sanitizer_method = '_sanitize_error_message'
+
+
 class PCLogSourceConfig(models.Model):
     class SourceType(models.TextChoices):
         SMB = 'smb', 'SMB'
@@ -11,6 +45,8 @@ class PCLogSourceConfig(models.Model):
     class FileTimeMode(models.TextChoices):
         RECENT_DAYS = 'recent_days', '最近 N 天'
         DATE_RANGE = 'date_range', '指定起止日期'
+
+    objects = PCLogSourceQuerySet.as_manager()
 
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     source_type = models.CharField(max_length=8, choices=SourceType.choices)
@@ -98,13 +134,16 @@ class PCLogSourceConfig(models.Model):
         if errors:
             raise ValidationError(errors)
 
+    def _sanitize_last_test_error(self):
+        from net.devices.pc.credentials import sanitize_pc_source_error
+        self.last_test_error = sanitize_pc_source_error(self, self.last_test_error)
+
     def save(self, *args, **kwargs):
         update_fields = kwargs.get('update_fields')
         if self.last_test_error and (
             update_fields is None or 'last_test_error' in update_fields
         ):
-            from net.devices.pc.credentials import sanitize_pc_source_error
-            self.last_test_error = sanitize_pc_source_error(self, self.last_test_error)
+            self._sanitize_last_test_error()
         super().save(*args, **kwargs)
 
     def public_data(self):
@@ -131,12 +170,14 @@ class PCLogSourceConfig(models.Model):
             'ftp_passive': self.ftp_passive,
             'ftp_use_tls': self.ftp_use_tls,
             'last_tested_at': self.last_tested_at.isoformat() if self.last_tested_at else None,
-            'last_test_error': self._public_last_test_error(),
+            'last_test_error': self.public_last_test_error(),
         }
 
-    def _public_last_test_error(self):
+    def public_last_test_error(self):
         from net.devices.pc.credentials import sanitize_pc_source_error
         return sanitize_pc_source_error(self, self.last_test_error)
+
+    public_last_test_error.short_description = '最近连接错误（已脱敏）'
 
     def __str__(self):
         return f'{self.get_source_type_display()} {self.host}:{self.port}'
@@ -155,6 +196,8 @@ class PCLogSourceCredential(models.Model):
 
 
 class ComputerLogTransfer(models.Model):
+    objects = ComputerLogTransferQuerySet.as_manager()
+
     class Stage(models.TextChoices):
         DISCOVERED = 'discovered', '已发现'
         DOWNLOADED = 'downloaded', '已下载'
@@ -189,7 +232,7 @@ class ComputerLogTransfer(models.Model):
         on_delete=models.PROTECT,
         related_name='transfers',
     )
-    remote_source_path = models.TextField()
+    remote_source_path = models.CharField(max_length=512)
     remote_archive_path = models.TextField(blank=True)
     local_staging_path = models.TextField(blank=True)
     remote_size = models.PositiveBigIntegerField(default=0)
@@ -233,12 +276,22 @@ class ComputerLogTransfer(models.Model):
             models.Index(fields=('source', 'stage'), name='net_pc_xfer_source_stage_idx'),
         ]
 
+    def _sanitize_error_message(self):
+        from net.devices.pc.credentials import sanitize_pc_source_error
+        source = self.source if self.source_id else None
+        self.error_message = sanitize_pc_source_error(source, self.error_message)
+
     def save(self, *args, **kwargs):
         update_fields = kwargs.get('update_fields')
         if self.error_message and (
             update_fields is None or 'error_message' in update_fields
         ):
-            from net.devices.pc.credentials import sanitize_pc_source_error
-            source = self.source if self.source_id else None
-            self.error_message = sanitize_pc_source_error(source, self.error_message)
+            self._sanitize_error_message()
         super().save(*args, **kwargs)
+
+    def public_error_message(self):
+        from net.devices.pc.credentials import sanitize_pc_source_error
+        source = self.source if self.source_id else None
+        return sanitize_pc_source_error(source, self.error_message)
+
+    public_error_message.short_description = '错误信息（已脱敏）'

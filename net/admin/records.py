@@ -29,8 +29,9 @@ class ComputerLogFileAdmin(admin.ModelAdmin):
 class ComputerLogTransferAdmin(admin.ModelAdmin):
     list_display = ('remote_source_path', 'source', 'stage', 'attempt_count', 'updated_at')
     list_filter = ('stage', 'source__source_type')
-    search_fields = ('remote_source_path', 'remote_archive_path', 'content_hash', 'error_message')
-    readonly_fields = ('source', 'task_target', 'log_file', 'remote_source_path', 'remote_archive_path', 'local_staging_path', 'remote_size', 'observed_mtime', 'content_hash', 'stage', 'attempt_count', 'error_message', 'created_at', 'updated_at')
+    search_fields = ('remote_source_path', 'remote_archive_path', 'content_hash')
+    readonly_fields = ('source', 'task_target', 'log_file', 'remote_source_path', 'remote_archive_path', 'local_staging_path', 'remote_size', 'observed_mtime', 'content_hash', 'stage', 'attempt_count', 'public_error_message', 'created_at', 'updated_at')
+    exclude = ('error_message',)
     raw_id_fields = ('source', 'task_target', 'log_file')
     date_hierarchy = 'created_at'
 
