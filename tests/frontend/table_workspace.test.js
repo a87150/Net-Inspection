@@ -404,3 +404,44 @@ test('opens an import modal marked for one-time auto-open', () => {
 
     assert.equal(modalInstance.showCount, 1);
 });
+test('describes every active filter for compact chips', () => {
+    assert.equal(typeof controller.activeFilterDescriptors, 'function');
+    const source = element({dataset: {
+        filterKey: 'department',
+        filterLabel: 'Department',
+        filterParameters: 'filter_department',
+        filterActive: 'true',
+    }});
+
+    assert.deepEqual(controller.activeFilterDescriptors({activeFilterSources: [source]}), [{
+        key: 'department',
+        label: 'Department',
+        parameters: ['filter_department'],
+        source,
+    }]);
+});
+
+test('clearing one filter preserves unrelated query state and focuses its control', () => {
+    assert.equal(typeof controller.clearActiveFilterSource, 'function');
+    const control = element({name: 'filter_department', value: 'IT'});
+    control.focused = false;
+    control.focus = () => { control.focused = true; };
+    const source = element({dataset: {
+        filterKey: 'department', filterParameters: 'filter_department', filterActive: 'true',
+    }});
+    source.querySelectorAll = selector => selector === '[name]' ? [control] : [];
+    source.querySelector = () => control;
+    const location = {
+        href: 'https://example.test/assets/people/?filter_department=IT&target=asset-1&page=4',
+        replacements: [],
+        replace(url) { this.replacements.push(url); },
+    };
+
+    controller.clearActiveFilterSource({exportLinks: []}, source, location);
+
+    const replacement = new URL(location.replacements[0]);
+    assert.equal(replacement.searchParams.has('filter_department'), false);
+    assert.equal(replacement.searchParams.has('page'), false);
+    assert.equal(replacement.searchParams.get('target'), 'asset-1');
+    assert.equal(control.focused, true);
+});

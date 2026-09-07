@@ -526,3 +526,20 @@ class ComputerAnalysisOutcomeTests(TestCase):
         )))
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['分析结果'], '异常')
+
+class PaginationWindowTests(TestCase):
+    def test_page_window_keeps_neighbors_between_first_and_last_pages(self):
+        from django.core.paginator import Paginator
+        from index.templatetags.extras import page_window
+
+        page = Paginator(list(range(200)), 10).page(10)
+
+        self.assertEqual(page_window(page, radius=2), (8, 9, 10, 11, 12))
+
+    def test_page_window_clamps_near_the_start(self):
+        from django.core.paginator import Paginator
+        from index.templatetags.extras import page_window
+
+        page = Paginator(list(range(200)), 10).page(1)
+
+        self.assertEqual(page_window(page, radius=2), (2, 3))

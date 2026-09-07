@@ -33,6 +33,7 @@
         <p class="table-scroll-hint">可横向滚动查看更多字段，最右侧操作列保持可见</p>
         <div class="table-responsive" role="region" aria-label="{{ item_name }}数据表" tabindex="0">
             <table class="table data-table table-hover align-middle mb-0">
+{% include 'common/table_caption.html' %}
                 <thead><tr>
                     {% include 'common/table_sort_headers.html' %}
                     {% if task_allow_target_selection %}<th scope="col"><span class="visually-hidden">选择目标</span></th>{% endif %}<th scope="col" class="table-actions-column table-actions-cell">操作</th>

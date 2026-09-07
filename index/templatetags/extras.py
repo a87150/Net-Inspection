@@ -52,3 +52,13 @@ def table_filter_parameter(table_state, field, boundary=''):
     if boundary:
         name = f'{name}_{boundary}'
     return f'{prefix}_{name}' if prefix else name
+@register.simple_tag
+def page_window(page_obj, radius=2):
+    """Return nearby page numbers; first and last are rendered separately."""
+    radius = max(0, int(radius))
+    last_page = page_obj.paginator.num_pages
+    start = max(2, page_obj.number - radius)
+    end = min(last_page - 1, page_obj.number + radius)
+    if end < start:
+        return ()
+    return tuple(range(start, end + 1))

@@ -17,6 +17,7 @@
 <div data-table-workspace data-table-key="{{ table_definition.key }}">
 <div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
 <div class="card surface-card table-scroll-shell"><p class="table-scroll-hint">可横向滚动查看完整资产信息</p><div class="table-responsive" role="region" aria-label="{{ item_name }}数据表" tabindex="0"><table class="table data-table table-hover align-middle mb-0">
+{% include 'common/table_caption.html' %}
     <thead><tr>
         {% include 'common/table_sort_headers.html' %}
         {% if inspection_type %}<th scope="col" class="table-actions-column table-actions-cell">操作</th>{% endif %}

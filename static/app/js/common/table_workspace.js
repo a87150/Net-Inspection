@@ -95,27 +95,33 @@
         return {...preferences, filterFields: Array.from(visible)};
     }
 
-    function clearActiveFilter(elements, toggle, location) {
-        const key = toggle.dataset.filterKey;
-        const field = elements.filterFields.find(
-            (candidate) => candidate.dataset.filterKey === key,
-        );
-        if (!field || field.dataset.filterActive === undefined) return;
+    function filterParameters(source) {
+        return String(source?.dataset?.filterParameters || '').split(/\s+/).filter(Boolean);
+    }
 
-        const controls = Array.from(field.querySelectorAll('[name]'));
-        const parameters = (field.dataset.filterParameters || '')
-            .split(/\s+/)
-            .filter(Boolean);
+    function activeFilterDescriptors(elements) {
+        return (elements.activeFilterSources || [])
+            .filter((source) => source.dataset.filterActive !== undefined)
+            .map((source) => ({
+                key: source.dataset.filterKey,
+                label: source.dataset.filterLabel || source.dataset.filterKey,
+                parameters: filterParameters(source),
+                source,
+            }));
+    }
+
+    function clearActiveFilterSource(elements, source, location) {
+        if (!source || source.dataset.filterActive === undefined) return false;
+        const controls = Array.from(source.querySelectorAll?.('[name]') || []);
+        const parameters = filterParameters(source);
+        const focusTarget = source.querySelector?.('[name]:not([type="hidden"])') || controls[0];
+        focusTarget?.focus?.();
         controls.forEach((control) => {
             control.value = '';
             control.disabled = true;
-            if (control.name && !parameters.includes(control.name)) {
-                parameters.push(control.name);
-            }
+            if (control.name && !parameters.includes(control.name)) parameters.push(control.name);
         });
-        delete field.dataset.filterActive;
-        delete toggle.dataset.filterActive;
-
+        delete source.dataset.filterActive;
         elements.exportLinks.forEach((link) => {
             if (!link.href) return;
             const exportUrl = new URL(link.href, location?.href);
@@ -123,13 +129,51 @@
             exportUrl.searchParams.delete('page');
             link.href = exportUrl.toString();
         });
-        if (!location?.href || typeof location.replace !== 'function') return;
+        if (!location?.href || typeof location.replace !== 'function') return true;
         const pageUrl = new URL(location.href);
         parameters.forEach((parameter) => pageUrl.searchParams.delete(parameter));
         pageUrl.searchParams.delete('page');
         location.replace(pageUrl.toString());
+        return true;
     }
 
+    function renderActiveFilterChips(elements, documentRoot, location) {
+        const container = elements.activeFilterList;
+        if (!container || typeof documentRoot?.createElement !== 'function') return [];
+        const descriptors = activeFilterDescriptors(elements);
+        container.replaceChildren?.();
+        descriptors.forEach((descriptor) => {
+            const button = documentRoot.createElement('button');
+            button.type = 'button';
+            button.className = 'table-filter-chip';
+            button.textContent = `${descriptor.label} ×`;
+            button.setAttribute('aria-label', `清除筛选：${descriptor.label}`);
+            button.addEventListener('click', () => {
+                const toggle = elements.filterToggles.find(
+                    (candidate) => candidate.dataset.filterKey === descriptor.key,
+                );
+                if (toggle) {
+                    toggle.checked = false;
+                    delete toggle.dataset.filterActive;
+                }
+                clearActiveFilterSource(elements, descriptor.source, location);
+            });
+            container.append?.(button);
+        });
+        container.hidden = descriptors.length === 0;
+        return descriptors;
+    }
+
+    function clearActiveFilter(elements, toggle, location) {
+        const key = toggle.dataset.filterKey;
+        const sources = elements.activeFilterSources?.length ? elements.activeFilterSources : elements.filterFields;
+        const source = sources.find(
+            (candidate) => candidate.dataset.filterKey === key,
+        );
+        if (!source || source.dataset.filterActive === undefined) return;
+        delete toggle.dataset.filterActive;
+        clearActiveFilterSource(elements, source, location);
+    }
     function currentPreferences(elements, defaults) {
         return {
             visibleFields: checkedKeys(elements.columnToggles, 'columnKey'),
@@ -195,6 +239,8 @@
             moreFilters: workspace.querySelector('[data-more-filters]'),
             exportLinks: Array.from(workspace.querySelectorAll('[data-filtered-export]')),
             suggestionSelects: Array.from(workspace.querySelectorAll('[data-filter-suggestion-select]')),
+            activeFilterSources: Array.from(workspace.querySelectorAll('[data-active-filter-source]')),
+            activeFilterList: workspace.querySelector('[data-active-filter-list]'),
         };
         elements.moreFilterFields = elements.moreFilters
             ? Array.from(elements.moreFilters.querySelectorAll(
@@ -225,6 +271,7 @@
             elements,
         );
         applyPreferences(elements, preferences);
+        renderActiveFilterChips(elements, workspace.ownerDocument, location);
         if (storedPreferences) {
             replacePageSizeQuery(location, elements.pageSize, preferences.pageSize);
         }
@@ -286,5 +333,5 @@
         bootstrapApi.Modal.getOrCreateInstance(modalElement).show();
     }
 
-    return {initializeWorkspace, initializeAll, openAutoOpenImportModal, storageKey};
+    return {activeFilterDescriptors, clearActiveFilterSource, initializeWorkspace, initializeAll, openAutoOpenImportModal, renderActiveFilterChips, storageKey};
 }));

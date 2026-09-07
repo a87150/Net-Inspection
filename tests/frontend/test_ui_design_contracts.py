@@ -111,6 +111,8 @@ class SharedInterfaceContractTests(TestCase):
         response = self.client.get(reverse('asset_list', args=['networks']))
 
         self.assertContains(response, 'table-scroll-shell')
+        self.assertContains(response, '<caption class="visually-hidden">网络设备数据表</caption>', html=True)
+        self.assertContains(response, 'data-active-filter-list')
         self.assertContains(response, 'scope="col"')
         self.assertContains(response, 'for="networks-keyword-filter"')
         self.assertContains(response, 'id="networks-keyword-filter"')
