@@ -242,7 +242,7 @@ class ProjectRecordWorkspaceTests(TestCase):
         self.assertNotIn('stats_url', computer)
         self.assertContains(
             response,
-            '<a href="/computers/analyses/" class="btn btn-outline-dark btn-sm">'
+            '<a href="/computers/analyses/" class="btn btn-outline-secondary btn-sm">'
             '日志分析记录</a>',
             html=True,
         )
