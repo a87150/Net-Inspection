@@ -41,6 +41,8 @@ class SharedInterfaceContractTests(TestCase):
         self.assertContains(response, '返回运维总览')
         self.assertContains(response, '修改密码')
         self.assertContains(response, '注销')
+        self.assertContains(response, 'id="content-main"')
+        self.assertContains(response, 'id="content-related"')
         self.assertContains(response, 'app-brand__copy')
 
     def test_dashboard_exposes_scan_friendly_overview_and_task_table(self):
@@ -180,4 +182,6 @@ class AdminVisualContractTests(TestCase):
         self.assertContains(response, '返回运维总览')
         self.assertContains(response, '修改密码')
         self.assertContains(response, '注销')
+        self.assertContains(response, 'id="content-main"')
+        self.assertContains(response, 'id="content-related"')
         self.assertContains(response, 'app-brand__copy')
