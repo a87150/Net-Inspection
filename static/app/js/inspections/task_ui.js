@@ -95,17 +95,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (window.bootstrap?.Modal) window.bootstrap.Modal.getOrCreateInstance(modal).show();
     });
 
-    const updateScheduleFields = (select) => {
-        const form = select.closest('form');
-        const daily = select.value === 'daily';
-        form.querySelectorAll('[data-schedule-interval]').forEach((field) => { field.hidden = daily; });
-        form.querySelectorAll('[data-schedule-daily]').forEach((field) => { field.hidden = !daily; });
-    };
-    document.querySelectorAll('[data-schedule-kind]').forEach((select) => {
-        updateScheduleFields(select);
-        select.addEventListener('change', () => updateScheduleFields(select));
-    });
-
     const updateFileTimeFields = (select) => {
         const form = select.closest('form');
         const dateRange = select.value === 'date_range';

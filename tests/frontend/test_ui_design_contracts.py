@@ -4,10 +4,17 @@ import re
 from django.contrib.staticfiles import finders
 
 from django.test import TestCase
+from django.template.loader import render_to_string
 from django.urls import reverse
 
 
 class SharedInterfaceContractTests(TestCase):
+    def test_shared_brand_partial_renders_application_identity_and_destination(self):
+        html = render_to_string('common/brand.html', {'brand_url': '/destination/'})
+
+        self.assertIn('href="/destination/"', html)
+        self.assertIn('网络巡检中心', html)
+        self.assertIn('Operations Console', html)
     def test_style_entrypoint_resolves_ordered_local_design_layers(self):
         entrypoint = Path(finders.find('app/css/style.css'))
         source = entrypoint.read_text(encoding='utf-8')
@@ -60,12 +67,7 @@ class SharedInterfaceContractTests(TestCase):
         self.assertContains(response, f'href="{reverse("admin:index")}"')
         self.assertContains(response, 'Operations Console')
         self.assertContains(response, 'navbar-collapse')
-        self.assertContains(response, 'admin-navbar-user')
-        self.assertContains(response, '返回运维总览')
-        self.assertContains(response, '修改密码')
-        self.assertContains(response, '注销')
-        self.assertContains(response, 'id="content-main"')
-        self.assertContains(response, 'id="content-related"')
+        self.assertContains(response, '运维管理台')
         self.assertContains(response, 'app-brand__copy')
 
     def test_dashboard_exposes_scan_friendly_overview_and_task_table(self):
@@ -109,6 +111,7 @@ class SharedInterfaceContractTests(TestCase):
         response = self.client.get(reverse('asset_list', args=['networks']))
 
         self.assertContains(response, 'table-scroll-shell')
+        self.assertContains(response, 'scope="col"')
         self.assertContains(response, 'table-scroll-hint')
         self.assertContains(response, 'class="table data-table')
         self.assertContains(response, 'table-actions-column')

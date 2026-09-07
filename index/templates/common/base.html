@@ -11,6 +11,7 @@
     <script defer src="{% static 'app/js/common/table_tools.js' %}"></script>
     <script defer src="{% static 'app/js/common/table_workspace.js' %}"></script>
     <script defer src="{% static 'app/js/common/modal_feedback.js' %}"></script>
+    <script defer src="{% static 'app/js/common/conditional_fields.js' %}"></script>
     <script defer src="{% static 'app/js/inspections/task_ui.js' %}"></script>
     <script defer src="{% static 'app/js/people/import_tasks.js' %}"></script>
 </head>
@@ -18,9 +19,7 @@
     <a class="skip-link" href="#main-content">跳至主要内容</a>
     <nav class="navbar navbar-expand-lg navbar-dark app-navbar app-header" aria-label="主导航">
         <div class="container-fluid app-navbar__inner">
-            <a class="navbar-brand app-brand" href="{% url 'index' %}">
-                <span class="app-brand__copy"><strong>网络巡检中心</strong><small>Operations Console</small></span>
-            </a>
+            {% url 'index' as brand_url %}{% include 'common/brand.html' with brand_url=brand_url %}
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="切换主导航">
                 <span class="navbar-toggler-icon"></span>
             </button>

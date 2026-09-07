@@ -5,7 +5,7 @@
 {% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'app/css/style.css' %}">{% endblock %}
 {% block finalstyle %}<link rel="stylesheet" href="{% static 'app/css/admin.css' %}">{% endblock %}
 {% block bodyclass %}{{ block.super }} app-shell admin-shell{% endblock %}
-{% block branding %}<a class="navbar-brand app-brand" href="{% url 'admin:index' %}"><span class="app-brand__copy"><strong>网络巡检中心</strong><small>Operations Console</small></span></a>{% endblock %}
+{% block branding %}{% url 'admin:index' as brand_url %}{% include 'common/brand.html' with brand_url=brand_url %}{% endblock %}
 {% block userlinks %}
 <li class="nav-item"><a class="nav-link" href="{% url 'index' %}">返回运维总览</a></li>
 {% if user.has_usable_password %}<li class="nav-item"><a class="nav-link" href="{% url 'admin:password_change' %}">{% translate 'Change password' %}</a></li>{% endif %}
