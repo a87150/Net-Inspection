@@ -43,9 +43,13 @@ class WindowsNetworkEvidenceTests(TestCase):
             execute_target(task.target_runs.get(), worker_id='n01-worker')
         record = Server_Inspection.objects.get()
         self.assertEqual(record.status, 'success')
-        self.assertEqual(record.details, payload)
+        self.assertEqual({key: value for key, value in record.details.items()
+                          if key not in {'issue_findings', 'normal_issue_items'}}, payload)
+        self.assertEqual(record.details['issue_findings'], [])
+        self.assertEqual(record.details['normal_issue_items'], ['inspection_collection', 'cpu', 'network_info'])
         self.assertEqual(record.raw_output, payload)
-        self.assertEqual(task.target_runs.get().result_snapshot['details'], payload)
+        from net.inspections.result_storage import expanded_result_snapshot
+        self.assertEqual(expanded_result_snapshot(task.target_runs.get())['details'], record.details)
         self.assertFalse(task.alert_events.exists())
 
     def test_explicit_empty_interface_array_is_valid_selected_evidence(self):

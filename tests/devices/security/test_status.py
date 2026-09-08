@@ -33,7 +33,7 @@ class SecurityStatusTests(TestCase):
     def setUp(self):
         self.device = SecurityDevice.objects.create(ip='192.0.2.245', vendor='hikvision', api_url='http://192.0.2.245/status')
 
-    def assert_status_roundtrip(self, body, expected):
+    def assert_status_roundtrip(self, body, expected, *, expected_abnormal=False):
         with patch('net.infrastructure.http_collectors.requests.get', return_value=response(body)):
             collected = collect_security_api(self.device, selected_items=['status_data'])
             self.assertEqual(collected.status, 'success')
@@ -54,12 +54,23 @@ class SecurityStatusTests(TestCase):
         record = self.device.inspections.get()
         self.assertEqual(outcome.status, 'success')
         self.assertEqual(task.status, 'success')
-        self.assertEqual(record.details, {'status_data': expected})
+        self.assertEqual({key: value for key, value in record.details.items()
+                          if key not in {'issue_findings', 'normal_issue_items'}}, {'status_data': expected})
+        if expected_abnormal:
+            self.assertEqual([(issue['analysis_item'], issue['severity']) for issue in record.details['issue_findings']],
+                             [('status_data', 'warning')])
+            self.assertEqual(record.details['normal_issue_items'], ['inspection_collection'])
+            self.assertEqual(target.result_snapshot['health_status'], 'abnormal')
+        else:
+            self.assertEqual(record.details['issue_findings'], [])
+            self.assertEqual(record.details['normal_issue_items'], ['inspection_collection', 'status_data'])
+            self.assertEqual(target.result_snapshot['health_status'], 'normal')
         self.assertEqual(record.raw_output, collected.raw)
-        self.assertEqual(target.result_snapshot['details'], record.details)
+        from net.inspections.result_storage import expanded_result_snapshot
+        self.assertEqual(expanded_result_snapshot(target)['details'], record.details)
         self.assertEqual(target.result_id, str(record.pk))
         self.assertEqual(record.task_target_id, target.pk)
-        self.assertFalse(Error_Monitor.objects.filter(inspection=record).exists())
+        self.assertEqual(Error_Monitor.objects.filter(inspection=record).exists(), expected_abnormal)
         self.assertNotIn('PRIVATE', json.dumps([record.raw_output, record.details, target.result_snapshot]))
 
     def test_native_xml_status_preserves_cpu_and_ignores_unselected_subtrees(self):
@@ -84,7 +95,7 @@ class SecurityStatusTests(TestCase):
     def test_wrapped_json_status_excludes_unselected_nested_items(self):
         self.assert_status_roundtrip({'status': {
             'online': False, 'logs': ['PRIVATE LOG'], 'channels': ['PRIVATE CHANNEL'],
-        }, 'logs': ['PRIVATE LOG']}, {'online': False})
+        }, 'logs': ['PRIVATE LOG']}, {'online': False}, expected_abnormal=True)
 
     def test_canonical_json_status_is_not_an_unrestricted_raw_fallback(self):
         self.assert_status_roundtrip({'status_data': {
@@ -141,5 +152,9 @@ class SecurityStatusTests(TestCase):
         self.assertEqual(task.status, 'partial')
         self.assertEqual(target.status, 'partial')
         self.assertEqual(record.raw_output, collected.raw)
-        self.assertEqual(record.details, collected.data)
+        self.assertEqual({key: value for key, value in record.details.items()
+                          if key not in {'issue_findings', 'normal_issue_items'}}, collected.data)
+        self.assertEqual([(issue['rule_key'], issue['severity']) for issue in record.details['issue_findings']],
+                         [('missing.status_data', 'info')])
+        self.assertEqual(record.details['normal_issue_items'], ['inspection_collection', 'storage_status'])
         self.assertTrue(Error_Monitor.objects.filter(inspection=record).exists())

@@ -19,6 +19,7 @@ _INSPECTION_LABELS = {
     'memory': '内存', 'storage_status': '存储', 'network_info': '网络',
     'services': '服务状态', 'logs': '系统日志', 'device_info': '设备信息',
     'temperature': '温度', 'interface_status': '接口状态',
+    'traffic': '实时接口流量（SNMP）',
     'vlan_status': 'VLAN 状态', 'status_data': '设备状态',
     'channel_status': '通道状态',
     'config_info': '设备配置（只读、脱敏，非完整恢复备份）',
@@ -27,7 +28,7 @@ _ANALYSIS_LABELS = {
     'activation': 'Windows 激活', 'software': '已安装软件',
     'processes': '运行进程', 'bitlocker': 'BitLocker',
     'defender': 'Defender 信息', 'patches': '系统更新',
-    'domain': '域状态', 'resource': '资源使用情况',
+    'resource': '资源使用情况',
     'event_findings': '事件发现', 'system': '系统版本',
     'uptime': '连续开机时间',
     'browser_extensions': '浏览器扩展', 'identity_match': '账号与电脑名匹配',
@@ -39,7 +40,7 @@ _ANALYSIS_LABELS = {
 def inspection_item_choices(device_type):
     """Return only collector keys that this project type can execute."""
     if device_type == InspectionProfile.DeviceType.NETWORK_DEVICE:
-        keys = set(NETWORK_FIELDS)
+        keys = set(NETWORK_FIELDS) | {'traffic'}
     elif device_type == InspectionProfile.DeviceType.SERVER:
         keys = set(LINUX_FIELDS) | set(WINDOWS_FIELDS)
     elif device_type == InspectionProfile.DeviceType.MONITOR:
@@ -198,6 +199,9 @@ class InspectionProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
 
 
 class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
+    matching_mode = forms.ChoiceField(required=False, initial='logs', label='人员匹配方式', choices=(
+        ('logs', '不按人员匹配（日志为主）'), ('people', '按人员匹配（人员为主）')),
+        help_text='人员为主：保留无日志人员；日志为主：保留未匹配人员的日志。工号优先，其次唯一姓名。')
     profile_id = forms.UUIDField(required=False, widget=forms.HiddenInput)
     name = forms.CharField(max_length=255, label='配置名称')
     analysis_items = forms.MultipleChoiceField(
@@ -255,6 +259,7 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
         if instance is not None and not self.is_bound:
             self.initial.update({
                 'profile_id': instance.pk,
+                'matching_mode': getattr(instance, 'matching_mode', 'logs'),
                 'name': instance.name,
                 'analysis_items': instance.analysis_items,
                 'minimum_windows_release': instance.minimum_windows_release,
@@ -304,6 +309,7 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
         return {
             'name': cleaned['name'],
             'analysis_items': cleaned['analysis_items'],
+            'matching_mode': self._configured_value('matching_mode', 'logs') or 'logs',
             'minimum_windows_release': self._configured_value('minimum_windows_release', '23H2'),
             'defender_update_max_days': self._configured_value('defender_update_max_days', 7),
             'defender_scan_max_days': self._configured_value('defender_scan_max_days', 7),

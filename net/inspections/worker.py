@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import logging
+import traceback
 import socket
 import threading
 import time
@@ -10,7 +12,7 @@ import uuid
 from concurrent.futures import FIRST_COMPLETED, CancelledError, ThreadPoolExecutor, wait
 
 from django.core.exceptions import ValidationError
-from django.db import close_old_connections, connections
+from django.db import OperationalError, close_old_connections, connections
 
 from net.models import TaskRun
 
@@ -31,11 +33,13 @@ from net.domain.executor import (
 )
 from net.inspections.executor import _database_guard, execute_target, persist_execution_failure
 from net.people.executor import execute_people_target, persist_people_failure
+from net.domain.sync_tasks import execute_domain_sync_target, persist_domain_sync_failure
 from .queue import (
     claim_next_task,
     finish_task,
     recover_expired_tasks,
     renew_lease,
+    is_sqlite_busy,
 )
 from .schedules import enqueue_due_schedules
 
@@ -100,7 +104,9 @@ class TaskWorker:
                         target, worker_id=self.worker_id, lease_guard=lease_guard,
                         domain_context=domain_context,
                     )
-                if task_type in TaskRun.PEOPLE_TASK_TYPES:
+                if task_type == TaskRun.TaskType.DOMAIN_SYNC:
+                    executor = execute_domain_sync_target
+                elif task_type in TaskRun.PEOPLE_TASK_TYPES:
                     executor = execute_people_target
                 elif task_type == TaskRun.TaskType.COMPUTER_FETCH:
                     return execute_computer_fetch_target(
@@ -113,6 +119,20 @@ class TaskWorker:
                     executor = execute_target
                 return executor(target, worker_id=self.worker_id, lease_guard=lease_guard)
             except Exception as exc:
+                database_message = ''
+                if isinstance(exc, OperationalError):
+                    if is_sqlite_busy(exc):
+                        database_message = 'SQLite 数据库被占用，请稍后重试。'
+                    elif any(text in str(exc).lower() for text in ('no such table', 'no such column')):
+                        database_message = '数据库结构与代码不一致，请对当前运行数据库执行迁移。'
+                    else:
+                        database_message = '数据库操作失败，请查看 Worker 控制台定位信息。'
+                    # Preserve call sites, but never log SQL parameters or raw DB errors
+                    # which may contain imported personal data or credentials.
+                    logging.getLogger(__name__).error(
+                        'task=%s target=%s: %s\n%s', target.task_id, target.pk,
+                        database_message, ''.join(traceback.format_tb(exc.__traceback__)),
+                    )
                 if not lease_guard.is_set():
                     try:
                         if task_type == TaskRun.TaskType.DOMAIN_OPERATION:
@@ -121,7 +141,9 @@ class TaskWorker:
                                 error='域控目标执行失败。', lease_guard=lease_guard,
                                 domain_context=domain_context,
                             )
-                        if task_type in TaskRun.PEOPLE_TASK_TYPES:
+                        if task_type == TaskRun.TaskType.DOMAIN_SYNC:
+                            persist_failure = persist_domain_sync_failure
+                        elif task_type in TaskRun.PEOPLE_TASK_TYPES:
                             persist_failure = persist_people_failure
                         elif task_type == TaskRun.TaskType.COMPUTER_FETCH:
                             persist_failure = persist_computer_fetch_failure
@@ -131,7 +153,7 @@ class TaskWorker:
                             persist_failure = persist_execution_failure
                         return persist_failure(
                             target, worker_id=self.worker_id,
-                            error=f'目标执行或结果保存失败（{type(exc).__name__}）',
+                            error=database_message or f'目标执行或结果保存失败（{type(exc).__name__}）',
                             lease_guard=lease_guard,
                         )
                     except Exception:
@@ -311,5 +333,16 @@ class TaskWorker:
         """Poll until the optional event is set; portable to Windows and Linux."""
         stop_event = stop_event if stop_event is not None else threading.Event()
         while not stop_event.is_set():
-            if not self.run_once(stop_event):
+            try:
+                handled = self.run_once(stop_event)
+            except OperationalError as exc:
+                if not is_sqlite_busy(exc):
+                    raise
+                # _execute_claimed_task fences targets before propagating;
+                # run_once closes connections. Expired work is recovered later.
+                logging.getLogger(__name__).warning(
+                    'SQLite 数据库正忙，Worker 将稍后重试；未完成任务按租约机制恢复。'
+                )
+                handled = False
+            if not handled:
                 stop_event.wait(self.poll_seconds)

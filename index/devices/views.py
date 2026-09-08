@@ -82,7 +82,7 @@ def _history_url(kind, asset):
     return ''
 
 
-def asset_list(request, kind, *, integration_context=None):
+def asset_list(request, kind, *, integration_context=None, creation_form=None):
     page = _asset_page(kind)
     table_definition = get_table_definition(page.table_key)
     objects, table_state = apply_table_filters(
@@ -115,6 +115,11 @@ def asset_list(request, kind, *, integration_context=None):
             request.session.pop('open_import_modal', None) == kind
         ),
     }
+    from .forms import DEVICE_KINDS, device_form, device_form_sections
+    if kind in DEVICE_KINDS and request.user.is_authenticated:
+        form = creation_form if creation_form is not None else device_form(kind)
+        context.update(device_form=form, device_form_sections=device_form_sections(form),
+                       open_add_device_modal=creation_form is not None)
     if kind == 'people':
         from index.people.integrations import people_modal_context
         modal_context = integration_context if integration_context is not None else people_modal_context(request)

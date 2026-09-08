@@ -12,7 +12,7 @@ from net.models import (
     TaskRun,
     TaskTargetRun,
 )
-from net.inspections.task_summary import inspection_task_queryset, summarize_task
+from net.inspections.task_summary import inspection_task_queryset, summarize_task, summarize_tasks
 
 
 class TaskbarTableParser(HTMLParser):
@@ -199,7 +199,7 @@ class HomeTaskbarTests(TestCase):
         with self.assertNumQueries(2):
             summaries = {
                 summary['task'].pk: summary
-                for summary in map(summarize_task, inspection_task_queryset())
+                for summary in summarize_tasks(inspection_task_queryset())
             }
 
         analysis = summaries[analysis_task.pk]

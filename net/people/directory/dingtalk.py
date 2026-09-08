@@ -13,6 +13,7 @@ from .base import (
     DirectoryPayloadError,
     DirectoryPerson,
     DirectoryRateLimitError,
+    DirectoryReferenceError,
     directory_source_configuration_identity,
     freeze_directory_source,
 )
@@ -33,6 +34,8 @@ class DingTalkDirectoryAdapter:
         self.max_retries = max_retries
         self.last_snapshot_complete = False
         self._skipped_records = []
+        self._department_names = {}
+        self._user_names = {}
 
     @property
     def source_key(self):
@@ -55,6 +58,8 @@ class DingTalkDirectoryAdapter:
     def iter_people(self):
         self.last_snapshot_complete = False
         self._skipped_records = []
+        self._department_names = {}
+        self._user_names = {}
         try:
             self._validate_source()
             access_token = self._application_access_token()
@@ -72,7 +77,9 @@ class DingTalkDirectoryAdapter:
             people = [
                 DirectoryPerson(
                     employee_id=record['employee_id'], name=record['name'], email=record['email'],
-                    department=','.join(sorted(record['departments'])), leader=record['leader'],
+                    department=','.join(self._reference_name(access_token, 'department', value)
+                                        for value in sorted(record['departments'])),
+                    leader=self._reference_name(access_token, 'user', record['leader']),
                     external_user_id=external_user_id, hire_date=record['hire_date'],
                     departure_date=record['departure_date'],
                 )
@@ -83,6 +90,29 @@ class DingTalkDirectoryAdapter:
             raise
         self.last_snapshot_complete = True
         return iter(people)
+
+    def _reference_name(self, access_token, kind, identifier):
+        try:
+            return self._load_reference_name(access_token, kind, identifier)
+        except DirectoryAdapterError:
+            raise DirectoryReferenceError() from None
+
+    def _load_reference_name(self, access_token, kind, identifier):
+        if not identifier:
+            return ''
+        cache = self._department_names if kind == 'department' else self._user_names
+        if identifier not in cache:
+            payload = self._request_json(
+                'post', f'https://oapi.dingtalk.com/topapi/v2/{kind}/get',
+                params={'access_token': access_token},
+                json={'dept_id': int(identifier)} if kind == 'department' else {'userid': identifier},
+            )
+            self._require_success(payload)
+            detail = payload.get('result')
+            if not isinstance(detail, Mapping):
+                raise DirectoryPayloadError()
+            cache[identifier] = self._required_text(detail.get('name'))
+        return cache[identifier]
 
     def _validate_source(self):
         credentials = getattr(self.source, 'credentials', None)
@@ -152,13 +182,20 @@ class DingTalkDirectoryAdapter:
         for item in result:
             if not isinstance(item, Mapping):
                 raise DirectoryPayloadError()
-            children.append(self._department_id(item.get('dept_id')))
+            child_id = self._department_id(item.get('dept_id'))
+            children.append(child_id)
+            name = self._optional_text(item.get('name'))
+            if name:
+                self._department_names[child_id] = name
         return children
 
     def _merge_person_record(self, item, current_department, records):
         if not isinstance(item, Mapping):
             raise DirectoryPayloadError()
         external_user_id = self._required_text(item.get('userid'))
+        name = self._optional_text(item.get('name'))
+        if name:
+            self._user_names[external_user_id] = name
         employee_id = self._optional_text(item.get('job_number'))
         if not employee_id:
             self._append_skip(external_user_id)

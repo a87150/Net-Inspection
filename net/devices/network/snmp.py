@@ -67,7 +67,7 @@ ENT_SENSOR_STATUS = "1.3.6.1.2.1.99.1.1.1.5"
 QBRIDGE_VLAN_NAME = "1.3.6.1.2.1.17.7.1.4.3.1.1"
 
 SNMP_ITEMS = frozenset(
-    {"device_info", "cpu", "memory", "temperature", "interface_status", "vlan_status"}
+    {"device_info", "cpu", "memory", "temperature", "interface_status", "vlan_status", "traffic"}
 )
 _ITEM_ORDER = (
     "device_info",
@@ -154,6 +154,10 @@ def _vendor_key(vendor):
 def _number(value):
     if value is None or isinstance(value, bool):
         return None
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        pass
     try:
         number = float(value)
     except (TypeError, ValueError):
@@ -390,6 +394,7 @@ def parse_snmp_snapshot(snapshot, selected_items, vendor):
     snapshot = {
         "scalars": dict(snapshot.get("scalars", {})),
         "tables": dict(snapshot.get("tables", {})),
+        'traffic': snapshot.get('traffic'),
     }
     selection = _ITEM_ORDER if selected_items is None else selected_items
     requested = [item for item in selection if item in SNMP_ITEMS]
@@ -412,6 +417,13 @@ def parse_snmp_snapshot(snapshot, selected_items, vendor):
         "vlan_status": (_parse_vlans, (), (QBRIDGE_VLAN_NAME,)),
     }
     for item in requested:
+        if item == 'traffic':
+            traffic = snapshot.get('traffic')
+            if traffic:
+                data[item] = raw[item] = traffic
+                if traffic.get('status') == 'success':
+                    completed.add(item)
+            continue
         parser, scalar_oids, table_oids = definitions[item]
         parsed = parser(snapshot, vendor) if item in {"device_info", "cpu", "memory", "temperature"} else parser(snapshot)
         if parsed is None:
@@ -706,6 +718,12 @@ async def _collect_snapshot(device, timeout, selected_items, session_factory):
                 snapshot["tables"][oid] = await _safe_walk(session, oid)
         if "vlan_status" in requested:
             snapshot["tables"][QBRIDGE_VLAN_NAME] = await _safe_walk(session, QBRIDGE_VLAN_NAME)
+        if 'traffic' in requested:
+            from .traffic import collect_traffic
+            try:
+                snapshot['traffic'] = await asyncio.wait_for(collect_traffic(session), timeout=max(1, timeout))
+            except (asyncio.TimeoutError, SnmpQueryError):
+                snapshot['traffic'] = {'status': 'failed', 'interfaces': [], 'message': '实时流量采样超时或SNMP读取失败'}
         return snapshot
     finally:
         close = getattr(session, "close", None) if session is not None else None

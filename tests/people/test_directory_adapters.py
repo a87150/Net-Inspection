@@ -126,17 +126,34 @@ class FixtureResponse:
 class RoutingSession:
     """A tiny, local HTTP fixture boundary; it never reaches a tenant."""
 
-    def __init__(self, handler):
+    def __init__(self, handler, *, reference_fixtures=True):
         self.handler = handler
         self.calls = []
+        self.reference_fixtures = reference_fixtures
+
+    def reference_response(self, url, kwargs):
+        if not self.reference_fixtures:
+            return None
+        names = {'dept-root': '总部', 'dept-child': '研发部', 'od-child': '研发部',
+                 '0': '总部', '1': '总部', '2': '研发部', '3': '运维部'}
+        prefix = 'https://open.feishu.cn/open-apis/contact/v3/departments/'
+        if url.startswith(prefix) and '/' not in url[len(prefix):]:
+            return FixtureResponse({'code': 0, 'data': {'department': {'name': names[url[len(prefix):]]}}})
+        if url == 'https://oapi.dingtalk.com/topapi/v2/department/get':
+            return FixtureResponse({'errcode': 0, 'result': {'name': names[str(kwargs['json']['dept_id'])]}})
+        if url.startswith('https://open.feishu.cn/open-apis/contact/v3/users/') and not url.endswith('/find_by_department'):
+            return FixtureResponse({'code': 0, 'data': {'user': {'name': '负责人'}}})
+        if url == 'https://oapi.dingtalk.com/topapi/v2/user/get':
+            return FixtureResponse({'errcode': 0, 'result': {'name': '负责人'}})
+        return None
 
     def get(self, url, **kwargs):
         self.calls.append(('GET', url, kwargs))
-        return self.handler('GET', url, kwargs)
+        return self.reference_response(url, kwargs) or self.handler('GET', url, kwargs)
 
     def post(self, url, **kwargs):
         self.calls.append(('POST', url, kwargs))
-        return self.handler('POST', url, kwargs)
+        return self.reference_response(url, kwargs) or self.handler('POST', url, kwargs)
 
 
 def _source(provider, **overrides):
@@ -323,7 +340,7 @@ class FeishuDirectoryAdapterTests(SimpleTestCase):
         self.assertEqual(len(people), 1)
         self.assertEqual(people[0].employee_id, 'EMP-1')
         self.assertEqual(people[0].name, '王工')
-        self.assertEqual(people[0].department, 'dept-child,dept-root')
+        self.assertEqual(people[0].department, '研发部,总部')
         self.assertEqual(people[0].external_user_id, 'ou-user')
         self.assertEqual(adapter.skipped_records, ({'external_user_id': 'ou-missing',
                                                     'reason': 'missing_employee_id'},))
@@ -424,7 +441,7 @@ class DingTalkDirectoryAdapterTests(SimpleTestCase):
         people = list(adapter.iter_people())
 
         self.assertEqual([(person.employee_id, person.department, person.external_user_id) for person in people],
-                         [('D-1', '1,2,3', 'user-1')])
+                         [('D-1', '总部,研发部,运维部', 'user-1')])
         self.assertEqual(adapter.skipped_records, ({'external_user_id': 'user-missing',
                                                     'reason': 'missing_employee_id'},))
         self.assertTrue(adapter.last_snapshot_complete)
@@ -455,7 +472,7 @@ class DingTalkDirectoryAdapterTests(SimpleTestCase):
         people = list(adapter.iter_people())
         self.assertEqual(visits, [1, 2])
         self.assertEqual([(p.employee_id, p.external_user_id, p.department) for p in people],
-                         [('001', '0007', '1,2')])
+                         [('001', '0007', '总部,研发部')])
         self.assertTrue(adapter.last_snapshot_complete)
 
     def test_dingtalk_rejects_malformed_department_ids_without_returning_partial_people(self):

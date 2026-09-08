@@ -15,6 +15,7 @@ def valid_smb_source(**overrides):
         'host': 'files.test',
         'port': 445,
         'username': 'svc-pc-logs',
+        'smb_auth_mode': 'credentials',
         'domain': 'EXAMPLE',
         'share_name': 'logs',
         'remote_root_directory': 'pc',

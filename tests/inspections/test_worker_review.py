@@ -265,6 +265,17 @@ class SanitizerPersistenceTests(TestCase):
 
 
 class SelectedCollectionTests(TestCase):
+    def assert_selected_details(self, record, expected):
+        # Grading metadata is not collected evidence; reject every other extra key.
+        metadata = {'issue_findings', 'normal_issue_items'}
+        self.assertEqual({key: value for key, value in record.details.items()
+                          if key not in metadata}, expected)
+        self.assertLessEqual(
+            {issue['analysis_item'] for issue in record.details['issue_findings']}
+            | set(record.details['normal_issue_items']),
+            set(expected) | {'inspection_collection'},
+        )
+
     def execute(self, asset, kind, items):
         profile = InspectionProfile.objects.create(
             name='selected', device_type=kind, selected_items=items,
@@ -293,7 +304,10 @@ class SelectedCollectionTests(TestCase):
         self.assertEqual(len(commands), 1)
         self.assertIn('lscpu', commands[0])
         self.assertEqual(record.raw_output, {'cpu': 'CPU selected'})
-        self.assertEqual(set(record.details), {'cpu'})
+        self.assert_selected_details(record, {'cpu': {'raw': 'CPU selected'}})
+        self.assertEqual([(issue['analysis_item'], issue['severity'])
+                          for issue in record.details['issue_findings']], [('cpu', 'info')])
+        self.assertEqual(record.details['normal_issue_items'], ['inspection_collection'])
 
     @patch('net.infrastructure.ssh_collectors._read_channel', return_value='CPU usage: 20%\nswitch#')
     @patch('net.infrastructure.ssh_collectors._connect')
@@ -305,7 +319,9 @@ class SelectedCollectionTests(TestCase):
         sent = [call.args[0] for call in connect.return_value.invoke_shell.return_value.send.call_args_list]
         self.assertEqual(sent, ['terminal length 0\n', 'show processes cpu\n'])
         self.assertEqual(record.raw_output, {'show processes cpu': 'CPU usage: 20%'})
-        self.assertEqual(set(record.details), {'cpu'})
+        self.assert_selected_details(record, {'cpu': {'usage_percent': 20}})
+        self.assertEqual(record.details['issue_findings'], [])
+        self.assertEqual(set(record.details['normal_issue_items']), {'inspection_collection', 'cpu'})
 
     @patch('net.infrastructure.http_collectors.requests.get')
     def test_windows_cpu_request_and_raw_exclude_unselected_fields(self, get):
@@ -335,4 +351,7 @@ class SelectedCollectionTests(TestCase):
         record = self.execute(asset, 'monitor', ['storage_status'])
         self.assertEqual(get.call_args.kwargs.get('params'), {'fields': 'storage_status'})
         self.assertEqual(record.raw_output, {'storage': [{'status': 'normal'}]})
-        self.assertEqual(record.details, {'storage_status': [{'status': 'normal'}]})
+        self.assert_selected_details(record, {'storage_status': [{'status': 'normal'}]})
+        self.assertEqual(record.details['issue_findings'], [])
+        self.assertEqual(set(record.details['normal_issue_items']), {'inspection_collection', 'storage_status'})
+        self.assertNotIn('PRIVATE', json.dumps(record.details))

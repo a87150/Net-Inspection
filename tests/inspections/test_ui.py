@@ -1,6 +1,8 @@
 """HTTP contracts for configuring and following Phase 2 background tasks."""
 
+import csv
 from datetime import time
+from io import StringIO
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -19,6 +21,7 @@ from net.models import (
     TaskRun,
 )
 from net.inspections.queue import enqueue_task
+from tests.devices.pc.test_config_layout import ConfigMarkup
 
 
 class TaskUiTestCase(TestCase):
@@ -72,7 +75,16 @@ class TaskUiTestCase(TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertContains(response, '手动执行分析')
                 self.assertContains(response, '分析配置')
-                self.assertContains(response, '汇总日志目录')
+                markup = ConfigMarkup(response.content.decode())
+                self.assertFalse(markup.nested)
+                source_form = markup.forms['pc-source-config-form']
+                self.assertEqual(source_form['action'], reverse('pc_log_source_save'))
+                self.assertTrue({'shared_path', 'ftp_directory', 'source_type'} <= source_form['names'])
+                self.assertEqual(markup.forms['pc-analysis-config-form']['action'],
+                                 reverse('computer_analysis_profile_configure'))
+                self.assertTrue({'pc-source-config-form', 'pc-analysis-config-form'} <= {
+                    button.get('form') for button in markup.buttons if button.get('type') == 'submit'
+                })
                 self.assertContains(response, '最近 N 天')
                 self.assertContains(response, '指定起止日期')
                 self.assertContains(response, '最低 Windows 版本')
@@ -87,6 +99,16 @@ class TaskUiTestCase(TestCase):
         css = Path(settings.BASE_DIR, 'static/app/css/modal-workflows.css').read_text(encoding='utf-8')
         self.assertIn('.modal-body--scroll', css)
         self.assertIn('overflow-y: auto', css)
+        saved = self.client.post(reverse('pc_log_source_save'), {
+            'simple_source_form': '1', 'source_type': 'smb', 'smb_auth_mode': 'system',
+            'shared_path': r'\\files.test\logs\pc\incoming', 'recent_days': '14',
+        })
+        self.assertEqual(saved.status_code, 302)
+        self.log_source.refresh_from_db()
+        self.assertEqual(self.log_source.recent_days, 14)
+        self.assertEqual(self.log_source.remote_incoming_directory, 'incoming')
+        self.log_profile.refresh_from_db()
+        self.assertEqual(self.log_profile.analysis_items, ['activation', 'resource'])
 
     def test_manual_selected_enqueue_snapshots_filtered_targets_items_and_concurrency(self):
         """Dropping UI scope validation could inspect an unfiltered asset or live profile setting."""
@@ -270,6 +292,8 @@ class TaskUiTestCase(TestCase):
         self.server_profile.refresh_from_db()
         self.assertEqual(self.server_profile.timeout_seconds, 120)
         self.assertEqual(self.server_profile.concurrent_workers, 5)
+        page = self.client.get(response['Location'])
+        self.assertTrue(page.context['profile_modal_auto_open'])
 
     def test_computer_fetch_action_enqueues_worker_owned_remote_work(self):
         """The HTTP action only queues the singleton source for the Worker."""
@@ -307,9 +331,22 @@ class TaskUiTestCase(TestCase):
         self.assertContains(listing, '任务列表')
         self.assertContains(listing, '导出筛选结果')
         self.assertEqual(detail.status_code, 200)
-        self.assertContains(detail, '目标执行详情')
+        self.assertEqual([row.pk for row in listing.context['page_obj']], [task.pk])
+        self.assertEqual([row.pk for row in detail.context['execution_page']], [target.pk])
+        self.assertContains(detail, str(self.linux.pk))
+        self.assertContains(detail, '<td>失败</td>', html=True)
         self.assertContains(detail, 'SSH 连接超时')
         self.assertContains(detail, '1 / 1')
+        export_url = listing.context['table_export_path']
+        exported = self.client.get(export_url, {'filter_status': 'queued'})
+        excluded = self.client.get(export_url, {'filter_status': 'success'})
+        self.assertEqual(exported.status_code, 200)
+        self.assertEqual(excluded.status_code, 200)
+        exported_rows = list(csv.DictReader(StringIO(exported.content.decode('utf-8-sig'))))
+        self.assertEqual(len(exported_rows), 1)
+        self.assertEqual(exported_rows[0]['任务类型'], '设备巡检')
+        self.assertEqual(exported_rows[0]['状态'], '等待')
+        self.assertEqual(list(csv.DictReader(StringIO(excluded.content.decode('utf-8-sig')))), [])
 
     def test_task_progress_is_display_only_not_a_broken_queryset_filter(self):
         """Progress is a model property, so exposing ORM filter/sort controls would be fake."""

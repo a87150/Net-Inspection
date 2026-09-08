@@ -1,4 +1,8 @@
 from dataclasses import dataclass
+from net.inspections.issues import RULES
+
+PROBLEM_TYPE_CHOICES = tuple((label, label) for label in dict.fromkeys(
+    [category for category, _label in RULES.values()] + ['其他']))
 
 
 @dataclass(frozen=True)
@@ -16,6 +20,7 @@ class TableField:
     option_mode: str = 'none'
     option_limit: int = 100
     export_source: str = ''
+    query_source: str = ''
 
 
 @dataclass(frozen=True)
@@ -27,6 +32,8 @@ class TableDefinition:
     default_order: str
     search_fields: tuple[str, ...]
     default_page_size: int
+    complete_options: bool = False
+    record_semantics: bool = False
 
 
 def _field(
@@ -187,6 +194,8 @@ TABLE_DEFINITIONS = {
     ),
     'inspection_records': TableDefinition(
         'inspection_records', '巡检与分析记录', (
+            _field('problem_types', '问题类型', choices=PROBLEM_TYPE_CHOICES),
+            _field('result_level', '问题等级', 'choice', choices=(('normal', '正常'), ('info', '提示'), ('warning', '警告'), ('critical', '严重'))),
             _field('category', '执行类型', 'choice'), _field('asset', '设备名称'),
             _field('time', '执行时间', 'datetime', default_filter=False),
             _field(
@@ -211,6 +220,7 @@ TABLE_DEFINITIONS = {
     ),
     'computer_inspections': TableDefinition(
         'computer_inspections', 'PC 日志分析记录', (
+            _field('problem_types', '问题类型', choices=PROBLEM_TYPE_CHOICES),
             _field('execution_status', '执行状态', filterable=False, sortable=False),
             _field('task_source', '任务来源', filterable=False, sortable=False),
             _field('error_count', '异常数', filterable=False, sortable=False),
@@ -226,9 +236,8 @@ TABLE_DEFINITIONS = {
             _field('log_time', '日志时间', 'datetime', source='log_file__modified_at', default_filter=False),
             _field('created_at', '入库时间', 'datetime', default_filter=False),
             _field(
-                'status', '分析结果', 'choice', source='ok',
-                choices=(('normal', '正常'), ('abnormal', '异常')),
-                comparison='boolean',
+                'status', '分析结果', 'choice', source='result_level',
+                choices=(('normal', '正常'), ('info', '提示'), ('warning', '警告'), ('critical', '严重')),
             ),
         ), 'created_at', 'desc', ('computer_name', 'user_name'), 20,
     ),
@@ -263,6 +272,7 @@ TABLE_DEFINITIONS = {
                   ('computer_fetch', 'PC 日志获取'),
                 ('people_sync', '人员自动同步'),
                 ('domain_operation', '域控操作'),
+                ('domain_sync', '域控同步'),
             )),
             _field('source', '来源', 'choice', choices=(
                 ('manual', '手动执行'), ('scheduled', '定时执行'),
@@ -326,3 +336,30 @@ TABLE_DEFINITIONS = {
 
 def get_table_definition(key: str) -> TableDefinition:
     return TABLE_DEFINITIONS[key]
+
+
+def project_record_definition(project):
+    from dataclasses import replace
+    from net.inspections.issues import PROJECT_RULES
+    definition = get_table_definition('computer_inspections' if project == 'computers' else 'inspection_records')
+    labels = list(dict.fromkeys(category for category, _ in PROJECT_RULES[project].values())) + ['其他']
+    query_sources = {
+        'problem_types': 'report_problem_types', 'result_level': '_report_level',
+        'execution_status': '_report_execution_status', 'task_source': '_report_task_source',
+        'error_count': '_report_error_count', 'key_metrics': 'report_metrics',
+        'asset': '_report_asset', 'category': '_report_category', 'time': 'created_at',
+        'summary': '_report_summary',
+    }
+    fields = []
+    for field in definition.fields:
+        changes = {'query_source': query_sources.get(field.key, field.source)}
+        if field.key == 'problem_types':
+            changes['choices'] = tuple((label, label) for label in labels)
+        if project == 'computers':
+            if field.key == 'status':
+                changes['query_source'] = '_report_level'
+            if field.source.startswith('details__enrichment__'):
+                changes['source'] = field.source.replace('details__enrichment__', 'report_enrichment__')
+                changes['query_source'] = f'_report_enrichment_{field.key}'
+        fields.append(replace(field, **changes))
+    return replace(definition, fields=tuple(fields), complete_options=True, record_semantics=True)

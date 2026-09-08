@@ -19,6 +19,7 @@ class PCLogSourceForm(forms.ModelForm):
         fields = (*SOURCE_FIELDS, 'password')
         labels = {
             'source_type': '获取协议', 'host': '服务器地址', 'port': '端口',
+            'smb_auth_mode': '共享访问身份',
             'username': '连接账号', 'domain': '域（仅 SMB）', 'share_name': '共享名称（仅 SMB）',
             'remote_root_directory': '远程根目录', 'remote_incoming_directory': '汇总日志目录',
             'remote_processed_directory': '已处理目录', 'remote_failed_directory': '失败目录',
@@ -59,6 +60,13 @@ class PCLogSourceForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        if cleaned.get('source_type') == 'ftp' or cleaned.get('smb_auth_mode') == 'credentials':
+            if not cleaned.get('username'):
+                self.add_error('username', '请填写连接账号。')
+        elif cleaned.get('source_type') == 'smb':
+            cleaned['username'] = cleaned['domain'] = ''
+            if cleaned.get('port') != 445:
+                self.add_error('port', '使用 Windows 运行账号时端口必须为 445。')
         if not 1 <= (cleaned.get('port') or 0) <= 65535:
             self.add_error('port', '端口必须在 1–65535 之间。')
         kind = cleaned.get('source_type')
@@ -73,7 +81,10 @@ class PCLogSourceForm(forms.ModelForm):
             try:
                 cleaned[key] = normalize_path(cleaned.get(key, ''))
                 if not cleaned[key]:
-                    self.add_error(key, '请填写相对目录。')
+                    if key == 'remote_incoming_directory' and getattr(self, 'allow_root_directory', False):
+                        cleaned[key] = '.'
+                    else:
+                        self.add_error(key, '请填写相对目录。')
             except ValueError:
                 self.add_error(key, '必须填写不含上级跳转的相对目录。')
         try:
@@ -106,7 +117,8 @@ class PCLogSourceForm(forms.ModelForm):
             if TaskRun.objects.filter(task_type='computer_fetch', status__in=TaskRun.ACTIVE_STATUSES).exists():
                 raise ValidationError('有日志获取任务正在排队或执行，请结束任务后再修改来源。')
             password = self.cleaned_data.get('password')
-            if not password or password == MASKED_SECRET:
+            system_identity = self.cleaned_data.get('source_type') == 'smb' and self.cleaned_data.get('smb_auth_mode') == 'system'
+            if not system_identity and (not password or password == MASKED_SECRET):
                 if previous is None:
                     raise ValidationError('首次配置必须填写连接密码。')
                 password = load_pc_source_secret(previous)
@@ -115,5 +127,6 @@ class PCLogSourceForm(forms.ModelForm):
             source.last_tested_at = None
             source.last_test_error = ''
             source.save()
-            store_pc_source_secret(source, password)
+            if not system_identity:
+                store_pc_source_secret(source, password)
             return source

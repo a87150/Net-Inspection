@@ -14,10 +14,12 @@ from net.models import ComputerAnalysisProfile, ComputerLogFile
 from net.inspections.queue import enqueue_task
 
 
-def computer_log_list(request):
+def computer_log_list(request, *, bulk=None):
+    from .bulk_analysis import bulk_context
     definition = get_table_definition('computer_logs')
     rows, state = apply_table_filters(request, ComputerLogFile.objects.all(), definition)
     return render(request, 'devices/pc/log_list.html', {
+        **(bulk if bulk is not None else bulk_context(request)),
         'table_definition': definition, 'table_state': state, 'page_sizes': PAGE_SIZES,
         'table_export_path': reverse('table_export', args=['computer_logs']),
         'page_obj': Paginator(rows, state['page_size']).get_page(request.GET.get('page')),

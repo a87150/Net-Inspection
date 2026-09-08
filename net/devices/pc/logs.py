@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from contextlib import nullcontext
 from dataclasses import dataclass
-from threading import RLock
+import time
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, OperationalError, connections, transaction
@@ -19,7 +18,6 @@ from net.devices.pc.checks import parse_local_datetime
 
 
 MAX_LOG_FILE_BYTES = 16 * 1024 * 1024
-_SQLITE_IMPORT_LOCK = RLock()
 
 def _aware_local(value):
     if timezone.is_aware(value):
@@ -40,9 +38,9 @@ def _require_transaction_boundary():
 
 def _import_database_guard():
     """Serialize local SQLite writes; MySQL coordinates import races in the DB."""
-    if connections['default'].vendor == 'sqlite':
-        return _SQLITE_IMPORT_LOCK
-    return nullcontext()
+    # Resolve lazily: executor imports queue helpers that also use PC logs.
+    from net.inspections.executor import _database_guard
+    return _database_guard()
 
 def _read_payload(raw):
     digest = hashlib.sha256(raw).hexdigest()
@@ -114,10 +112,16 @@ def _isolated_retry(operation):
                 with transaction.atomic(durable=True):
                     return operation()
             except (IntegrityError, OperationalError) as exc:
-                if isinstance(exc, OperationalError) and exc.args[0] not in (1205, 1213):
+                from net.inspections.queue import is_sqlite_busy
+                sqlite_busy = is_sqlite_busy(exc)
+                if isinstance(exc, OperationalError) and not sqlite_busy and (not exc.args or exc.args[0] not in (1205, 1213)):
                     raise
                 if attempt == 2:
+                    if sqlite_busy:
+                        raise ValidationError({'database': 'SQLite 数据库持续被占用，源文件保留，请稍后重新获取。'}) from exc
                     raise ValidationError({'database': '并发导入冲突，保留源文件待重试。'}) from exc
+                if sqlite_busy:
+                    time.sleep(0.1 * (attempt + 1))
 
 
 @dataclass(frozen=True)
@@ -160,7 +164,10 @@ def import_log_bytes(*, raw, source_path, modified_at, source_protocol,
     platform = ''
     if not error:
         try:
-            collected_at = parse_local_datetime(payload.get('日志时间'))
+            # Original TerminalLogs.ps1 has no top-level timestamp. The legacy
+            # analyzer uses file mtime; preserve the original payload as evidence.
+            collected_at = (modified_at if '日志时间' not in payload
+                            else parse_local_datetime(payload.get('日志时间')))
             if collected_at is None:
                 raise ValidationError('日志时间缺失或格式无效。')
             collected_at = _aware_local(collected_at)

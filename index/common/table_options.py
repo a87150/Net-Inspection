@@ -9,8 +9,8 @@ def _option(value):
     return submitted, submitted
 
 
-def _queryset_values(queryset, field):
-    lookup = field.source
+def _queryset_values(queryset, field, *, complete=False):
+    lookup = field.query_source or field.source
     values_query = (
         queryset.order_by()
         .exclude(**{f'{lookup}__isnull': True})
@@ -20,13 +20,13 @@ def _queryset_values(queryset, field):
     except (TypeError, ValueError):
         # Numeric and other non-text fields cannot prepare an empty string.
         pass
-    values = list(
+    values_query = (
         values_query
         .values_list(lookup, flat=True)
         .distinct()
-        .order_by(lookup)[:field.option_limit + 1]
+        .order_by(lookup)
     )
-    return values
+    return list(values_query if complete else values_query[:field.option_limit + 1])
 
 
 def _record_value(record, source):
@@ -40,13 +40,14 @@ def _record_value(record, source):
     return value
 
 
-def _record_values(records, field):
+def _record_values(records, field, *, complete=False):
     values = {
         value
         for record in records
         if (value := _record_value(record, field.source)) not in (None, '')
     }
-    return sorted(values, key=lambda value: str(value))[:field.option_limit + 1]
+    values = sorted(values, key=lambda value: str(value))
+    return values if complete else values[:field.option_limit + 1]
 
 
 def build_field_option_context(source, definition):
@@ -72,13 +73,13 @@ def build_field_option_context(source, definition):
             continue
 
         values = (
-            _queryset_values(source, field)
+            _queryset_values(source, field, complete=definition.complete_options)
             if is_queryset
-            else _record_values(records, field)
+            else _record_values(records, field, complete=definition.complete_options)
         )
         overflow = len(values) > field.option_limit
         options[field.key] = tuple(
-            _option(value) for value in values[:field.option_limit]
+            _option(value) for value in (values if definition.complete_options else values[:field.option_limit])
         )
         modes[field.key] = 'suggest' if mode == 'suggest' or overflow else 'distinct'
 

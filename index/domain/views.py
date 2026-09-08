@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -15,8 +16,11 @@ from net.models import (
     Domain_Computer,
     Domain_Group,
     Domain_Controller_Config,
+    Schedule, TaskRun,
 )
-from net.domain.sync import sync_domain, test_domain_connection
+from net.domain.sync import test_domain_connection
+from net.domain.sync_tasks import enqueue_domain_sync
+from index.domain.schedule_form import DomainSyncScheduleForm
 
 
 @dataclass(frozen=True)
@@ -91,16 +95,28 @@ def _display_value(obj, field):
 def _domain_controller_settings_mutation(request):
     config, _ = Domain_Controller_Config.objects.get_or_create(pk=1)
     action = request.POST.get('action', 'save')
+    if action == 'schedule':
+        schedule = Schedule.objects.filter(domain_config=config).first()
+        schedule_form = DomainSyncScheduleForm(request.POST, config=config, instance=schedule)
+        if schedule_form.is_valid():
+            schedule_form.save()
+            messages.success(request, '域控定时同步设置已保存，后台 Worker 将按计划创建任务。')
+        else:
+            messages.error(request, '定时设置未保存：' + '；'.join(
+                str(error) for errors in schedule_form.errors.values() for error in errors))
+            return _render_domain_settings(request, config, DomainControllerConfigForm(instance=config),
+                                           open_domain_modal=True, schedule_form=schedule_form)
+        return redirect(reverse('domain_controller_settings') + '?modal=1')
     form_fields = DomainControllerConfigForm.base_fields
     if action == 'sync' and not any(field in request.POST for field in form_fields):
         try:
-            account_count, computer_count, group_count = sync_domain(config)
+            task = enqueue_domain_sync()
             messages.success(
                 request,
-                f'域控同步完成：{account_count} 个账号，{computer_count} 台域计算机，{group_count} 个分组。',
+                '域控同步任务已加入后台队列，可在下方同步任务列表查看进度。',
             )
-        except Exception:
-            messages.error(request, '域控操作失败。')
+        except ValidationError as exc:
+            messages.error(request, '；'.join(exc.messages))
         return redirect('domain_controller_settings')
 
     form = DomainControllerConfigForm(request.POST, instance=config)
@@ -110,26 +126,29 @@ def _domain_controller_settings_mutation(request):
             if action == 'test':
                 messages.success(request, test_domain_connection(config))
             elif action == 'sync':
-                account_count, computer_count, group_count = sync_domain(config)
+                task = enqueue_domain_sync()
                 messages.success(
                     request,
-                    f'域控同步完成：{account_count} 个账号，{computer_count} 台域计算机，{group_count} 个分组。',
+                    '域控同步任务已加入后台队列，可在同步任务列表查看进度。',
                 )
             else:
                 messages.success(request, '域控配置已保存。')
         except Exception:
             messages.error(request, '域控操作失败。')
-        return redirect('domain_controller_settings')
+        return redirect(reverse('domain_controller_settings') + '?modal=1')
 
     return _render_domain_settings(request, config, form, open_domain_modal=True)
 
 
-def _render_domain_settings(request, config, form, *, open_domain_modal=False):
+def _render_domain_settings(request, config, form, *, open_domain_modal=False, schedule_form=None):
     can_manage_domain = request.user.has_perm('net.manage_domain_operations')
     return render(request, 'domain/controller_settings.html', {
         'form': form,
         'config': config,
-        'open_domain_modal': open_domain_modal,
+        'open_domain_modal': open_domain_modal or request.GET.get('modal') == '1',
+        'domain_schedule': Schedule.objects.filter(domain_config=config).first(),
+        'domain_schedule_form': schedule_form if schedule_form is not None else DomainSyncScheduleForm(config=config, instance=Schedule.objects.filter(domain_config=config).first()),
+        'domain_sync_tasks': Paginator(TaskRun.objects.filter(task_type='domain_sync').order_by('-created_at'), 10).get_page(request.GET.get('sync_page')),
         'can_manage_domain': can_manage_domain,
         'account_total': Domain_Account.objects.count(),
         'account_active': Domain_Account.objects.filter(is_active=True).count(),

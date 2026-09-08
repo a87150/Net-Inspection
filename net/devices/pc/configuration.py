@@ -5,14 +5,14 @@ from net.models import PCLogSourceConfig
 
 
 SOURCE_FIELDS = (
-    'source_type', 'host', 'port', 'username', 'domain', 'share_name',
+    'source_type', 'host', 'port', 'username', 'domain', 'share_name', 'smb_auth_mode',
     'remote_root_directory', 'remote_incoming_directory', 'remote_processed_directory',
     'remote_failed_directory', 'local_staging_directory', 'terminal_windows_path',
     'terminal_macos_path', 'recursive', 'file_time_mode', 'recent_days',
     'range_start_date', 'range_end_date', 'ftp_passive', 'ftp_use_tls',
 )
 ORIGIN_FIELDS = ('source_type', 'host', 'port', 'username', 'domain', 'share_name',
-                 'remote_root_directory', 'ftp_use_tls')
+                 'remote_root_directory', 'ftp_use_tls', 'smb_auth_mode')
 
 
 def source_snapshot(source):

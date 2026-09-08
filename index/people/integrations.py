@@ -90,7 +90,7 @@ def people_modal_context(
     return {
         'people_provider_tabs': tabs,
         'people_active_tab': provider,
-        'people_import_error': error,
+        'people_import_error': error or request.session.pop('people_import_error', ''),
         'open_import_modal': (
             open_modal or request.GET.get('import') in {'api', 'people'}
         ),
@@ -104,11 +104,12 @@ def people_modal_context(
 
 
 def _render_modal(request, **kwargs):
-    from index.devices.views import asset_list
-    return asset_list(
-        request, 'people',
-        integration_context=people_modal_context(request, open_modal=True, **kwargs),
-    )
+    # A full table must never live at a POST-only URL: restoring page size
+    # would turn it into a GET of the operation endpoint (HTTP 405).
+    request.session['people_import_error'] = kwargs.get('error', '')
+    source = kwargs.get('source')
+    provider = source.source_type if source else kwargs.get('provider', 'csv')
+    return redirect(_provider_redirect(provider))
 
 
 def _provider_redirect(provider):
@@ -319,4 +320,4 @@ def people_apply(request):
         f'人员导入完成：新增 {result.created} 条，更新 {result.updated} 条，'
         f'停用 {result.deactivated} 条。',
     )
-    return redirect('asset_list', kind='people')
+    return redirect('people_operation', pk=task.pk)

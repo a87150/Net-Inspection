@@ -5,6 +5,11 @@ from net.infrastructure.sanitization import sanitize
 def key_metrics(details):
     details = details if isinstance(details, dict) else {}
     parts = []
+    traffic = details.get('traffic')
+    if isinstance(traffic, dict):
+        rows = [row for row in traffic.get('interfaces', []) if isinstance(row, dict) and row.get('data_state') == 'known']
+        if rows:
+            parts.append(f"接口峰值收/发 {max(row.get('rx_mbps') or 0 for row in rows):g}/{max(row.get('tx_mbps') or 0 for row in rows):g} Mbps")
     for key, label, names in (
         ('cpu', 'CPU', ('usage_percent', 'percent', 'load_percent')),
         ('memory', '内存', ('used_percent', 'usage_percent', 'percent')),

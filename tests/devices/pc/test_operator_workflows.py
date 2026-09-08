@@ -143,7 +143,13 @@ class FinalOperatorTests(TestCase):
         log = create_log_file(source_path='metrics.json', modified_at=timezone.now(),
             content_hash='e'*64, import_status='imported', payload={'系统信息概览': {'计算机名': 'METRICS'},
             '计算机硬件资源情况': {'当前CPU占用率': '23%', '当前内存使用率': '34%'}})
-        analyze_log(log, ['resource', 'activation'])
+        analysis = analyze_log(log, ['resource', 'activation'])
+        self.assertEqual(analysis.status, 'success')
+        self.assertEqual(analysis.result_level, 'info')
+        self.assertEqual(analysis.details['severity_counts'], {'info': 1, 'warning': 0, 'critical': 0})
+        self.assertEqual(analysis.exceptions[0]['analysis_item'], 'activation')
+        self.assertFalse(analysis.errors.exists())
         page = self.client.get('/computers/analyses/')
         self.assertContains(page, 'CPU 23%')
-        self.assertContains(page, '<td data-column-key="execution_status">失败</td>', html=True)
+        self.assertContains(page, '<td data-column-key="execution_status">成功</td>', html=True)
+        self.assertContains(page, '<td data-column-key="status"><span class="badge text-bg-info">提示</span></td>', html=True)

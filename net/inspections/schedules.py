@@ -14,6 +14,7 @@ from net.models import (
     ComputerLogFile,
     InspectionProfile,
     PeopleSyncSource,
+    Domain_Controller_Config,
     SecurityDevice,
     Network_Device,
     Schedule,
@@ -183,7 +184,7 @@ def _is_due(schedule, now):
 
 
 def _schedule_profile(schedule):
-    profile = schedule.inspection_profile or schedule.analysis_profile or schedule.people_source
+    profile = schedule.inspection_profile or schedule.analysis_profile or schedule.people_source or schedule.domain_config
     if profile is None:
         raise ValidationError({'schedule': '计划必须关联配置。'})
     return profile
@@ -203,7 +204,7 @@ def _enqueue_due_schedules(now):
             with transaction.atomic():
                 schedule = (
                     Schedule.objects.select_for_update()
-                    .select_related('inspection_profile', 'analysis_profile', 'people_source')
+                    .select_related('inspection_profile', 'analysis_profile', 'people_source', 'domain_config')
                     .filter(pk=schedule_id)
                     .first()
                 )
@@ -212,7 +213,10 @@ def _enqueue_due_schedules(now):
 
                 profile = _schedule_profile(schedule)
                 overrides = {'available_at': now, 'schedule': schedule}
-                if isinstance(profile, PeopleSyncSource):
+                if isinstance(profile, Domain_Controller_Config):
+                    from net.domain.sync_tasks import enqueue_domain_sync
+                    task = enqueue_domain_sync(schedule=schedule, available_at=now)
+                elif isinstance(profile, PeopleSyncSource):
                     from net.people.tasks import enqueue_people_sync_task
                     task = enqueue_people_sync_task(schedule, available_at=now)
                 elif isinstance(profile, ComputerAnalysisProfile):

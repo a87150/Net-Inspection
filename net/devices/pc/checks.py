@@ -314,6 +314,10 @@ def check_remote_item(item, payload, issues, rules):
         elif login.casefold() != name.strip().casefold():
             result['data_state'] = 'failed'
             add_issue(issues, '计算机和用户不匹配', f'计算机名 {name} 与登录标识 {login} 不匹配')
+    elif item == 'browser_extensions':
+        # Plugin collection is presence-only: no installed extensions is normal.
+        # Keep the producer's evidence intact; the final missing-field check applies.
+        result['data_state'] = 'known'
     else:
         def collected(values):
             return isinstance(values, list) and all(

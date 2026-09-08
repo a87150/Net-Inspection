@@ -1,11 +1,16 @@
 """Creation of immutable queue task snapshots and lease transitions."""
 
 import json
+import configparser
+import hashlib
+from pathlib import Path
+import time
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, OperationalError, connection, transaction
+from django.db.models.functions import Now
 from django.utils import timezone
 
 from net.models import (
@@ -59,7 +64,31 @@ _ASSET_SPECS = {
 }
 
 
+def software_policy_snapshot(file_path):
+    """Parse and hash identical bytes without persisting parser diagnostics."""
+    if not file_path:
+        return {'content': {}, 'sha256': hashlib.sha256(b'').hexdigest()}
+    from django.conf import settings
+    path = Path(file_path)
+    if not path.is_absolute():
+        path = Path(settings.BASE_DIR) / path
+    try:
+        raw = path.read_bytes()
+        config = configparser.ConfigParser()
+        config.optionxform = str
+        config.read_string(raw.decode('utf-8-sig'))
+        content = {section: {key: [item.strip() for item in value.split(',') if item.strip()]
+                             for key, value in config.items(section)}
+                   for section in config.sections()}
+        return {'content': content, 'sha256': hashlib.sha256(raw).hexdigest()}
+    except (OSError, UnicodeError, configparser.Error):
+        return {'error': '软件策略文件无法读取或格式无效。', 'sha256': ''}
+
+
 def _task_context_for_profile(profile):
+    from net.inspections.issues import configuration_snapshot, DEVICE_PROJECTS
+    issue_project = DEVICE_PROJECTS.get(profile.device_type) if isinstance(profile, InspectionProfile) else 'computers'
+    issue_policy, issue_thresholds = configuration_snapshot(issue_project)
     from net.alerts.routing import snapshot_routing
     routing = snapshot_routing(profile)
     if isinstance(profile, InspectionProfile):
@@ -77,6 +106,9 @@ def _task_context_for_profile(profile):
                 'concurrent_workers': profile.concurrent_workers,
                 'alert_policy_mode': routing['mode'],
                 'alert_routing': routing,
+                'issue_severity_overrides': issue_policy,
+                'issue_project': issue_project,
+                'issue_thresholds': issue_thresholds,
             },
         )
     if isinstance(profile, ComputerAnalysisProfile):
@@ -88,7 +120,9 @@ def _task_context_for_profile(profile):
                 'id': str(profile.pk),
                 'name': profile.name,
                 'analysis_items': list(profile.analysis_items),
+                'matching_mode': profile.matching_mode,
                 'software_policy_path': profile.software_policy_path,
+                'software_policy_snapshot': software_policy_snapshot(profile.software_policy_path),
                 'minimum_windows_release': profile.minimum_windows_release,
                 'defender_update_max_days': profile.defender_update_max_days,
                 'defender_scan_max_days': profile.defender_scan_max_days,
@@ -102,6 +136,7 @@ def _task_context_for_profile(profile):
                 'concurrent_workers': profile.concurrent_workers,
                 'alert_policy_mode': routing['mode'],
                 'alert_routing': routing,
+                'issue_severity_overrides': issue_policy,
             },
         )
     raise ValidationError({'profile': '必须提供已保存的巡检或日志分析配置。'})
@@ -162,9 +197,9 @@ def _json_object_copy(value, field_name):
         raise ValidationError({field_name: '必须可序列化为 JSON。'}) from exc
 
 
-def _validated_target_inputs(profile, target_ids, selected_items):
+def _validated_target_inputs(profile, target_ids, selected_items, *, context=None):
     task_type, target_type, profile_items, profile_snapshot = (
-        _task_context_for_profile(profile)
+        context if context is not None else _task_context_for_profile(profile)
     )
     if profile.pk is None:
         raise ValidationError({'profile': '配置必须先保存。'})
@@ -219,9 +254,15 @@ def enqueue_task(profile, target_ids, source, overrides=None, *, _frozen_parent=
         raise ValidationError({'overrides': f'不支持的任务参数: {", ".join(sorted(unsupported))}'})
     if source not in TaskRun.Source.values:
         raise ValidationError({'source': '任务来源无效。'})
-    _task_type, _target_type, profile_items, _profile_snapshot = (
-        _task_context_for_profile(profile)
-    )
+    if _frozen_parent is None:
+        context = _task_context_for_profile(profile)
+    elif isinstance(profile, InspectionProfile):
+        context = (TaskRun.TaskType.INSPECTION, profile.device_type,
+                   list(_frozen_parent.selected_items_snapshot), _frozen_parent.profile_snapshot)
+    else:
+        context = (TaskRun.TaskType.COMPUTER_ANALYSIS, TaskTargetRun.TargetType.COMPUTER_LOG,
+                   list(_frozen_parent.selected_items_snapshot), _frozen_parent.profile_snapshot)
+    _task_type, _target_type, profile_items, _profile_snapshot = context
     selected_items = overrides.get(
         'selected_items',
         profile_items,
@@ -240,6 +281,7 @@ def enqueue_task(profile, target_ids, source, overrides=None, *, _frozen_parent=
         profile,
         target_ids,
         selected_items,
+        context=context,
     )
     target_scope_snapshot = {
         # Child context is inherited below, never re-resolved from live policy.
@@ -265,6 +307,13 @@ def enqueue_task(profile, target_ids, source, overrides=None, *, _frozen_parent=
         ),
         'total_targets': len(targets),
     }
+    if task_type == TaskRun.TaskType.COMPUTER_ANALYSIS:
+        from net.devices.pc.matching import personnel_snapshot
+        # Legacy parents without a roster remain frozen to an empty roster.
+        roster = (_frozen_parent.parameters_snapshot.get('personnel_roster', [])
+                  if _frozen_parent is not None else personnel_snapshot())
+        task_kwargs['parameters_snapshot'] = _json_object_copy(
+            {**parameters, 'personnel_roster': roster}, 'parameters')
     task = TaskRun(**task_kwargs)
     task.scope_key = TaskRun.build_scope_key(
         task_type=task.task_type,
@@ -355,6 +404,8 @@ def enqueue_computer_fetch_task(profile, source, overrides=None):
         raise ValidationError('请先保存 PC 日志来源配置。')
     log_source.full_clean()
     profile_snapshot['log_source'] = source_snapshot(log_source)
+    from net.devices.pc.matching import personnel_snapshot
+    parameters = _json_object_copy({**parameters, 'personnel_roster': personnel_snapshot()}, 'parameters')
     target_scope_snapshot = {
         'targets': [{
             'target_type': TaskTargetRun.TargetType.COMPUTER_SOURCE,
@@ -511,29 +562,43 @@ def claim_next_task(worker_id, lease_seconds, now=None, task_type=None):
         return task
 
 
+def is_sqlite_busy(error):
+    if connection.vendor != 'sqlite' or not isinstance(error, OperationalError):
+        return False
+    code = getattr(error.__cause__, 'sqlite_errorcode', None)
+    if code is not None:
+        return (code & 255) in (5, 6)  # SQLITE_BUSY / SQLITE_LOCKED, including extended codes.
+    return str(error).lower().startswith((
+        'database is locked', 'database table is locked', 'database schema is locked',
+    ))
+
+
 def renew_lease(task_id, worker_id, lease_seconds):
     """Extend a live task lease only for its current owner."""
     if not isinstance(worker_id, str) or not worker_id.strip():
         return False
     require_positive_int(lease_seconds, 'lease_seconds')
-    now = timezone.now()
     try:
         normalized_task_id = TaskRun._meta.pk.to_python(task_id)
     except (TypeError, ValueError, ValidationError):
         return False
-    with transaction.atomic():
-        task = TaskRun.objects.select_for_update().filter(pk=normalized_task_id).first()
-        if (
-            task is None
-            or task.status != TaskRun.Status.RUNNING
-            or task.worker_id != worker_id.strip()
-            or task.lease_expires_at is None
-            or task.lease_expires_at <= now
-        ):
-            return False
-        task.lease_expires_at = now + timedelta(seconds=lease_seconds)
-        save_task(task, {'lease_expires_at'})
-        return True
+    for attempt in range(3):
+        now = timezone.now()
+        try:
+            # Only the lease changes: no snapshot/state transition is involved.
+            # A single conditional write avoids SQLite's read-to-write upgrade.
+            # Database time also fences leases that expire while waiting for a lock.
+            return bool(TaskRun.objects.filter(
+                pk=normalized_task_id, status=TaskRun.Status.RUNNING,
+                worker_id=worker_id.strip(), lease_expires_at__gt=now,
+            ).filter(lease_expires_at__gt=Now()).update(
+                lease_expires_at=now + timedelta(seconds=lease_seconds),
+            ))
+        except OperationalError as exc:
+            # Never retry inside a caller's transaction or replay external work.
+            if not is_sqlite_busy(exc) or connection.in_atomic_block or attempt == 2:
+                raise
+            time.sleep(0.1 * (attempt + 1))
 
 
 def cancel_task(task_id, *, now=None):

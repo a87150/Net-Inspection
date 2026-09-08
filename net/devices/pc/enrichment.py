@@ -72,12 +72,15 @@ def _sites(payload, prefixes):
     return sites
 
 
-def build_pc_enrichment(computer: Computer, payload: Mapping, *, site_ip_prefixes=None) -> dict:
+def build_pc_enrichment(computer: Computer, payload: Mapping, *, site_ip_prefixes=None, personnel_roster=None) -> dict:
     system = payload.get('系统信息概览')
     system = system if isinstance(system, Mapping) else {}
     raw_login = system.get('当前登录用户工号')
     login = normalize_login(raw_login)
-    person, person_state = _match(People.objects.filter(employee_id__iexact=login), bool(login))
+    from net.devices.pc.matching import match_person, personnel_snapshot
+    from types import SimpleNamespace
+    row, person_state = match_person(system, personnel_snapshot() if personnel_roster is None else personnel_roster)
+    person = SimpleNamespace(pk=row['id'], **row) if row else None
     account, account_state = _match(Domain_Account.objects.filter(
         Q(login_name__iexact=login) | Q(login_name__iexact=raw_login or '')
         | Q(login_name__istartswith=login + '@') | Q(login_name__iendswith='\\' + login),

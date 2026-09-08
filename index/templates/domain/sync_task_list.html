@@ -1,0 +1,14 @@
+<section class="card surface-card mb-4"><div class="card-body">
+ <h2 class="h5">域控同步任务</h2>
+ <p class="small text-secondary">每页 10 次，点击查看同步数量、失败原因或结束运行中的任务。</p>
+ <ul class="list-group list-group-flush">
+ {% for sync_task in domain_sync_tasks %}<li class="list-group-item d-flex justify-content-between">
+ <a href="{% url 'task_detail' sync_task.pk %}">{{ sync_task.created_at|date:'Y-m-d H:i:s' }} · {{ sync_task.get_source_display }}</a>
+ <span>{{ sync_task.get_status_display }}</span></li>{% empty %}<li class="list-group-item text-secondary">暂无同步任务。</li>{% endfor %}
+ </ul>
+ <div class="d-flex gap-3 mt-3">
+ {% if domain_sync_tasks.has_previous %}<a href="?sync_page={{ domain_sync_tasks.previous_page_number }}">上一页</a>{% endif %}
+ <span>第 {{ domain_sync_tasks.number }} / {{ domain_sync_tasks.paginator.num_pages }} 页</span>
+ {% if domain_sync_tasks.has_next %}<a href="?sync_page={{ domain_sync_tasks.next_page_number }}">下一页</a>{% endif %}
+ </div>
+</div></section>

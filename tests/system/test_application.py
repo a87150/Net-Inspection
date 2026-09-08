@@ -658,12 +658,13 @@ class DomainControllerSettingsTests(TestCase):
             'computer_filter': '(objectCategory=computer)',
             'group_filter': '(objectCategory=group)', 'action': 'test',
         })
-        self.assertRedirects(response, reverse('domain_controller_settings'))
+        self.assertRedirects(response, reverse('domain_controller_settings') + '?modal=1')
+        self.assertTrue(self.client.get(response.url).context['open_domain_modal'])
         self.assertTrue(Domain_Controller_Config.objects.filter(host='dc.example.com').exists())
         connection_mock.assert_called_once()
 
-    @patch('index.domain.views.sync_domain', return_value=(12, 8, 4))
-    def test_domain_sync_action_calls_sync_service(self, sync_mock):
+    @patch('net.domain.sync._connect', side_effect=AssertionError('HTTP must only queue synchronization'))
+    def test_domain_sync_action_queues_task(self, connect_mock):
         response = self.client.post(reverse('domain_controller_settings'), {
             'name': '公司域控', 'host': 'dc.example.com', 'port': 389,
             'base_dn': 'DC=example,DC=com', 'bind_username': 'EXAMPLE\\sync',
@@ -671,8 +672,14 @@ class DomainControllerSettingsTests(TestCase):
             'computer_filter': '(objectCategory=computer)',
             'group_filter': '(objectCategory=group)', 'action': 'sync',
         })
-        self.assertEqual(response.status_code, 302)
-        sync_mock.assert_called_once()
+        self.assertRedirects(response, reverse('domain_controller_settings') + '?modal=1')
+        task = TaskRun.objects.get(task_type='domain_sync')
+        self.assertEqual(task.status, 'queued')
+        self.assertEqual(task.source, 'manual')
+        target = task.target_runs.get()
+        self.assertEqual(target.target_type, 'domain_config')
+        self.assertEqual(target.target_id, '1')
+        connect_mock.assert_not_called()
 
     @patch('net.domain.sync._connect')
     def test_domain_entries_are_mapped_to_accounts_and_computers(self, connect_mock):
@@ -765,12 +772,11 @@ class DomainWorkspaceTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
-    @patch('index.domain.views.sync_domain', return_value=(1, 1, 0))
-    def test_overview_sync_uses_saved_config_without_reopening_modal(self, sync_mock):
+    def test_unauthorized_overview_sync_does_not_queue_task(self):
         response = self.client.post(reverse('domain_controller_settings'), {'action': 'sync'})
 
         self.assertEqual(response.status_code, 403)
-        sync_mock.assert_not_called()
+        self.assertFalse(TaskRun.objects.exists())
 
 
 class TableFilteringAndSortingTests(TestCase):
@@ -1258,7 +1264,7 @@ class TableWorkspaceTemplateTests(TestCase):
         })
         self.assertContains(
             response,
-            '<span class="page-link text-white">1 / 2</span>',
+            '<span class="page-link" aria-current="page">1</span>',
             html=True,
         )
 
@@ -1767,7 +1773,7 @@ class RecordWorkspaceTests(TestCase):
             'input', **{'data-column-toggle': '', 'data-column-key': 'type'},
         ))
         self.assertContains(inspection_response, 'href="/inspection/detail/"')
-        self.assertContains(inspection_response, '<span class="badge text-bg-danger">异常</span>', html=True)
+        self.assertTrue(inspection_document.find('span', **{'data-status': 'abnormal'}))
         self.assertContains(error_response, 'href="/error/detail/"')
         self.assertContains(error_response, '<span class="badge text-bg-danger">磁盘异常</span>', html=True)
 
@@ -1790,7 +1796,7 @@ class RecordWorkspaceTests(TestCase):
         ))
         detail_url = reverse('computer_analysis_detail', args=[inspection.pk])
         self.assertContains(inspection_response, f'href="{detail_url}"')
-        self.assertContains(inspection_response, '<span class="badge text-bg-danger">异常</span>', html=True)
+        self.assertContains(inspection_response, '<span class="badge text-bg-warning">警告</span>', html=True)
         self.assertContains(error_response, f'href="{detail_url}"')
         self.assertContains(error_response, f'<span class="badge text-bg-danger">{error.error_type}</span>', html=True)
 
@@ -1896,6 +1902,21 @@ class RecordWorkspaceTests(TestCase):
         self.assertContains(
             normal_response, '<option value="normal" selected>正常</option>', html=True,
         )
+
+    def test_computer_severity_filters_include_findings_without_error_rows(self):
+        normal = create_computer_analysis('PC-NORMAL')
+        info = create_computer_analysis('PC-INFO', exceptions=[{'severity': 'info'}])
+        warning = create_computer_analysis('PC-WARNING', exceptions=[{'severity': 'warning'}])
+        critical = create_computer_analysis('PC-CRITICAL', exceptions=[{'severity': 'critical'}])
+        failed = create_computer_analysis('PC-FAILED', status=RecordStatus.FAILED)
+        for value, expected in (
+            ('normal', [normal]), ('info', [info]), ('warning', [warning]),
+            ('critical', [critical, failed]), ('abnormal', [warning, critical, failed]),
+        ):
+            with self.subTest(status=value):
+                response = self.client.get(reverse('computer_analysis_list'), {'filter_status': value})
+                self.assertCountEqual(response.context['page_obj'].object_list, expected)
+                self.assertEqual(response.context['table_state']['filters']['status'], value)
 
     def test_computer_error_workspace_filters_registered_type_and_date_fields(self):
         matching = create_computer_analysis('PC-MATCH')

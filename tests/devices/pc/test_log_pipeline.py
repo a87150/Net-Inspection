@@ -30,7 +30,7 @@ class FinalPipelineTests(TestCase):
         connector_patch.start()
         self.addCleanup(connector_patch.stop)
         self.profile = ComputerAnalysisProfile.objects.create(
-            name='final pipeline', analysis_items=['activation', 'bitlocker', 'domain', 'event_findings'],
+            name='final pipeline', analysis_items=['activation', 'bitlocker', 'domain_trust', 'group_policy', 'event_findings'],
             concurrent_workers=8)
         self.channel = AlertChannel.objects.create(name='frozen', channel_type='feishu')
         self.policy = AlertPolicy.objects.create(is_default=True, mode='override')
@@ -63,7 +63,7 @@ class FinalPipelineTests(TestCase):
         task, _ = self.run_payload(bad)
         self.assertFalse(task.alert_events.filter(event_type='recovery').exists())
         self.assertEqual(set(AlertState.objects.values_list('finding_key', flat=True)),
-                         {'analysis.activation', 'analysis.bitlocker', 'analysis.domain', 'analysis.event_findings'})
+                         {'analysis.activation', 'analysis.bitlocker', 'analysis.domain_trust', 'analysis.group_policy', 'analysis.event_findings'})
         good = {**bad, 'Windows激活信息': {'许可证状态': '已授权'},
                 'BitLocker状态': {'磁盘卷信息': [{'卷': 'C:', '转换状态': '完全加密'}]},
                 '当前与域服务器通讯情况': '正常通讯', '事件发现': []}
@@ -72,7 +72,7 @@ class FinalPipelineTests(TestCase):
         self.assertEqual(ComputerAnalysis.objects.count(), 3)
 
     def test_routing_membership_is_frozen_before_worker_result(self):
-        log = import_payload(self.payload()).log_file
+        log = import_payload(self.payload({'当前与域服务器通讯情况': '失败'})).log_file
         task = enqueue_task(self.profile, [log.pk], 'manual')
         other = AlertChannel.objects.create(name='later', channel_type='feishu')
         self.policy.channels.set([other])
@@ -82,8 +82,8 @@ class FinalPipelineTests(TestCase):
 
     def test_live_disable_vetoes_new_event_and_existing_delivery(self):
         from net.alerts.service import deliver_due_alerts
-        self.run_payload({})
-        log = import_payload(self.payload(name='VETO-PC')).log_file
+        self.run_payload({'当前与域服务器通讯情况': '失败'})
+        log = import_payload(self.payload({'当前与域服务器通讯情况': '失败'}, name='VETO-PC')).log_file
         task = enqueue_task(self.profile, [log.pk], 'manual')
         self.assertEqual(task.profile_snapshot['alert_routing']['channel_ids'], [str(self.channel.pk)])
         self.channel.is_enabled = False
@@ -127,17 +127,29 @@ class FinalPipelineTests(TestCase):
         self.assertEqual(task.target_runs.get().status, 'running')
 
     def test_scheduled_fetch_child_retains_frozen_parameters_and_profile(self):
+        person = People.objects.create(employee_id='frozen-person', name='Original')
         schedule = Schedule.objects.create(analysis_profile=self.profile, kind='interval',
                                            interval_value=1, interval_unit='hours')
         self.remote_file()
         task = enqueue_computer_fetch_task(self.profile, 'scheduled', overrides={
             'schedule': schedule, 'parameters': {'concurrent_workers': 3, 'context': 'original'}})
+        task.refresh_from_db()
+        frozen_roster = task.parameters_snapshot['personnel_roster']
+        self.assertEqual(len(frozen_roster), 1)
+        self.assertEqual(frozen_roster[0]['name'], 'Original')
+        person.name = 'Changed after enqueue'
+        person.save(update_fields=['name'])
+        People.objects.create(employee_id='later-person', name='Later')
         self.profile.analysis_items = ['resource']
         self.profile.concurrent_workers = 1
         self.profile.save()
         claim_next_task('final-worker', 60)
-        execute_computer_fetch_target(task.target_runs.get(), worker_id='final-worker')
+        with patch('net.devices.pc.matching.personnel_snapshot', side_effect=AssertionError('Personnel must remain frozen')):
+            execute_computer_fetch_target(task.target_runs.get(), worker_id='final-worker')
         child = TaskRun.objects.get(pk=task.target_runs.get().result_id)
+        self.assertEqual(child.parameters_snapshot['concurrent_workers'], 3)
+        self.assertEqual(child.parameters_snapshot['context'], 'original')
+        self.assertEqual(child.parameters_snapshot['personnel_roster'], frozen_roster)
         self.assertEqual(child.parameters_snapshot, task.parameters_snapshot)
         self.assertEqual(child.profile_snapshot, task.profile_snapshot)
         self.assertEqual(child.selected_items_snapshot, task.selected_items_snapshot)
@@ -176,7 +188,7 @@ class FinalPipelineTests(TestCase):
         claim_next_task('final-worker', 60)
         execute_computer_target(first.target_runs.get(), worker_id='final-worker')
         finish_task(first.pk, 'final-worker')
-        self.assertTrue(AlertEvent.objects.exists())
+        self.assertFalse(AlertEvent.objects.exists())
         duplicate = import_payload(payload)
         self.assertEqual(duplicate.status, 'duplicate_content')
         self.assertEqual(duplicate.log_file.pk, log.pk)

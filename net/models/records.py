@@ -11,7 +11,70 @@ class RecordStatus(models.TextChoices):
     FAILED = 'failed', '失败'
 
 
+REPORT_FIELDS = ('report_metrics', 'report_problem_types', 'report_severity', 'report_enrichment')
+
+
+def record_report_values(record):
+    """Small report projection, computed at ingestion without querying relations."""
+    from net.inspections.record_summary import key_metrics
+    from net.inspections.issues import issue_categories
+    from net.devices.pc.severity import grade_issue, RANK
+    details = record.details if isinstance(record.details, dict) else {}
+    if hasattr(record, 'exceptions'):
+        findings = record.exceptions or []
+    else:
+        findings = details.get('issue_findings') or []
+        if not findings and (not record.is_reachable or record.status != 'success'):
+            findings = [{'analysis_item': 'inspection_collection', 'severity': 'critical'}]
+    enrichment = details.get('enrichment') or {}
+    return {
+        'report_metrics': key_metrics(details),
+        'report_problem_types': issue_categories(findings),
+        'report_severity': max((grade_issue(issue)['severity'] for issue in findings),
+                               key=RANK.get, default=''),
+        'report_enrichment': {key: enrichment[key] for key in (
+            'personnel_id', 'employee_number', 'personnel_name', 'department',
+            'user_ou', 'computer_ou', 'site',
+        ) if key in enrichment},
+    }
+
+
+class RecordQuerySet(models.QuerySet):
+    """Insert projections with results.
+
+    Runtime result writers use create/save. Maintenance code using update or
+    bulk_update for payload/status fields must also refresh REPORT_FIELDS;
+    those APIs deliberately bypass model save hooks.
+    """
+    def bulk_create(self, objs, *args, **kwargs):
+        objs = list(objs)
+        for obj in objs:
+            obj.refresh_report()
+        if kwargs.get('update_conflicts') and kwargs.get('update_fields'):
+            kwargs['update_fields'] = list(set(kwargs['update_fields']) | set(REPORT_FIELDS))
+        return super().bulk_create(objs, *args, **kwargs)
+
+
 class DynamicRecord(models.Model):
+    objects = RecordQuerySet.as_manager()
+    report_metrics = models.TextField(blank=True, default='无可用指标')
+    report_problem_types = models.TextField(blank=True, default='')
+    report_severity = models.CharField(max_length=16, blank=True, default='')
+    report_enrichment = models.JSONField(default=dict, blank=True)
+
+    def refresh_report(self):
+        """Refresh projections before a maintenance bulk_update including REPORT_FIELDS."""
+        for name, value in record_report_values(self).items():
+            setattr(self, name, value)
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get('update_fields')
+        if update_fields is None or set(update_fields) & {'details', 'exceptions', 'status', 'is_reachable'}:
+            self.refresh_report()
+            if update_fields is not None:
+                kwargs['update_fields'] = set(update_fields) | set(REPORT_FIELDS)
+        return super().save(*args, **kwargs)
+
     @property
     def execution_status(self):
         return self.get_status_display()
@@ -22,10 +85,14 @@ class DynamicRecord(models.Model):
 
     @property
     def error_count(self):
+        if hasattr(self, '_report_error_count'):
+            return self._report_error_count
         return self.errors.count() or (0 if self.status == 'success' else 1)
 
     @property
     def key_metrics(self):
+        if hasattr(self, '_report_error_count') or 'details' in self.get_deferred_fields():
+            return self.report_metrics
         from net.inspections.record_summary import key_metrics
         return key_metrics(self.details)
 
@@ -123,6 +190,34 @@ class ComputerLogArchive(models.Model):
 
 
 class ComputerAnalysis(DynamicRecord):
+    @property
+    def problem_types(self):
+        if 'exceptions' in self.get_deferred_fields():
+            return self.report_problem_types
+        from net.inspections.issues import issue_categories
+        return issue_categories(self.exceptions or [])
+
+    @property
+    def result_level(self):
+        if hasattr(self, '_report_level'):
+            return self._report_level
+        from net.devices.pc.severity import severity_counts
+        counts = severity_counts(self.exceptions or [])
+        level = next((level for level in ('critical', 'warning', 'info') if counts[level]), None)
+        if level:
+            return level
+        if self.status == 'failed':
+            return 'critical'
+        has_errors = getattr(self, 'has_errors', None)
+        if has_errors is None:
+            has_errors = self.errors.exists()
+        return 'warning' if has_errors else 'normal'
+
+    @property
+    def graded_findings(self):
+        from net.devices.pc.severity import grade_issue
+        return [grade_issue(issue) for issue in self.exceptions or []]
+
     computer = models.ForeignKey(
         Computer,
         on_delete=models.CASCADE,

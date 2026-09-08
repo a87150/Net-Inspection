@@ -45,6 +45,29 @@ class FinalEvidenceTests(TestCase):
         self.assertEqual(Server_Inspection.objects.get().status, 'partial')
         self.assertEqual(task.alert_events.get().event_type, 'abnormal')
 
+    def test_collection_failure_recovers_only_after_complete_evidence(self):
+        from net.inspections.queue import finish_task
+
+        self.profile.selected_items = ['cpu', 'services']
+        self.profile.save()
+        observations = [
+            ({}, 'failed', 'abnormal'),
+            ({'cpu': {'usage_percent': 0}}, 'partial', 'abnormal'),
+            ({'cpu': {'usage_percent': 0}, 'services': []}, 'success', 'recovery'),
+        ]
+        for payload, status, event_type in observations:
+            with self.subTest(status=status):
+                task = enqueue_task(self.profile, [self.server.pk], 'manual')
+                claim_next_task('evidence', 60)
+                with patch('requests.get', return_value=self.response(payload)):
+                    execute_target(task.target_runs.get(), worker_id='evidence')
+                finish_task(task.pk, 'evidence')
+                self.assertEqual(Server_Inspection.objects.get(task_target__task=task).status, status)
+                self.assertEqual(list(task.alert_events.values_list('event_type', flat=True)), [event_type])
+                event = task.alert_events.get()
+                self.assertEqual([finding['key'] for finding in event.findings], ['inspection.collection'])
+                self.assertEqual(event.states.get().status, 'normal' if status == 'success' else 'abnormal')
+
     def test_http_exception_diagnostics_drop_all_query_and_fragment_values(self):
         task = enqueue_task(self.profile, [self.server.pk], 'manual')
         claim_next_task('evidence', 60)

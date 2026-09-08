@@ -8,6 +8,7 @@ from net.people.directory.base import (
     DirectoryAuthenticationError,
     DirectoryPayloadError,
     DirectoryRateLimitError,
+    DirectoryReferenceError,
 )
 from net.people.directory.dingtalk import DingTalkDirectoryAdapter
 from net.people.directory.feishu import FeishuDirectoryAdapter
@@ -114,6 +115,8 @@ def execute_people_target(target_run, *, worker_id, lease_guard=None):
                 }
         else:
             raise ValueError('unsupported operation')
+    except DirectoryReferenceError as exc:
+        result, error = {'error_category': 'reference'}, str(exc)
     except DirectoryAuthenticationError:
         result, error = {'error_category': 'authentication'}, '人员目录认证失败，请检查 API 密钥。'
     except DirectoryRateLimitError:

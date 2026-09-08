@@ -134,6 +134,10 @@ def _update_or_create_domain_object(model, identity_field, identity, object_guid
 
 
 def sync_domain(config):
+    return apply_domain_snapshot(fetch_domain_snapshot(config))
+
+
+def fetch_domain_snapshot(config):
     connection = _connect(config)
     try:
         user_entries = connection.extend.standard.paged_search(
@@ -170,6 +174,11 @@ def sync_domain(config):
     finally:
         connection.unbind()
 
+    return users, computers, groups
+
+
+def apply_domain_snapshot(snapshot):
+    users, computers, groups = snapshot
     seen_accounts = set()
     seen_computers = set()
     reported_accounts = set()

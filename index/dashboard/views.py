@@ -8,7 +8,7 @@ from net.dashboard.assets import (
     build_asset_card_summaries,
     with_latest_status,
 )
-from net.inspections.task_summary import inspection_task_queryset, summarize_task
+from net.inspections.task_summary import inspection_task_queryset, summarize_tasks
 
 
 def _card_summary_values(summary, *, static=False, waiting_label=''):
@@ -181,7 +181,7 @@ def index(request):
     task_page = Paginator(inspection_task_queryset(), 10).get_page(
         request.GET.get('task_page'),
     )
-    task_page.object_list = [summarize_task(task) for task in task_page.object_list]
+    task_page.object_list = summarize_tasks(task_page.object_list)
     return render(request, 'dashboard/index.html', {
         'items': items,
         'task_page': task_page,

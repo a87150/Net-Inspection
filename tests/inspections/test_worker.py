@@ -31,6 +31,27 @@ from net.inspections.worker import TaskWorker
 
 
 class InfrastructureExecutorTests(TestCase):
+    @patch('net.inspections.executor.collect_linux_ssh')
+    def test_lease_loss_during_insert_rolls_back_result_and_progress(self, collect):
+        from django.db.models.signals import post_save
+        guard = threading.Event()
+        target, task = self._claimed_target()
+        collect.return_value = CollectionResult(True, 'success', data={'cpu': {'usage_percent': 20}})
+        def lose_lease(sender, **kwargs):
+            guard.set()
+        post_save.connect(lose_lease, sender=Server_Inspection)
+        try:
+            outcome = execute_target(target, worker_id='executor-test', lease_guard=guard)
+        finally:
+            post_save.disconnect(lose_lease, sender=Server_Inspection)
+        self.assertTrue(outcome.stale)
+        self.assertFalse(Server_Inspection.objects.exists())
+        self.assertFalse(Error_Server.objects.exists())
+        target.refresh_from_db()
+        task.refresh_from_db()
+        self.assertEqual(target.status, 'running')
+        self.assertEqual(task.completed_targets, 0)
+
     def setUp(self):
         self.profile = InspectionProfile.objects.create(
             name='服务器执行配置',
@@ -78,13 +99,17 @@ class InfrastructureExecutorTests(TestCase):
 
         self.assertEqual(outcome.status, TaskRun.Status.SUCCESS)
         inspection = Server_Inspection.objects.get()
-        self.assertEqual(inspection.details, {'cpu': {'usage_percent': 22}})
+        self.assertEqual({key: value for key, value in inspection.details.items() if key not in {'issue_findings', 'normal_issue_items'}}, {'cpu': {'usage_percent': 22}})
+        self.assertEqual(inspection.details['issue_findings'], [])
         self.assertEqual(inspection.raw_output, {'cpu': {'output': 'ok', 'password': '[REDACTED]'}})
         self.assertEqual(inspection.task_target_id, target.pk)
         target.refresh_from_db()
         self.assertEqual(target.result_type, 'server_inspection')
         self.assertEqual(target.result_id, str(inspection.pk))
-        self.assertEqual(target.result_snapshot['details'], {'cpu': {'usage_percent': 22}})
+        from net.inspections.result_storage import expanded_result_snapshot
+        self.assertNotIn('details', target.result_snapshot)
+        self.assertEqual(expanded_result_snapshot(target)['details']['cpu'], {'usage_percent': 22})
+        self.assertEqual(expanded_result_snapshot(target)['details']['issue_findings'], [])
         self.assertNotIn('raw_output', target.result_snapshot)
 
 
@@ -205,7 +230,7 @@ class TaskWorkerTests(TransactionTestCase):
 
         inspection = Network_Device_Inspection.objects.get()
         self.assertEqual(inspection.status, 'success')
-        self.assertEqual(set(inspection.details), {'cpu', 'memory', 'logs'})
+        self.assertEqual(set(inspection.details) - {'issue_findings', 'normal_issue_items'}, {'cpu', 'memory', 'logs'})
         self.assertEqual(inspection.raw_output, {
             'snmp:cpu': {'1.3.6.1': '[REDACTED]'},
             'ssh:cpu': 'SSH collision evidence',
@@ -259,7 +284,8 @@ class TaskWorkerTests(TransactionTestCase):
 
         inspection = Network_Device_Inspection.objects.get()
         self.assertEqual(inspection.status, 'partial')
-        self.assertEqual(inspection.details, {'logs': ['accepted']})
+        self.assertEqual({key: value for key, value in inspection.details.items() if key not in {'issue_findings', 'normal_issue_items'}}, {'logs': ['accepted']})
+        self.assertEqual(inspection.details['issue_findings'][0]['rule_key'], 'missing.cpu')
         run = TaskRun.objects.get()
         run.refresh_from_db()
         self.assertEqual(run.status, TaskRun.Status.PARTIAL)

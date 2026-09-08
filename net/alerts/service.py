@@ -69,7 +69,10 @@ def _normalised_findings(findings):
         # An abnormal observation wins over a normal duplicate from the same
         # result, so ambiguous data can never create a false recovery.
         current = grouped.get(finding['key'])
-        if current is None or (current['state'] != 'abnormal' and finding['state'] == 'abnormal'):
+        ranks = {'info': 0, 'warning': 1, 'critical': 2}
+        if current is None or (current['state'] != 'abnormal' and finding['state'] == 'abnormal') or (
+            current['state'] == finding['state'] and ranks.get(finding['severity'], 0) > ranks.get(current['severity'], 0)
+        ):
             grouped[finding['key']] = finding
     return [grouped[key] for key in sorted(grouped)]
 
@@ -111,7 +114,8 @@ def _event_defaults(target, event_type, findings, observed_at, policy):
         'target_id': target_id,
         'event_type': event_type,
         'findings': safe_findings,
-        'severity': max((item['severity'] for item in findings), default=''),
+        'severity': max((item['severity'] for item in findings), default='',
+                        key=lambda level: {'info': 0, 'warning': 1, 'critical': 2}.get(level, 0)),
         'summary': f'{len(findings)} merged finding(s)',
         'occurred_at': observed_at,
     }
@@ -239,6 +243,8 @@ def findings_for_target(target_run):
         for issue in exceptions:
             if not isinstance(issue, dict):
                 continue
+            from net.devices.pc.severity import grade_issue
+            issue = grade_issue(issue)
             item = str(issue.get('analysis_item') or '').strip()
             issue_type = str(issue.get('问题类型') or 'analysis exception').strip()
             key = f'analysis.{item}' if item else f'analysis.exception.{issue_type.casefold()[:120]}'
@@ -246,7 +252,8 @@ def findings_for_target(target_run):
                 failed_items.add(item)
             findings.append(Finding(
                 key=key,
-                severity='critical',
+                severity=issue['severity'],
+                state='unknown' if issue['severity'] == 'info' else 'abnormal',
                 title=issue_type,
                 detail=str(issue.get('详细问题') or analysis.summary),
             ))
@@ -258,7 +265,46 @@ def findings_for_target(target_run):
                 ))
         return findings
     if target.result_type.endswith('_inspection'):
+        from net.inspections.result_storage import expanded_result_snapshot
+        snapshot = expanded_result_snapshot(target)
+        if snapshot is None:
+            return []
         status = str(snapshot.get('status') or target.status)
+        details = snapshot.get('details', {})
+        if 'normal_issue_items' in details:
+            from net.devices.pc.severity import grade_issue
+            findings = []
+            failed_items = set()
+            def item_key(item):
+                return 'inspection.collection' if item == 'inspection_collection' else f'inspection.{item}'
+            for value in details.get('issue_findings', []):
+                issue = grade_issue(value)
+                item = issue['analysis_item']
+                failed_items.add(item)
+                findings.append(Finding(key=item_key(item), severity=issue['severity'], title=issue['问题类型'],
+                    detail=str(issue.get('详细问题') or status), state='unknown' if issue['severity'] == 'info' else 'abnormal'))
+            # Reachability alone is not a complete collection. Missing metric
+            # evidence remains unknown, but a persisted failed/partial run must
+            # not silently recover the independent collection alert. Preserve
+            # explicitly graded collection findings (including policy overrides).
+            if status != TaskRun.Status.SUCCESS and 'inspection_collection' not in failed_items:
+                failed_items.add('inspection_collection')
+                findings.append(Finding(
+                    key='inspection.collection', severity='critical', title='Infrastructure collection',
+                    detail=str(snapshot.get('summary') or target.error_message or status),
+                ))
+            for item in details['normal_issue_items']:
+                if item not in failed_items:
+                    findings.append(Finding(key=item_key(item), severity='info', title=item,
+                                            detail='本次检查正常', state='normal'))
+            return findings
+        issues = snapshot.get('details', {}).get('issue_findings')
+        if issues:
+            from net.devices.pc.severity import grade_issue, RANK
+            finding = max((grade_issue(issue) for issue in issues), key=lambda issue: RANK[issue['severity']])
+            return [Finding(key='inspection.collection', severity=finding['severity'],
+                            title=finding['问题类型'], detail=str(finding.get('详细问题') or status),
+                            state='unknown' if finding['severity'] == 'info' else 'abnormal')]
         return [Finding(
             key='inspection.collection',
             severity='critical' if status != TaskRun.Status.SUCCESS else 'info',
@@ -390,7 +436,7 @@ def process_persisted_target(target_run):
         try:
             with transaction.atomic():
                 target = TaskTargetRun.objects.select_for_update().get(pk=target_id)
-                if target.task.task_type in TaskRun.PEOPLE_TASK_TYPES:
+                if target.task.task_type in {*TaskRun.PEOPLE_TASK_TYPES, TaskRun.TaskType.DOMAIN_SYNC}:
                     return []
                 if target.status not in TaskRun.TERMINAL_STATUSES or target.alert_processed_at is not None:
                     return []
@@ -416,7 +462,7 @@ def reconcile_terminal_targets(*, limit=100):
     targets = list(TaskTargetRun.objects.filter(
         status__in=TaskRun.TERMINAL_STATUSES,
         alert_processed_at__isnull=True,
-    ).exclude(task__task_type__in=TaskRun.PEOPLE_TASK_TYPES).order_by(
+    ).exclude(task__task_type__in=(*TaskRun.PEOPLE_TASK_TYPES, TaskRun.TaskType.DOMAIN_SYNC)).order_by(
         F('alert_attempted_at').asc(nulls_first=True), 'finished_at', 'pk')[:limit])
     for target in targets:
         process_persisted_target(target)

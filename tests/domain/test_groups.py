@@ -145,7 +145,7 @@ class DomainGroupConfigTests(TestCase):
             'action': 'save',
         })
 
-        self.assertRedirects(response, reverse('domain_controller_settings'))
+        self.assertRedirects(response, reverse('domain_controller_settings') + '?modal=1')
         self.assertEqual(
             Domain_Controller_Config.objects.get().group_filter,
             '(&(objectCategory=group)(cn=IT*))',
@@ -258,5 +258,5 @@ class DomainAccountTableImportTests(TestCase):
             '"CN=Outside,OU=Users,DC=outside,DC=com",outside,域外用户\n'
         )
 
-        self.assertRedirects(response, reverse('domain_account_list'))
+        self.assertRedirects(response, reverse('domain_account_list') + '?domain_modal=account_import')
         self.assertEqual(DomainOperation.objects.count(), 0)

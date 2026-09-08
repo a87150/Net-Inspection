@@ -115,6 +115,8 @@ class InspectionProfile(models.Model):
 
 
 class ComputerAnalysisProfile(models.Model):
+    matching_mode = models.CharField(max_length=16, default='logs', choices=(
+        ('logs', '不按人员匹配（日志为主）'), ('people', '按人员匹配（人员为主）')))
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255, unique=True)
     is_enabled = models.BooleanField(default=True)
@@ -180,6 +182,8 @@ class ComputerAnalysisProfile(models.Model):
 
 
 class Schedule(models.Model):
+    domain_config = models.ForeignKey('Domain_Controller_Config', null=True, blank=True,
+                                     on_delete=models.PROTECT, related_name='schedules')
     class Kind(models.TextChoices):
         INTERVAL = 'interval', '间隔执行'
         DAILY = 'daily', '每天执行'
@@ -237,17 +241,22 @@ class Schedule(models.Model):
                         inspection_profile__isnull=False,
                         analysis_profile__isnull=True,
                         people_source__isnull=True,
+                        domain_config__isnull=True,
                     )
                     | models.Q(
                         inspection_profile__isnull=True,
                         analysis_profile__isnull=False,
                         people_source__isnull=True,
+                        domain_config__isnull=True,
                     )
                     | models.Q(
                         inspection_profile__isnull=True,
                         analysis_profile__isnull=True,
                         people_source__isnull=False,
+                        domain_config__isnull=True,
                     )
+                    | models.Q(domain_config__isnull=False, inspection_profile__isnull=True,
+                               analysis_profile__isnull=True, people_source__isnull=True)
                 ),
                 name='net_schedule_one_profile_ck',
             ),
@@ -272,6 +281,7 @@ class Schedule(models.Model):
             models.UniqueConstraint(fields=['inspection_profile'], name='net_schedule_inspection_uniq'),
             models.UniqueConstraint(fields=['analysis_profile'], name='net_schedule_analysis_uniq'),
             models.UniqueConstraint(fields=['people_source'], name='net_schedule_people_source_uniq'),
+            models.UniqueConstraint(fields=['domain_config'], name='net_schedule_domain_config_uniq'),
         ]
 
     def clean(self):
@@ -280,7 +290,7 @@ class Schedule(models.Model):
         has_inspection = self.inspection_profile_id is not None
         has_analysis = self.analysis_profile_id is not None
         has_people = self.people_source_id is not None
-        if sum((has_inspection, has_analysis, has_people)) != 1:
+        if sum((has_inspection, has_analysis, has_people, self.domain_config_id is not None)) != 1:
             errors['inspection_profile'] = '必须且只能选择一个配置。'
             errors['analysis_profile'] = '必须且只能选择一个配置。'
             errors['people_source'] = '必须且只能选择一个配置。'
@@ -304,12 +314,13 @@ class Schedule(models.Model):
             raise ValidationError(errors)
 
     def __str__(self):
-        profile = self.inspection_profile or self.analysis_profile or self.people_source
+        profile = self.inspection_profile or self.analysis_profile or self.people_source or self.domain_config
         return f'{profile} - {self.get_kind_display()}'
 
 
 class TaskRun(models.Model):
     class TaskType(models.TextChoices):
+        DOMAIN_SYNC = 'domain_sync', '域控同步'
         INSPECTION = 'inspection', '设备巡检'
         COMPUTER_ANALYSIS = 'computer_analysis', '计算机日志分析'
         COMPUTER_FETCH = 'computer_fetch', 'PC 日志获取'
@@ -479,6 +490,9 @@ class TaskRun(models.Model):
                                people_source__isnull=True, inspection_profile__isnull=True,
                                analysis_profile__isnull=False,
                                people_applied_at__isnull=True)
+                    | models.Q(task_type='domain_sync', people_source__isnull=True,
+                               inspection_profile__isnull=True, analysis_profile__isnull=True,
+                               people_applied_at__isnull=True)
                     | models.Q(task_type='domain_operation', people_source__isnull=True,
                                inspection_profile__isnull=True, analysis_profile__isnull=True,
                                schedule__isnull=True, source='manual',
@@ -584,6 +598,8 @@ class TaskRun(models.Model):
                 fields=('status', 'available_at'),
                 name='net_task_status_avail_idx',
             ),
+            models.Index(fields=('task_type', '-created_at', '-id'), name='net_task_type_created_idx'),
+            models.Index(fields=('inspection_profile', '-created_at', '-id'), name='net_task_profile_created_idx'),
             models.Index(
                 fields=('lease_expires_at',),
                 name='net_task_lease_exp_idx',
@@ -632,6 +648,14 @@ class TaskRun(models.Model):
             ):
                 if contains_sensitive_snapshot_value(getattr(self, field_name)):
                     errors[field_name] = '域控操作快照不能包含敏感载荷。'
+        if self.task_type == self.TaskType.DOMAIN_SYNC:
+            if has_inspection or has_analysis or self.people_source_id or self.total_targets != 1:
+                errors['task_type'] = '域控同步必须且只能包含一个域控目标。'
+            if self.selected_items_snapshot:
+                errors['selected_items_snapshot'] = '域控同步统一获取账号、计算机和分组。'
+            for name in ('profile_snapshot', 'parameters_snapshot', 'target_scope_snapshot'):
+                if contains_sensitive_snapshot_value(getattr(self, name)):
+                    errors[name] = '域控同步快照不能包含敏感载荷。'
         if self.people_applied_at and (
             self.task_type != self.TaskType.PEOPLE_PREVIEW or self.status != self.Status.SUCCESS
         ):
@@ -656,6 +680,8 @@ class TaskRun(models.Model):
             errors['schedule'] = '手动任务不能关联计划。'
         if self.source == self.Source.SCHEDULED and self.schedule_id is not None:
             schedule = self.schedule
+            if self.task_type == self.TaskType.DOMAIN_SYNC and not schedule.domain_config_id:
+                errors['schedule'] = '域控同步必须使用域控同步计划。'
             if (
                 self.task_type == self.TaskType.INSPECTION
                 and schedule.inspection_profile_id != self.inspection_profile_id
@@ -783,6 +809,7 @@ class TaskRun(models.Model):
 class TaskTargetRun(models.Model):
     fetched_logs = models.ManyToManyField('net.ComputerLogFile', blank=True, related_name='intended_scans')
     class TargetType(models.TextChoices):
+        DOMAIN_CONFIG = 'domain_config', '域控目录'
         NETWORK_DEVICE = 'network_device', '网络设备'
         SERVER = 'server', '服务器'
         MONITOR = 'monitor', '安防设备'
@@ -911,6 +938,10 @@ class TaskTargetRun(models.Model):
                     expected_target_type = (
                         profile.device_type if profile is not None else None
                     )
+            elif task.task_type == TaskRun.TaskType.DOMAIN_SYNC:
+                expected_target_type = self.TargetType.DOMAIN_CONFIG
+                if self.target_id != '1':
+                    errors['target_id'] = '域控同步只支持当前域控配置。'
             elif task.task_type == TaskRun.TaskType.DOMAIN_OPERATION:
                 expected_target_type = self.target_type
                 if expected_target_type not in {

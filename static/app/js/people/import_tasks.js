@@ -59,6 +59,19 @@ function createPeopleTaskController({document, window, fetchImpl = fetch, pollIn
         currentTerminal = task;
         messageElement.textContent = task.message;
         jumpElement.href = task.jump_url;
+        const workflow = document.querySelector('#importModal.show, #peoplePreviewModal.show');
+        if (workflow) {
+            const notice = document.createElement('div');
+            notice.className = 'alert alert-info';
+            notice.textContent = task.message + ' ';
+            const link = document.createElement('a');
+            link.href = task.jump_url;
+            link.textContent = '查看结果 / 继续下一步';
+            link.addEventListener('click', () => acknowledgeTerminal(task));
+            notice.append(link);
+            workflow.querySelector('.modal-body').prepend(notice);
+            return;
+        }
         window.bootstrap?.Modal.getOrCreateInstance(modalElement).show();
     }
 
@@ -103,5 +116,6 @@ if (typeof document !== 'undefined') {
     document.addEventListener('DOMContentLoaded', () => {
         const controller = createPeopleTaskController({document, window});
         controller.start();
+        document.addEventListener('people:operation-submitted', () => controller.poll());
     });
 }

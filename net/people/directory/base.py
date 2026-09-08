@@ -32,6 +32,10 @@ class DirectoryPayloadError(DirectoryAdapterError):
     public_message = '人员目录接口返回的数据无效。'
 
 
+class DirectoryReferenceError(DirectoryAdapterError):
+    public_message = '无法获取部门或上级姓名，请检查通讯录可见范围及部门详情、用户详情读取权限；本次未导入人员。'
+
+
 def _optional_text(value):
     if value is None:
         return ''

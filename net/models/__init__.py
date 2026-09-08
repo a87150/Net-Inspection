@@ -6,6 +6,7 @@ from .domain import (
 )
 from .integrations import PeopleSyncSource
 from .people import People
+from .issue_policy import IssueSeverityPolicy
 from .pc_sources import ComputerLogTransfer, PCLogSourceConfig
 from .records import (
     ComputerAnalysis, ComputerLogArchive, ComputerLogFile, Error_Computer,
@@ -16,6 +17,7 @@ from .tasks import ComputerAnalysisProfile, InspectionProfile, Schedule, TaskRun
 
 
 __all__ = [
+    'IssueSeverityPolicy',
     'People', 'Domain_Account', 'Domain_Computer', 'Domain_Group', 'Computer', 'Network_Device',
     'Server', 'SecurityDevice', 'Domain_Controller_Config', 'DomainOperation',
     'RecordStatus', 'ComputerLogFile', 'PCLogSourceConfig', 'ComputerLogTransfer',

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
-from django.db.models import BooleanField, Case, Exists, OuterRef, Q, Value, When
+from django.db.models import Exists, OuterRef, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -13,7 +13,7 @@ from index.common.table_query import (
     preserve_table_parameters,
     query_without_page,
 )
-from index.common.table_registry import get_table_definition
+from index.common.table_registry import get_table_definition, project_record_definition
 from net.models import (
     ComputerAnalysis,
     Error_Computer,
@@ -22,11 +22,7 @@ from net.models import (
     RecordStatus,
     Server_Inspection,
 )
-from net.inspections.task_summary import (
-    build_project_task_metrics,
-    project_task_queryset,
-    summarize_task,
-)
+from net.inspections.task_summary import project_task_queryset
 from .tasks import task_modal_context
 from index.alerts.views import alert_modal_context
 
@@ -54,7 +50,20 @@ def _record_page(kind):
 
 def _record_row(kind, page, inspection):
     ok = inspection.is_reachable and inspection.status == RecordStatus.SUCCESS
+    from net.devices.pc.severity import grade_issue, RANK
+    from net.inspections.issues import issue_categories
+    issues = [] if 'details' in inspection.get_deferred_fields() else inspection.details.get('issue_findings', [])
+    if not issues and not ok:
+        issues = [{'analysis_item': 'inspection_collection', 'severity': 'critical'}]
+    level = max((grade_issue(issue)['severity'] for issue in issues), key=RANK.get, default='normal')
+    if hasattr(inspection, '_report_level'):
+        level = inspection._report_level
+    if level in {'warning', 'critical'}:
+        ok = False
     return {
+        'pk': inspection.pk,
+        'problem_types': inspection.report_problem_types if hasattr(inspection, '_report_level') else issue_categories(issues),
+        'result_level': level,
         'execution_status': inspection.execution_status,
         'task_source': inspection.task_source,
         'error_count': inspection.error_count,
@@ -73,10 +82,13 @@ def _latest_project_task(kind):
     return project_task_queryset(kind).first()
 
 
-def _infrastructure_records(kind, *, target='', latest_only=True):
+def _infrastructure_records(kind, *, target='', latest_only=True, task=None):
     page = _record_page(kind)
-    queryset = page.model.objects.select_related(page.asset_field)
-    if latest_only:
+    from .result_query import infrastructure_queryset
+    queryset = infrastructure_queryset(kind, page)
+    if task is not None:
+        queryset = queryset.filter(task_target__task=task)
+    elif latest_only:
         latest_task = _latest_project_task(kind)
         if latest_task:
             queryset = queryset.filter(task_target__task=latest_task)
@@ -85,25 +97,13 @@ def _infrastructure_records(kind, *, target='', latest_only=True):
             queryset = queryset.filter(**{f'{page.asset_field}_id': target})
         except (ValidationError, ValueError):
             queryset = queryset.none()
-    return [
-        _record_row(kind, page, inspection)
-        for inspection in queryset.order_by('-created_at')
-    ]
+    return queryset
 
 
-def _computer_analysis_records(target=''):
-    error_exists = Error_Computer.objects.filter(inspection_id=OuterRef('pk'))
-    analyses = ComputerAnalysis.objects.select_related(
-        'computer', 'log_file',
-    ).annotate(
-        has_errors=Exists(error_exists),
-        ok=Case(
-            When(status=RecordStatus.SUCCESS, has_errors=False, then=Value(True)),
-            default=Value(False),
-            output_field=BooleanField(),
-        ),
-    )
-    latest_task = _latest_project_task('computers')
+def _computer_analysis_records(target='', *, task=None):
+    from .result_query import computer_queryset, people_analysis_rows
+    analyses = computer_queryset()
+    latest_task = task if task is not None else _latest_project_task('computers')
     if latest_task:
         analyses = analyses.filter(task_target__task=latest_task)
     if target:
@@ -111,29 +111,19 @@ def _computer_analysis_records(target=''):
             analyses = analyses.filter(computer_id=target)
         except (ValidationError, ValueError):
             analyses = analyses.none()
+    if latest_task and not target and latest_task.profile_snapshot.get('matching_mode') == 'people':
+        return people_analysis_rows(analyses, latest_task.parameters_snapshot.get('personnel_roster', []))
     return analyses
 
 
 def _project_workspace_context(request, kind):
-    tasks = list(project_task_queryset(kind))
-    task_page = Paginator(tasks, 7).get_page(request.GET.get('task_page'))
-    task_page.object_list = [summarize_task(task) for task in task_page.object_list]
-    return {
-        'task_metrics': build_project_task_metrics(tasks),
-        'task_page': task_page,
-        'latest_task': tasks[0] if tasks else None,
-        'task_section_title': (
-            '日志分析任务' if kind == 'computers' else '巡检任务'
-        ),
-        'task_empty_title': (
-            '暂无日志分析任务' if kind == 'computers' else '暂无巡检任务'
-        ),
-    }
+    from net.inspections.task_summary import project_workspace_context
+    return project_workspace_context(request, kind)
 
 
 def record_list(request, kind):
     page = _record_page(kind)
-    table_definition = get_table_definition('inspection_records')
+    table_definition = project_record_definition(kind)
     target = request.GET.get('target', '').strip()
     records, table_state = apply_table_filters(
         request,
@@ -191,7 +181,7 @@ def record_detail(request, kind, pk):
 def computer_analysis_list(request):
     target = request.GET.get('target', '').strip()
     analyses = _computer_analysis_records(target)
-    table_definition = get_table_definition('computer_inspections')
+    table_definition = project_record_definition('computers')
     analyses, table_state = apply_table_filters(
         request, analyses, table_definition, include_legacy_status=False,
     )

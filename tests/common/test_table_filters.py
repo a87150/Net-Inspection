@@ -491,7 +491,7 @@ class ComputerAnalysisOutcomeTests(TestCase):
     def test_anomaly_outcome_is_consistent_in_html_filter_options_and_csv(self):
         abnormal_response = self.client.get(
             reverse('computer_analysis_list'),
-            {'filter_status': 'abnormal'},
+            {'filter_status': 'warning'},
         )
         normal_response = self.client.get(
             reverse('computer_analysis_list'),
@@ -508,25 +508,24 @@ class ComputerAnalysisOutcomeTests(TestCase):
         )
         self.assertContains(
             abnormal_response,
-            '<option value="abnormal" selected>异常</option>',
+            '<option value="warning" selected>警告</option>',
             html=True,
         )
-        self.assertContains(abnormal_response, '>异常</span>')
+        self.assertContains(abnormal_response, '>警告</span>')
         self.assertEqual(
             abnormal_response.context['table_state']['field_options']['status'],
-            (('normal', '正常'), ('abnormal', '异常')),
+            (('normal', '正常'), ('info', '提示'), ('warning', '警告'), ('critical', '严重')),
         )
 
         export_response = self.client.get(
             reverse('table_export', args=['computer_inspections']),
-            {'filter_status': 'abnormal'},
+            {'filter_status': 'warning'},
         )
         rows = list(csv.DictReader(StringIO(
             export_response.content.decode('utf-8-sig'),
         )))
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]['分析结果'], '异常')
-
+        self.assertEqual(rows[0]['分析结果'], '警告')
 class PaginationWindowTests(TestCase):
     def test_page_window_keeps_neighbors_between_first_and_last_pages(self):
         from django.core.paginator import Paginator

@@ -1,7 +1,8 @@
 from django.core.exceptions import ValidationError
 from django.http import Http404
+from django.shortcuts import get_object_or_404
 
-from index.common.table_registry import get_table_definition
+from index.common.table_registry import get_table_definition, project_record_definition
 from net.data_exchange.table_csv import export_filtered_csv
 from net.models import (
     Computer,
@@ -58,7 +59,13 @@ def _table_source(request, table_key, scope):
     if table_key == 'computer_inspections':
         if scope:
             raise Http404('该表不支持分组导出')
-        return _computer_analyses(request.GET.get('target', '').strip())
+        task = None
+        if request.GET.get('task'):
+            try:
+                task = get_object_or_404(TaskRun, pk=request.GET['task'], task_type='computer_analysis')
+            except (ValidationError, ValueError):
+                raise Http404('任务无效')
+        return _computer_analysis_records(request.GET.get('target', '').strip(), task=task)
     if table_key == 'computer_errors':
         if scope:
             raise Http404('该表不支持分组导出')
@@ -69,8 +76,16 @@ def _table_source(request, table_key, scope):
         if scope:
             if scope not in RECORD_PAGES:
                 raise Http404('未知的巡检类型')
+            task = None
+            if request.GET.get('task'):
+                device_type = {'networks': 'network_device', 'servers': 'server', 'monitors': 'monitor'}[scope]
+                try:
+                    task = get_object_or_404(TaskRun, pk=request.GET['task'], task_type='inspection',
+                                             inspection_profile__device_type=device_type)
+                except (ValidationError, ValueError):
+                    raise Http404('任务无效')
             return _infrastructure_records(
-                scope, target=request.GET.get('target', '').strip(),
+                scope, target=request.GET.get('target', '').strip(), task=task,
             )
         return _inspection_records()
     if table_key == 'error_records' and not scope:
@@ -93,6 +108,10 @@ def table_export(request, table_key, scope=''):
     except KeyError as exc:
         raise Http404('未知的数据表') from exc
     source = _table_source(request, table_key, scope)
+    if table_key == 'computer_inspections':
+        definition = project_record_definition('computers')
+    elif table_key == 'inspection_records' and scope in RECORD_PAGES:
+        definition = project_record_definition(scope)
     return export_filtered_csv(
         request, definition, source, f'{table_key}.csv',
     )

@@ -1,8 +1,10 @@
 from datetime import date, datetime
+from dataclasses import replace
 from urllib.parse import urlencode
 
 from django.core.exceptions import FieldError, ValidationError
-from django.db.models import Q
+from django.db.models import CharField, F, Q, Value
+from django.db.models.functions import Coalesce, Concat
 from django.db.models.query import QuerySet
 from django.utils.dateparse import parse_date
 from django.utils import timezone
@@ -130,6 +132,7 @@ def _filter_queryset(queryset, definition, filters):
     invalid_keys = []
     for key, value in filters.items():
         field = fields[key]
+        field = replace(field, source=field.query_source or field.source)
         try:
             if field.kind == 'text':
                 queryset = queryset.filter(**{f'{field.source}__icontains': value})
@@ -141,7 +144,10 @@ def _filter_queryset(queryset, definition, filters):
                         if boolean is not None:
                             queryset = queryset.filter(**{field.source: boolean})
                     else:
-                        queryset = queryset.filter(**{field.source: value})
+                        if field.source == '_report_level' and value == 'abnormal':
+                            queryset = queryset.filter(**{f'{field.source}__in': ('warning', 'critical')})
+                        else:
+                            queryset = queryset.filter(**{field.source: value})
                         if field.comparison == 'related':
                             queryset = queryset.distinct()
             elif field.kind == 'boolean':
@@ -186,17 +192,38 @@ def apply_table_query(request, queryset, definition: TableDefinition, *, prefix=
         fields = {field.key: field for field in definition.fields}
         condition = Q()
         for field_key in definition.search_fields:
-            condition |= Q(**{f'{fields[field_key].source}__icontains': q})
-        queryset = queryset.filter(condition)
+            field = fields[field_key]
+            condition |= Q(**{f'{field.query_source or field.source}__icontains': q})
+        if definition.record_semantics and len(definition.search_fields) > 1:
+            parts = []
+            for field_key in definition.search_fields:
+                if parts:
+                    parts.append(Value(' '))
+                field = fields[field_key]
+                parts.append(Coalesce(F(field.query_source or field.source), Value(''), output_field=CharField()))
+            queryset = queryset.alias(_table_search=Concat(*parts, output_field=CharField())).filter(_table_search__icontains=q)
+        else:
+            queryset = queryset.filter(condition)
 
     sort_field, sort, order = _requested_sort(request, definition, prefix)
-    ordering = f'-{sort_field.source}' if order == 'desc' else sort_field.source
+    source = sort_field.query_source or sort_field.source
+    ordering = f'-{source}' if order == 'desc' else source
+    if definition.record_semantics:
+        ordering = F(source).desc(nulls_first=True) if order == 'desc' else F(source).asc(nulls_last=True)
     table_state = _table_state(
         request, definition, prefix, filters, sort, order,
         include_legacy_status=include_legacy_status,
     )
     table_state['field_options'] = field_options
     table_state['field_option_modes'] = field_option_modes
+    if definition.record_semantics:
+        category = request.GET.get(_parameter(prefix, 'category'), '').strip()
+        field = next((field for field in definition.fields if field.key == 'category'), None)
+        table_state['category'] = category
+        table_state['categories'] = [value for value, _ in field_options.get('category', ())]
+        table_state['parameter_names']['category'] = _parameter(prefix, 'category')
+        if category:
+            queryset = queryset.filter(**{field.query_source or field.source: category}) if field else queryset.none()
     return queryset.order_by(ordering, 'pk'), table_state
 
 
@@ -280,7 +307,8 @@ def apply_queryset_table(
 
 
 def _record_value(record, field):
-    return record.get(field.source)
+    from net.data_exchange.table_csv import _raw_value
+    return _raw_value(record, field.source)
 
 
 def _record_matches(record, field, value):
@@ -288,6 +316,8 @@ def _record_matches(record, field, value):
     if field.kind == 'text':
         return value.lower() in str(actual or '').lower()
     if field.kind == 'choice':
+        if field.source == 'result_level' and value == 'abnormal':
+            return actual in ('warning', 'critical')
         if field.comparison == 'boolean':
             boolean = _parse_boolean(value)
             return boolean is None or actual is boolean
@@ -332,7 +362,8 @@ def apply_record_table(request, records, definition, *, prefix=''):
 
     category = request.GET.get(_parameter(prefix, 'category'), '').strip()
     if category:
-        filtered = [record for record in filtered if record.get('category') == category]
+        from net.data_exchange.table_csv import _raw_value
+        filtered = [record for record in filtered if _raw_value(record, 'category') == category]
     sort_field, sort, order = _requested_sort(request, definition, prefix)
     filtered.sort(
         key=lambda record: (_record_value(record, sort_field) is None, _record_value(record, sort_field)),
@@ -343,7 +374,8 @@ def apply_record_table(request, records, definition, *, prefix=''):
         include_legacy_status=False,
     )
     state['category'] = category
-    state['categories'] = sorted({record.get('category') for record in records if record.get('category')})
+    from net.data_exchange.table_csv import _raw_value
+    state['categories'] = sorted({value for record in records if (value := _raw_value(record, 'category'))})
     state['parameter_names']['category'] = _parameter(prefix, 'category')
     state['field_options'] = field_options
     state['field_option_modes'] = field_option_modes
@@ -359,6 +391,18 @@ def apply_table_filters(
     include_legacy_status=True,
 ):
     """Apply one allowlisted filter/sort contract to ORM or record sources."""
+    # Old PC report bookmarks used a binary outcome. Keep that selection
+    # visible and filter both actionable severity levels instead of dropping it.
+    if (definition.key == 'computer_inspections'
+            and request.GET.get(_parameter(prefix, 'filter_status'), '').strip() == 'abnormal'):
+        definition = replace(definition, fields=tuple(
+            replace(field, choices=field.choices + (('abnormal', '异常'),))
+            if field.key == 'status' else field
+            for field in definition.fields
+        ))
+    if hasattr(source, 'apply_query'):
+        return source.apply_query(request, definition, prefix=prefix,
+                                  include_legacy_status=include_legacy_status)
     if isinstance(source, QuerySet):
         return apply_table_query(
             request,

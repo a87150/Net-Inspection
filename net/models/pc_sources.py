@@ -52,7 +52,11 @@ class PCLogSourceConfig(models.Model):
     source_type = models.CharField(max_length=8, choices=SourceType.choices)
     host = models.CharField(max_length=255)
     port = models.PositiveIntegerField()
-    username = models.CharField(max_length=255)
+    username = models.CharField(max_length=255, blank=True)
+    smb_auth_mode = models.CharField(max_length=16, default='system', choices=(
+        ('system', '使用当前 Windows 运行账号（默认）'),
+        ('credentials', '手动指定账号密码'),
+    ))
     domain = models.CharField(max_length=255, blank=True)
     share_name = models.CharField(max_length=255, blank=True)
     remote_root_directory = models.TextField(blank=True)
@@ -153,6 +157,7 @@ class PCLogSourceConfig(models.Model):
             'host': self.host,
             'port': self.port,
             'username': self.username,
+            'smb_auth_mode': self.smb_auth_mode,
             'domain': self.domain,
             'share_name': self.share_name,
             'remote_root_directory': self.remote_root_directory,

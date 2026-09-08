@@ -9,6 +9,7 @@
         <p class="page-heading__description">{% if item_key == 'people' %}展示姓名、工号、部门、邮箱、上级和启用状态。{% else %}仅展示名称、地址、型号和系统版本等基础信息。{% endif %}</p>
     </div>
     <div class="page-heading__actions">
+        {% if device_form %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#addDeviceModal">添加设备</button>{% endif %}
         {% if import_enabled %}<button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#importModal">{% if item_key == 'people' %}导入人员{% else %}导入设备{% endif %}</button>{% endif %}
         {% if task_project_kind %}
         <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#profileConfigModal">{{ task_config_label }}</button>
@@ -22,6 +23,7 @@
 {% if data_source_note %}<div class="alert alert-info">{{ data_source_note }}</div>{% endif %}
 {% if item_key == 'computers' and not pc_log_source %}<div class="alert alert-warning">请先保存日志来源，再下载 PC 采集脚本。<a href="{% url 'computer_analysis_list' %}?task_modal=profile">前往分析配置</a></div>{% endif %}
 {% if import_enabled %}{% include 'common/import_modal.html' %}{% endif %}
+{% if device_form %}{% include 'devices/add_modal.html' %}{% endif %}
 {% if people_operation %}{% include 'integrations/preview_modal.html' %}{% endif %}
 {% if personnel_api_import %}{% include 'integrations/task_notifications.html' %}{% endif %}
 {% if task_project_kind %}{% include 'inspections/profile_modal.html' %}{% include 'inspections/run_modal.html' %}{% include 'alerts/policy_modal.html' %}{% endif %}

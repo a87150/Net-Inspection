@@ -47,6 +47,15 @@ class RemoteImportTests(TestCase):
         self.assertIsNone(outcome.log_file.computer_id)
         self.assertIn('日志时间', outcome.log_file.parse_error)
 
+    def test_original_terminal_logs_without_timestamp_use_file_modified_time(self):
+        data = json.loads(payload())
+        del data['日志时间']
+        outcome = self.ingest(json.dumps(data, ensure_ascii=False).encode('utf-8'))
+        self.assertEqual(outcome.status, 'imported')
+        self.assertEqual(str(outcome.log_file.collected_date), '2026-09-07')
+        self.assertNotIn('日志时间', outcome.log_file.payload)
+        self.assertEqual(outcome.log_file.computer.cpu_model, 'Test CPU')
+
     def test_non_finite_or_non_object_json_is_failed(self):
         for raw in (b'{"x": NaN}', b'[]', b'{broken'):
             with self.subTest(raw=raw):

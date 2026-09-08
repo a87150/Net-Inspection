@@ -116,13 +116,19 @@ if os.getenv('DB_ENGINE', 'sqlite').lower() == 'mysql':
         }
     }
 else:
+    from net.infrastructure.database import sqlite_timeout
+
     sqlite_database_path = os.getenv('DJANGO_SQLITE_PATH', '').strip()
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': sqlite_database_path or BASE_DIR / 'db.sqlite3',
+            'OPTIONS': {'timeout': sqlite_timeout(os.getenv('NET_SQLITE_TIMEOUT', '5'))},
         }
     }
+
+# Permission for the explicit sqlite_wal maintenance command, not a startup hook.
+NET_SQLITE_WAL_ENABLED = os.getenv('NET_SQLITE_WAL_ENABLED', 'false').strip().lower() in {'1', 'true', 'yes'}
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators

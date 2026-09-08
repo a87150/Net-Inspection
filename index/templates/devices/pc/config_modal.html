@@ -7,42 +7,15 @@
    <div class="inspection-config-layout">
    {% if request.user.is_staff or request.user.is_superuser %}
     <form id="pc-source-config-form" class="inspection-config-layout" method="post" action="{% url 'pc_log_source_save' %}" data-pc-source-form>
-    {% csrf_token %}{{ pc_log_source_form.non_field_errors }}
-<section class="inspection-config-block"><div class="inspection-config-block__heading"><span class="inspection-config-block__index">01</span><div><h3 class="h6 mb-1">日志来源与连接</h3><p class="mb-0">全局共用一个来源；终端写入共享目录，后台通过 SMB 或 FTP/FTPS 获取。</p></div></div><div class="row g-3">{% include 'devices/pc/config_field.html' with field=pc_log_source_form.source_type col='col-md-3' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.host col='col-md-6' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.port col='col-md-3' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.username col='col-md-6' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.password col='col-md-6' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.domain col='col-md-6' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.share_name col='col-md-6' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.ftp_passive col='col-md-6' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.ftp_use_tls col='col-md-6' source=True  %}</div></section>
-<section class="inspection-config-block"><div class="inspection-config-block__heading"><span class="inspection-config-block__index">02</span><div><h3 class="h6 mb-1">日志目录与终端路径</h3><p class="mb-0">区分远程目录与 Worker 本地暂存目录；修改终端写入路径后请重新下载脚本。</p></div></div><div class="row g-3">{% include 'devices/pc/config_field.html' with field=pc_log_source_form.remote_root_directory col='col-md-6' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.remote_incoming_directory col='col-md-6' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.remote_processed_directory col='col-md-6' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.remote_failed_directory col='col-md-6' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.local_staging_directory col='col-12' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.terminal_windows_path col='col-md-6' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.terminal_macos_path col='col-md-6' source=True  %}</div></section>
-<section class="inspection-config-block"><div class="inspection-config-block__heading"><span class="inspection-config-block__index">03</span><div><h3 class="h6 mb-1">文件时间范围</h3><p class="mb-0">按日志文件修改时间筛选，已处理与失败目录自动排除。</p></div></div><div class="row g-3">{% include 'devices/pc/config_field.html' with field=pc_log_source_form.file_time_mode col='col-md-4' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.recent_days col='col-md-2' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.range_start_date col='col-md-3' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.range_end_date col='col-md-3' source=True  %}
-{% include 'devices/pc/config_field.html' with field=pc_log_source_form.recursive col='col-12' source=True  %}</div>
- {% if pc_log_source %}<div class="d-flex flex-wrap align-items-center gap-2 mt-3">
- <button class="btn btn-outline-primary btn-sm" type="submit" form="pc-source-test-form">测试连接</button>
- <button class="btn btn-outline-primary btn-sm" type="submit" form="pc-source-preview-form">预览日志</button>
- <span class="small text-secondary">使用已保存的来源配置</span></div>
- <div class="form-text">连接测试会创建并清理专用测试文件；预览只列目录。{% if pc_log_source.last_tested_at %}最近测试：{{ pc_log_source.last_tested_at|date:'Y-m-d H:i' }}。{% endif %}</div>
- {% if pc_log_source.public_last_test_error %}<div class="small text-danger mt-2">{{ pc_log_source.public_last_test_error }}</div>{% endif %}
- {% endif %}</section>
+    {% csrf_token %}
+    {% include 'devices/pc/source_fields.html' with form=pc_log_source_form %}
     </form>
    {% else %}<div class="alert alert-secondary mb-0">日志来源设置与采集脚本下载需要管理员权限。</div>{% endif %}
    <form id="pc-analysis-config-form" class="inspection-config-layout" method="post" enctype="multipart/form-data" action="{% url 'computer_analysis_profile_configure' %}">
     {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
     {{ pc_analysis_form.profile_id }}{{ pc_analysis_form.non_field_errors }}
 <section class="inspection-config-block"><div class="inspection-config-block__heading"><span class="inspection-config-block__index">04</span><div><h3 class="h6 mb-1">选择配置与执行参数</h3><p class="mb-0">选择已有分析配置，并设置名称及下载、分析的并发上限。</p></div></div><div class="row g-3">{% if task_profiles %}<div class="col-md-4"><label class="form-label" for="pc-profile-switch">编辑配置</label><select id="pc-profile-switch" class="form-select" data-pc-profile-switch>{% for profile in task_profiles %}<option value="{{ profile.pk }}"{% if profile.pk == task_default_profile.pk %} selected{% endif %}>{{ profile.name }}</option>{% endfor %}</select></div>{% endif %}
- {% include 'devices/pc/config_field.html' with field=pc_analysis_form.name col='col-md-5'   %}{% include 'devices/pc/config_field.html' with field=pc_analysis_form.concurrent_workers col='col-md-3'   %}</div>
+ {% include 'devices/pc/config_field.html' with field=pc_analysis_form.matching_mode col='col-md-6' %} {% include 'devices/pc/config_field.html' with field=pc_analysis_form.name col='col-md-5'   %}{% include 'devices/pc/config_field.html' with field=pc_analysis_form.concurrent_workers col='col-md-3'   %}</div>
  {% if pc_log_source and task_default_profile %}{% if request.user.is_staff or request.user.is_superuser %}
  <div class="d-flex flex-wrap gap-2 mt-3"><a class="btn btn-outline-secondary btn-sm" href="{% url 'pc_script_download' task_default_profile.pk 'windows' %}">下载 Windows 采集脚本</a><a class="btn btn-outline-secondary btn-sm" href="{% url 'pc_script_download' task_default_profile.pk 'macos' %}">下载 macOS 采集脚本</a></div>
  {% endif %}{% endif %}</section>

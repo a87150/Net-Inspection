@@ -188,7 +188,8 @@ class ConfigurationTests(TestCase):
         native = 'hostname edge\n description cisco\nend\n'
         self.shell('show running-config\n' + native + 'edge#')
         record = self.execute(self.device, 'network_device', ['config_info'])
-        for source in (record.details, record.raw_output, record.task_target.result_snapshot['details']):
+        from net.inspections.result_storage import expanded_result_snapshot
+        for source in (record.details, record.raw_output, expanded_result_snapshot(record.task_target)['details']):
             item = source['config_info']
             self.assertEqual(item['vendor'], 'cisco')
             self.assertEqual(item['status'], 'success')

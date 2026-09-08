@@ -529,6 +529,7 @@ class NetworkSnmpCollectionTests(SimpleTestCase):
                     "temperature",
                     "interface_status",
                     "vlan_status",
+                    "traffic",
                 }
             ),
         )

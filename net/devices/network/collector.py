@@ -38,7 +38,7 @@ def _network_item_plan(mode, selected_items):
     requested = _ordered_unique(_DEFAULT_ITEMS if selected_items is None else selected_items)
     mode = mode if mode in {'ssh', 'snmp', 'hybrid', 'auto'} else 'ssh'
     if mode == 'ssh':
-        return [], requested, False
+        return [item for item in requested if item == 'traffic'], [item for item in requested if item != 'traffic'], False
     snmp_items = [item for item in requested if item in SNMP_ITEMS]
     if mode == 'snmp':
         return snmp_items, [], False
@@ -138,7 +138,7 @@ def collect_network(
                 if item not in snmp_data or not _item_completed(snmp_data[item])
             ]
             fallback = set(missing_snmp)
-            ssh_items = [item for item in requested if item in SSH_ONLY_ITEMS or item in fallback]
+            ssh_items = [item for item in requested if item in SSH_ONLY_ITEMS or (item in fallback and item != 'traffic')]
 
     if ssh_items:
         if use_default_ssh and (

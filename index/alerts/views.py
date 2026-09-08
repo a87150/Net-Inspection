@@ -219,7 +219,8 @@ def alert_channel_save(request):
             alert_channel_type=channel_type, alert_channel_id=str(channel.pk) if channel else '',
         )
     messages.success(request, f'已保存告警渠道“{saved.name}”。')
-    return redirect(next_url)
+    return _failure_redirect(request, next_url, 'channel', state={'values': {}, 'errors': []},
+                             alert_channel_type=saved.channel_type, alert_channel_id=str(saved.pk))
 
 
 def _policy_scope_from_post(request):
@@ -288,7 +289,11 @@ def alert_policy_save(request):
             alert_policy_scope=scope, alert_policy_profile_id=str(profile.pk) if profile else '',
         )
     messages.success(request, f'已保存“{policy.name}”。')
-    return redirect(next_url)
+    return _failure_redirect(request, next_url, 'policy',
+                             state={'errors': [], 'name': policy.name, 'mode': policy.mode,
+                                    'channels': [str(value) for value in policy.channels.values_list('pk', flat=True)]},
+                             alert_policy_scope=scope,
+                             alert_policy_profile_id=str(profile.pk) if profile else '')
 
 
 @require_POST
@@ -315,4 +320,5 @@ def alert_test_send(request):
         error_summary='' if success else summary,
     )
     messages.success(request, '测试发送已记录。' if success else '测试发送未成功，结果已记录。')
-    return redirect(next_url)
+    return _failure_redirect(request, next_url, 'channel', state={'values': {}, 'errors': []},
+                             alert_channel_type=channel.channel_type, alert_channel_id=str(channel.pk))

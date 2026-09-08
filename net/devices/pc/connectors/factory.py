@@ -3,6 +3,9 @@ from .ftp import FTPPCLogConnector
 
 
 def build_connector(source):
+    if source.source_type == 'smb' and source.smb_auth_mode == 'system':
+        from .windows import WindowsPCLogConnector
+        return WindowsPCLogConnector(source)
     password = load_pc_source_secret(source)
     if source.source_type == 'ftp':
         return FTPPCLogConnector(source, password)

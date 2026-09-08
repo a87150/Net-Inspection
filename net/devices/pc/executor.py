@@ -15,7 +15,7 @@ from net.models import (
     TaskRun,
     TaskTargetRun,
 )
-from net.devices.pc.analysis import analyze_log
+from net.devices.pc.analysis import prepare_log, persist_analysis
 from net.devices.pc.logs import LogLeaseLost
 from net.devices.pc.remote_ingestion import FetchSummary, fetch_remote_logs
 from net.devices.pc.configuration import source_from_snapshot
@@ -23,6 +23,8 @@ from net.devices.pc.connectors.base import PCLogConnectionError
 from net.infrastructure.sanitization import sanitize
 from net.inspections.queue import enqueue_task
 from net.inspections.state import save_target
+from net.inspections.result_storage import compact_result_snapshot
+from net.inspections.locking import locked_task_target
 
 from net.inspections.executor import (
     ExecutionOutcome,
@@ -41,6 +43,7 @@ def _snapshot_profile(task):
     profile.name = str(snapshot.get('name') or profile.name)
     profile.is_enabled = True
     profile.analysis_items = list(snapshot.get('analysis_items') or [])
+    profile.matching_mode = snapshot.get('matching_mode', 'logs')
     profile.software_policy_path = str(snapshot.get('software_policy_path') or '')
     profile.minimum_windows_release = str(snapshot.get('minimum_windows_release') or '')
     profile.defender_update_max_days = snapshot.get('defender_update_max_days', 7)
@@ -250,19 +253,25 @@ def persist_computer_fetch_failure(target_run, *, worker_id, error, lease_guard=
     )
 
 
-def _failure(target_run_id, worker_id, message, lease_guard=None):
+def _analysis_lease_live(task, worker_id, lease_guard):
+    # The parent remains locked throughout persistence; only wall time and the
+    # external guard can change independently of this transaction.
+    return (not (lease_guard is not None and lease_guard.is_set())
+            and _has_live_lease(task, worker_id, timezone.now()))
+
+
+def _rollback_analysis(target):
+    transaction.set_rollback(True)
+    return ExecutionOutcome(str(target.pk), TaskRun.Status.RUNNING, stale=True)
+
+
+def _failure(target_run_id, worker_id, message, lease_guard=None, *, expected_attempts=None):
     """Terminally fail one analysis target only while the lease is still live."""
     with _database_guard():
         with transaction.atomic():
-            target = (
-                TaskTargetRun.objects.select_for_update()
-                .select_related('task')
-                .filter(pk=target_run_id)
-                .first()
-            )
+            task, target = locked_task_target(target_run_id)
             if target is None:
                 return ExecutionOutcome(str(target_run_id), TaskRun.Status.FAILED, stale=True)
-            task = TaskRun.objects.select_for_update().filter(pk=target.task_id).first()
             now = timezone.now()
             if (
                 (lease_guard is not None and lease_guard.is_set())
@@ -272,10 +281,14 @@ def _failure(target_run_id, worker_id, message, lease_guard=None):
             ):
                 return ExecutionOutcome(str(target.pk), target.status, stale=True)
             message = sanitize(message)[:4096]
+            if expected_attempts is not None and expected_attempts != (task.attempt_count, target.attempt_count):
+                return ExecutionOutcome(str(target.pk), target.status, stale=True)
             target.status = TaskRun.Status.FAILED
             target.finished_at = now
             target.error_message = message
             save_target(target, {'status', 'finished_at', 'error_message'})
+            if not _analysis_lease_live(task, worker_id, lease_guard):
+                return _rollback_analysis(target)
             return ExecutionOutcome(
                 str(target.pk),
                 TaskRun.Status.FAILED,
@@ -283,18 +296,12 @@ def _failure(target_run_id, worker_id, message, lease_guard=None):
             )
 
 
-def _persist_analysis(target_run_id, worker_id, lease_guard=None):
+def _persist_analysis(target_run_id, worker_id, prepared, expected_attempts, lease_guard=None):
     with _database_guard():
         with transaction.atomic():
-            target = (
-                TaskTargetRun.objects.select_for_update()
-                .select_related('task')
-                .filter(pk=target_run_id)
-                .first()
-            )
+            task, target = locked_task_target(target_run_id)
             if target is None:
                 return ExecutionOutcome(str(target_run_id), TaskRun.Status.FAILED, stale=True)
-            task = TaskRun.objects.select_for_update().filter(pk=target.task_id).first()
             now = timezone.now()
             if (
                 (lease_guard is not None and lease_guard.is_set())
@@ -303,38 +310,23 @@ def _persist_analysis(target_run_id, worker_id, lease_guard=None):
                 or target.status != TaskRun.Status.RUNNING
             ):
                 return ExecutionOutcome(str(target.pk), target.status, stale=True)
-            log_file = ComputerLogFile.objects.filter(pk=target.target_id).first()
-            if log_file is None:
-                return _failure(
-                    target.pk,
-                    worker_id,
-                    '日志文件已不存在，无法执行分析。',
-                    lease_guard,
-                )
+            if expected_attempts != (task.attempt_count, target.attempt_count):
+                return ExecutionOutcome(str(target.pk), target.status, stale=True)
             try:
-                analysis = analyze_log(
-                    log_file,
-                    list(task.selected_items_snapshot),
-                    rules=task.profile_snapshot,
-                    task_target=target,
-                    started_at=target.started_at or now,
-                )
+                # Include caller-side failures after insertion in the savepoint.
+                with transaction.atomic():
+                    analysis = persist_analysis(prepared)
             except (ValidationError, ValueError, TypeError) as exc:
-                return _failure(target.pk, worker_id, f'日志分析失败：{exc}', lease_guard)
+                return _failure(target.pk, worker_id, f'日志分析失败：{exc}', lease_guard,
+                                expected_attempts=expected_attempts)
 
+            if not _analysis_lease_live(task, worker_id, lease_guard):
+                return _rollback_analysis(target)
             target.status = analysis.status
-            target.finished_at = now
+            target.finished_at = timezone.now()
             target.result_type = 'computer_analysis'
             target.result_id = str(analysis.pk)
-            target.result_snapshot = {
-                'result_type': 'computer_analysis',
-                'result_id': str(analysis.pk),
-                'status': analysis.status,
-                'summary': analysis.summary,
-                'details': analysis.details,
-                'analysis_items': analysis.analysis_items,
-                'exceptions': analysis.exceptions,
-            }
+            target.result_snapshot = compact_result_snapshot(analysis, result_type='computer_analysis')
             target.error_message = '' if analysis.status == TaskRun.Status.SUCCESS else analysis.summary
             save_target(
                 target,
@@ -343,6 +335,8 @@ def _persist_analysis(target_run_id, worker_id, lease_guard=None):
                     'result_snapshot', 'error_message',
                 },
             )
+            if not _analysis_lease_live(task, worker_id, lease_guard):
+                return _rollback_analysis(target)
             return ExecutionOutcome(
                 str(target.pk),
                 analysis.status,
@@ -364,7 +358,24 @@ def execute_computer_target(target_run, *, worker_id, lease_guard=None):
         return _failure(target_run_id, worker_id, '计算机分析任务包含无效目标类型。', lease_guard)
     if lease_guard is not None and lease_guard.is_set():
         return ExecutionOutcome(target_run_id, started.status, stale=True)
-    outcome = _persist_analysis(target_run_id, worker_id, lease_guard)
+    expected_attempts = (started.task.attempt_count, started.attempt_count)
+    log_file = ComputerLogFile.objects.filter(pk=started.target_id).first()
+    if log_file is None:
+        outcome = _failure(target_run_id, worker_id, '日志文件已不存在，无法执行分析。',
+                           lease_guard, expected_attempts=expected_attempts)
+    else:
+        try:
+            prepared = prepare_log(
+                log_file, list(started.task.selected_items_snapshot),
+                rules={**started.task.profile_snapshot,
+                       'personnel_roster': started.task.parameters_snapshot.get('personnel_roster')},
+                task_target=started, started_at=started.started_at,
+            )
+        except (ValidationError, ValueError, TypeError) as exc:
+            outcome = _failure(target_run_id, worker_id, f'日志分析失败：{exc}',
+                               lease_guard, expected_attempts=expected_attempts)
+        else:
+            outcome = _persist_analysis(target_run_id, worker_id, prepared, expected_attempts, lease_guard)
     if not outcome.stale:
         from net.alerts.service import process_persisted_target
 

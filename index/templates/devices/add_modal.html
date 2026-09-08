@@ -1,0 +1,18 @@
+<div class="modal fade" id="addDeviceModal" tabindex="-1" aria-labelledby="addDeviceModalLabel" aria-hidden="true"{% if open_add_device_modal %} data-auto-open="true"{% endif %}>
+ <div class="modal-dialog modal-dialog-scrollable modal-lg"><div class="modal-content modal-surface">
+  <form method="post" action="{% url 'asset_create' item_key %}" class="d-flex flex-column overflow-hidden">
+   {% csrf_token %}
+   <div class="modal-header"><h2 class="modal-title fs-5" id="addDeviceModalLabel">添加{{ item_name }}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+   <div class="modal-body modal-body--scroll">
+    <p class="text-secondary small">填写设备名称、IP 和巡检连接参数即可。硬件与系统信息由巡检采集，采集到的字段自动回填。保存仅添加设备，不会立即巡检。密码不会在校验失败后回显，请重新填写。</p>
+    {% if device_form.non_field_errors %}<div class="alert alert-danger">{{ device_form.non_field_errors }}</div>{% endif %}
+    {% for section in device_form_sections %}
+    <section class="config-section-card mb-3"><h3 class="h6">{{ section.title }}</h3><div class="row g-3">
+     {% for field in section.fields %}<div class="col-md-6"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="text-danger">*</span>{% endif %}</label>{{ field }}{% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>{% endfor %}
+    </div></section>
+    {% endfor %}
+   </div>
+   <div class="modal-footer modal-footer--sticky"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button><button type="submit" class="btn btn-primary">保存设备</button></div>
+  </form>
+ </div></div>
+</div>

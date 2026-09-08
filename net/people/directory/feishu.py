@@ -4,6 +4,7 @@ Tokens are method-local only and never written to the source model.
 """
 
 from collections.abc import Mapping
+from urllib.parse import quote
 
 import requests
 
@@ -13,6 +14,7 @@ from .base import (
     DirectoryPayloadError,
     DirectoryPerson,
     DirectoryRateLimitError,
+    DirectoryReferenceError,
     directory_source_configuration_identity,
     freeze_directory_source,
 )
@@ -33,6 +35,8 @@ class FeishuDirectoryAdapter:
         self.max_retries = max_retries
         self.last_snapshot_complete = False
         self._skipped_records = []
+        self._department_names = {}
+        self._user_names = {}
 
     @property
     def source_key(self):
@@ -58,6 +62,8 @@ class FeishuDirectoryAdapter:
     def iter_people(self):
         self.last_snapshot_complete = False
         self._skipped_records = []
+        self._department_names = {}
+        self._user_names = {}
         try:
             self._validate_source()
             access_token = self._tenant_access_token()
@@ -75,7 +81,9 @@ class FeishuDirectoryAdapter:
             people = [
                 DirectoryPerson(
                     employee_id=record['employee_id'], name=record['name'], email=record['email'],
-                    department=','.join(sorted(record['departments'])), leader=record['leader'],
+                    department=','.join(self._reference_name(access_token, 'department', value)
+                                        for value in sorted(record['departments'])),
+                    leader=self._reference_name(access_token, 'user', record['leader']),
                     external_user_id=external_user_id, hire_date=record['hire_date'],
                     departure_date=record['departure_date'],
                 )
@@ -86,6 +94,30 @@ class FeishuDirectoryAdapter:
             raise
         self.last_snapshot_complete = True
         return iter(people)
+
+    def _reference_name(self, access_token, kind, identifier):
+        try:
+            return self._load_reference_name(access_token, kind, identifier)
+        except DirectoryAdapterError:
+            raise DirectoryReferenceError() from None
+
+    def _load_reference_name(self, access_token, kind, identifier):
+        if not identifier:
+            return ''
+        cache = self._department_names if kind == 'department' else self._user_names
+        if identifier not in cache:
+            payload = self._request_json(
+                'get', f'https://open.feishu.cn/open-apis/contact/v3/{kind}s/{quote(identifier, safe="")}',
+                params={'department_id_type': 'open_department_id', 'user_id_type': 'open_id'},
+                headers={'Authorization': f'Bearer {access_token}'},
+            )
+            self._require_success(payload)
+            data = payload.get('data')
+            detail = data.get(kind) if isinstance(data, Mapping) else None
+            if not isinstance(detail, Mapping):
+                raise DirectoryPayloadError()
+            cache[identifier] = self._required_text(detail.get('name'))
+        return cache[identifier]
 
     def _validate_source(self):
         credentials = getattr(self.source, 'credentials', None)
@@ -167,9 +199,13 @@ class FeishuDirectoryAdapter:
             for item in items:
                 if not isinstance(item, Mapping):
                     raise DirectoryPayloadError()
-                children.append(self._required_text(
+                child_id = self._required_text(
                     item.get('open_department_id', item.get('department_id')),
-                ))
+                )
+                children.append(child_id)
+                name = self._optional_text(item.get('name'))
+                if name:
+                    self._department_names[child_id] = name
             if not isinstance(data.get('has_more'), bool):
                 raise DirectoryPayloadError()
             if not data['has_more']:
@@ -184,6 +220,9 @@ class FeishuDirectoryAdapter:
         if not isinstance(item, Mapping):
             raise DirectoryPayloadError()
         external_user_id = self._required_text(item.get('open_id', item.get('user_id')))
+        name = self._optional_text(item.get('name'))
+        if name:
+            self._user_names[external_user_id] = name
         employee_id = self._optional_text(item.get('employee_no'))
         if not employee_id:
             self._append_skip(external_user_id)

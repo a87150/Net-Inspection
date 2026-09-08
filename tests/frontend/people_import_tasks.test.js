@@ -3,9 +3,9 @@ const assert = require('node:assert/strict');
 
 const {createPeopleTaskController} = require('../../static/app/js/people/import_tasks.js');
 
-function fixture(payloads) {
+function fixture(payloads, {workflowOpen = false} = {}) {
     const posts = [];
-    const state = {running: [], message: '', href: '', shows: 0};
+    const state = {running: [], message: '', href: '', shows: 0, inline: []};
     const root = {
         dataset: {statusUrl: '/status/', csrfToken: 'csrf'},
         querySelector(selector) {
@@ -21,7 +21,9 @@ function fixture(payloads) {
         },
     };
     const document = {
-        querySelector: () => root,
+        querySelector: selector => selector === '[data-people-task-notifications]' ? root : (
+            workflowOpen ? {querySelector: () => ({prepend: notice => state.inline.push(notice)})} : null
+        ),
         createElement(tag) {
             return {
                 tag, className: '', textContent: '', type: '', dataset: {}, children: [],
@@ -82,4 +84,14 @@ test('terminal acknowledgement posts terminal kind', async () => {
     await controller.acknowledgeTerminal(task);
 
     assert.deepEqual(posts[0], ['/ack/3/', 'kind=terminal']);
+});
+
+test('completed task stays inside an open workflow without stacking a second modal', async () => {
+    const task = {id: '4', status: 'success', show_terminal: true,
+        message: '预览已完成', jump_url: '/task/4/', ack_url: '/ack/4/'};
+    const {controller, state} = fixture([{tasks: [task]}], {workflowOpen: true});
+    await controller.poll();
+    assert.equal(state.shows, 0);
+    assert.equal(state.inline.length, 1);
+    assert.equal(state.inline[0].children[0].href, '/task/4/');
 });

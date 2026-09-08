@@ -23,7 +23,7 @@ from index.inspections.forms import (
     inspection_item_choices,
 )
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
-from index.common.table_registry import get_table_definition
+from index.common.table_registry import get_table_definition, project_record_definition
 from index.devices.pc.software_policy import (
     software_policy_target,
     store_software_policy_upload,
@@ -113,9 +113,9 @@ def task_modal_context(request, project_kind, *, allow_target_selection=False, t
     if project_kind == 'computers':
         from django.conf import settings
         from net.models import PCLogSourceConfig
-        from index.devices.pc.forms import PCLogSourceForm
+        from index.devices.pc.simple_source_form import SimplePCLogSourceForm
         pc_source = PCLogSourceConfig.load()
-        pc_source_form = PCLogSourceForm(instance=pc_source, initial={
+        pc_source_form = SimplePCLogSourceForm(instance=pc_source, initial={
             'source_type': getattr(pc_source, 'source_type', 'smb'),
             'port': getattr(pc_source, 'port', 445),
             'remote_incoming_directory': getattr(pc_source, 'remote_incoming_directory', 'incoming'),
@@ -218,7 +218,7 @@ def _target_ids_from_request(post_data, profile, target_mode):
         rows, _state = apply_table_filters(
             SimpleNamespace(GET=post_data),
             _infrastructure_records(kind, target=post_data.get('target', '')),
-            get_table_definition('inspection_records'),
+            project_record_definition(kind),
         )
         ids = {str(row['target_id']) for row in rows if row['target_id'] is not None}
         model = PROJECTS[kind][1]
@@ -401,6 +401,7 @@ def _inspection_profile_configure(request):
         _remember_modal(request, 'profile')
         return redirect(next_url)
     messages.success(request, f'已保存“{profile.name}”的巡检配置。')
+    _remember_modal(request, 'profile')
     return redirect(next_url)
 
 
@@ -441,6 +442,7 @@ def _computer_analysis_profile_configure(request):
         _remember_modal(request, 'profile')
         return redirect(next_url)
     messages.success(request, f'已保存“{profile.name}”的分析配置。')
+    _remember_modal(request, 'profile')
     return redirect(next_url)
 
 
@@ -471,7 +473,7 @@ def task_cancel(request, pk):
         from index.people.integrations import require_people_owner
         require_people_owner(request, task)
     if (
-        task.task_type == TaskRun.TaskType.DOMAIN_OPERATION
+        task.task_type in {TaskRun.TaskType.DOMAIN_OPERATION, TaskRun.TaskType.DOMAIN_SYNC}
         and not request.user.has_perm('net.manage_domain_operations')
     ):
         raise PermissionDenied
@@ -517,13 +519,17 @@ def task_detail(request, pk):
         require_people_owner(request, task)
         return redirect('people_operation', pk=task.pk)
     definition = get_table_definition('task_targets')
-    statuses = list(task.target_runs.values_list('status', flat=True))
-    task.completed_targets = sum(status in TaskRun.TERMINAL_STATUSES for status in statuses)
-    task.successful_targets = statuses.count(TaskRun.Status.SUCCESS)
+    from net.inspections.state import target_progress
+    progress_counts = target_progress(task.target_runs.all())
+    task.completed_targets = progress_counts['completed']
+    task.successful_targets = progress_counts['successful']
     task.failed_targets = task.completed_targets - task.successful_targets
-    task.progress = int(100 * task.completed_targets / len(statuses)) if statuses else 0
+    task.progress = int(100 * task.completed_targets / progress_counts['total']) if progress_counts['total'] else 0
+    target_source = task.target_runs.all()
+    if task.task_type in {TaskRun.TaskType.INSPECTION, TaskRun.TaskType.COMPUTER_ANALYSIS}:
+        target_source = target_source.defer('result_snapshot', 'target_snapshot')
     targets, table_state = apply_table_filters(
-        request, task.target_runs.all(), definition, include_legacy_status=False,
+        request, target_source, definition, include_legacy_status=False,
     )
     page_obj = Paginator(targets, table_state['page_size']).get_page(request.GET.get('page'))
     domain_operation = getattr(task, 'domain_operation', None)
@@ -555,7 +561,7 @@ def task_detail(request, pk):
             snapshot = target.target_snapshot if isinstance(target.target_snapshot, dict) else {}
             target.domain_name = snapshot.get('name') or target.target_id
             target.domain_dn = snapshot.get('distinguished_name', '')
-    return render(request, 'inspections/task_detail.html', {
+    context = {
         'task': task,
         'page_obj': page_obj,
         'table_definition': definition,
@@ -567,4 +573,11 @@ def task_detail(request, pk):
         'domain_retry_available': domain_retry_available,
         'domain_retry_requires_password': domain_retry_requires_password,
         'domain_manual_intervention': domain_manual_intervention,
-    })
+    }
+    from .task_results import task_result_context
+    context.update(task_result_context(request, task))
+    if context.get('show_result_table'):
+        diagnostics = task.target_runs.exclude(alert_processing_error='').only(
+            'pk', 'target_id', 'alert_processing_error', 'alert_attempted_at').order_by('pk')
+        context['alert_processing_page'] = Paginator(diagnostics, 20).get_page(request.GET.get('alert_page'))
+    return render(request, 'inspections/task_detail.html', context)

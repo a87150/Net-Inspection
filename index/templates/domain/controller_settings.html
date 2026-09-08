@@ -24,6 +24,7 @@
 </section>
 
 {% if can_manage_domain %}
+{% include 'domain/sync_task_list.html' %}
 <div class="modal fade domain-config-modal" id="domainConfigModal" data-auto-open="{{ open_domain_modal|yesno:'true,false' }}" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="domainConfigModalLabel" aria-describedby="domainConfigModalDescription" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
         <form method="post">
@@ -62,6 +63,7 @@
                         </div>
                     </section>
                 </div>
+                {% include 'domain/sync_schedule.html' %}
             </div>
             <div class="modal-footer modal-footer--sticky">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
@@ -70,6 +72,7 @@
                 <button class="btn btn-primary" name="action" value="sync">保存并从域控同步</button>
             </div>
         </form>
+        <form method="post" id="domain-sync-schedule-form" hidden>{% csrf_token %}<input type="hidden" name="action" value="schedule"></form>
     </div></div>
 </div>
 {% else %}<div class="modal fade domain-config-modal" id="domainConfigModal" data-auto-open="{{ open_domain_modal|yesno:'true,false' }}" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="domainConfigModalLabel" aria-describedby="domainConfigModalDescription" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface"><div class="modal-header"><h2 class="modal-title fs-5 visually-hidden" id="domainConfigModalLabel">需要域控运维权限</h2></div><div class="modal-body modal-body--scroll"><p id="domainConfigModalDescription" class="visually-hidden">当前账号不能修改该连接。</p></div></div></div></div>{% endif %}

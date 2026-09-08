@@ -32,7 +32,8 @@ class SelectedItemSchemaTests(TestCase):
         'bitlocker': {'BitLocker状态': {'磁盘卷信息': [{'卷': 'C', '转换状态': '完全加密'}]}},
         'defender': {'WindowsDefender状态': {'当前病毒库版本': '1.2.3', '上次更新时间': '2026-08-31 09:00:00'}},
         'patches': {'系统更新历史': [{'补丁名称': 'KB123', '日期': '2026-08-31 09:00:00'}]},
-        'domain': {'已应用策略': {'计算机策略': [], '用户策略': []}, '当前与域服务器通讯情况': '正常通讯'},
+        'domain_trust': {'当前与域服务器通讯情况': '正常通讯'},
+        'group_policy': {'已应用策略': {'计算机策略': [], '用户策略': []}},
         'resource': {'计算机硬件资源情况': {'当前CPU占用率': '23%', '当前内存使用率': '48%'}},
         'event_findings': {'事件发现': [{'级别': 'Information', '消息': 'Started'}]},
     }
@@ -52,7 +53,7 @@ class SelectedItemSchemaTests(TestCase):
         for item in self.NORMAL:
             with self.subTest(item=item):
                 result = self.analyze(item, {})
-                self.assertEqual(result.status, RecordStatus.FAILED)
+                self.assertEqual(result.result_level, 'info')
                 self.assertEqual(result.exceptions[0]['analysis_item'], item)
                 self.assertEqual(result.exceptions[0]['data_state'], 'missing')
 
@@ -61,7 +62,7 @@ class SelectedItemSchemaTests(TestCase):
             for unknown in (None, '未知', {'error': '未采集'}, [None]):
                 with self.subTest(item=item, unknown=unknown):
                     result = self.analyze(item, {key: unknown for key in fields})
-                    self.assertEqual(result.status, RecordStatus.FAILED)
+                    self.assertEqual(result.result_level, 'info')
                     self.assertEqual(result.exceptions[0]['data_state'], 'unknown')
 
     def test_every_selected_item_normal_schema_can_be_analyzed(self):
@@ -70,7 +71,7 @@ class SelectedItemSchemaTests(TestCase):
                 result = self.analyze(item, fields)
                 self.assertEqual(result.status, RecordStatus.SUCCESS)
                 self.assertEqual(result.exceptions, [])
-                self.assertEqual(set(result.details) - {'enrichment', 'rules', 'platform'}, {item})
+                self.assertEqual(set(result.details) - {'enrichment', 'rules', 'platform', 'severity_counts', 'health_status'}, {item})
 
     def test_present_empty_collections_are_distinct_from_missing(self):
         for item, key in (
@@ -82,7 +83,7 @@ class SelectedItemSchemaTests(TestCase):
                 self.assertEqual(result.status, RecordStatus.SUCCESS)
                 self.assertEqual(result.details[item], [])
         result = self.analyze('bitlocker', {'BitLocker状态': {'磁盘卷信息': []}})
-        self.assertEqual(result.status, RecordStatus.FAILED)
+        self.assertEqual(result.result_level, 'info')
         self.assertEqual(result.exceptions[0]['data_state'], 'empty')
 
     def test_nested_unknown_status_and_resource_values_are_not_healthy(self):
@@ -90,13 +91,13 @@ class SelectedItemSchemaTests(TestCase):
             'activation': {'Windows激活信息': {'许可证状态': '未知'}},
             'defender': {'WindowsDefender状态': {'当前病毒库版本': '', '上次更新时间': ''}},
             'resource': {'计算机硬件资源情况': {'当前CPU占用率': '获取失败', '当前内存使用率': '未知'}},
-            'domain': {'已应用策略': {}, '当前与域服务器通讯情况': '未知'},
+            'domain_trust': {'当前与域服务器通讯情况': '未知'},
             'event_findings': {'事件发现': [{'级别': '未知'}]},
         }
         for item, fields in cases.items():
             with self.subTest(item=item):
                 result = self.analyze(item, fields)
-                self.assertEqual(result.status, RecordStatus.FAILED)
+                self.assertEqual(result.result_level, 'info')
                 self.assertEqual(result.exceptions[0]['data_state'], 'unknown')
 
     def test_empty_primary_events_do_not_fall_through_to_legacy_alias(self):

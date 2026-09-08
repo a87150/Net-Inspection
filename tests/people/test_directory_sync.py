@@ -485,6 +485,8 @@ class PeopleSyncPreviewTests(TestCase):
         fetched_roots = []
 
         def handler(method, url, kwargs):
+            if url.endswith('/departments/persisted-root'):
+                return ProviderResponse({'code': 0, 'data': {'department': {'name': '总部'}}})
             if url.endswith('/tenant_access_token/internal'):
                 self.assertEqual(kwargs['json'], {
                     'app_id': 'fixture-app', 'app_secret': 'fixture-secret',

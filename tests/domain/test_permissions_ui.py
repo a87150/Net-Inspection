@@ -88,13 +88,13 @@ class DomainPermissionUiTests(TestCase):
 
         response = self.client.get(reverse('domain_controller_settings'))
 
-        self.assertContains(
-            response,
-            'name="bind_password" autocomplete="new-password" class="form-control"',
-        )
+        import re
+        password_input = re.search(r'<input\b[^>]*name="bind_password"[^>]*>', response.content.decode()).group()
+        self.assertIn('class="form-control"', password_input)
+        self.assertIn('autocomplete="new-password"', password_input)
 
     @patch('index.domain.views.test_domain_connection', return_value='连接成功')
-    @patch('index.domain.views.sync_domain', return_value=(1, 1, 0))
+    @patch('net.domain.sync._connect', side_effect=AssertionError('Web sync must only enqueue'))
     def test_connection_mutations_require_domain_permission_for_all_four_roles(
         self, sync_domain, test_connection,
     ):
@@ -127,7 +127,9 @@ class DomainPermissionUiTests(TestCase):
                         response.content.decode('utf-8', errors='replace'),
                     )
 
-        self.assertEqual(sync_domain.call_count, 2)
+        self.assertEqual(sync_domain.call_count, 0)
+        from net.models import TaskRun
+        self.assertEqual(TaskRun.objects.filter(task_type='domain_sync').count(), 1)
         self.assertEqual(test_connection.call_count, 2)
 
     def test_operation_create_and_retry_require_domain_permission_for_all_four_roles(self):

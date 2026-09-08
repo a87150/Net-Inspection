@@ -77,6 +77,16 @@ class PeopleFlowMixin:
 
 
 class PeopleImportUITests(PeopleFlowMixin, TestCase):
+    def test_rejected_preview_returns_to_get_page_and_keeps_modal_open(self):
+        PeopleSyncSource.objects.filter(pk=self.source.pk).update(last_tested_at=None)
+        response = self.client.post('/integrations/people/preview/?page_size=500', {'provider': 'feishu'})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], '/assets/people/?import=people&provider=feishu')
+        page = self.client.get(response['Location'])
+        self.assertContains(page, '请先完成第 1 步')
+        self.assertTrue(page.context['open_import_modal'])
+        self.assertFalse(TaskRun.objects.exists())
+
     def test_fixed_provider_can_save_interval_and_daily_schedule(self):
         response = self.client.post('/integrations/people/providers/feishu/schedule/', {
             'is_enabled': 'on', 'kind': 'interval',
@@ -127,6 +137,7 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
 
         response = self.client.post(
             '/integrations/people/preview/', {'provider': 'feishu'},
+            follow=True,
         )
 
         self.assertEqual(response.status_code, 200)
@@ -306,7 +317,7 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
 
     def test_disabled_source_and_duplicate_operation_are_not_queued(self):
         task, _ = self.enqueue()
-        response = self.client.post('/integrations/people/preview/', {'provider': 'feishu'})
+        response = self.client.post('/integrations/people/preview/', {'provider': 'feishu'}, follow=True)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '活动')
         self.assertEqual(TaskRun.objects.count(), 1)
@@ -314,7 +325,7 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
     def test_queue_and_expired_apply_errors_are_visible_inside_reopened_modal(self):
         from tests.common.test_table_exports import extract_div
         task, _ = self.enqueue()
-        response = self.client.post('/integrations/people/preview/', {'provider': 'feishu'})
+        response = self.client.post('/integrations/people/preview/', {'provider': 'feishu'}, follow=True)
         self.assertIn('活动操作', extract_div(response.content.decode(), 'importModal'))
         target = self.execute(task)
         with patch('django.core.signing.time.time', return_value=timezone.now().timestamp() + 301):
@@ -323,7 +334,7 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
         self.assertIn('预览已失效', extract_div(response.content.decode(), 'peoplePreviewModal'))
         self.other.is_enabled = False
         self.other.save()
-        response = self.client.post('/integrations/people/preview/', {'provider': 'dingtalk'})
+        response = self.client.post('/integrations/people/preview/', {'provider': 'dingtalk'}, follow=True)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(TaskRun.objects.count(), 1)
 
@@ -475,7 +486,7 @@ class PeopleQueueTests(PeopleFlowMixin, TestCase):
     def test_duplicate_other_session_is_rejected_but_different_source_is_independent(self):
         self.enqueue()
         other_client = Client()
-        response = other_client.post('/integrations/people/preview/', {'provider': 'feishu'})
+        response = other_client.post('/integrations/people/preview/', {'provider': 'feishu'}, follow=True)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(TaskRun.objects.count(), 1)
         other_task, _ = self.enqueue(source=self.other, client=other_client)

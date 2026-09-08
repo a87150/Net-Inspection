@@ -122,6 +122,7 @@ class AlertUiTests(TestCase):
             'next': reverse('asset_list', args=['servers']),
         })
         self.assertEqual(overridden.status_code, 302)
+        self.assertTrue(self.client.get(overridden['Location']).context['alert_policy_modal_auto_open'])
         policy.refresh_from_db()
         self.assertEqual(policy.mode, AlertPolicy.Mode.OVERRIDE)
         self.assertEqual(set(policy.channels.values_list('pk', flat=True)), {

@@ -36,6 +36,7 @@ from net.infrastructure.sanitization import (
 )
 from net.inspections.selection import LINUX_FIELDS, NETWORK_FIELDS, SECURITY_FIELDS, WINDOWS_FIELDS, selected_fields
 from net.inspections.state import save_target
+from net.inspections.locking import locked_task_target
 
 
 _TERMINAL_STATUSES = TaskRun.TERMINAL_STATUSES
@@ -79,15 +80,9 @@ def _begin_target(target_run_id, worker_id, lease_guard=None, *, expected_task_a
     """Claim the target execution under the parent task's live lease."""
     with _database_guard():
         with transaction.atomic():
-            target = (
-                TaskTargetRun.objects.select_for_update()
-                .select_related('task')
-                .filter(pk=target_run_id)
-                .first()
-            )
+            task, target = locked_task_target(target_run_id)
             if target is None:
                 return None
-            task = TaskRun.objects.select_for_update().filter(pk=target.task_id).first()
             now = timezone.now()
             if (task is None or not _has_live_lease(task, worker_id, now)
                     or (expected_task_attempt is not None and task.attempt_count != expected_task_attempt)
@@ -229,19 +224,13 @@ def _persist_collection(target_run_id, worker_id, collection, lease_guard=None, 
     """Write one dynamic record only if this Worker still owns the lease."""
     with _database_guard():
         with transaction.atomic():
-            target = (
-                TaskTargetRun.objects.select_for_update()
-                .select_related('task')
-                .filter(pk=target_run_id)
-                .first()
-            )
+            task, target = locked_task_target(target_run_id)
             if target is None:
                 return ExecutionOutcome(
                     str(target_run_id),
                     TaskRun.Status.FAILED,
                     stale=True,
                 )
-            task = TaskRun.objects.select_for_update().filter(pk=target.task_id).first()
             now = timezone.now()
             if (
                 (lease_guard is not None and lease_guard.is_set())
@@ -265,6 +254,23 @@ def _persist_collection(target_run_id, worker_id, collection, lease_guard=None, 
             scrub = sanitize_configuration if 'config_info' in task.selected_items_snapshot else sanitize
             scrub_items = sanitize_configuration_items if 'config_info' in task.selected_items_snapshot else sanitize
             details = scrub_items(_selected_details(task, collection), secrets=secrets)
+            from net.devices.pc.severity import grade_issue
+            if task.profile_snapshot.get('issue_project'):
+                from net.inspections.device_issues import evaluate_device_issues
+                findings, normal_items = evaluate_device_issues(
+                    task.profile_snapshot['issue_project'], task.selected_items_snapshot, details,
+                    reachable=bool(collection.reachable), status=status,
+                    overrides=task.profile_snapshot.get('issue_severity_overrides', {}),
+                    thresholds=task.profile_snapshot.get('issue_thresholds', {}), message=collection.message)
+                details['issue_findings'] = scrub_items(findings, secrets=secrets)
+                details['normal_issue_items'] = normal_items
+            elif status != RecordStatus.SUCCESS:
+                issue = {'analysis_item': 'inspection_collection', '问题类型': '设备采集问题',
+                         '详细问题': collection.message or '巡检未完整成功', 'severity': 'critical'}
+                if status == RecordStatus.PARTIAL:
+                    issue['data_state'] = 'partial'
+                details['issue_findings'] = [grade_issue(issue, overrides=task.profile_snapshot.get('issue_severity_overrides', {}))]
+                details['issue_findings'] = scrub_items(details['issue_findings'], secrets=secrets)
             raw_output = scrub_items(
                 _selected_raw(target, task, collection.raw),
                 secrets=secrets,
@@ -279,6 +285,9 @@ def _persist_collection(target_run_id, worker_id, collection, lease_guard=None, 
                 secrets=secrets,
             )[:4096]
             record_model, error_model, result_type, asset_field = _record_spec(target)
+            if details.get('issue_findings'):
+                message = (message + '；' + '、'.join(f"{issue['category']}（{issue['severity_label']}）"
+                           for issue in details['issue_findings']))[:4096]
             record = record_model.objects.create(
                 **{asset_field: target.target_id},
                 task_target=target,
@@ -291,27 +300,21 @@ def _persist_collection(target_run_id, worker_id, collection, lease_guard=None, 
                 is_reachable=bool(collection.reachable),
                 duration_ms=max(0, int(collection.duration_ms or 0)),
             )
-            if status != RecordStatus.SUCCESS:
+            if status != RecordStatus.SUCCESS or any(issue['severity'] != 'info' for issue in details.get('issue_findings', [])):
                 error_model.objects.create(
                     inspection=record,
                     error_message={
                         '采集状态': status,
                         '详细信息': message,
+                        '问题': details.get('issue_findings', []),
                     },
                 )
             target.status = status
             target.finished_at = now
             target.result_type = result_type
             target.result_id = str(record.pk)
-            target.result_snapshot = {
-                'result_type': result_type,
-                'result_id': str(record.pk),
-                'status': status,
-                'summary': message,
-                'details': details,
-                'is_reachable': bool(collection.reachable),
-                'duration_ms': max(0, int(collection.duration_ms or 0)),
-            }
+            from net.inspections.result_storage import compact_result_snapshot
+            target.result_snapshot = compact_result_snapshot(record, result_type=result_type)
             target.error_message = '' if status == RecordStatus.SUCCESS else message
             save_target(
                 target,
@@ -332,6 +335,10 @@ def _persist_collection(target_run_id, worker_id, collection, lease_guard=None, 
                         from net.devices.inventory import refresh_asset_inventory
 
                         refresh_asset_inventory(asset, collection.data)
+            if ((lease_guard is not None and lease_guard.is_set())
+                    or not _has_live_lease(task, worker_id, timezone.now())):
+                transaction.set_rollback(True)
+                return ExecutionOutcome(str(target.pk), TaskRun.Status.RUNNING, stale=True)
             return ExecutionOutcome(
                 str(target.pk),
                 status,
