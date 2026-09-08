@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views
 from index.devices.pc import source as pc_source_views
+from index.devices.pc.software_policy import pc_software_policy_template_download
 
 urlpatterns = [
     path('computers/source/save/', pc_source_views.pc_log_source_save, name='pc_log_source_save'),
@@ -15,6 +16,8 @@ urlpatterns = [
     path('people/<uuid:pk>/', views.person_detail, name='person_detail'),
     path('item/<str:item>/', views.item_list, name='item_list'),
     path('computers/analyses/', views.computer_analysis_list, name='computer_analysis_list'),
+    path('computers/software-policy/template/', pc_software_policy_template_download,
+         name='pc_software_policy_template_download'),
     path('computers/logs/', views.computer_log_list, name='computer_log_list'),
     path('computers/logs/<int:pk>/', views.computer_log_detail, name='computer_log_detail'),
     path('computers/logs/<int:pk>/analyze/', views.computer_log_analyze, name='computer_log_analyze'),

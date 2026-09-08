@@ -60,13 +60,13 @@ def extract_div(document, element_id):
 class FilteredExportContractTests(TestCase):
     def test_each_manual_import_template_has_csv_and_xlsx_sample_data(self):
         cases = (
-            ('people', People, '工号', 'H10001', 'employee_id'),
-            ('networks', Network_Device, 'IP地址', '192.0.2.10', 'ip'),
-            ('servers', Server, 'IP地址', '192.0.2.20', 'ip'),
-            ('monitors', SecurityDevice, 'IP地址', '192.0.2.30', 'ip'),
+            ('people', People, '工号', 'H10001', 'employee_id', 1),
+            ('networks', Network_Device, 'IP地址', '192.0.2.10', 'ip', 3),
+            ('servers', Server, 'IP地址', '192.0.2.20', 'ip', 2),
+            ('monitors', SecurityDevice, 'IP地址', '192.0.2.30', 'ip', 2),
         )
 
-        for entity, model, column, sample_value, model_field in cases:
+        for entity, model, column, sample_value, model_field, sample_count in cases:
             with self.subTest(entity=entity):
                 csv_response = self.client.get(
                     reverse('download_inventory_template', args=[entity]),
@@ -74,18 +74,14 @@ class FilteredExportContractTests(TestCase):
                 csv_rows = list(csv.DictReader(StringIO(
                     csv_response.content.decode('utf-8-sig'),
                 )))
-                self.assertEqual(len(csv_rows), 1)
+                self.assertEqual(len(csv_rows), sample_count)
                 self.assertEqual(csv_rows[0][column], sample_value)
                 if entity == 'networks':
-                    self.assertEqual(csv_rows[0]['连接方式'], 'hybrid')
-                    self.assertEqual(csv_rows[0]['SNMP 版本'], 'v3')
-                    self.assertEqual(csv_rows[0]['SNMP 端口'], '161')
-                    self.assertEqual(
-                        csv_rows[0]['认证密码'], 'DEMO-ONLY-NOT-A-SECRET',
-                    )
-                    self.assertEqual(
-                        csv_rows[0]['加密密码'], 'DEMO-ONLY-NOT-A-SECRET',
-                    )
+                    hybrid = next(row for row in csv_rows if row['连接方式'] == 'hybrid')
+                    self.assertEqual(hybrid['SNMP 版本'], 'v3')
+                    self.assertEqual(hybrid['SNMP 端口'], '161')
+                    self.assertEqual(hybrid['认证密码'], 'CHANGE-ME')
+                    self.assertEqual(hybrid['加密密码'], 'CHANGE-ME')
 
                 xlsx_response = self.client.get(
                     f'/data/{entity}/template/xlsx/',

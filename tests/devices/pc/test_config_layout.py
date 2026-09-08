@@ -20,7 +20,11 @@ class ConfigMarkup(HTMLParser):
         if tag == 'form':
             self.nested |= self.form is not None
             self.form = attrs.get('id', 'unnamed')
-            self.forms[self.form] = {'action': attrs.get('action'), 'names': set()}
+            self.forms[self.form] = {
+                'action': attrs.get('action'),
+                'enctype': attrs.get('enctype'),
+                'names': set(),
+            }
         elif tag in ('input', 'select', 'textarea') and self.form and attrs.get('name'):
             self.forms[self.form]['names'].add(attrs['name'])
         elif tag == 'button':
@@ -51,9 +55,14 @@ class PCConfigLayoutTests(TestCase):
                          'range_start_date', 'range_end_date', 'recursive', 'ftp_use_tls'} <= source['names'])
         analysis = parsed.forms['pc-analysis-config-form']
         self.assertEqual(analysis['action'], reverse('computer_analysis_profile_configure'))
+        self.assertEqual(analysis['enctype'], 'multipart/form-data')
         self.assertTrue({'profile_id', 'analysis_items', 'site_ip_prefixes',
                          'cpu_temperature_max_celsius', 'schedule_kind',
-                         'schedule_enabled', 'interval_value', 'daily_time'} <= analysis['names'])
+                         'schedule_enabled', 'interval_value', 'daily_time',
+                         'software_policy_file'} <= analysis['names'])
+        self.assertNotIn('software_policy_path', analysis['names'])
+        self.assertContains(response, reverse('pc_software_policy_template_download'))
+        self.assertContains(response, '下载演示策略模板')
         self.assertTrue({'pc-source-config-form', 'pc-analysis-config-form'} <= {
             b.get('form') for b in parsed.buttons if b.get('type') == 'submit'})
         self.assertContains(response, 'modal-dialog-scrollable modal-shell')

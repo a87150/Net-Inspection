@@ -24,6 +24,10 @@ from index.inspections.forms import (
 )
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition
+from index.devices.pc.software_policy import (
+    software_policy_target,
+    store_software_policy_upload,
+)
 from net.models import (
     ComputerAnalysisProfile,
     ComputerLogFile,
@@ -412,7 +416,7 @@ def _computer_analysis_profile_configure(request):
     if request.POST.get('profile_id'):
         existing = get_object_or_404(ComputerAnalysisProfile, pk=request.POST['profile_id'])
     form = ComputerAnalysisProfileConfigForm(
-        request.POST, instance=existing,
+        request.POST, request.FILES, instance=existing,
         schedule=_schedule_for_profile(existing) if existing else None,
     )
     if not form.is_valid():
@@ -425,6 +429,13 @@ def _computer_analysis_profile_configure(request):
         with transaction.atomic():
             profile = existing or ComputerAnalysisProfile()
             profile = _save_profile(profile, form)
+            uploaded_policy = form.cleaned_data.get('software_policy_file')
+            if uploaded_policy is not None:
+                policy_path = software_policy_target(profile.pk)
+                profile.software_policy_path = str(policy_path)
+                profile.full_clean()
+                profile.save(update_fields=['software_policy_path', 'updated_at'])
+                store_software_policy_upload(uploaded_policy, policy_path)
     except ValidationError as exc:
         messages.error(request, '配置未保存：' + '；'.join(exc.messages))
         _remember_modal(request, 'profile')

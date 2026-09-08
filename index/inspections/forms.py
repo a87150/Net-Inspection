@@ -11,6 +11,7 @@ from net.inspections.selection import (
     WINDOWS_FIELDS,
 )
 from net.devices.pc.analysis import ANALYSIS_ITEMS
+from index.devices.pc.software_policy import validate_software_policy_upload
 
 
 _INSPECTION_LABELS = {
@@ -205,7 +206,13 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
         error_messages={'invalid_choice': '不支持的分析项目。'},
         label='分析项目',
     )
-    software_policy_path = forms.CharField(required=False, label='软件策略文件路径')
+    software_policy_file = forms.FileField(
+        required=False,
+        label='上传软件策略文件',
+        help_text='支持 UTF-8 编码的 .ini 文件，最大 1 MB；不重新上传会保留当前策略。',
+        validators=[validate_software_policy_upload],
+        widget=forms.FileInput(attrs={'accept': '.ini,text/plain'}),
+    )
     minimum_windows_release = forms.CharField(
         required=False, max_length=16, label='最低 Windows 版本',
     )
@@ -250,7 +257,6 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
                 'profile_id': instance.pk,
                 'name': instance.name,
                 'analysis_items': instance.analysis_items,
-                'software_policy_path': instance.software_policy_path,
                 'minimum_windows_release': instance.minimum_windows_release,
                 'defender_update_max_days': instance.defender_update_max_days,
                 'defender_scan_max_days': instance.defender_scan_max_days,
@@ -298,7 +304,6 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
         return {
             'name': cleaned['name'],
             'analysis_items': cleaned['analysis_items'],
-            'software_policy_path': self._configured_value('software_policy_path', ''),
             'minimum_windows_release': self._configured_value('minimum_windows_release', '23H2'),
             'defender_update_max_days': self._configured_value('defender_update_max_days', 7),
             'defender_scan_max_days': self._configured_value('defender_scan_max_days', 7),

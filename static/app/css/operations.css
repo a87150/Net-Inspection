@@ -625,6 +625,33 @@ body.app-shell {
     min-width: 0;
 }
 
+.software-policy-upload {
+    display: grid;
+    gap: .85rem;
+    padding: .9rem;
+    border: 1px solid rgba(129, 153, 198, .3);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, .45);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .78);
+}
+
+.software-policy-upload__summary,
+.software-policy-upload__actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.software-policy-upload__field {
+    flex: 1 1 28rem;
+    min-width: 0;
+}
+
+.software-policy-upload__actions > .btn {
+    flex: 0 0 auto;
+}
+
 .task-run-modal fieldset,
 .task-run-modal .modal-body > div {
     padding: 1rem;
@@ -941,6 +968,9 @@ code {
     .modal-shell .modal-body { padding: 1rem; }
     .modal-section { padding: .85rem; }
     .inspection-config-block { padding: .85rem; }
+    .software-policy-upload__summary,
+    .software-policy-upload__actions { align-items: stretch; flex-direction: column; }
+    .software-policy-upload__actions > .btn { width: 100%; }
 
     .alert-channel-management__heading,
     .alert-channel-management__item {

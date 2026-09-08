@@ -162,6 +162,30 @@ ENTITY_SPECS = {
             'password', 'snmp_community', 'snmp_auth_password',
             'snmp_priv_password',
         },
+        'template_fields': (
+            'device_name', 'ip', 'device_type', 'vendor', 'connection_type',
+            'port', 'username', 'password', 'snmp_version', 'snmp_port',
+            'snmp_community', 'snmp_username', 'snmp_security_level',
+            'snmp_auth_protocol', 'snmp_auth_password', 'snmp_priv_protocol',
+            'snmp_priv_password', 'snmp_context_name', 'snmp_retries',
+        ),
+        'template_samples': (
+            (
+                '核心交换机', '192.0.2.10', '交换机', 'H3C', 'ssh', '22',
+                'readonly', 'CHANGE-ME', 'v2c', '161', '', '',
+                'noAuthNoPriv', '', '', '', '', '', '1',
+            ),
+            (
+                '接入交换机', '192.0.2.11', '交换机', 'Example', 'snmp', '22',
+                '', '', 'v2c', '161', 'CHANGE-ME', '', 'noAuthNoPriv',
+                '', '', '', '', '', '1',
+            ),
+            (
+                '汇聚交换机', '192.0.2.12', '交换机', 'Example', 'hybrid', '22',
+                'readonly', 'CHANGE-ME', 'v3', '161', '', 'snmp-reader',
+                'authPriv', 'sha256', 'CHANGE-ME', 'aes128', 'CHANGE-ME', '', '1',
+            ),
+        ),
         'sample': (
             '核心交换机', '192.0.2.10', '交换机', 'H3C', 'hybrid', '22',
             'S5560X', 'Intel Atom', '4', '8', '48', '10', 'readonly',
@@ -190,6 +214,20 @@ ENTITY_SPECS = {
             ('磁盘总量', 'disk_total_gb', _gib),
         ],
         'secret_fields': {'password', 'api_token'},
+        'template_fields': (
+            'name', 'ip', 'server_type', 'port', 'username', 'password',
+            'api_url', 'api_token', 'verify_ssl',
+        ),
+        'template_samples': (
+            (
+                'Linux 应用服务器', '192.0.2.20', 'Linux', '22', 'readonly',
+                'CHANGE-ME', '', '', '是',
+            ),
+            (
+                'Windows 应用服务器', '192.0.2.21', 'Windows', '9180', '', '',
+                'https://192.0.2.21:9180/inspection', 'CHANGE-ME', '是',
+            ),
+        ),
         'sample': ('应用服务器', '192.0.2.20', 'Linux', 'Ubuntu 24.04', '22', 'readonly', 'CHANGE-ME', '', '', '否', '24.04', '', '2026-01-15', 'Example', 'Rack Server', 'DEMO-SRV-001', 'x86_64', 'Xeon', '32', '8', '16', '512'),
     },
     'monitors': {
@@ -206,6 +244,20 @@ ENTITY_SPECS = {
             ('内存总量', 'memory_total_gb', _gib), ('磁盘总量', 'disk_total_gb', _gib),
         ],
         'secret_fields': {'api_password', 'api_token'},
+        'template_fields': (
+            'device_name', 'ip', 'device_type', 'vendor', 'api_url',
+            'api_username', 'api_password', 'api_token', 'verify_ssl',
+        ),
+        'template_samples': (
+            (
+                '前门摄像机', '192.0.2.30', '摄像机', 'Hikvision',
+                'https://192.0.2.30/api/status', 'readonly', 'CHANGE-ME', '', '是',
+            ),
+            (
+                '机房门禁', '192.0.2.31', '门禁', 'Example',
+                'https://192.0.2.31/api/status', '', '', 'CHANGE-ME', '是',
+            ),
+        ),
         'sample': ('前门门禁闸机', '192.0.2.30', '门禁闸机', 'Dahua', 'https://192.0.2.30/api/status', 'readonly', 'CHANGE-ME', '', '否', 'ASI7213Y', 'ARM', '2', '8'),
     },
 }
@@ -218,9 +270,21 @@ def get_spec(entity):
         raise ValueError('不支持的数据类型') from exc
 
 
+def _template_columns(spec):
+    requested = spec.get('template_fields')
+    if not requested:
+        return spec['columns']
+    columns_by_field = {column[1]: column for column in spec['columns']}
+    return [columns_by_field[field] for field in requested]
+
+
+def _template_samples(spec):
+    return spec.get('template_samples') or (spec['sample'],)
+
+
 def export_csv(entity, template_only=False):
     spec = get_spec(entity)
-    columns = spec['columns'] if template_only else [
+    columns = _template_columns(spec) if template_only else [
         column for column in spec['columns']
         if column[1] not in spec.get('secret_fields', set())
     ]
@@ -228,7 +292,7 @@ def export_csv(entity, template_only=False):
     writer = csv.writer(stream)
     writer.writerow([label for label, _, _ in columns])
     if template_only:
-        writer.writerow(spec['sample'])
+        writer.writerows(_template_samples(spec))
     else:
         for obj in spec['model'].objects.all().order_by('pk'):
             row = []
@@ -243,8 +307,9 @@ def export_csv(entity, template_only=False):
 
 def export_xlsx_template(entity):
     spec = get_spec(entity)
+    columns = _template_columns(spec)
     return build_xlsx(
-        ([label for label, _, _ in spec['columns']], spec['sample']),
+        ([label for label, _, _ in columns], *_template_samples(spec)),
         sheet_name=spec['name'],
     )
 

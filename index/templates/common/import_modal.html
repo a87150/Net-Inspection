@@ -13,7 +13,7 @@
             {% endif %}
             <section class="modal-section import-config-section{% if personnel_api_import %} tab-pane fade{% if people_active_tab == 'csv' %} show active{% endif %}{% endif %}"{% if personnel_api_import %} id="people-panel-csv" role="tabpanel" aria-labelledby="people-tab-csv"{% endif %}>
                 <h3 class="h6">从文件导入</h3>
-                <p class="text-secondary small">此入口只接受{{ item_name }}模板。请先下载模板，填写后再上传。</p>
+                <p class="text-secondary small">此入口只接受{{ item_name }}模板。请先下载模板。请删除或替换模板中的演示数据行，填写后再上传。</p>
                 <div class="d-flex flex-wrap gap-2 mb-3">
                     <a href="{% url 'download_inventory_template_format' item_key 'csv' %}" class="btn btn-outline-secondary">下载 CSV 模板</a>
                     <a href="{% url 'download_inventory_template_format' item_key 'xlsx' %}" class="btn btn-outline-secondary">下载 Excel 模板</a>

@@ -38,7 +38,7 @@
  {% endif %}</section>
     </form>
    {% else %}<div class="alert alert-secondary mb-0">日志来源设置与采集脚本下载需要管理员权限。</div>{% endif %}
-   <form id="pc-analysis-config-form" class="inspection-config-layout" method="post" action="{% url 'computer_analysis_profile_configure' %}">
+   <form id="pc-analysis-config-form" class="inspection-config-layout" method="post" enctype="multipart/form-data" action="{% url 'computer_analysis_profile_configure' %}">
     {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
     {{ pc_analysis_form.profile_id }}{{ pc_analysis_form.non_field_errors }}
 <section class="inspection-config-block"><div class="inspection-config-block__heading"><span class="inspection-config-block__index">04</span><div><h3 class="h6 mb-1">选择配置与执行参数</h3><p class="mb-0">选择已有分析配置，并设置名称及下载、分析的并发上限。</p></div></div><div class="row g-3">{% if task_profiles %}<div class="col-md-4"><label class="form-label" for="pc-profile-switch">编辑配置</label><select id="pc-profile-switch" class="form-select" data-pc-profile-switch>{% for profile in task_profiles %}<option value="{{ profile.pk }}"{% if profile.pk == task_default_profile.pk %} selected{% endif %}>{{ profile.name }}</option>{% endfor %}</select></div>{% endif %}
@@ -53,7 +53,12 @@
 {% include 'devices/pc/config_field.html' with field=pc_analysis_form.minimum_windows_release col='col-md-3'   %}
 {% include 'devices/pc/config_field.html' with field=pc_analysis_form.defender_update_max_days col='col-md-3'   %}
 {% include 'devices/pc/config_field.html' with field=pc_analysis_form.defender_scan_max_days col='col-md-3'   %}
-{% include 'devices/pc/config_field.html' with field=pc_analysis_form.patch_max_days col='col-md-3'   %}{% include 'devices/pc/config_field.html' with field=pc_analysis_form.software_policy_path col='col-12'   %}{% include 'devices/pc/config_field.html' with field=pc_analysis_form.kms_servers_text col='col-md-6'   %}{% include 'devices/pc/config_field.html' with field=pc_analysis_form.site_ip_prefixes col='col-md-6'   %}</div></section>
+{% include 'devices/pc/config_field.html' with field=pc_analysis_form.patch_max_days col='col-md-3'   %}
+<div class="col-12"><div class="software-policy-upload">
+ <div class="software-policy-upload__summary"><div><span class="form-label d-block mb-1">软件策略文件</span><p class="small text-secondary mb-0">下载演示模板后按实际环境填写并上传；未重新上传时继续使用当前配置。</p></div><span class="status-badge {% if task_default_profile.software_policy_path %}status-badge--success{% else %}status-badge--neutral{% endif %}">{% if task_default_profile.software_policy_path %}✓ 已配置{% else %}— 未配置{% endif %}</span></div>
+ <div class="software-policy-upload__actions"><a class="btn btn-outline-primary" href="{% url 'pc_software_policy_template_download' %}">下载演示策略模板</a><div class="software-policy-upload__field"><label class="form-label" for="{{ pc_analysis_form.software_policy_file.id_for_label }}">{{ pc_analysis_form.software_policy_file.label }}</label>{{ pc_analysis_form.software_policy_file }}{{ pc_analysis_form.software_policy_file.errors }}{% if pc_analysis_form.software_policy_file.help_text %}<div class="form-text">{{ pc_analysis_form.software_policy_file.help_text }}</div>{% endif %}</div></div>
+</div></div>
+{% include 'devices/pc/config_field.html' with field=pc_analysis_form.kms_servers_text col='col-md-6'   %}{% include 'devices/pc/config_field.html' with field=pc_analysis_form.site_ip_prefixes col='col-md-6'   %}</div></section>
 <section class="inspection-config-block"><div class="inspection-config-block__heading"><span class="inspection-config-block__index">06</span><div><h3 class="h6 mb-1">分析项目</h3><p class="mb-0">macOS 自动跳过 Windows 专用项目；已选择但未采集的数据会提示缺失。</p></div></div><fieldset data-bulk-choice-group><div class="bulk-choice-group__heading"><legend class="visually-hidden">分析项目</legend><div class="bulk-choice-group__actions"><button class="btn btn-outline-primary btn-sm" type="button" data-bulk-select-all>全选</button><button class="btn btn-outline-secondary btn-sm" type="button" data-bulk-invert>反选</button></div></div>
  <div class="row row-cols-1 row-cols-md-3 g-2">{% for key, label in task_item_choices %}
  <label class="col form-check" for="pc-analysis-{{ key }}"><input id="pc-analysis-{{ key }}" class="form-check-input" type="checkbox" data-bulk-choice name="analysis_items" value="{{ key }}"{% if key in task_default_items %} checked{% endif %}><span class="form-check-label">{{ label }}</span></label>
