@@ -48,22 +48,6 @@ def _domain_summary_values(account_summary, computer_summary, group_summary):
     }
 
 
-def _dashboard_attention_score(item):
-    """Sort presentation only: load errors, abnormalities, unchecked, healthy."""
-    if item.get('error'):
-        return (0, 0)
-    if item['key'] == 'domain':
-        attention_count = item.get('account_abnormal', 0) + item.get('computer_abnormal', 0)
-    elif item['key'] in {'computers', 'networks', 'servers', 'monitors'}:
-        attention_count = item.get('bad', item.get('abnormal', 0))
-    else:
-        attention_count = 0
-    if attention_count:
-        return (1, -attention_count)
-    if item.get('unchecked', 0):
-        return (2, -item['unchecked'])
-    return (3, 0)
-
 
 def _with_card_actions(item):
     item = dict(item)
@@ -177,7 +161,6 @@ def index(request):
         },
     ]
     items = [_with_card_actions(item) for item in items]
-    items.sort(key=_dashboard_attention_score)
     task_page = Paginator(inspection_task_queryset(), 10).get_page(
         request.GET.get('task_page'),
     )

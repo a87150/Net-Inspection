@@ -55,6 +55,29 @@
                     <li class="nav-item"><a class="nav-link" href="{% url 'alert_list' %}">告警记录</a></li>
                 </ul>
                 <a class="navbar-text app-navbar__context" href="{% url 'admin:index' %}"><span class="status-dot status-dot--success" aria-hidden="true"></span>运维管理台</a>
+                {% if user.is_authenticated %}
+                <div class="dropdown ms-3" data-account-menu>
+                    <button class="btn btn-outline-light btn-sm dropdown-toggle d-inline-flex align-items-center gap-2" id="accountMenuToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="accountMenu" aria-label="账号 {{ user.get_username }}，查看权限组">
+                        <span>{{ user.get_username }}</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end app-navbar__dropdown-menu" id="accountMenu" aria-labelledby="accountMenuToggle">
+                        <li><h2 class="dropdown-header">权限组</h2></li>
+                        {% for group in user.groups.all %}
+                        <li><span class="dropdown-item-text">{{ group.name }}</span></li>
+                        {% empty %}
+                        <li><span class="dropdown-item-text text-secondary">未分配权限组</span></li>
+                        {% endfor %}
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <form method="post" action="{% url 'logout' %}">
+                                {% csrf_token %}<button class="dropdown-item text-danger" type="submit">退出登录</button>
+                            </form>
+                        </li>
+                    </ul>
+                </div>
+                {% else %}
+                <a class="navbar-text ms-3" href="{% url 'login' %}">登录</a>
+                {% endif %}
             </div>
         </div>
     </nav>

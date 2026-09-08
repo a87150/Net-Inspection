@@ -58,12 +58,15 @@ class DashboardHierarchyTests(TestCase):
             {'key': 'monitors', **common},
         ]
 
-    def test_actionable_cards_are_ordered_before_healthy_cards(self):
+    def test_cards_keep_the_original_fixed_order_even_when_attention_counts_change(self):
         with patch('index.dashboard.views.build_asset_card_summaries', return_value=self.summaries()):
             response = self.client.get(reverse('index'))
 
         keys = [item['key'] for item in response.context['items']]
-        self.assertEqual(keys[:2], ['networks', 'servers'])
+        self.assertEqual(
+            keys,
+            ['people', 'domain', 'computers', 'networks', 'servers', 'monitors'],
+        )
 
     def test_every_card_has_one_primary_action_and_compact_secondary_actions(self):
         with patch('index.dashboard.views.build_asset_card_summaries', return_value=self.summaries()):

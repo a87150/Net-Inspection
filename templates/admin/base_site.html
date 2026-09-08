@@ -11,7 +11,7 @@
 <ul id="user-tools" class="navbar-nav ms-auto align-items-lg-center" aria-label="管理操作">
 <li class="nav-item"><a class="nav-link" href="{% url 'index' %}">返回运维总览</a></li>
 {% if user.has_usable_password %}<li class="nav-item"><a class="nav-link" href="{% url 'admin:password_change' %}">{% translate 'Change password' %}</a></li>{% endif %}
-<li class="nav-item"><form id="logout-form" method="post" action="{% url 'admin:logout' %}">{% csrf_token %}<button class="nav-link" type="submit">{% translate 'Log out' %}</button></form></li>
+<li class="nav-item"><form id="logout-form" method="post" action="{% url 'admin:logout' %}">{% csrf_token %}<button class="nav-link" type="submit">退出登录</button></form></li>
 </ul>
 {% endif %}{% endblock %}
 {% block extrabody %}<script defer src="{% static 'app/js/common/form_accessibility.js' %}"></script>{% endblock %}
