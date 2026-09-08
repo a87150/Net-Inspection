@@ -42,9 +42,9 @@ def join_analysis_rows(analyses, roster, mode):
             continue
         rows.append(SimpleNamespace(
             pk=None, missing_log=True, computer=None, log_file=None, created_at=None,
-            execution_status='未匹配日志', task_source='人员匹配', error_count=0,
-            key_metrics='本任务范围内暂无匹配日志', result_level='info', ok=True,
-            summary='提示：本任务范围内未匹配到日志，不代表设备故障。',
+            execution_status='未匹配日志', task_source='人员匹配', error_count=1,
+            key_metrics='本任务范围内暂无匹配日志', result_level='warning', ok=False,
+            summary='异常：本任务范围内未匹配到日志，判定为异常。',
             details={'enrichment': {'personnel_id': str(person['id']),
                      'employee_number': person['employee_id'], 'personnel_name': person.get('name', ''),
                      'department': person.get('department', '')}},

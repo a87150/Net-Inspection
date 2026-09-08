@@ -1,6 +1,6 @@
 {% load extras %}
 <div data-table-workspace data-table-key="{{ table_preference_key|default:table_definition.key }}">
-    {% if record_type == 'computer_analysis' %}<p class="small text-secondary">{% if latest_task.profile_snapshot.matching_mode == 'people' %}按人员匹配：以任务创建时的人员为主，保留本任务范围内未匹配日志的人员；未匹配人员的日志仍保留在日志证据中。{% else %}不按人员匹配：以日志为主，保留未匹配人员的日志。{% endif %} 上方任务统计按实际分析的日志目标计算；未匹配日志的人员只作提示，不计为设备故障。切换配置对新任务生效。</p>{% endif %}
+    {% if record_type == 'computer_analysis' %}<p class="small text-secondary">{% if latest_task.profile_snapshot.matching_mode == 'people' %}按人员匹配：以任务创建时的人员为主；没有匹配日志的人员计为异常目标，未匹配人员的日志仍保留在日志证据中。{% else %}不按人员匹配：以日志为主，保留未匹配人员的日志。{% endif %} 上方任务统计包含已完成的分析目标；排队中、运行中和已取消任务不把缺失日志计为异常。切换配置对新任务生效。</p>{% endif %}
     <div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
     <div class="card surface-card table-scroll-shell execution-list-workspace"><p class="table-scroll-hint">可横向滚动查看完整记录，最右侧操作列保持可见</p><div class="table-responsive" role="region" aria-label="{% if record_type == 'computer_analysis' %}日志分析记录{% else %}{{ item_name }}巡检记录{% endif %}数据表" tabindex="0"><table class="table data-table table-hover align-middle mb-0">
         <thead><tr>
@@ -15,7 +15,7 @@
         {% if record_type == 'computer_analysis' %}
             {% for analysis in page_obj %}<tr>
                 {% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{% if field.key == 'computer_name' %}<span class="fw-semibold">{{ analysis.computer.computer_name|default:'未知' }}</span>{% elif field.key == 'user_name' %}{{ analysis.computer.user_name|default:'-' }}{% elif field.key == 'log_time' %}{{ analysis.log_file.modified_at|date:'Y-m-d H:i:s'|default:'-' }}{% elif field.key == 'created_at' %}{{ analysis.created_at|date:'Y-m-d H:i:s' }}{% elif field.key == 'status' %}{% if analysis.result_level == 'critical' %}<span class="badge text-bg-danger">严重</span>{% elif analysis.result_level == 'warning' %}<span class="badge text-bg-warning">警告</span>{% elif analysis.result_level == 'info' %}<span class="badge text-bg-info">提示</span>{% else %}<span class="badge text-bg-success">正常</span>{% endif %}{% else %}{{ analysis|get_attr:field.source|format_table_value:field.kind }}{% endif %}</td>{% endfor %}
-                <td class="text-end table-actions-cell">{% if analysis.pk %}<a href="{% url 'computer_analysis_detail' analysis.pk %}" class="btn btn-outline-dark btn-sm">查看详情</a>{% else %}<span class="text-info">未匹配日志</span>{% endif %}</td>
+                <td class="text-end table-actions-cell">{% if analysis.pk %}<a href="{% url 'computer_analysis_detail' analysis.pk %}" class="btn btn-outline-dark btn-sm">查看详情</a>{% else %}<span class="text-warning fw-semibold">异常：未匹配日志</span>{% endif %}</td>
             </tr>{% empty %}<tr><td colspan="20"><div class="empty-state"><strong>暂无日志分析记录</strong><span>最新任务尚未产生分析结果。</span></div></td></tr>{% endfor %}
         {% else %}
             {% for record in page_obj %}<tr>

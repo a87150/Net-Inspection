@@ -15,7 +15,7 @@ class MatchingModeTests(TestCase):
         self.assertIs(rows[0], matched)
         self.assertTrue(rows[1].missing_log)
         self.assertEqual(rows[1].details['enrichment']['employee_number'], 'A2')
-        self.assertEqual(rows[1].result_level, 'info')
+        self.assertEqual(rows[1].result_level, 'warning')
         self.assertEqual(join_analysis_rows([matched, orphan], roster, 'logs'), [matched, orphan])
 
     def test_employee_number_wins_and_duplicate_names_are_not_guessed(self):
@@ -72,6 +72,6 @@ class MatchingModeTests(TestCase):
         from index.common.table_registry import get_table_definition
         from index.inspections.records import _computer_analysis_records
         from django.test import RequestFactory
-        filtered, _ = apply_table_filters(RequestFactory().get('/', {'filter_status': 'info'}),
+        filtered, _ = apply_table_filters(RequestFactory().get('/', {'filter_status': 'warning'}),
                         _computer_analysis_records(), get_table_definition('computer_inspections'), include_legacy_status=False)
-        self.assertEqual([row.result_level for row in filtered], ['info'])
+        self.assertEqual([row.result_level for row in filtered], ['warning'])

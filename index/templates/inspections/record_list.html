@@ -28,7 +28,7 @@
         <div class="col-6 col-xl"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">完成目标</div><div class="h3 mb-0">{{ task_metrics.completed_count }}</div></div></div></div>
         <div class="col-6 col-xl"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">正常目标</div><div class="h3 mb-0 text-success">{{ task_metrics.normal_count }}</div></div></div></div>
         <div class="col-6 col-xl"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">异常目标</div><div class="h3 mb-0 text-danger">{{ task_metrics.abnormal_count }}</div></div></div></div>
-        <div class="col-6 col-xl"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">整体故障率</div><div class="h3 mb-0">{{ task_metrics.failure_rate|floatformat:1 }}%</div></div></div></div>
+        <div class="col-6 col-xl"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">整体异常率</div><div class="h3 mb-0">{{ task_metrics.abnormal_rate|floatformat:1 }}%</div></div></div></div>
         <div class="col-12 col-xl-3"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">最新任务时间</div><div class="fw-semibold mt-2">{{ task_metrics.latest_task_at|date:'Y-m-d H:i:s'|default:'暂无' }}</div></div></div></div>
     </div>
 </section>

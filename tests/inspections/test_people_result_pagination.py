@@ -67,13 +67,13 @@ class PeopleResultPaginationTests(TestCase):
         self.assertEqual(last[-1].pk, self.records[-1].pk)
 
     def test_filter_does_not_fabricate_placeholder_when_real_log_is_filtered_out(self):
-        rows, state = self.rows(filter_status='info', sort='employee_number', order='asc')
+        rows, state = self.rows(filter_status='warning', sort='employee_number', order='asc')
         result = list(rows)
         self.assertEqual(len(result), 21)
         self.assertTrue(all(row.missing_log for row in result))
         self.assertEqual(result[0].report_enrichment['employee_number'], 'E002')
         self.assertIn(('E001', 'E001'), state['field_options']['employee_number'])
-        rows, _ = self.rows(filter_employee_number='E00', filter_status='info', sort='employee_number', order='desc')
+        rows, _ = self.rows(filter_employee_number='E00', filter_status='warning', sort='employee_number', order='desc')
         self.assertEqual([r.report_enrichment['employee_number'] for r in rows],
                          ['E009', 'E008', 'E007', 'E006', 'E005', 'E004', 'E003', 'E002'])
 

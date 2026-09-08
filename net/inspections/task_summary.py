@@ -2,7 +2,7 @@
 
 from django.core.paginator import Paginator
 from django.db.models import Case, When, Value, CharField, Count, Q, Max, QuerySet
-from net.models import TaskRun, TaskTargetRun
+from net.models import ComputerAnalysis, TaskRun, TaskTargetRun
 
 
 def _outcome_expression(prefix='', task_prefix='task__'):
@@ -147,36 +147,91 @@ def summarize_task(task) -> dict:
     }
 
 
+_COMPLETED_HEALTH_STATUSES = frozenset({
+    TaskRun.Status.SUCCESS,
+    TaskRun.Status.PARTIAL,
+    TaskRun.Status.FAILED,
+})
+
+
+def _frozen_roster_ids(task):
+    snapshot = task.parameters_snapshot if isinstance(task.parameters_snapshot, dict) else {}
+    roster = snapshot.get('personnel_roster', [])
+    if not isinstance(roster, list):
+        return set()
+    return {
+        str(person['id'])
+        for person in roster
+        if isinstance(person, dict) and person.get('id') not in (None, '')
+    }
+
+
+def _missing_people_without_logs(tasks):
+    if isinstance(tasks, QuerySet):
+        people_tasks = list(tasks.filter(
+            task_type=TaskRun.TaskType.COMPUTER_ANALYSIS,
+            status__in=_COMPLETED_HEALTH_STATUSES,
+            profile_snapshot__matching_mode='people',
+        ).select_related(None).only('pk', 'parameters_snapshot'))
+    else:
+        people_tasks = [
+            task for task in tasks
+            if task.task_type == TaskRun.TaskType.COMPUTER_ANALYSIS
+            and task.status in _COMPLETED_HEALTH_STATUSES
+            and isinstance(task.profile_snapshot, dict)
+            and task.profile_snapshot.get('matching_mode') == 'people'
+        ]
+    roster_by_task = {task.pk: _frozen_roster_ids(task) for task in people_tasks}
+    if not roster_by_task:
+        return 0
+    matched_by_task = {task_id: set() for task_id in roster_by_task}
+    matched_rows = ComputerAnalysis.objects.filter(
+        task_target__task_id__in=roster_by_task,
+    ).values_list('task_target__task_id', 'report_enrichment__personnel_id').distinct()
+    for task_id, person_id in matched_rows:
+        if person_id not in (None, ''):
+            matched_by_task[task_id].add(str(person_id))
+    return sum(
+        len(roster_ids - matched_by_task[task_id])
+        for task_id, roster_ids in roster_by_task.items()
+    )
+
+
+def _finish_metrics(*, task_count, latest_task_at, normal_count, abnormal_count):
+    completed_count = normal_count + abnormal_count
+    abnormal_rate = round(abnormal_count * 100 / completed_count, 1) if completed_count else 0.0
+    return {
+        'task_count': task_count,
+        'completed_count': completed_count,
+        'normal_count': normal_count,
+        'abnormal_count': abnormal_count,
+        'abnormal_rate': abnormal_rate,
+        'failure_rate': abnormal_rate,
+        'latest_task_at': latest_task_at,
+    }
+
+
 def build_project_task_metrics(tasks):
-    """Summarize task/result health; queued and cancelled targets are not completed."""
+    """Summarize completed health, counting frozen people without logs as abnormal."""
+    missing_people = _missing_people_without_logs(tasks)
     if isinstance(tasks, QuerySet):
         summary = tasks.aggregate(task_count=Count('pk'), latest_task_at=Max('created_at'))
         rows = TaskTargetRun.objects.filter(task_id__in=tasks.order_by().values('pk')).annotate(
             outcome=_outcome_expression())
         counts = rows.aggregate(normal_count=Count('pk', filter=Q(outcome='normal')),
                                 abnormal_count=Count('pk', filter=Q(outcome='abnormal')))
-        completed = counts['normal_count'] + counts['abnormal_count']
-        return {**summary, **counts, 'completed_count': completed,
-                'failure_rate': round(counts['abnormal_count'] * 100 / completed, 1) if completed else 0.0}
+        return _finish_metrics(**summary, normal_count=counts['normal_count'],
+                               abnormal_count=counts['abnormal_count'] + missing_people)
     normal_count = 0
-    abnormal_count = 0
+    abnormal_count = missing_people
     for task in tasks:
         for target in task.target_runs.all():
             outcome = _target_outcome(task, target)
             normal_count += outcome == 'normal'
             abnormal_count += outcome == 'abnormal'
-    completed_count = normal_count + abnormal_count
-    return {
-        'task_count': len(tasks),
-        'completed_count': completed_count,
-        'normal_count': normal_count,
-        'abnormal_count': abnormal_count,
-        'failure_rate': (
-            round(abnormal_count * 100 / completed_count, 1)
-            if completed_count else 0.0
-        ),
-        'latest_task_at': tasks[0].created_at if tasks else None,
-    }
+    return _finish_metrics(task_count=len(tasks), normal_count=normal_count,
+                           abnormal_count=abnormal_count,
+                           latest_task_at=tasks[0].created_at if tasks else None)
 
 
 def project_workspace_context(request, kind):
