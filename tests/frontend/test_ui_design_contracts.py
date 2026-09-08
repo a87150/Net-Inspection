@@ -202,18 +202,28 @@ class AdminVisualContractTests(TestCase):
             password='unused',
         )
 
-    def test_admin_login_uses_the_operations_console_theme(self):
+    def test_admin_login_only_renders_the_login_card_and_password_reset(self):
         response = self.client.get(reverse('admin:login'))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'admin-login-shell')
-        self.assertContains(response, 'app-shell')
-        self.assertContains(response, 'app-navbar app-header')
-        self.assertContains(response, 'app-navbar__inner')
-        self.assertContains(response, 'app-main')
+        self.assertContains(response, 'admin-login-card')
+        self.assertContains(response, 'name="username"')
+        self.assertContains(response, 'name="password"')
+        self.assertContains(response, 'href="/admin/password_reset/"')
         self.assertContains(response, 'app/css/style.css')
         self.assertContains(response, 'app/css/admin.css')
-        self.assertContains(response, '网络巡检中心')
+        self.assertNotContains(response, '<header id="header"')
+        self.assertNotContains(response, '安全访问')
+        self.assertNotContains(response, '使用管理员账号管理资产、策略与后台数据。')
+        self.assertNotContains(response, '<footer id="footer"')
+
+    def test_admin_password_reset_form_is_available(self):
+        response = self.client.get('/admin/password_reset/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="email"')
+        self.assertContains(response, 'type="submit"')
 
     def test_admin_index_uses_the_operations_console_theme(self):
         self.client.force_login(self.admin_user)

@@ -254,10 +254,10 @@ body.admin-shell {
 .admin-login-shell #branding .navbar-brand { margin: 0; }
 .admin-login-shell .main { margin: 0; padding: 0; }
 .admin-login-shell #content { width: 100%; }
-.admin-login-card { padding: 2rem; border: 1px solid rgba(255, 255, 255, .78); border-radius: 0 0 1.15rem 1.15rem; background: rgba(255, 255, 255, .84); box-shadow: 0 24px 60px rgba(21, 45, 87, .18), inset 0 1px 0 rgba(255, 255, 255, .95); backdrop-filter: blur(18px); }
-.admin-login-card h1 { margin: 0 0 .55rem; color: var(--admin-ink); font-size: 1.55rem; }
-.admin-login-card__eyebrow { margin: 0 0 .45rem; color: var(--admin-primary); font-size: .72rem; font-weight: 780; letter-spacing: .12em; }
-.admin-login-card__description { margin: 0 0 1.5rem; color: var(--admin-muted); line-height: 1.65; }
+.admin-login-card { padding: 2rem; border: 1px solid rgba(255, 255, 255, .78); border-radius: 1.15rem; background: rgba(255, 255, 255, .84); box-shadow: 0 24px 60px rgba(21, 45, 87, .18), inset 0 1px 0 rgba(255, 255, 255, .95); backdrop-filter: blur(18px); }
+.admin-login-card h1 { margin: 0 0 1.5rem; color: var(--admin-ink); font-size: 1.55rem; text-align: center; }
+.admin-login-shell .password-reset-link { margin-top: -.25rem; text-align: right; }
+.admin-login-shell .password-reset-link a { color: var(--admin-primary); font-size: .82rem; font-weight: 650; text-decoration: none; }
 .admin-login-shell #login-form .form-row { display: grid; gap: .45rem; padding: 0; margin-bottom: 1rem; border: 0; }
 .admin-login-shell #login-form label { color: #41506a; font-size: .82rem; font-weight: 700; }
 .admin-login-shell #login-form input[type="text"],

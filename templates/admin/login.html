@@ -4,6 +4,8 @@
 {% block title %}{% if form.errors %}{% translate "Error:" %} {% endif %}{{ block.super }}{% endblock %}
 {% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'admin/css/login.css' %}">{% csp_nonce_attr form.media %}{% endblock %}
 {% block bodyclass %}{{ block.super }} login admin-login-shell{% endblock %}
+{% block header %}{% endblock %}
+{% block footer_container %}{% endblock %}
 {% block usertools %}{% endblock %}
 {% block nav-global %}{% endblock %}
 {% block nav-sidebar %}{% endblock %}
@@ -11,9 +13,7 @@
 {% block nav-breadcrumbs %}{% endblock %}
 {% block content %}
 <div class="admin-login-card">
-    <p class="admin-login-card__eyebrow">安全访问</p>
-    <h1>登录运维管理台</h1>
-    <p class="admin-login-card__description">使用管理员账号管理资产、策略与后台数据。</p>
+    <h1>后台登录</h1>
     {% if form.errors and not form.non_field_errors %}<p class="errornote">{% blocktranslate count counter=form.errors.items|length %}请检查下方错误信息。{% plural %}请检查下方错误信息。{% endblocktranslate %}</p>{% endif %}
     {% if form.non_field_errors %}{% for error in form.non_field_errors %}<p class="errornote">{{ error }}</p>{% endfor %}{% endif %}
     {% if user.is_authenticated %}<p class="errornote">当前账号 {{ username }} 没有访问权限，请使用其他账号登录。</p>{% endif %}
@@ -21,7 +21,7 @@
         <div class="form-row">{{ form.username.errors }}{{ form.username.label_tag }}{{ form.username }}</div>
         <div class="form-row">{{ form.password.errors }}{{ form.password.label_tag }}{{ form.password }}<input type="hidden" name="next" value="{{ next }}"></div>
         {% url 'admin_password_reset' as password_reset_url %}
-        {% if password_reset_url %}<div class="password-reset-link"><a href="{{ password_reset_url }}">{% translate 'Forgotten your login credentials?' %}</a></div>{% endif %}
+        {% if password_reset_url %}<div class="password-reset-link"><a href="{{ password_reset_url }}">找回密码</a></div>{% endif %}
         <div class="submit-row"><input type="submit" value="登录"></div>
     </form>
 </div>
