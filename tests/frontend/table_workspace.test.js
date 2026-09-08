@@ -445,3 +445,173 @@ test('clearing one filter preserves unrelated query state and focuses its contro
     assert.equal(replacement.searchParams.get('target'), 'asset-1');
     assert.equal(control.focused, true);
 });
+function partialNavigationFixture({fetchError = null} = {}) {
+    const replacementFixture = workspaceFixture();
+    const replacement = replacementFixture.workspace;
+    const originalQuerySelector = replacement.querySelector.bind(replacement);
+    const focusedSortLink = {focused: false, focus() { this.focused = true; }};
+    replacement.querySelector = (selector) => (
+        selector === '[data-sort-key="name"]' ? focusedSortLink : originalQuerySelector(selector)
+    );
+
+    const current = {
+        dataset: {tableKey: 'people'},
+        attributes: {},
+        replacedWith: null,
+        setAttribute(name, value) { this.attributes[name] = value; },
+        removeAttribute(name) { delete this.attributes[name]; },
+        getAttribute(name) { return this.attributes[name] || null; },
+        replaceWith(value) { this.replacedWith = value; },
+    };
+    const documentListeners = new Map();
+    const documentRoot = {
+        addEventListener(type, listener) { documentListeners.set(type, listener); },
+        querySelectorAll(selector) {
+            assert.equal(selector, '[data-table-workspace]');
+            return [current];
+        },
+    };
+    const windowListeners = new Map();
+    const requests = [];
+    const history = {pushed: [], pushState(_state, _title, url) { this.pushed.push(url); }};
+    const location = {
+        href: 'https://example.test/assets/people/?sort=name&order=asc',
+        origin: 'https://example.test',
+        assigned: [],
+        assign(url) { this.assigned.push(url); },
+        replace() {},
+    };
+    const browserWindow = {
+        location,
+        history,
+        addEventListener(type, listener) { windowListeners.set(type, listener); },
+        async fetch(url, options) {
+            requests.push({url, options});
+            if (fetchError) throw fetchError;
+            return {
+                ok: true,
+                url,
+                async text() { return '<html>updated table</html>'; },
+            };
+        },
+        DOMParser: class {
+            parseFromString(html, type) {
+                assert.equal(html, '<html>updated table</html>');
+                assert.equal(type, 'text/html');
+                return {
+                    querySelectorAll(selector) {
+                        assert.equal(selector, '[data-table-workspace]');
+                        return [replacement];
+                    },
+                };
+            }
+        },
+        FormData: class {
+            constructor(form) { this.form = form; }
+            *entries() { yield* this.form.entries; }
+        },
+    };
+    return {
+        browserWindow, current, documentListeners, documentRoot, focusedSortLink,
+        history, location, replacement, requests, windowListeners,
+    };
+}
+
+test('sort click fetches the server-sorted page and replaces the table workspace', async () => {
+    assert.equal(typeof controller.bindPartialTableNavigation, 'function');
+    const fixture = partialNavigationFixture();
+    const binding = controller.bindPartialTableNavigation(
+        fixture.documentRoot,
+        memoryStorage(),
+        fixture.browserWindow,
+    );
+    const link = {
+        href: 'https://example.test/assets/people/?sort=name&order=desc&page_size=20',
+        target: '',
+        dataset: {sortKey: 'name'},
+        closest(selector) {
+            return selector === '[data-table-workspace]' ? fixture.current : null;
+        },
+    };
+    const event = {
+        button: 0, defaultPrevented: false,
+        metaKey: false, ctrlKey: false, shiftKey: false, altKey: false,
+        prevented: false,
+        preventDefault() { this.prevented = true; },
+        target: {closest(selector) { return selector === '.table-sort-link, [data-query-reset]' ? link : null; }},
+    };
+
+    await binding.handleClick(event);
+
+    assert.equal(event.prevented, true);
+    assert.equal(fixture.requests.length, 1);
+    assert.equal(fixture.requests[0].url, link.href);
+    assert.equal(fixture.requests[0].options.headers['X-Requested-With'], 'XMLHttpRequest');
+    assert.equal(fixture.current.replacedWith, fixture.replacement);
+    assert.deepEqual(fixture.history.pushed, [link.href]);
+    assert.equal(fixture.focusedSortLink.focused, true);
+    assert.deepEqual(fixture.location.assigned, []);
+});
+
+test('filter submit serializes all current controls and updates without a page reload', async () => {
+    const fixture = partialNavigationFixture();
+    const binding = controller.bindPartialTableNavigation(
+        fixture.documentRoot,
+        memoryStorage(),
+        fixture.browserWindow,
+    );
+    const form = {
+        method: 'get',
+        action: 'https://example.test/assets/people/',
+        entries: [['q', '张 三'], ['filter_department', '运维部'], ['page_size', '50']],
+        matches(selector) { return selector === '[data-table-query-form]'; },
+        closest(selector) {
+            return selector === '[data-table-workspace]' ? fixture.current : null;
+        },
+    };
+    const event = {defaultPrevented: false, prevented: false, target: form, preventDefault() { this.prevented = true; }};
+
+    await binding.handleSubmit(event);
+
+    assert.equal(event.prevented, true);
+    assert.equal(fixture.requests.length, 1);
+    const requested = new URL(fixture.requests[0].url);
+    assert.equal(requested.pathname, '/assets/people/');
+    assert.equal(requested.searchParams.get('q'), '张 三');
+    assert.equal(requested.searchParams.get('filter_department'), '运维部');
+    assert.equal(requested.searchParams.get('page_size'), '50');
+    assert.equal(requested.searchParams.has('page'), false);
+    assert.equal(fixture.current.replacedWith, fixture.replacement);
+    assert.equal(fixture.history.pushed.length, 1);
+    assert.deepEqual(fixture.location.assigned, []);
+});
+
+test('partial table request failure falls back to normal navigation', async () => {
+    const fixture = partialNavigationFixture({fetchError: new Error('offline')});
+    const targetUrl = 'https://example.test/assets/people/?sort=name&order=desc';
+
+    await controller.refreshTableWorkspaces(
+        fixture.documentRoot,
+        targetUrl,
+        memoryStorage(),
+        fixture.browserWindow,
+    );
+
+    assert.deepEqual(fixture.location.assigned, [targetUrl]);
+    assert.equal(fixture.current.getAttribute('aria-busy'), null);
+});
+
+test('browser history refreshes table content without adding another history entry', async () => {
+    const fixture = partialNavigationFixture();
+    const binding = controller.bindPartialTableNavigation(
+        fixture.documentRoot,
+        memoryStorage(),
+        fixture.browserWindow,
+    );
+
+    await binding.handlePopState();
+
+    assert.equal(fixture.requests[0].url, fixture.location.href);
+    assert.equal(fixture.current.replacedWith, fixture.replacement);
+    assert.deepEqual(fixture.history.pushed, []);
+});

@@ -14,6 +14,7 @@
                 storage = null;
             }
             controller.initializeAll(document, storage, window.location);
+            controller.bindPartialTableNavigation(document, storage, window);
             controller.openAutoOpenImportModal(document, window.bootstrap);
         });
     }
@@ -323,6 +324,100 @@
         });
     }
 
+    async function refreshTableWorkspaces(documentRoot, href, storage, browserWindow, options = {}) {
+        const currentWorkspaces = Array.from(documentRoot.querySelectorAll('[data-table-workspace]'));
+        currentWorkspaces.forEach((workspace) => workspace.setAttribute('aria-busy', 'true'));
+        try {
+            const response = await browserWindow.fetch(href, {
+                credentials: 'same-origin',
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+            });
+            if (!response.ok) throw new Error(`Table request failed: ${response.status}`);
+            const parsed = new browserWindow.DOMParser().parseFromString(
+                await response.text(),
+                'text/html',
+            );
+            const replacements = Array.from(parsed.querySelectorAll('[data-table-workspace]'));
+            const pairs = currentWorkspaces.map((workspace) => {
+                const replacement = replacements.find(
+                    (candidate) => candidate.dataset.tableKey === workspace.dataset.tableKey,
+                );
+                if (!replacement) throw new Error(`Missing table workspace: ${workspace.dataset.tableKey}`);
+                return {workspace, replacement};
+            });
+            const finalUrl = response.url || href;
+            if (options.updateHistory !== false) {
+                browserWindow.history.pushState({}, '', finalUrl);
+            }
+            pairs.forEach(({workspace, replacement}) => {
+                workspace.replaceWith(replacement);
+                initializeWorkspace(replacement, storage, browserWindow.location);
+            });
+            if (options.focusTableKey && options.focusSortKey) {
+                const target = pairs.find(
+                    ({replacement}) => replacement.dataset.tableKey === options.focusTableKey,
+                )?.replacement;
+                target?.querySelector(`[data-sort-key="${options.focusSortKey}"]`)?.focus();
+            }
+            return pairs.map(({replacement}) => replacement);
+        } catch (_error) {
+            currentWorkspaces.forEach((workspace) => workspace.removeAttribute('aria-busy'));
+            browserWindow.location.assign(href);
+            return [];
+        }
+    }
+
+    function bindPartialTableNavigation(documentRoot, storage, browserWindow) {
+        if (documentRoot.__partialTableNavigation) return documentRoot.__partialTableNavigation;
+
+        const supported = typeof browserWindow?.fetch === 'function'
+            && typeof browserWindow?.DOMParser === 'function';
+        const handleClick = async (event) => {
+            const link = event.target?.closest?.('.table-sort-link, [data-query-reset]');
+            if (!supported || !link || event.defaultPrevented || event.button !== 0
+                || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey
+                || link.target || link.hasAttribute?.('download')) return;
+            const url = new URL(link.href, browserWindow.location.href);
+            if (url.origin !== browserWindow.location.origin) return;
+            const workspace = link.closest('[data-table-workspace]');
+            if (!workspace || workspace.getAttribute('aria-busy') === 'true') return;
+            event.preventDefault();
+            return refreshTableWorkspaces(
+                documentRoot, url.toString(), storage, browserWindow,
+                {
+                    focusTableKey: workspace.dataset.tableKey,
+                    focusSortKey: link.dataset.sortKey || '',
+                },
+            );
+        };
+        const handleSubmit = async (event) => {
+            const form = event.target;
+            if (!supported || event.defaultPrevented
+                || !form?.matches?.('[data-table-query-form]')
+                || String(form.method || 'get').toLowerCase() !== 'get') return;
+            const workspace = form.closest('[data-table-workspace]');
+            if (!workspace || workspace.getAttribute('aria-busy') === 'true') return;
+            const url = new URL(form.action || browserWindow.location.href, browserWindow.location.href);
+            const formData = new browserWindow.FormData(form);
+            url.search = new URLSearchParams(formData.entries()).toString();
+            url.searchParams.delete('page');
+            event.preventDefault();
+            return refreshTableWorkspaces(documentRoot, url.toString(), storage, browserWindow);
+        };
+        const handlePopState = () => refreshTableWorkspaces(
+            documentRoot,
+            browserWindow.location.href,
+            storage,
+            browserWindow,
+            {updateHistory: false},
+        );
+        documentRoot.addEventListener('click', handleClick);
+        documentRoot.addEventListener('submit', handleSubmit);
+        browserWindow.addEventListener('popstate', handlePopState);
+        const binding = {handleClick, handleSubmit, handlePopState};
+        documentRoot.__partialTableNavigation = binding;
+        return binding;
+    }
     function openAutoOpenImportModal(documentRoot, bootstrapApi) {
         const modalElement = documentRoot.querySelector(
             '#importModal[data-auto-open="true"]',
@@ -333,5 +428,5 @@
         bootstrapApi.Modal.getOrCreateInstance(modalElement).show();
     }
 
-    return {activeFilterDescriptors, clearActiveFilterSource, initializeWorkspace, initializeAll, openAutoOpenImportModal, renderActiveFilterChips, storageKey};
+    return {activeFilterDescriptors, bindPartialTableNavigation, clearActiveFilterSource, initializeWorkspace, initializeAll, openAutoOpenImportModal, refreshTableWorkspaces, renderActiveFilterChips, storageKey};
 }));
