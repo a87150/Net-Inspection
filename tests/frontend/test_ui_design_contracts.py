@@ -9,6 +9,27 @@ from django.urls import reverse
 
 
 class SharedInterfaceContractTests(TestCase):
+    def test_table_query_actions_share_vertical_centering_contract(self):
+        response = self.client.get(reverse('asset_list', args=['networks']))
+        html = response.content.decode(response.charset)
+
+        actions = (
+            ('data-filter-submit', '筛选'),
+            ('data-query-reset', '重置查询'),
+            ('data-filtered-export', '导出筛选结果'),
+        )
+        for marker, label in actions:
+            with self.subTest(marker=marker):
+                match = re.search(
+                    rf'<(?:button|a)[^>]*{marker}[^>]*>{label}</(?:button|a)>',
+                    html,
+                )
+                self.assertIsNotNone(match)
+                self.assertIn(
+                    'd-inline-flex align-items-center justify-content-center',
+                    match.group(),
+                )
+
     def test_shared_brand_partial_renders_application_identity_and_destination(self):
         html = render_to_string('common/brand.html', {'brand_url': '/destination/'})
 

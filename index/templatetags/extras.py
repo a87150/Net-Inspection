@@ -34,6 +34,14 @@ def format_table_value(value, kind):
     return value
 
 
+@register.filter
+def format_table_field(value, field):
+    formatted = format_table_value(value, field.kind)
+    if formatted != '-' and field.key in {'memory_total_gb', 'disk_total_gb'}:
+        return f'{formatted} GB'
+    return formatted
+
+
 @register.simple_tag
 def query_transform(request, **changes):
     query = request.GET.copy()

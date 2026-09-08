@@ -41,7 +41,7 @@
                 <tbody>
                 {% for obj in page_obj %}
                 <tr>
-                    {% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ obj|get_attr:field.source|format_table_value:field.kind }}</td>{% endfor %}
+                    {% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ obj|get_attr:field.source|format_table_field:field }}</td>{% endfor %}
                     {% if task_allow_target_selection %}<td><input class="form-check-input" type="checkbox" name="target_ids" value="{{ obj.pk }}" form="manualTaskForm" aria-label="选择 {{ obj }}"{% if obj.pk|stringformat:'s' in task_selected_ids %} checked{% endif %}></td>{% endif %}
                     <td class="text-end table-actions-cell"><div class="d-inline-flex gap-2 table-row-actions">
                         <a href="{% url 'asset_detail' item_key obj.pk %}" class="btn btn-outline-dark btn-sm">查看详情</a>

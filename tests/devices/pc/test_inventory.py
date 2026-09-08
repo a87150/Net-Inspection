@@ -17,6 +17,26 @@ from net.data_exchange.xlsx import build_xlsx
 
 
 class AssetInventoryFieldTests(TestCase):
+    def test_asset_table_displays_capacity_values_with_gb_units(self):
+        Computer.objects.create(
+            computer_name='PC-CAPACITY', memory_total_gb=32, disk_total_gb=512,
+        )
+        Computer.objects.create(computer_name='PC-CAPACITY-UNKNOWN')
+
+        response = self.client.get(reverse('asset_list', args=['computers']))
+
+        self.assertContains(
+            response,
+            '<td data-column-key="memory_total_gb" hidden>32.00 GB</td>',
+            html=True,
+        )
+        self.assertContains(
+            response,
+            '<td data-column-key="disk_total_gb" hidden>512.00 GB</td>',
+            html=True,
+        )
+        self.assertNotContains(response, '- GB')
+
     def test_people_and_device_inventory_fields_are_nullable(self):
         person = People.objects.create(employee_id='P-100', hire_date=date(2024, 1, 2))
         pc = Computer.objects.create(computer_name='PC-100', cpu_model='Core i7', memory_total_gb=32)

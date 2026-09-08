@@ -24,9 +24,9 @@
             {% endif %}
         {% endfor %}
         <div class="table-filter-actions">
-            <button class="btn btn-primary text-nowrap" type="submit">筛选</button>
-            <a class="btn btn-outline-secondary text-nowrap" href="{{ request.path }}{% if table_state.reset_query %}?{{ table_state.reset_query }}{% endif %}" data-query-reset>重置查询</a>
-            {% if table_export_path %}{% query_transform request page=None as export_query %}<a class="btn btn-outline-success text-nowrap" href="{{ table_export_path }}{% if export_query %}?{{ export_query }}{% endif %}" data-filtered-export>导出筛选结果</a>{% endif %}
+            <button class="btn btn-primary text-nowrap d-inline-flex align-items-center justify-content-center" type="submit" data-filter-submit>筛选</button>
+            <a class="btn btn-outline-secondary text-nowrap d-inline-flex align-items-center justify-content-center" href="{{ request.path }}{% if table_state.reset_query %}?{{ table_state.reset_query }}{% endif %}" data-query-reset>重置查询</a>
+            {% if table_export_path %}{% query_transform request page=None as export_query %}<a class="btn btn-outline-success text-nowrap d-inline-flex align-items-center justify-content-center" href="{{ table_export_path }}{% if export_query %}?{{ export_query }}{% endif %}" data-filtered-export>导出筛选结果</a>{% endif %}
         </div>
     </div>
 
