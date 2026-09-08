@@ -20,6 +20,7 @@ COMPUTER_UPLOAD_PROFILE_ID = os.getenv('COMPUTER_UPLOAD_PROFILE_ID', '')
 # of relying on a request-derived origin behind a reverse proxy.
 NET_PUBLIC_BASE_URL = os.getenv('NET_PUBLIC_BASE_URL', '')
 DOMAIN_OPERATION_ENCRYPTION_KEY = os.getenv('DOMAIN_OPERATION_ENCRYPTION_KEY', '')
+PC_LOG_SOURCE_ENCRYPTION_KEY = os.getenv('PC_LOG_SOURCE_ENCRYPTION_KEY', '')
 # Forwarded host and scheme are trusted only when the deployment explicitly
 # enables this setting for a proxy that it controls.
 NET_TRUST_PROXY_HEADERS = (

@@ -115,34 +115,9 @@ class InspectionProfile(models.Model):
 
 
 class ComputerAnalysisProfile(models.Model):
-    class FileTimeMode(models.TextChoices):
-        RECENT_DAYS = 'recent_days', '最近 N 天'
-        DATE_RANGE = 'date_range', '指定起止日期'
-
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255, unique=True)
     is_enabled = models.BooleanField(default=True)
-    scan_directories = models.JSONField(
-        default=list,
-        blank=True,
-        validators=[validate_string_list],
-    )
-    recursive = models.BooleanField(default=False)
-    processed_directory = models.TextField(blank=True)
-    failed_directory = models.TextField(blank=True)
-    file_time_mode = models.CharField(
-        max_length=20,
-        choices=FileTimeMode.choices,
-        default=FileTimeMode.RECENT_DAYS,
-    )
-    recent_days = models.PositiveSmallIntegerField(
-        null=True,
-        blank=True,
-        default=7,
-        validators=[MinValueValidator(1), MaxValueValidator(3650)],
-    )
-    range_start_date = models.DateField(null=True, blank=True)
-    range_end_date = models.DateField(null=True, blank=True)
     analysis_items = models.JSONField(
         default=list,
         blank=True,
@@ -188,32 +163,11 @@ class ComputerAnalysisProfile(models.Model):
     def clean(self):
         super().clean()
         errors = {}
-        for field_name in ('scan_directories', 'analysis_items', 'kms_servers'):
+        for field_name in ('analysis_items', 'kms_servers'):
             try:
                 validate_string_list(getattr(self, field_name))
             except ValidationError as exc:
                 errors[field_name] = exc.messages
-        if self.file_time_mode == self.FileTimeMode.RECENT_DAYS:
-            if self.recent_days is None:
-                errors['recent_days'] = '最近天数模式必须设置天数。'
-            if self.range_start_date is not None:
-                errors['range_start_date'] = '最近天数模式不能设置开始日期。'
-            if self.range_end_date is not None:
-                errors['range_end_date'] = '最近天数模式不能设置结束日期。'
-        elif self.file_time_mode == self.FileTimeMode.DATE_RANGE:
-            if self.recent_days is not None:
-                errors['recent_days'] = '指定日期模式不能设置最近天数。'
-            if self.range_start_date is None:
-                errors['range_start_date'] = '指定日期模式必须设置开始日期。'
-            if self.range_end_date is None:
-                errors['range_end_date'] = '指定日期模式必须设置结束日期。'
-            if (
-                self.range_start_date is not None
-                and self.range_end_date is not None
-                and self.range_start_date > self.range_end_date
-            ):
-                errors['range_start_date'] = '开始日期不能晚于结束日期。'
-                errors['range_end_date'] = '结束日期不能早于开始日期。'
         if errors:
             raise ValidationError(errors)
 
