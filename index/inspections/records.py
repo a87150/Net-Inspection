@@ -179,29 +179,13 @@ def record_detail(request, kind, pk):
 
 
 def computer_analysis_list(request):
-    target = request.GET.get('target', '').strip()
-    analyses = _computer_analysis_records(target)
-    table_definition = project_record_definition('computers')
-    analyses, table_state = apply_table_filters(
-        request, analyses, table_definition, include_legacy_status=False,
-    )
-    preserve_table_parameters(table_state, {'target': target})
-    page_obj = Paginator(analyses, table_state['page_size']).get_page(
-        request.GET.get('page'),
-    )
+    from .analysis_summary import latest_analysis_statistics
     context = {
         'record_type': 'computer_analysis',
         'item_name': 'PC',
-        'page_obj': page_obj,
-        'table_definition': table_definition,
-        'table_state': table_state,
-        'page_sizes': PAGE_SIZES,
-        'table_export_path': reverse(
-            'table_export', args=['computer_inspections'],
-        ),
-        'pagination_query': query_without_page(request),
     }
     context.update(_project_workspace_context(request, 'computers'))
+    context['latest_analysis_statistics'] = latest_analysis_statistics(context['latest_task'])
     context.update(task_modal_context(request, 'computers'))
     context.update(alert_modal_context(request, profile=context['task_default_profile']))
     return render(request, 'inspections/record_list.html', context)

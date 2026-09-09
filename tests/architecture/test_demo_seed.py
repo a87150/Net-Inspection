@@ -10,6 +10,7 @@ from django.db.models import Q
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
+from tests.auth import login_admin
 
 from net.models import (
     Computer,
@@ -57,6 +58,9 @@ BUSINESS_MODELS = (
 
 
 class DashboardActionTests(TestCase):
+    def setUp(self):
+        login_admin(self.client)
+
     def test_dashboard_separates_list_and_dynamic_actions(self):
         call_command('seed_demo_data', reset=True, stdout=StringIO())
 
@@ -735,6 +739,7 @@ class DeterministicDemoSeedTests(TestCase):
         )
 
     def test_seeded_data_smokes_lists_details_filters_exports_and_import_ui(self):
+        login_admin(self.client)
         call_command('seed_demo_data', reset=True, stdout=StringIO())
 
         homepage = self.client.get(reverse('index'))

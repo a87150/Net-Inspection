@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, OperationalError, connection, transaction
+from django.db.models import F
 from django.db.models.functions import Now
 from django.utils import timezone
 
@@ -283,6 +284,10 @@ def enqueue_task(profile, target_ids, source, overrides=None, *, _frozen_parent=
         selected_items,
         context=context,
     )
+    # Daily raw backups are independent of optional metric selection.
+    if target_type == TaskTargetRun.TargetType.NETWORK_DEVICE:
+        selected_items = list(dict.fromkeys([*selected_items, 'config_info']))
+        profile_snapshot = dict(profile_snapshot, selected_items=selected_items)
     target_scope_snapshot = {
         # Child context is inherited below, never re-resolved from live policy.
         'targets': [
@@ -603,17 +608,36 @@ def renew_lease(task_id, worker_id, lease_seconds):
 
 def cancel_task(task_id, *, now=None):
     """Atomically cancel active work and fence its current Worker lease."""
-    now = _queue_now(now)
+    if now is not None:
+        now = _queue_now(now)
     try:
         normalized_task_id = TaskRun._meta.pk.to_python(task_id)
     except (TypeError, ValueError, ValidationError):
         raise ValidationError({'task_id': '任务 ID 无效。'}) from None
+    for attempt in range(3):
+        try:
+            return _cancel_task_once(normalized_task_id, now=now)
+        except OperationalError as exc:
+            # Retry the whole rolled-back transaction, never a caller's transaction.
+            if not is_sqlite_busy(exc) or connection.in_atomic_block or attempt == 2:
+                raise
+            time.sleep(0.1 * (attempt + 1))
+
+
+def _cancel_task_once(normalized_task_id, *, now):
     with transaction.atomic():
+        if connection.vendor == 'sqlite':
+            # SQLite ignores select_for_update. Acquire its write lock before
+            # reading, avoiding a read-to-write upgrade deadlock with the Worker.
+            TaskRun.objects.filter(
+                pk=normalized_task_id, status__in=TaskRun.ACTIVE_STATUSES,
+            ).update(lease_expires_at=F('lease_expires_at'))
         task = TaskRun.objects.select_for_update().filter(pk=normalized_task_id).first()
         if task is None:
             raise ValidationError({'task_id': '任务不存在。'})
         if task.status not in TaskRun.ACTIVE_STATUSES:
             raise ValidationError({'status': '任务已经结束，不能重复结束。'})
+        now = _queue_now(now)
         targets = list(
             task.target_runs.select_for_update().order_by('created_at', 'pk')
         )

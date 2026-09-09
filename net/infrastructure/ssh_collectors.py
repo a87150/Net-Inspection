@@ -3,6 +3,8 @@ import re
 import time
 
 from net.infrastructure.collection import CollectionResult, Timer
+from net.devices.network.transport import connect_network as _connect_network
+from net.infrastructure.sanitization import sanitize
 from net.inspections.selection import LINUX_FIELDS, NETWORK_FIELDS, selected_fields
 from net.data_exchange.adapters import MAX_CONFIG_BYTES
 from net.devices.network.configuration import NETWORK_CONFIG, BAD_OUTPUT, network_vendor, validate_native
@@ -12,9 +14,9 @@ LINUX_COMMANDS = {
     'hostname': 'hostname',
     'system': 'uname -a; printf "\\n---OS_RELEASE---\\n"; cat /etc/os-release 2>/dev/null',
     'uptime': 'cat /proc/uptime; uptime',
-    'cpu': 'lscpu; printf "\\n---LOAD---\\n"; cat /proc/loadavg',
+    'cpu': 'LC_ALL=C lscpu; printf "\\n---LOAD---\\n"; cat /proc/loadavg; printf "\\n---CPU_SAMPLE---\\n"; head -n 1 /proc/stat; sleep 1; head -n 1 /proc/stat',
     'memory': 'free -b',
-    'storage': 'df -P -B1',
+    'storage': 'df -P -B1; printf "\n---LSBLK---\n"; lsblk -b -J -d -o NAME,TYPE,SIZE 2>/dev/null || true',
     'network': 'ip -j address 2>/dev/null; printf "\\n---ROUTE---\\n"; ip -j route 2>/dev/null',
     'services': 'systemctl --failed --no-pager --no-legend',
     'logs': 'journalctl -p 0..3 --since "24 hours ago" --no-pager -n 100',
@@ -71,6 +73,27 @@ def _json_or_text(value):
         return value
 
 
+def _linux_cpu(raw):
+    cpu = {'raw': raw}
+    _, marker, samples = raw.partition('---CPU_SAMPLE---')
+    if not marker:
+        return cpu
+    try:
+        rows = [line.split() for line in samples.splitlines() if line.strip()]
+        if len(rows) != 2 or any(row[0] != 'cpu' or len(row) < 9 for row in rows):
+            return cpu
+        # guest counters are already included in user/nice; do not count twice.
+        before, after = ([int(value) for value in row[1:9]] for row in rows)
+        deltas = [end - start for start, end in zip(before, after)]
+        total = sum(deltas)
+        if total > 0 and all(value >= 0 for value in deltas):
+            cpu['usage_percent'] = round(100 * (total - deltas[3] - deltas[4]) / total, 2)
+            cpu['sample_seconds'] = 1
+    except (ValueError, IndexError):
+        pass
+    return cpu
+
+
 def _parse_linux(raw):
     memory = {}
     memory_lines = raw.get('memory', '').splitlines()
@@ -80,11 +103,29 @@ def _parse_linux(raw):
             memory = {'total_bytes': columns[1], 'used_bytes': columns[2], 'free_bytes': columns[3]}
 
     disks = []
-    for line in raw.get('storage', '').splitlines()[1:]:
+    storage_text, _, lsblk_text = raw.get('storage', '').partition('---LSBLK---')
+    for line in storage_text.splitlines()[1:]:
         columns = line.split()
         if len(columns) >= 6:
             disks.append({'filesystem': columns[0], 'total_bytes': columns[1], 'used_bytes': columns[2], 'available_bytes': columns[3], 'usage': columns[4], 'mount': columns[5]})
 
+    lsblk = _json_or_text(lsblk_text) if lsblk_text.strip() else None
+    disk_bytes = 0
+    blockdevices = lsblk.get('blockdevices') if isinstance(lsblk, dict) else None
+    seen = set()
+    if isinstance(blockdevices, list):
+        for disk in blockdevices:
+            if not isinstance(disk, dict):
+                disk_bytes = 0
+                break
+            if disk.get('type') != 'disk':
+                continue
+            name, size = disk.get('name'), str(disk.get('size', ''))
+            if not isinstance(name, str) or not name or name in seen or not size.isdigit() or int(size) <= 0:
+                disk_bytes = 0
+                break
+            seen.add(name)
+            disk_bytes += int(size)
     network_text = raw.get('network', '')
     address_text, _, route_text = network_text.partition('---ROUTE---')
     system_text = raw.get('system', '')
@@ -93,12 +134,13 @@ def _parse_linux(raw):
     return {
         'computer_name': raw.get('hostname', '').strip(),
         'system_info': {'uname': uname.strip(), 'os_release': os_release.strip(), 'uptime_seconds': uptime_seconds},
-        'cpu': {'raw': raw.get('cpu', '')},
+        'cpu': _linux_cpu(raw.get('cpu', '')),
         'memory': memory,
         'storage_status': disks,
+        'disk_total_gb': disk_bytes / (1024 ** 3) if disk_bytes else None,
         'network_info': {'interfaces': _json_or_text(address_text), 'routes': _json_or_text(route_text)},
         'services': [line for line in raw.get('services', '').splitlines() if line.strip()],
-        'logs': [line for line in raw.get('logs', '').splitlines() if line.strip()],
+        'logs': [line for line in raw.get('logs', '').splitlines() if line.strip() and line.strip() != '-- No entries --'],
     }
 
 
@@ -125,6 +167,8 @@ def collect_linux_ssh(server, timeout=10, selected_items=None):
         requested = list(LINUX_FIELDS) if selected_items is None else selected_items
         data = {item: parsed[item] for item in requested if item in parsed
                 and all(key in raw for key in LINUX_FIELDS[item])}
+        if 'storage_status' in data and parsed.get('disk_total_gb') is not None:
+            data['disk_total_gb'] = parsed['disk_total_gb']
         for item in ('memory', 'storage_status'):
             if item in data and not data[item]:
                 failures[item] = 'unusable command evidence'
@@ -196,7 +240,7 @@ def _read_configuration_channel(channel, timeout, prompt=None):
             if (prompt is not None and tail == prompt) or (
                 prompt is None and re.fullmatch(r'(?:<[^<>\s]{1,100}>|[\w./:@-]{1,100}[>#])', tail)
             ):
-                return bytes(buffer).decode('utf-8').replace('\r\n', '\n'), tail
+                return bytes(buffer).decode('utf-8'), tail
         time.sleep(.02)
     raise TimeoutError('configuration did not terminate at the session prompt')
 
@@ -230,13 +274,12 @@ def collect_network_ssh(device, timeout=12, selected_items=None):
     timer = Timer()
     try:
         with timer:
-            client = _connect(device, timeout)
+            client = _connect_network(device, timeout, vendor_key)
             try:
-                channel = client.invoke_shell(width=200, height=1000)
-                prompt = None
+                channel = client.remote_conn
+                prompt = client.find_prompt().strip()
                 if wants_config and config_vendor:
                     try:
-                        _, prompt = _read_configuration_channel(channel, timeout)
                         channel.send(NETWORK_CONFIG[config_vendor][0] + '\n')
                         paging, _ = _read_configuration_channel(channel, timeout, prompt)
                         if BAD_OUTPUT.search(paging):
@@ -247,15 +290,18 @@ def collect_network_ssh(device, timeout=12, selected_items=None):
                         # A timed-out/paged shell is no longer synchronized.
                         return CollectionResult(True, 'failed', config['message'], data={'config_info': config}, raw={'config_info': config})
                 else:
-                    _read_channel(channel, 2)
-                    channel.send(PAGING_COMMANDS[vendor_key] + '\n')
-                    _read_channel(channel, 2)
+                    paging = client.send_command(PAGING_COMMANDS[vendor_key], read_timeout=timeout)
+                    if BAD_OUTPUT.search(paging):
+                        raise ValueError('cannot disable pagination')
                 successful_items, failed_items = set(), set()
                 for item, command in zip(NETWORK_FIELDS, NETWORK_COMMANDS[vendor_key]):
                     if selected_items is not None and item not in selected_items:
                         continue
-                    channel.send(command + '\n')
-                    output = _read_channel(channel, timeout).strip()
+                    output = client.send_command(
+                        command, read_timeout=timeout,
+                        expect_string=r'(?m)^' + re.escape(prompt) + r'\s*$',
+                        strip_prompt=False, strip_command=False,
+                    ).strip()
                     lines = output.splitlines()
                     complete = bool(lines and re.fullmatch(r'(?:<[^<>\s]+>|[\w./:@-]+[>#])', lines[-1].strip()))
                     body = '\n'.join(line for line in lines[:-1] if line.strip() not in (command, (prompt or '') + command)).strip()
@@ -265,7 +311,7 @@ def collect_network_ssh(device, timeout=12, selected_items=None):
                         successful_items.add(item)
                         raw[command] = body
             finally:
-                client.close()
+                client.disconnect()
         data = selected_fields(_network_data(raw, vendor_key), selected_items)
         data = {key: value for key, value in data.items() if key in successful_items - failed_items}
         if 'cpu' in data and data['cpu']['usage_percent'] is None:
@@ -288,4 +334,4 @@ def collect_network_ssh(device, timeout=12, selected_items=None):
                                     '网络设备配置连接或采集失败。',
                                     data={'config_info': config}, raw={'config_info': config},
                                     duration_ms=getattr(timer, 'duration_ms', 0))
-        return CollectionResult(False, 'failed', f'网络设备 SSH 采集失败：{exc}', duration_ms=getattr(timer, 'duration_ms', 0))
+        return CollectionResult(False, 'failed', f'网络设备 SSH 采集失败：{sanitize(str(exc), secrets=(device.username, device.password))}', duration_ms=getattr(timer, 'duration_ms', 0))

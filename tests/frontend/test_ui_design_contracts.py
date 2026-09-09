@@ -6,9 +6,13 @@ from django.contrib.staticfiles import finders
 from django.test import TestCase
 from django.template.loader import render_to_string
 from django.urls import reverse
+from tests.auth import login_admin
 
 
 class SharedInterfaceContractTests(TestCase):
+    def setUp(self):
+        login_admin(self.client)
+
     def test_table_query_actions_share_vertical_centering_contract(self):
         response = self.client.get(reverse('asset_list', args=['networks']))
         html = response.content.decode(response.charset)
@@ -118,7 +122,8 @@ class SharedInterfaceContractTests(TestCase):
         self.assertContains(statistics, 'department-workspace__summary')
         self.assertContains(task_list, 'execution-list-workspace')
         self.assertContains(records, 'execution-list-workspace')
-        self.assertContains(analyses, 'execution-list-workspace')
+        self.assertContains(analyses, '最新任务统计')
+        self.assertNotContains(analyses, 'execution-list-workspace')
 
     def test_dashboard_cards_use_glass_surface_without_status_side_rail(self):
         response = self.client.get(reverse('index'))

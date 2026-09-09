@@ -75,7 +75,24 @@ class AlertServiceTests(TestCase):
             'state': state,
         }
 
-    def test_normal_to_abnormal_creates_one_merged_event_and_fanout(self):
+    def summary_event(self):
+        from net.alerts.service import process_target_findings
+        from net.alerts.task_summaries import process_task_summary
+
+        target = self.target()
+        process_target_findings(target, [self.finding()])
+        TaskTargetRun.objects.filter(pk=target.pk).update(
+            alert_processed_at=timezone.now(),
+            result_snapshot={'alert_observation': {'abnormal': True, 'info': False}},
+        )
+        event = process_task_summary(target.task_id)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.event_type, 'summary')
+        self.assertEqual(event.summary_task_id, target.task_id)
+        self.assertIsNone(event.target_run_id)
+        return event
+
+    def test_normal_to_abnormal_creates_one_merged_recorded_event_without_fanout(self):
         from net.alerts.service import process_target_findings
 
         target = self.target()
@@ -88,7 +105,8 @@ class AlertServiceTests(TestCase):
         event = events[0]
         self.assertEqual(event.event_type, AlertEvent.EventType.ABNORMAL)
         self.assertEqual({item['key'] for item in event.findings}, {'collector.cpu', 'collector.memory'})
-        self.assertEqual(AlertDelivery.objects.filter(event=event, channel=self.channel).count(), 1)
+        self.assertEqual(event.status, 'recorded')
+        self.assertFalse(AlertDelivery.objects.exists())
 
     def test_normal_to_normal_creates_no_event(self):
         from net.alerts.service import process_target_findings
@@ -107,12 +125,14 @@ class AlertServiceTests(TestCase):
         events = process_target_findings(recovered, [self.finding(state='normal')])
 
         self.assertEqual([event.event_type for event in events], [AlertEvent.EventType.RECOVERY])
+        self.assertEqual(events[0].status, 'recorded')
+        self.assertFalse(AlertDelivery.objects.exists())
 
     def test_delivery_retries_only_retryable_failures_with_a_finite_attempt_limit(self):
         from net.alerts.base import DeliveryResult
-        from net.alerts.service import deliver_event, process_target_findings
+        from net.alerts.service import deliver_event
 
-        event = process_target_findings(self.target(), [self.finding()])[0]
+        event = self.summary_event()
         with patch('net.alerts.service.send_alert', return_value=DeliveryResult(False, 'timed out', True)):
             delivery = deliver_event(event)[0]
         delivery.refresh_from_db()
@@ -129,8 +149,6 @@ class AlertServiceTests(TestCase):
         self.assertEqual(delivery.attempt_count, delivery.max_attempts)
 
     def test_inherited_and_override_policies_select_their_own_multichannel_fanout(self):
-        from net.alerts.service import process_target_findings
-
         email = AlertChannel.objects.create(
             name='override email channel',
             channel_type=AlertChannel.ChannelType.EMAIL,
@@ -144,13 +162,13 @@ class AlertServiceTests(TestCase):
             name='profile inherits default', inspection_profile=self.profile,
             mode=AlertPolicy.Mode.INHERIT,
         )
-        inherited_event = process_target_findings(self.target(), [self.finding()])[0]
+        inherited_event = self.summary_event()
         self.assertEqual(set(inherited_event.deliveries.values_list('channel_id', flat=True)), {self.channel.pk})
 
         inherited.mode = AlertPolicy.Mode.OVERRIDE
         inherited.save(update_fields={'mode', 'updated_at'})
         inherited.channels.add(self.channel, email)
-        override_event = process_target_findings(self.target(), [self.finding()])[0]
+        override_event = self.summary_event()
         self.assertEqual(
             set(override_event.deliveries.values_list('channel_id', flat=True)),
             {self.channel.pk, email.pk},
@@ -158,7 +176,7 @@ class AlertServiceTests(TestCase):
 
     def test_one_channel_failure_does_not_hide_another_channel_success(self):
         from net.alerts.base import DeliveryResult
-        from net.alerts.service import deliver_event, process_target_findings
+        from net.alerts.service import deliver_event
 
         email = AlertChannel.objects.create(
             name='secondary email channel', channel_type=AlertChannel.ChannelType.EMAIL,
@@ -169,7 +187,7 @@ class AlertServiceTests(TestCase):
             },
         )
         self.policy.channels.add(email)
-        event = process_target_findings(self.target(), [self.finding()])[0]
+        event = self.summary_event()
         with patch('net.alerts.service.send_alert', side_effect=[
             DeliveryResult(True, 'accepted', False),
             DeliveryResult(False, 'rejected', False),
@@ -238,26 +256,27 @@ class AlertServiceTests(TestCase):
         self.assertEqual(recovery.event_type, AlertEvent.EventType.RECOVERY)
         self.assertEqual(recovery.target_id, str(computer.pk))
         self.assertNotEqual(event.target_run_id, recovery.target_run_id)
+        self.assertEqual((event.status, recovery.status), ('recorded', 'recorded'))
+        self.assertFalse(AlertDelivery.objects.exists())
 
     def test_worker_delivers_due_alerts_when_no_inspection_task_remains(self):
         from net.alerts.base import DeliveryResult
-        from net.alerts.service import process_target_findings
         from net.inspections.worker import TaskWorker
 
-        event = process_target_findings(self.target(), [self.finding()])[0]
+        event = self.summary_event()
         with patch('net.alerts.service.send_alert', return_value=DeliveryResult(True, 'accepted', False)):
             self.assertTrue(TaskWorker(worker_id='alert-only-worker', threads=1).run_once())
 
         self.assertEqual(event.deliveries.get().status, AlertDelivery.Status.SENT)
 
     def test_adapter_exception_redacts_configured_url_and_password_before_summary(self):
-        from net.alerts.service import deliver_event, process_target_findings
+        from net.alerts.service import deliver_event
 
         url = 'https://open.feishu.test/hook/private-path-token?access_token=query-token'
         password = 'configured-password-value'
         self.channel.settings = {'webhook_url': url, 'password': password}
         self.channel.save(update_fields=['settings'])
-        event = process_target_findings(self.target(), [self.finding()])[0]
+        event = self.summary_event()
         with patch('net.alerts.service.send_alert', side_effect=RuntimeError(
             f'Transport rejected {url} using {password}',
         )):
@@ -302,7 +321,8 @@ class AlertServiceTests(TestCase):
             reconcile_terminal_targets(limit=2)
         event = target.alert_events.get()
         self.assertEqual(event.findings[0]['key'], 'inspection.collection')
-        self.assertEqual(event.deliveries.count(), 1)
+        self.assertEqual(event.status, 'recorded')
+        self.assertFalse(event.deliveries.exists())
         for done in [*history, target]:
             done.refresh_from_db()
             self.assertIsNotNone(done.alert_processed_at)
@@ -337,11 +357,18 @@ class AlertServiceTests(TestCase):
         self.assertEqual(target.status, 'failed')
         self.assertFalse(target.alert_events.exists())
         with patch('net.alerts.service.send_alert', return_value=DeliveryResult(True, 'accepted', False)):
-            worker.run_once()
-            worker.run_once()
+            # Normal history now also has summaries, so drain multiple outbox batches.
+            for _ in range(12):
+                worker.run_once()
+                if AlertDelivery.objects.filter(event__summary_task=task, status='sent').exists():
+                    break
         event = target.alert_events.get()
         self.assertEqual(event.findings[0]['key'], 'execution.failure')
-        self.assertEqual(event.deliveries.get().status, 'sent')
+        self.assertEqual(event.status, 'recorded')
+        self.assertFalse(event.deliveries.exists())
+        summary = AlertEvent.objects.get(summary_task=task)
+        self.assertEqual(summary.event_type, 'summary')
+        self.assertEqual(summary.deliveries.get().status, 'sent')
         target.refresh_from_db()
         self.assertEqual(target.status, 'failed')
 
@@ -385,6 +412,7 @@ class AlertServiceTests(TestCase):
         self.assertFalse(target.alert_events.exists())
         reconcile_terminal_targets(limit=1)
         self.assertEqual(target.alert_events.count(), 1)
-        self.assertEqual(target.alert_events.get().deliveries.count(), 1)
+        self.assertEqual(target.alert_events.get().status, 'recorded')
+        self.assertFalse(target.alert_events.get().deliveries.exists())
         target.refresh_from_db()
         self.assertIsNotNone(target.alert_processed_at)

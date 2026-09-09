@@ -193,3 +193,150 @@
     border-radius: .85rem;
     box-shadow: 0 10px 28px -24px rgba(24, 38, 68, .9);
 }
+
+/* Recently added workflows inherit the same glass hierarchy as the main console. */
+.alert-template-layout [data-template-section="content"] {
+    grid-column: 1 / -1;
+}
+
+.alert-template-variables {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .45rem;
+}
+
+.alert-template-variables code {
+    padding: .32rem .5rem;
+    border: 1px solid rgba(128, 149, 184, .22);
+    border-radius: .55rem;
+    background: rgba(244, 247, 253, .88);
+}
+
+.alert-template-preview__body {
+    max-height: 15rem;
+    padding: .85rem;
+    overflow-y: auto;
+    border: 1px solid rgba(128, 149, 184, .2);
+    border-radius: .75rem;
+    background: rgba(255, 255, 255, .56);
+    line-height: 1.65;
+}
+
+.alert-template-preview__empty {
+    min-height: 8rem;
+}
+
+.domain-statistics-layout {
+    display: grid;
+    gap: 1rem;
+}
+
+.domain-statistics-impact {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .75rem;
+    margin-bottom: .85rem;
+}
+
+.domain-statistics-impact > div {
+    display: grid;
+    gap: .2rem;
+    padding: .85rem;
+    border: 1px solid rgba(128, 149, 184, .2);
+    border-radius: .8rem;
+    background: rgba(255, 255, 255, .56);
+}
+
+.domain-statistics-impact span {
+    color: var(--color-text-muted);
+    font-size: .78rem;
+}
+
+.domain-statistics-impact strong {
+    color: var(--color-text);
+    font-size: 1.55rem;
+    line-height: 1.15;
+}
+
+.analysis-problems-modal__body {
+    margin: 1rem;
+    padding: 1rem !important;
+    overflow: auto;
+}
+
+.analysis-problems-table {
+    margin-bottom: 1rem;
+}
+
+.analysis-problems-table .data-table {
+    min-width: 48rem;
+}
+
+.configuration-backup-workspace {
+    display: grid;
+    gap: 1rem;
+}
+
+.configuration-backup-notes {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.configuration-backup-note {
+    min-width: 0;
+}
+
+.configuration-backup-note .card-body {
+    display: grid;
+    gap: .55rem;
+}
+
+.configuration-backup-note h2 {
+    margin: 0;
+}
+
+.configuration-backup-note p {
+    color: var(--color-text-muted);
+    line-height: 1.6;
+}
+
+.configuration-backup-note--warning {
+    border-color: rgba(196, 132, 32, .28);
+    background: linear-gradient(145deg, rgba(255, 252, 242, .9), rgba(255, 246, 222, .72));
+}
+
+.configuration-backup-table .data-table {
+    min-width: 70rem;
+}
+
+.configuration-backup-hash {
+    max-width: 15rem;
+}
+
+.configuration-backup-hash code {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 767.98px) {
+    .alert-template-layout,
+    .configuration-backup-notes {
+        grid-template-columns: 1fr;
+    }
+
+    .alert-template-layout [data-template-section="content"] {
+        grid-column: auto;
+    }
+
+    .domain-statistics-impact {
+        grid-template-columns: 1fr;
+    }
+
+    .analysis-problems-modal__body {
+        margin: .65rem;
+        padding: .75rem !important;
+    }
+}

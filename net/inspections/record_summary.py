@@ -30,10 +30,10 @@ def key_metrics(details):
         for disk in storage[:4]:
             if not isinstance(disk, dict):
                 continue
-            mount = disk.get('mount') or disk.get('name') or disk.get('filesystem')
+            mount = disk.get('mount') or disk.get('device') or disk.get('name') or disk.get('filesystem')
             usage = disk.get('usage_percent')
             if usage is None:
-                usage = disk.get('usage')
+                usage = disk.get('used_percent', disk.get('usage'))
             if mount and usage is not None:
                 usage_text = str(usage)
                 disk_parts.append(f'{mount} {usage_text if usage_text.endswith("%") else usage_text + "%"}')

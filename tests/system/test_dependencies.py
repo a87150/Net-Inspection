@@ -15,7 +15,12 @@ LATEST_STABLE_DIRECT_DEPENDENCIES = {
     "requests": "2.34.2",
     "aiohttp": "3.14.3",
     "dnspython": "2.8.0",
-    "paramiko": "5.0.0",
+    "paramiko": "4.0.0",
+    "netmiko": "4.7.0",
+    "redis": "8.1.0",
+    "python-dotenv": "1.2.3",
+    "keyring": "25.7.0",
+    "pycryptodome": "3.23.0",
     "pysnmp": "7.1.29",
     "smbprotocol": "1.17.0",
     "waitress": "3.0.2",
@@ -31,7 +36,7 @@ def read_exact_requirements(path):
             continue
         pin, _, marker = line.partition(';')
         if marker:
-            if marker.strip() != 'sys_platform == "win32"':
+            if marker.strip().replace("'", '"') != 'sys_platform == "win32"':
                 raise AssertionError(f'Unsupported dependency marker: {marker}')
             if sys.platform != 'win32':
                 continue

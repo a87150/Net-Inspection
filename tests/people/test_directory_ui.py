@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from tests.people.test_directory_sync import SnapshotAdapter
+from tests.auth import login_admin
 from net.people.directory import DirectoryPerson
 from net.models import People, PeopleSyncSource, Schedule, TaskRun, TaskTargetRun
 from net.inspections.queue import claim_next_task, finish_task, recover_expired_tasks
@@ -28,6 +29,7 @@ class FixtureDirectory(SnapshotAdapter):
 class PeopleFlowMixin:
     def setUp(self):
         super().setUp()
+        login_admin(self.client)
         self.source = PeopleSyncSource.objects.create(
             name='飞书', source_key='people-provider-feishu', source_type='feishu',
             credentials={'app_id': 'private-app-id', 'app_secret': 'private-app-secret'},
@@ -253,6 +255,7 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
     def test_status_returns_only_tasks_created_by_current_session(self):
         own, _ = self.enqueue('test')
         other_client = Client()
+        login_admin(other_client)
         other, _ = self.enqueue('preview', source=self.other, client=other_client)
 
         response = self.client.get('/integrations/people/tasks/status/')
@@ -291,12 +294,15 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
         ack_url = reverse('people_task_acknowledge', args=[task.pk])
 
         self.assertEqual(self.client.post(ack_url, {'kind': 'unknown'}).status_code, 400)
-        self.assertEqual(Client().post(ack_url, {'kind': 'running'}).status_code, 404)
+        other_client = Client()
+        login_admin(other_client)
+        self.assertEqual(other_client.post(ack_url, {'kind': 'running'}).status_code, 404)
 
     def test_another_session_cannot_view_export_or_apply_even_with_valid_token(self):
         task, url = self.enqueue()
         target = self.execute(task)
         stranger = Client()
+        login_admin(stranger)
         self.assertEqual(stranger.get(url).status_code, 404)
         self.assertEqual(stranger.get(reverse('task_detail', args=[task.pk])).status_code, 404)
         self.assertEqual(stranger.get(reverse('table_export_scoped', args=['task_targets', task.pk])).status_code, 404)
@@ -342,10 +348,35 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
         paths = ['/integrations/people/providers/feishu/save/', '/integrations/people/test/',
                  '/integrations/people/preview/', '/integrations/people/apply/']
         csrf_client = Client(enforce_csrf_checks=True)
+        login_admin(csrf_client)
         for path in paths:
             with self.subTest(path=path):
                 self.assertEqual(self.client.get(path).status_code, 405)
                 self.assertEqual(csrf_client.post(path, {}).status_code, 403)
+
+        page = csrf_client.get('/assets/people/?import=people&provider=feishu')
+        token = page.cookies['csrftoken'].value
+        response = csrf_client.post(
+            '/integrations/people/preview/', {'provider': 'feishu'},
+            HTTP_X_CSRFTOKEN=token,
+        )
+        self.assertEqual(response.status_code, 302)
+        task = TaskRun.objects.latest('created_at')
+        target = self.execute(task)
+        preview = csrf_client.get(reverse('people_operation', args=[task.pk]))
+        self.assertContains(preview, '预览员工')
+        payload = {
+            'task_id': task.pk,
+            'preview_token': target.result_snapshot['preview']['token'],
+            'confirm': 'yes',
+        }
+        self.assertEqual(csrf_client.post('/integrations/people/apply/', payload).status_code, 403)
+        self.assertFalse(People.objects.exists())
+        applied = csrf_client.post(
+            '/integrations/people/apply/', payload, HTTP_X_CSRFTOKEN=token,
+        )
+        self.assertEqual(applied.status_code, 302)
+        self.assertTrue(People.objects.filter(employee_id='P4-001', name='预览员工').exists())
 
     def test_legacy_multi_source_routes_are_not_routable(self):
         self.assertEqual(self.client.post('/integrations/people/sources/save/').status_code, 404)
@@ -486,6 +517,7 @@ class PeopleQueueTests(PeopleFlowMixin, TestCase):
     def test_duplicate_other_session_is_rejected_but_different_source_is_independent(self):
         self.enqueue()
         other_client = Client()
+        login_admin(other_client)
         response = other_client.post('/integrations/people/preview/', {'provider': 'feishu'}, follow=True)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(TaskRun.objects.count(), 1)

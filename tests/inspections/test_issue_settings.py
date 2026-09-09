@@ -1,6 +1,7 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from tests.auth import login_reader
 from tests.devices.pc.test_remote_rules import RemoteRuleFixture
 
 
@@ -36,6 +37,7 @@ class IssueSettingsTests(RemoteRuleFixture, TestCase):
         self.assertFalse(result.errors.exists())
 
     def test_history_task_uses_same_result_table_and_scoped_export(self):
+        login_reader(self.client)
         from net.models import ComputerAnalysisProfile
         from net.inspections.queue import enqueue_task
         from net.devices.pc.analysis import analyze_log
@@ -77,6 +79,7 @@ class IssueSettingsTests(RemoteRuleFixture, TestCase):
         self.assertFalse(task.alert_events.exists())
 
     def test_device_inspection_level_and_task_table_use_frozen_policy(self):
+        login_reader(self.client)
         from net.models import IssueSeverityPolicy, InspectionProfile, Server
         from net.inspections.queue import enqueue_task, claim_next_task
         from net.inspections.executor import persist_execution_failure, _begin_target

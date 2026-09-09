@@ -2,6 +2,7 @@
     'use strict';
 
     const controller = factory();
+    if (typeof window !== 'undefined') window.AppTableWorkspace = controller;
     if (typeof module === 'object' && module.exports) {
         module.exports = controller;
     }

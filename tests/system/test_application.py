@@ -14,6 +14,8 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
+from tests.auth import login_admin, login_reader
+from tests.devices.pc.helpers import analysis_task_url
 
 from net.models import (
     Computer,
@@ -153,6 +155,7 @@ class InspectionRuleTests(TestCase):
 
 class ComputerRemoteEvidenceTests(TestCase):
     def setUp(self):
+        login_reader(self.client)
         self.profile = ComputerAnalysisProfile.objects.create(
             name='Remote system tests', analysis_items=['activation', 'bitlocker', 'defender', 'patches', 'resource'])
 
@@ -321,6 +324,9 @@ class ComputerSnapshotTests(TestCase):
 
 
 class DashboardTests(TestCase):
+    def setUp(self):
+        login_reader(self.client)
+
     def test_empty_dashboard_and_record_workspace_do_not_crash(self):
         response = self.client.get(reverse('index'))
         self.assertEqual(response.status_code, 200)
@@ -365,6 +371,9 @@ class PeopleUploadTests(TestCase):
 
 
 class NetworkCheckCommandTests(TestCase):
+    def setUp(self):
+        login_admin(self.client)
+
     def test_command_enqueues_all_asset_types_without_collecting(self):
         Network_Device.objects.create(device_name='SW-1', ip='192.0.2.1')
         Server.objects.create(ip='192.0.2.2')
@@ -443,6 +452,9 @@ class ProtocolCollectorTests(TestCase):
 
 
 class InventoryImportExportTests(TestCase):
+    def setUp(self):
+        login_admin(self.client)
+
     def test_people_csv_template_import_and_filtered_export(self):
         template_response = self.client.get(reverse('download_inventory_template', args=['people']))
         self.assertEqual(template_response.status_code, 200)
@@ -503,6 +515,9 @@ class InventoryImportExportTests(TestCase):
 
 
 class ImportModalTests(TestCase):
+    def setUp(self):
+        login_admin(self.client)
+
     def _modal_markup(self, response):
         document = response.content.decode(response.charset)
         self.assertIn('id="importModal"', document)
@@ -574,7 +589,7 @@ class ImportModalTests(TestCase):
 
     def test_domain_child_pages_offer_filtered_export_and_only_accounts_allow_import(self):
         operator = get_user_model().objects.create_user(
-            username='domain-list-operator', password='test-password',
+            username='domain-list-operator', password='test-password', is_staff=True,
         )
         operator.user_permissions.add(
             Permission.objects.get(
@@ -601,7 +616,7 @@ class ImportModalTests(TestCase):
 class DomainControllerSettingsTests(TestCase):
     def setUp(self):
         self.operator = get_user_model().objects.create_user(
-            username='domain-settings-operator', password='test-password',
+            username='domain-settings-operator', password='test-password', is_staff=True,
         )
         self.operator.user_permissions.add(
             Permission.objects.get(
@@ -710,6 +725,7 @@ class DomainControllerSettingsTests(TestCase):
 
 class DomainWorkspaceTests(TestCase):
     def setUp(self):
+        login_reader(self.client)
         self.account = Domain_Account.objects.create(
             account_name='域账号', login_name='domain.user', is_active=True,
         )
@@ -718,6 +734,7 @@ class DomainWorkspaceTests(TestCase):
         )
 
     def test_domain_overview_links_to_separate_tables(self):
+        login_admin(self.client)
         response = self.client.get(reverse('domain_controller_settings'))
 
         self.assertNotContains(response, '<table', html=False)
@@ -780,6 +797,9 @@ class DomainWorkspaceTests(TestCase):
 
 
 class TableFilteringAndSortingTests(TestCase):
+    def setUp(self):
+        login_reader(self.client)
+
     def test_asset_list_filters_and_sorts_people(self):
         People.objects.create(name='张三', employee_id='H200', department='技术部', is_active=True)
         People.objects.create(name='李四', employee_id='H100', department='财务部', is_active=False)
@@ -907,6 +927,9 @@ class TableFilteringAndSortingTests(TestCase):
 
 
 class TableRegistryTests(TestCase):
+    def setUp(self):
+        login_reader(self.client)
+
     def test_computer_registry_defaults_show_key_snapshot_fields(self):
         response = self.client.get(reverse('item_list', args=['computers']))
 
@@ -961,6 +984,9 @@ class TableRegistryTests(TestCase):
 
 
 class VisualStructureTests(TestCase):
+    def setUp(self):
+        login_admin(self.client)
+
     @staticmethod
     def _elements_with_class(document, tag, class_name):
         return [
@@ -1020,9 +1046,9 @@ class VisualStructureTests(TestCase):
         self.assertTrue(self._elements_with_class(empty_page, 'div', 'empty-state'))
 
     def test_dedicated_computer_record_pages_use_shared_table_surfaces(self):
-        for route_name in ('computer_analysis_list', 'computer_error_list'):
-            with self.subTest(route_name=route_name):
-                document = parse_response_html(self.client.get(reverse(route_name)))
+        for url in (analysis_task_url(), reverse('computer_error_list')):
+            with self.subTest(url=url):
+                document = parse_response_html(self.client.get(url))
                 self.assertTrue(
                     self._elements_with_class(document, 'div', 'table-toolbar'),
                 )
@@ -1120,6 +1146,9 @@ class VisualStructureTests(TestCase):
 
 
 class TableWorkspaceTemplateTests(TestCase):
+    def setUp(self):
+        login_admin(self.client)
+
     def test_asset_page_renders_configurable_workspace(self):
         People.objects.create(
             name='张三', employee_id='H100', department='技术部', leader='李经理',
@@ -1297,6 +1326,7 @@ class TableWorkspaceTemplateTests(TestCase):
 
 class DynamicTableQueryTests(TestCase):
     def setUp(self):
+        login_reader(self.client)
         self.ops_user = People.objects.create(
             name='运维人员', employee_id='H200', department='运维', is_active=True,
         )
@@ -1479,6 +1509,9 @@ class DynamicTableQueryTests(TestCase):
 
 
 class TablePaginationTests(TestCase):
+    def setUp(self):
+        login_reader(self.client)
+
     def test_table_page_size_supports_large_operational_views(self):
         People.objects.bulk_create([
             People(name=f'人员{number}', employee_id=f'P-LARGE-{number:03d}')
@@ -1595,6 +1628,9 @@ class TablePaginationTests(TestCase):
 
 
 class RecordTableDefinitionTests(TestCase):
+    def setUp(self):
+        login_reader(self.client)
+
     @patch('index.inspections.records._inspection_records', return_value=[])
     def test_empty_inspection_list_keeps_its_explicit_definition(self, inspection_records_mock):
         response = self.client.get(reverse('inspection_records'))
@@ -1607,6 +1643,9 @@ class RecordTableDefinitionTests(TestCase):
 
 
 class RecordWorkspaceTests(TestCase):
+    def setUp(self):
+        login_reader(self.client)
+
     def test_computer_record_list_does_not_duplicate_analysis_with_multiple_errors(self):
         analysis = create_computer_analysis('PC-MULTI-ERROR')
         Error_Computer.objects.create(
@@ -1620,7 +1659,7 @@ class RecordWorkspaceTests(TestCase):
             error_message='连接超时',
         )
 
-        response = self.client.get(reverse('computer_analysis_list'))
+        response = self.client.get(analysis_task_url(analysis))
 
         self.assertEqual(list(response.context['page_obj'].object_list), [analysis])
 
@@ -1783,7 +1822,7 @@ class RecordWorkspaceTests(TestCase):
             inspection=inspection, error_type='磁盘异常', error_message='空间不足',
         )
 
-        inspection_response = self.client.get(reverse('computer_analysis_list'))
+        inspection_response = self.client.get(analysis_task_url(inspection))
         error_response = self.client.get(reverse('computer_error_list'))
         inspection_document = parse_response_html(inspection_response)
         error_document = parse_response_html(error_response)
@@ -1813,7 +1852,7 @@ class RecordWorkspaceTests(TestCase):
         ])
 
         inspection_response = self.client.get(
-            reverse('computer_analysis_list'), {'page_size': '50'},
+            analysis_task_url(*inspections), {'page_size': '50'},
         )
         error_response = self.client.get(
             reverse('computer_error_list'), {'page_size': '50'},
@@ -1831,7 +1870,7 @@ class RecordWorkspaceTests(TestCase):
             inspection=abnormal, error_type='测试异常', error_message='异常',
         )
 
-        response = self.client.get(reverse('computer_analysis_list'), {
+        response = self.client.get(analysis_task_url(abnormal, normal), {
             'filter_computer_name': 'ABNORMAL',
             'filter_status': 'failed',
             'filter_created_at_from': timezone.localdate().isoformat(),
@@ -1887,10 +1926,11 @@ class RecordWorkspaceTests(TestCase):
             inspection=abnormal, error_type='测试异常', error_message='异常',
         )
 
-        normal_response = self.client.get(reverse('computer_analysis_list'), {
+        task_url = analysis_task_url(normal, abnormal)
+        normal_response = self.client.get(task_url, {
             'filter_status': 'normal',
         })
-        abnormal_response = self.client.get(reverse('computer_analysis_list'), {
+        abnormal_response = self.client.get(task_url, {
             'filter_status': 'abnormal',
         })
         document = parse_response_html(normal_response)
@@ -1909,12 +1949,13 @@ class RecordWorkspaceTests(TestCase):
         warning = create_computer_analysis('PC-WARNING', exceptions=[{'severity': 'warning'}])
         critical = create_computer_analysis('PC-CRITICAL', exceptions=[{'severity': 'critical'}])
         failed = create_computer_analysis('PC-FAILED', status=RecordStatus.FAILED)
+        task_url = analysis_task_url(normal, info, warning, critical, failed)
         for value, expected in (
             ('normal', [normal]), ('info', [info]), ('warning', [warning]),
             ('critical', [critical, failed]), ('abnormal', [warning, critical, failed]),
         ):
             with self.subTest(status=value):
-                response = self.client.get(reverse('computer_analysis_list'), {'filter_status': value})
+                response = self.client.get(task_url, {'filter_status': value})
                 self.assertCountEqual(response.context['page_obj'].object_list, expected)
                 self.assertEqual(response.context['table_state']['filters']['status'], value)
 

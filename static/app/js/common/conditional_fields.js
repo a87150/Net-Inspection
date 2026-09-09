@@ -25,14 +25,28 @@
         form.querySelectorAll('[data-schedule-daily]').forEach(group => setGroupEnabled(group, daily));
     }
 
+    function updateServerFields(select) {
+        select.closest('form')?.querySelectorAll('[data-server-fields]').forEach(group => {
+            setGroupEnabled(group, group.dataset.serverFields === select.value);
+        });
+    }
+
     function bindScheduleFields(root) {
+        root.querySelectorAll('[data-server-type]').forEach(select => {
+            if (select.dataset.serverBound !== undefined) return;
+            select.dataset.serverBound = '';
+            select.addEventListener('change', () => updateServerFields(select));
+            select.closest('form')?.addEventListener('modal-draft-restored', () => updateServerFields(select));
+            updateServerFields(select);
+        });
         root.querySelectorAll('[data-schedule-kind]').forEach(select => {
             if (select.dataset.scheduleBound !== undefined) return;
             select.dataset.scheduleBound = '';
             select.addEventListener('change', () => updateScheduleFields(select));
+            select.closest('form')?.addEventListener('modal-draft-restored', () => updateScheduleFields(select));
             updateScheduleFields(select);
         });
     }
 
-    return {bindScheduleFields, setGroupEnabled, updateScheduleFields};
+    return {updateServerFields, bindScheduleFields, setGroupEnabled, updateScheduleFields};
 }));

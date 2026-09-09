@@ -153,7 +153,7 @@ def _locked_state(scope, finding_key):
 
 
 def process_target_findings(target_run, findings) -> list[AlertEvent]:
-    """Persist one merged abnormal/recovery event per target observation.
+    """Persist station-local abnormal/recovery evidence without delivery rows.
 
     This function only writes state, event, and outbox rows.  Transport I/O is
     deliberately deferred to :func:`deliver_event` after this transaction.
@@ -215,14 +215,8 @@ def process_target_findings(target_run, findings) -> list[AlertEvent]:
             for state in state_groups['abnormal' if event_type == AlertEvent.EventType.ABNORMAL else 'recovery']:
                 state.last_event = event
                 state.save(update_fields={'last_event', 'updated_at'})
-            channels = (AlertChannel.objects.filter(pk__in=routing['channel_ids'], is_enabled=True)
-                        if routing is not None else policy.effective_channels() if policy else [])
-            for channel in channels:
-                AlertDelivery.objects.get_or_create(event=event, channel=channel)
-            if not event.deliveries.exists():
-                event.status = AlertEvent.Status.FAILED
-                event.summary = 'No enabled alert delivery channel is available.'
-                event.save(update_fields={'status', 'summary', 'updated_at'})
+            event.status = 'recorded'
+            event.save(update_fields={'status', 'updated_at'})
             events.append(event)
         return events
 
@@ -329,7 +323,8 @@ def _claim_deliveries(*, event=None, limit=1, now=None):
         due = Q(status=AlertDelivery.Status.PENDING)
         due |= Q(status=AlertDelivery.Status.RETRY, next_attempt_at__lte=now)
         due |= Q(status=AlertDelivery.Status.SENDING, lease_expires_at__lte=now)
-        rows = AlertDelivery.objects.select_for_update().select_related('event', 'channel').filter(due)
+        rows = AlertDelivery.objects.select_for_update().select_related('event', 'channel').filter(
+            due, event__event_type='summary')
         if event_id is not None:
             rows = rows.filter(event_id=event_id)
         claimed = []
@@ -436,14 +431,22 @@ def process_persisted_target(target_run):
         try:
             with transaction.atomic():
                 target = TaskTargetRun.objects.select_for_update().get(pk=target_id)
-                if target.task.task_type in {*TaskRun.PEOPLE_TASK_TYPES, TaskRun.TaskType.DOMAIN_SYNC}:
+                if target.task.task_type not in ('inspection', 'computer_analysis', 'computer_fetch'):
                     return []
                 if target.status not in TaskRun.TERMINAL_STATUSES or target.alert_processed_at is not None:
                     return []
-                events = process_target_findings(target, findings_for_target(target))
+                findings = findings_for_target(target)
+                events = process_target_findings(target, findings)
+                observation = _normalised_findings(findings)
+                snapshot = dict(target.result_snapshot or {})
+                snapshot['alert_observation'] = {
+                    'abnormal': any(item['state'] == 'abnormal' for item in observation),
+                    'info': any(item['state'] == 'unknown' for item in observation),
+                }
                 now = timezone.now()
                 TaskTargetRun.objects.filter(pk=target.pk).update(
                     alert_processed_at=now, alert_attempted_at=now, alert_processing_error='',
+                    result_snapshot=snapshot,
                 )
                 return events
         except Exception as exc:
@@ -462,7 +465,8 @@ def reconcile_terminal_targets(*, limit=100):
     targets = list(TaskTargetRun.objects.filter(
         status__in=TaskRun.TERMINAL_STATUSES,
         alert_processed_at__isnull=True,
-    ).exclude(task__task_type__in=(*TaskRun.PEOPLE_TASK_TYPES, TaskRun.TaskType.DOMAIN_SYNC)).order_by(
+        task__task_type__in=('inspection', 'computer_analysis', 'computer_fetch'),
+    ).order_by(
         F('alert_attempted_at').asc(nulls_first=True), 'finished_at', 'pk')[:limit])
     for target in targets:
         process_persisted_target(target)

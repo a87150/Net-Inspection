@@ -77,6 +77,7 @@ TABLE_DEFINITIONS = {
             _field('employee_id', '工号'),
             _field('department', '部门', 'choice'),
             _field('email', '邮箱', default_filter=False),
+            _field('phone', '手机号', default_filter=False),
             _field('leader', '上级', default_filter=False),
             _field('is_active', '是否启用', 'boolean', default_filter=False),
             _field('hire_date', '入职日期', 'date', default_filter=False),
@@ -84,7 +85,7 @@ TABLE_DEFINITIONS = {
             _field('source', '数据来源', 'choice', visible=False, default_filter=False),
             _field('platform_user_id', '平台用户 ID', visible=False, default_filter=False),
             _field('last_synced_at', '最后同步时间', 'datetime', visible=False, default_filter=False),
-        ), 'name', 'asc', ('name', 'employee_id', 'department', 'email', 'leader'), 20,
+        ), 'name', 'asc', ('name', 'employee_id', 'department', 'email', 'phone', 'leader'), 20,
     ),
     'computers': TableDefinition(
         'computers', 'PC', (
@@ -309,7 +310,7 @@ TABLE_DEFINITIONS = {
     'alert_events': TableDefinition(
         'alert_events', '告警记录', (
             _field('event_type', '事件类型', 'choice', choices=(
-                ('abnormal', '异常告警'), ('recovery', '恢复通知'),
+                ('summary', '任务总结'), ('abnormal', '异常记录'), ('recovery', '恢复记录'),
             )),
             _field('profile_type', '项目', 'choice', choices=(
                 ('inspection_profile', '巡检配置'),
@@ -321,7 +322,7 @@ TABLE_DEFINITIONS = {
             )),
             _field('status', '事件状态', 'choice', choices=(
                 ('pending', '待发送'), ('sending', '发送中'), ('delivered', '已送达'),
-                ('partial', '部分送达'), ('failed', '发送失败'),
+                ('partial', '部分送达'), ('failed', '发送失败'), ('recorded', '仅站内记录'),
             )),
             _field('delivery_outcome', '渠道结果', 'choice', source='deliveries__status',
                    comparison='related', sortable=False, export_source='delivery_outcomes', choices=(

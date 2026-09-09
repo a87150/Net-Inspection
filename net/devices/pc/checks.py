@@ -280,6 +280,11 @@ def _measurement(value, kind):
     return number * factors[unit] if unit in factors and number > 0 else None
 
 
+def _reference_person_name(value):
+    """Ignore numeric disambiguation suffixes for reference checks only."""
+    return re.sub(r'\d+$', '', str(value or '').strip()).rstrip()
+
+
 def check_remote_item(item, payload, issues, rules):
     """Evaluate producer evidence without collapsing unknown into an empty success."""
     from net.devices.pc.enrichment import normalize_login
@@ -309,11 +314,55 @@ def check_remote_item(item, payload, issues, rules):
         login = normalize_login(system.get('当前登录用户工号'))
         name = system.get('计算机名')
         result.update(login_identifier=login, reported_match=payload.get('计算机和用户匹配情况'))
-        if not login or not isinstance(name, str) or not name.strip() or login.casefold() in {'未知', 'unknown', '未采集'}:
-            result['data_state'] = 'unknown'
-        elif login.casefold() != name.strip().casefold():
+        person_name = str(system.get('当前登录用户姓名') or system.get('当前登录用户名')
+                          or system.get('姓名') or '').strip()
+        computer_name = name.strip() if isinstance(name, str) else ''
+        unknown_values = {'', '未知', 'unknown', '未采集', '无法获取', 'none', 'null'}
+        normalized_name = _reference_person_name(person_name)
+        signals = {
+            '姓名': normalized_name if normalized_name.casefold() not in unknown_values else '',
+            '计算机名': computer_name if computer_name.casefold() not in unknown_values else '',
+            '当前登录用户工号': login if login.casefold() not in unknown_values else '',
+        }
+        roster = rules.get('personnel_roster')
+        if roster is None:
+            from django.db.models import Q
+            from net.models import People
+            identifiers = [signals[key] for key in ('计算机名', '当前登录用户工号') if signals[key]]
+            query = Q(pk__in=[])
+            for identifier in identifiers:
+                query |= Q(employee_id__iexact=identifier)
+            roster = list(People.objects.filter(query).values('employee_id', 'name')) if identifiers else []
+        reference_matches = []
+        for person in roster:
+            employee_id = str(person.get('employee_id') or '').strip()
+            expected = {'姓名': _reference_person_name(person.get('name')),
+                        '计算机名': employee_id, '当前登录用户工号': employee_id}
+            matched_fields = [key for key, value in signals.items()
+                              if value and expected[key] and value.casefold() == expected[key].casefold()]
+            if employee_id and len(matched_fields) >= 2:
+                reference_matches.append((person, matched_fields))
+        result.update(matching_rule='person_two_of_three', matched_fields=[])
+        if len(reference_matches) == 1:
+            # A reference association, not proof of the authenticated account.
+            person, matched_fields = reference_matches[0]
+            basis = {('姓名', '计算机名'): 'person_name_and_computer',
+                     ('姓名', '当前登录用户工号'): 'person_name_and_login',
+                     ('计算机名', '当前登录用户工号'): 'person_computer_and_login'}
+            result.update(match_basis=basis.get(tuple(matched_fields), 'person_all_three'),
+                          matched_fields=matched_fields,
+                          reference_employee_id=person['employee_id'],
+                          reference_person_name=person.get('name') or '')
+        elif len(reference_matches) > 1:
+            result.update(data_state='unknown', match_basis='ambiguous_person')
+        elif sum(bool(value) for value in signals.values()) < 2 or not roster:
+            result.update(data_state='unknown', match_basis='insufficient_personnel_evidence')
+        else:
             result['data_state'] = 'failed'
-            add_issue(issues, '计算机和用户不匹配', f'计算机名 {name} 与登录标识 {login} 不匹配')
+            result['match_basis'] = 'no_two_fields_match'
+            add_issue(issues, '计算机和用户不匹配',
+                      f'姓名 {person_name or "未采集"}、计算机名 {computer_name or "未采集"}、'
+                      f'登录工号 {login or "未采集"} 未能以任意两项对应同一人员')
     elif item == 'browser_extensions':
         # Plugin collection is presence-only: no installed extensions is normal.
         # Keep the producer's evidence intact; the final missing-field check applies.

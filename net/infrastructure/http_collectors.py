@@ -7,6 +7,7 @@ from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 
 from net.devices.security.payload import normalize_security_payload, collect_native_configuration
 from net.infrastructure.collection import CollectionResult, Timer
+from net.infrastructure.sanitization import sanitize
 from net.inspections.selection import SECURITY_FIELDS, WINDOWS_FIELDS, selected_fields
 
 
@@ -37,7 +38,7 @@ def _response_data(response, *, structured_xml=False):
     return {'response': text}
 
 
-def _request(url, token='', username='', password='', verify_ssl=True, timeout=12, digest=False, selected_items=None, structured_xml=False):
+def _request(url, token='', username='', password='', verify_ssl=True, timeout=12, digest=False, selected_items=None, structured_xml=False, error_body=False):
     headers = {'Accept': 'application/json, application/xml, text/xml'}
     if token:
         headers['Authorization'] = f'Bearer {token}'
@@ -52,7 +53,17 @@ def _request(url, token='', username='', password='', verify_ssl=True, timeout=1
                          if unquote_plus(part.partition('=')[0]).lower() != 'fields')
         url = urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
     response = requests.get(url, headers=headers, auth=auth, timeout=timeout, verify=verify_ssl, **options)
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.HTTPError:
+        if error_body:
+            try:
+                detail = _response_data(response, structured_xml=structured_xml).get('error')
+            except (ValueError, ET.ParseError, AttributeError):
+                detail = None
+            if isinstance(detail, str) and detail.strip():
+                raise requests.HTTPError('Windows agent error: ' + detail.strip(), response=response) from None
+        raise
     return _response_data(response, structured_xml=structured_xml)
 
 
@@ -85,15 +96,38 @@ def _valid_windows_network(value):
     return True
 
 
+def _windows_collection_errors(payload, selected_items, token):
+    errors = payload.get('collection_errors') if isinstance(payload, dict) else None
+    requested = WINDOWS_FIELDS if selected_items is None else set(selected_items)
+    if not isinstance(errors, dict):
+        return {}
+    result = {}
+    for item in requested:
+        messages = errors.get(item)
+        if isinstance(messages, str):
+            messages = [messages]
+        if isinstance(messages, list):
+            safe = [sanitize(message, secrets=(token,)) for message in messages if isinstance(message, str) and message.strip()]
+            if safe:
+                result[item] = safe
+    return result
+
+
 def collect_windows_http(server, timeout=12, selected_items=None):
     timer = Timer()
     try:
         with timer:
             url = server.api_url or f'http://{server.ip}:9180/inspection'
-            payload = _request(url, token=server.api_token or '', verify_ssl=server.verify_ssl, timeout=timeout, selected_items=selected_items)
+            payload = _request(url, token=server.api_token or '', verify_ssl=server.verify_ssl, timeout=timeout, selected_items=selected_items, error_body=True)
+            field_errors = _windows_collection_errors(payload, selected_items, server.api_token or '')
             payload = selected_fields(payload, selected_items, WINDOWS_FIELDS)
+            if field_errors:
+                payload['collection_errors'] = field_errors
+        field_errors = payload.pop('collection_errors', {})
         data = {}
         missing = []
+        incomplete = []
+        diagnostics = []
         for item in WINDOWS_FIELDS if selected_items is None else selected_items:
             value = next((payload[key] for key in WINDOWS_FIELDS.get(item, (item,)) if key in payload), None)
             if item in ('services', 'logs', 'storage_status'):
@@ -107,15 +141,31 @@ def collect_windows_http(server, timeout=12, selected_items=None):
                 valid = _valid_windows_network(value)
             else:
                 valid = isinstance(value, dict) and bool(value) and any(v is not None for v in value.values())
+            # Only services can retain a non-empty partial array: other field
+            # errors make even a well-shaped value incomplete evidence.  An
+            # empty service array with an error cannot prove no rows were omitted.
+            if item in field_errors and (item != 'services' or value == []):
+                valid = False
             if valid:
                 data[item] = value
             else:
                 missing.append(item)
-        status = 'partial' if missing and data else 'failed' if missing else 'success'
-        return CollectionResult(True, status, '缺少有效采集证据：' + ', '.join(missing) if missing else '',
+            if item in field_errors:
+                diagnostics.append(item + '（' + '；'.join(field_errors[item]) + '）')
+                if valid:
+                    incomplete.append(item)
+        status = 'partial' if (missing or incomplete) and data else 'failed' if missing else 'success'
+        message = '缺少有效采集证据：' + ', '.join(missing) if missing else ''
+        if incomplete:
+            message += ('；' if message else '') + '已取得部分证据，采集受限：' + ', '.join(incomplete)
+        if diagnostics:
+            message += ('；' if message else '') + '采集错误：' + '；'.join(diagnostics)
+        if field_errors:
+            payload['collection_errors'] = field_errors
+        return CollectionResult(True, status, message,
                                 data=data, raw=payload, duration_ms=timer.duration_ms)
     except (requests.RequestException, ValueError, ET.ParseError) as exc:
-        return CollectionResult(False, 'failed', f'Windows HTTP 采集失败：{exc}', duration_ms=getattr(timer, 'duration_ms', 0))
+        return CollectionResult(False, 'failed', 'Windows HTTP 采集失败：' + sanitize(str(exc), secrets=(server.api_token or '',)), duration_ms=getattr(timer, 'duration_ms', 0))
 
 
 def collect_security_api(device, timeout=12, selected_items=None):

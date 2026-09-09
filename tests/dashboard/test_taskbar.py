@@ -3,6 +3,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from django.test import TestCase
 from django.urls import reverse
+from tests.auth import login_admin
 from django.utils import timezone
 
 from net.models import (
@@ -57,6 +58,7 @@ class TaskbarTableParser(HTMLParser):
 
 class HomeTaskbarTests(TestCase):
     def setUp(self):
+        login_admin(self.client)
         self.profile = InspectionProfile.objects.create(
             name='首页巡检配置',
             device_type=InspectionProfile.DeviceType.SERVER,

@@ -3,9 +3,11 @@ from urllib.parse import quote
 
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 
 from index.common.table_query import apply_table_filters
+from index.common.access import admin_required
 from index.common.table_registry import get_table_definition
 from net.data_exchange.configuration import build_configuration_zip, latest_configuration
 from net.models import Network_Device, SecurityDevice
@@ -27,15 +29,19 @@ def _response(content, media_type, filename='', status=200):
     return response
 
 
+@never_cache
+@admin_required
 @require_GET
 def configuration_download(request, kind, pk):
     asset = get_object_or_404(_model(kind), pk=pk)
     result = latest_configuration(asset)
     if result.status != 'success':
         return _response(result.message, 'text/plain; charset=utf-8', status=404 if result.status == 'missing' else 409)
-    return _response(result.content, result.media_type + '; charset=utf-8', result.filename)
+    return _response(result.content, result.media_type, result.filename)
 
 
+@never_cache
+@admin_required
 @require_GET
 def configuration_zip(request, kind):
     assets, _ = apply_table_filters(request, _model(kind).objects.all(),

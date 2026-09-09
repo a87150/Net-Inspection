@@ -401,17 +401,19 @@ class AlertState(models.Model):
 
 
 class AlertEvent(models.Model):
-    SCOPE_WRITE_FIELDS = (*ALERT_SCOPE_FIELDS, 'task', 'task_id', 'target_run', 'target_run_id', 'policy', 'policy_id')
+    SCOPE_WRITE_FIELDS = (*ALERT_SCOPE_FIELDS, 'task', 'task_id', 'target_run', 'target_run_id', 'policy', 'policy_id', 'summary_task', 'summary_task_id')
     objects = _ScopedHistoryQuerySet.as_manager()
 
     class EventType(models.TextChoices):
         ABNORMAL = 'abnormal', '异常告警'
         RECOVERY = 'recovery', '恢复通知'
+        SUMMARY = 'summary', '任务总结'
 
     class Status(models.TextChoices):
         PENDING = 'pending', '待发送'
         SENDING = 'sending', '发送中'
         DELIVERED = 'delivered', '已送达'
+        RECORDED = 'recorded', '仅记录'
         PARTIAL = 'partial', '部分送达'
         FAILED = 'failed', '发送失败'
 
@@ -423,9 +425,16 @@ class AlertEvent(models.Model):
     )
     target_run = models.ForeignKey(
         'net.TaskTargetRun',
+        null=True,
+        blank=True,
         on_delete=models.PROTECT,
         related_name='alert_events',
     )
+    summary_task = models.OneToOneField(
+        'net.TaskRun', null=True, blank=True, on_delete=models.PROTECT,
+        related_name='summary_alert',
+    )
+    summary_data = models.JSONField(default=dict)
     policy = models.ForeignKey(
         AlertPolicy,
         null=True,
@@ -450,12 +459,22 @@ class AlertEvent(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(event_type__in=('abnormal', 'recovery')),
+                condition=models.Q(event_type__in=('abnormal', 'recovery', 'summary')),
                 name='net_alert_event_type_ck',
             ),
             models.CheckConstraint(
-                condition=models.Q(status__in=('pending', 'sending', 'delivered', 'partial', 'failed')),
+                condition=models.Q(status__in=('pending', 'sending', 'delivered', 'partial', 'failed', 'recorded')),
                 name='net_alert_event_status_ck',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(event_type='summary', summary_task__isnull=False,
+                             summary_task=models.F('task'), target_run__isnull=True,
+                             target_type='task')
+                    | models.Q(event_type__in=('abnormal', 'recovery'),
+                               summary_task__isnull=True, target_run__isnull=False)
+                ),
+                name='net_alert_event_summaryshape_ck',
             ),
             models.UniqueConstraint(
                 fields=('target_run', 'event_type'),
@@ -485,13 +504,25 @@ class AlertEvent(models.Model):
             raise ValidationError(errors)
 
     def _validate_scope(self, using=None):
-        from net.models.tasks import TaskTargetRun
+        from net.models.tasks import TaskRun, TaskTargetRun
 
         alias = using or self._state.db or 'default'
-        target = TaskTargetRun.objects.using(alias).select_related('task').filter(pk=self.target_run_id).first()
-        if target is None or self.task_id != target.task_id:
-            raise ValidationError({'target_run': '告警目标必须存在且属于关联任务。'})
-        task = target.task
+        if self.event_type == self.EventType.SUMMARY:
+            if self.summary_task_id is None or self.summary_task_id != self.task_id:
+                raise ValidationError({'summary_task': '总结必须关联同一任务。'})
+            if self.target_run_id is not None:
+                raise ValidationError({'target_run': '总结不能关联设备目标。'})
+            task = TaskRun.objects.using(alias).filter(pk=self.task_id).first()
+            if task is None:
+                raise ValidationError({'task': '总结任务必须存在。'})
+            target = None
+        else:
+            if self.summary_task_id is not None:
+                raise ValidationError({'summary_task': '设备事件不能关联总结任务。'})
+            target = TaskTargetRun.objects.using(alias).select_related('task').filter(pk=self.target_run_id).first()
+            if target is None or self.task_id != target.task_id:
+                raise ValidationError({'target_run': '告警目标必须存在且属于关联任务。'})
+            task = target.task
         if task.task_type == 'inspection' and task.inspection_profile_id and not task.analysis_profile_id:
             profile_type, profile_id = 'inspection_profile', str(task.inspection_profile_id)
         elif task.task_type in ('computer_analysis', 'computer_fetch') and task.analysis_profile_id and not task.inspection_profile_id:
@@ -501,12 +532,14 @@ class AlertEvent(models.Model):
         snapshot_id = task.profile_snapshot.get('id')
         if snapshot_id is not None and str(snapshot_id) != profile_id:
             raise ValidationError({'task': '任务配置快照与关联配置不一致。'})
-        canonical_target_type, canonical_target_id = target.target_type, target.target_id
+        canonical_target_type, canonical_target_id = (
+            (target.target_type, target.target_id) if target else ('task', str(task.pk))
+        )
         # A computer-analysis task is queued against an uploaded log, but its
         # durable alert identity is the Computer recorded by the analysis.  A
         # missing/failed analysis deliberately retains the log scope: it is not
         # evidence that a different computer is healthy.
-        if task.task_type == 'computer_analysis' and target.result_type == 'computer_analysis':
+        if target is not None and task.task_type == 'computer_analysis' and target.result_type == 'computer_analysis':
             from net.models.records import ComputerAnalysis
 
             analysis = ComputerAnalysis.objects.using(alias).filter(
@@ -517,7 +550,8 @@ class AlertEvent(models.Model):
         canonical = (profile_type, profile_id, canonical_target_type, canonical_target_id)
         errors = {}
         original = type(self).objects.using(alias).filter(pk=self.pk).first()
-        if original and (original.task_id != self.task_id or original.target_run_id != self.target_run_id):
+        if original and (original.task_id != self.task_id or original.target_run_id != self.target_run_id
+                         or original.summary_task_id != self.summary_task_id):
             errors['target_run'] = '已保存的告警任务和目标不能修改。'
         for field, value in zip(ALERT_SCOPE_FIELDS, canonical):
             supplied = getattr(self, field)
@@ -549,6 +583,35 @@ class AlertEvent(models.Model):
             f'{delivery.channel.name}: {delivery.get_status_display()}'
             for delivery in sorted(self.deliveries.all(), key=lambda row: (row.channel.name, str(row.pk)))
         )
+
+
+class AlertNotificationTemplate(models.Model):
+    class Mode(models.TextChoices):
+        COMPACT = 'compact', '简洁'
+        DETAILED = 'detailed', '详细'
+
+    key = models.CharField(max_length=32, primary_key=True, default='task_summary')
+    mode = models.CharField(max_length=16, choices=Mode.choices, default=Mode.COMPACT)
+    title_template = models.CharField(max_length=255, blank=True)
+    body_template = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=models.Q(key='task_summary'), name='net_alert_template_key_ck'),
+            models.CheckConstraint(condition=models.Q(mode__in=('compact', 'detailed')), name='net_alert_template_mode_ck'),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.key != 'task_summary':
+            raise ValidationError({'key': '仅支持任务总结模板。'})
+        if self.mode not in self.Mode.values:
+            raise ValidationError({'mode': '不支持的总结模板模式。'})
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
 
 class AlertDelivery(models.Model):

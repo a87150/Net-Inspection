@@ -4,6 +4,13 @@ from net.models import Domain_Controller_Config
 from net.secret_masks import MaskedSecretInput
 
 
+class DomainInactivityForm(forms.Form):
+    inactive_days = forms.IntegerField(
+        label='未登录天数', min_value=1, max_value=36500, initial=60,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '1'}),
+    )
+
+
 class DomainControllerConfigForm(forms.ModelForm):
     class Meta:
         model = Domain_Controller_Config
@@ -28,7 +35,7 @@ class DomainControllerConfigForm(forms.ModelForm):
         help_texts = {
             'port': '普通 LDAP 通常使用 389；勾选 LDAPS 时通常使用 636。',
             'use_ssl': '这里表示建立连接时直接使用 TLS（隐式 LDAPS），不是 389 端口的 StartTLS。',
-            'bind_username': '可填写 user@example.com、DOMAIN\\user、完整 DN，或只填写用户名（系统会按 Base DN 补成 UPN）。',
+            'bind_username': 'DOMAIN\\user 使用 NTLM；user@example.com 或完整 DN 使用 SIMPLE；只填用户名时按 Base DN 补成 UPN。不会自动反复尝试凭据。',
         }
 
     def __init__(self, *args, **kwargs):

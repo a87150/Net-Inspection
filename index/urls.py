@@ -1,13 +1,21 @@
+from index.inspections.tasks import single_device_task_create
 from django.urls import path
+from django.contrib.auth.views import LoginView, LogoutView
 from . import views
 from index.inspections.issue_settings import issue_severity_settings
+from index.inspections.analysis_summary import analysis_problem_list
 from index.devices.pc import source as pc_source_views
 from index.devices.server.scripts import windows_server_script_download
-from index.devices.create import asset_create
+from index.devices.create import asset_create, asset_edit
+from index.alerts.templates import alert_template_settings
+from index.devices.backups import configuration_backup_list, configuration_backup_download
 from index.devices.pc.bulk_analysis import computer_logs_analyze_bulk
 from index.devices.pc.software_policy import pc_software_policy_template_download
 
 urlpatterns = [
+    path('computers/analyses/tasks/<uuid:pk>/problems/', analysis_problem_list, name='analysis_problem_list'),
+    path('login/', LoginView.as_view(template_name='registration/login.html'), name='login'),
+    path('logout/', LogoutView.as_view(), name='logout'),
     path('inspections/issue-severity/', issue_severity_settings, name='issue_severity_settings'),
     path('servers/scripts/windows/', windows_server_script_download, name='windows_server_script_download'),
     path('computers/source/save/', pc_source_views.pc_log_source_save, name='pc_log_source_save'),
@@ -16,8 +24,11 @@ urlpatterns = [
     path('', views.index, name='index'),
     path('assets/<str:kind>/', views.asset_list, name='asset_list'),
     path('assets/<str:kind>/add/', asset_create, name='asset_create'),
+    path('assets/<str:kind>/<uuid:pk>/edit/', asset_edit, name='asset_edit'),
     path('assets/<str:kind>/configurations.zip', views.configuration_zip, name='configuration_zip'),
     path('assets/<str:kind>/<uuid:pk>/configuration/', views.configuration_download, name='configuration_download'),
+    path('assets/<str:kind>/<uuid:pk>/backups/', configuration_backup_list, name='configuration_backup_list'),
+    path('assets/<str:kind>/<uuid:pk>/backups/<uuid:backup_id>/download/', configuration_backup_download, name='configuration_backup_download'),
     path('assets/<str:kind>/<uuid:pk>/', views.asset_detail, name='asset_detail'),
     path('people/statistics/', views.people_statistics, name='people_statistics'),
     path('people/<uuid:pk>/', views.person_detail, name='person_detail'),
@@ -33,6 +44,7 @@ urlpatterns = [
     path('computers_errors/', views.computer_error_list, name='computer_error_list'),
     path('actions/run-infrastructure-inspection/', views.run_infrastructure_inspection, name='run_infrastructure_inspection'),
     path('tasks/', views.task_list, name='task_list'),
+    path('assets/<str:kind>/<uuid:pk>/inspect/', single_device_task_create, name='single_device_task_create'),
     path('tasks/manual/', views.manual_task_create, name='manual_task_create'),
     path('tasks/<uuid:pk>/cancel/', views.task_cancel, name='task_cancel'),
     path('tasks/profiles/inspection/', views.inspection_profile_configure, name='inspection_profile_configure'),
@@ -40,6 +52,7 @@ urlpatterns = [
     path('tasks/profiles/computer/<uuid:profile_id>/scripts/<str:platform>/', views.pc_script_download, name='pc_script_download'),
     path('tasks/<uuid:pk>/', views.task_detail, name='task_detail'),
     path('alerts/', views.alert_list, name='alert_list'),
+    path('alerts/template/', alert_template_settings, name='alert_template_settings'),
     path('alerts/channels/save/', views.alert_channel_save, name='alert_channel_save'),
     path('alerts/policies/save/', views.alert_policy_save, name='alert_policy_save'),
     path('alerts/test-send/', views.alert_test_send, name='alert_test_send'),

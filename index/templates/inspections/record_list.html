@@ -2,7 +2,7 @@
 {% load extras %}
 {% block title %}{% if record_type == 'computer_analysis' %}日志分析记录{% else %}{{ item_name }}巡检记录{% endif %}{% endblock %}
 {% block content %}
-{% include 'inspections/issue_settings_modal.html' %}
+{% if can_administer %}{% include 'inspections/issue_settings_modal.html' %}{% endif %}
 <header class="page-heading">
     <div class="page-heading__copy">
         <p class="page-heading__eyebrow">{% if record_type == 'computer_analysis' %}PC 日志{% else %}设备巡检{% endif %}</p>
@@ -10,14 +10,14 @@
         <p class="page-heading__description">{% if record_type == 'computer_analysis' %}每次日志分析独立保存，可进入详情查看动态指标和异常。{% else %}每次巡检独立保存，可进入详情查看动态指标和采集回显。{% endif %}</p>
     </div>
     <div class="page-heading__actions">
-        {% if user.is_staff or user.is_superuser %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#issueSeverityModal">问题等级设置</button>{% endif %}
-        {% if record_kind == 'servers' %}{% if user.is_staff or user.is_superuser %}<a class="btn btn-outline-primary" href="{% url 'windows_server_script_download' %}">下载 Windows 采集脚本</a>{% endif %}{% endif %}
+        {% if can_administer %}{% if can_administer %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#issueSeverityModal">问题等级设置</button>{% endif %}{% endif %}
+        {% if record_kind == 'servers' %}{% if can_administer %}<a class="btn btn-outline-primary" href="{% url 'windows_server_script_download' %}">下载 Windows 采集脚本</a>{% endif %}{% endif %}
         {% if record_type == 'computer_analysis' %}<a class="btn btn-outline-primary" href="{% url 'computer_log_list' %}">导入日志证据 / 重新分析</a>{% endif %}
-        {% if task_project_kind %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#profileConfigModal">{{ task_config_label }}</button><button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#alertPolicyModal">告警配置</button><button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#runTaskModal">{{ task_action_label }}</button>{% endif %}
+        {% if can_administer and task_project_kind %}{% if can_administer %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#profileConfigModal">{{ task_config_label }}</button>{% endif %}{% if can_administer %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#alertPolicyModal">告警配置</button>{% endif %}{% if can_administer %}<button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#runTaskModal">{{ task_action_label }}</button>{% endif %}{% endif %}
         <a class="btn btn-outline-secondary" href="{% if record_type == 'computer_analysis' %}{% url 'asset_list' 'computers' %}{% else %}{% url 'asset_list' record_kind %}{% endif %}">返回{% if record_type == 'computer_analysis' %}PC{% else %}设备{% endif %}列表</a>
     </div>
 </header>
-{% if task_project_kind %}{% include 'inspections/profile_modal.html' %}{% include 'inspections/run_modal.html' %}{% include 'alerts/policy_modal.html' %}{% endif %}
+{% if can_administer and task_project_kind %}{% if can_administer %}{% include 'inspections/profile_modal.html' %}{% endif %}{% if can_administer %}{% include 'inspections/run_modal.html' %}{% endif %}{% if can_administer %}{% include 'alerts/policy_modal.html' %}{% endif %}{% endif %}
 
 <section class="mb-4" aria-labelledby="task-overview-title">
     <div class="d-flex align-items-center justify-content-between mb-3">
@@ -35,10 +35,14 @@
 
 <div class="mb-4">{% include 'inspections/taskbar.html' %}</div>
 
+{% if record_type == 'computer_analysis' %}
+{% include 'inspections/latest_analysis_statistics.html' %}
+{% else %}
 <div class="d-flex align-items-end justify-content-between mb-3">
-    <div><p class="page-heading__eyebrow mb-1">最新结果</p><h2 class="h5 mb-0">{% if record_type == 'computer_analysis' %}最新任务日志分析记录{% else %}最新任务巡检记录{% endif %}</h2></div>
+    <div><p class="page-heading__eyebrow mb-1">最新结果</p><h2 class="h5 mb-0">最新任务巡检记录</h2></div>
     {% if latest_task %}<span class="small text-secondary">任务创建于 {{ latest_task.created_at|date:'Y-m-d H:i:s' }}</span>{% endif %}
 </div>
 
 {% include 'inspections/results_table.html' %}
+{% endif %}
 {% endblock %}

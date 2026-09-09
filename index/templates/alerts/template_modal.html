@@ -1,0 +1,39 @@
+<div class="modal fade alert-template-modal" id="alertTemplateModal" tabindex="-1" aria-labelledby="alertTemplateModalLabel" aria-hidden="true" data-template-settings-url="{% url 'alert_template_settings' %}">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
+    {% if template_form %}<form id="alert-template-form" method="post" action="{% url 'alert_template_settings' %}" data-modal-form>{% csrf_token %}{% endif %}
+    <div class="modal-header"><h2 class="modal-title fs-5" id="alertTemplateModalLabel">任务总结通知模板</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+    <div class="modal-body modal-body--scroll">
+      {% if template_form %}
+        {% if template_saved %}<div class="alert alert-success" role="status" data-flash-message>模板已保存，将用于后续任务总结；已有通知保持原样。</div>{% endif %}
+        {{ template_form.non_field_errors }}
+        <div class="config-modal-grid alert-template-layout">
+          <section class="config-section-card" data-template-section="content">
+            <div class="config-section-heading"><span class="config-section-index">01</span><div><h3>模板内容</h3><p>选择展示密度并设置通知标题与正文；留空字段继续使用当前模式预设。</p></div></div>
+            <p class="text-secondary small">详细模式仅包含有限的问题和恢复摘要，完整结果仍从任务详情查看。</p>
+            {% for field in template_form %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}{{ field.errors }}
+            </div>
+            {% endfor %}
+          </section>
+          <section class="config-section-card" data-template-section="variables">
+            <div class="config-section-heading"><span class="config-section-index">02</span><div><h3>可用变量</h3><p>点击预览前，可将下列变量放入标题或正文。</p></div></div>
+            <div class="alert-template-variables">{% for variable in template_variables %}<code>&#123;{{ variable }}&#125;</code>{% endfor %}</div>
+            <p class="form-text mb-0">仅支持简单变量替换，不支持属性、索引、格式或模板代码。</p>
+          </section>
+          <section class="config-section-card alert-template-preview" data-template-section="preview" aria-label="通知预览" aria-live="polite">
+            <div class="config-section-heading"><span class="config-section-index">03</span><div><h3>示例预览</h3><p>使用本地示例数据生成，不会发送任何外部通知。</p></div></div>
+            {% if template_preview %}
+            <strong class="d-block text-break">{{ template_preview.title }}</strong>
+            <div class="text-break mt-2 alert-template-preview__body">{{ template_preview.text|linebreaksbr }}</div>
+            {% else %}
+            <div class="empty-state alert-template-preview__empty"><strong>尚未生成预览</strong><span>完成模板内容后点击底部“预览”。</span></div>
+            {% endif %}
+          </section>
+        </div>
+      {% else %}<p class="text-secondary" role="status">正在加载模板配置…</p><form method="get" action="{% url 'alert_template_settings' %}" data-modal-form><button type="submit" class="btn btn-outline-secondary btn-sm">重新加载</button></form>{% endif %}
+    </div>
+    {% if template_form %}<div class="modal-footer modal-footer--sticky"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">关闭</button><button type="submit" class="btn btn-outline-primary" name="action" value="preview">预览</button><button type="submit" class="btn btn-primary" name="action" value="save">保存模板</button></div></form>{% endif %}
+  </div></div>
+</div>

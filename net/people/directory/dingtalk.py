@@ -77,6 +77,7 @@ class DingTalkDirectoryAdapter:
             people = [
                 DirectoryPerson(
                     employee_id=record['employee_id'], name=record['name'], email=record['email'],
+                    phone=record['phone'],
                     department=','.join(self._reference_name(access_token, 'department', value)
                                         for value in sorted(record['departments'])),
                     leader=self._reference_name(access_token, 'user', record['leader']),
@@ -207,6 +208,7 @@ class DingTalkDirectoryAdapter:
         details = {
             'employee_id': employee_id, 'name': self._optional_text(item.get('name')),
             'email': self._optional_text(item.get('email')),
+            'phone': self._optional_text(item.get('mobile')),
             'leader': self._optional_text(item.get('manager_userid')), 'departments': departments,
             'hire_date': self._optional_text(item.get('hire_date', item.get('hired_date'))),
             'departure_date': self._optional_text(item.get('departure_date', item.get('leave_date'))),
@@ -218,7 +220,7 @@ class DingTalkDirectoryAdapter:
         if existing['employee_id'] != employee_id:
             raise DirectoryPayloadError()
         existing['departments'].update(departments)
-        for field in ('name', 'email', 'leader', 'hire_date', 'departure_date'):
+        for field in ('name', 'email', 'phone', 'leader', 'hire_date', 'departure_date'):
             if not existing[field] and details[field]:
                 existing[field] = details[field]
 

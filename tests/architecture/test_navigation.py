@@ -2,6 +2,7 @@ from html.parser import HTMLParser
 
 from django.test import TestCase
 from django.urls import reverse
+from tests.auth import login_admin
 
 
 class NavigationMenuParser(HTMLParser):
@@ -57,6 +58,9 @@ class NavigationMenuParser(HTMLParser):
 
 
 class NavigationDropdownTests(TestCase):
+    def setUp(self):
+        login_admin(self.client)
+
     def test_asset_and_domain_navigation_groups_expose_their_workspaces(self):
         response = self.client.get(reverse('index'))
         parser = NavigationMenuParser()
@@ -131,4 +135,3 @@ class NavigationDropdownTests(TestCase):
                 self.assertEqual(attributes.get('data-bs-toggle'), 'dropdown')
                 self.assertEqual(attributes.get('aria-expanded'), 'false')
                 self.assertTrue(attributes.get('aria-controls'))
-

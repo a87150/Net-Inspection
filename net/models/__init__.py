@@ -1,5 +1,7 @@
 from .alerts import AlertChannel, AlertDelivery, AlertEvent, AlertPolicy, AlertState, AlertTestSend
+from .alerts import AlertNotificationTemplate
 from .devices import Computer, Network_Device, SecurityDevice, Server
+from .configuration_backups import DeviceConfigurationBackup
 from .domain import (
     Domain_Account, Domain_Computer, Domain_Group, Domain_Controller_Config,
     DomainOperation,
@@ -17,6 +19,8 @@ from .tasks import ComputerAnalysisProfile, InspectionProfile, Schedule, TaskRun
 
 
 __all__ = [
+    'AlertNotificationTemplate',
+    'DeviceConfigurationBackup',
     'IssueSeverityPolicy',
     'People', 'Domain_Account', 'Domain_Computer', 'Domain_Group', 'Computer', 'Network_Device',
     'Server', 'SecurityDevice', 'Domain_Controller_Config', 'DomainOperation',

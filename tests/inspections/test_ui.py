@@ -10,6 +10,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from tests.auth import login_admin, login_reader
 from django.utils import timezone
 
 from net.models import (
@@ -26,6 +27,7 @@ from tests.devices.pc.test_config_layout import ConfigMarkup
 
 class TaskUiTestCase(TestCase):
     def setUp(self):
+        login_admin(self.client)
         from tests.devices.pc.test_source_models import valid_smb_source
         self.log_source = valid_smb_source()
         self.linux = Server.objects.create(
@@ -155,6 +157,53 @@ class TaskUiTestCase(TestCase):
             {str(self.linux.pk), str(self.windows.pk)},
         )
 
+    def test_manual_selected_run_enqueues_only_the_posted_server(self):
+        response = self.post_manual({'profile_id': str(self.server_profile.pk), 'target_mode': 'selected', 'target_ids': [str(self.linux.pk)], 'next': reverse('asset_list', args=['servers'])})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(list(TaskRun.objects.get().target_runs.values_list('target_id', flat=True)), [str(self.linux.pk)])
+
+    def test_manual_selected_run_rejects_a_different_asset_type(self):
+        from net.models import Network_Device
+        network = Network_Device.objects.create(ip='192.0.2.250')
+        response = self.post_manual({'profile_id': str(self.server_profile.pk), 'target_mode': 'selected', 'target_ids': [str(network.pk)], 'next': reverse('asset_list', args=['servers'])}, follow=True)
+        self.assertEqual(TaskRun.objects.count(), 0)
+        self.assertContains(response, '当前筛选范围')
+    def test_row_single_target_rejects_unknown_and_extra_ids_without_falling_back_to_all(self):
+        from uuid import uuid4
+        for target_ids in ([str(uuid4())], [str(self.linux.pk), str(self.windows.pk)]):
+            with self.subTest(target_ids=target_ids):
+                response = self.post_manual({
+                    'profile_id': str(self.server_profile.pk),
+                    'target_mode': 'selected',
+                    'single_target_id': str(self.linux.pk),
+                    'target_ids': target_ids,
+                    'next': reverse('asset_list', args=['servers']),
+                }, follow=True)
+                self.assertEqual(TaskRun.objects.count(), 0)
+                self.assertContains(response, '任务未创建')
+
+    def test_row_single_target_rejects_all_mode_without_expanding_scope(self):
+        response = self.post_manual({
+            'profile_id': str(self.server_profile.pk),
+            'target_mode': 'all',
+            'single_target_id': str(self.linux.pk),
+            'target_ids': [str(self.linux.pk)],
+            'next': reverse('asset_list', args=['servers']),
+        }, follow=True)
+        self.assertEqual(TaskRun.objects.count(), 0)
+        self.assertContains(response, '单设备巡检')
+    def test_row_single_target_rejects_another_configuration_type_without_writing(self):
+        from net.models import Network_Device
+        network = Network_Device.objects.create(ip='192.0.2.251')
+        response = self.post_manual({
+            'profile_id': str(self.server_profile.pk),
+            'target_mode': 'selected',
+            'single_target_id': str(network.pk),
+            'target_ids': [str(network.pk)],
+            'next': reverse('asset_list', args=['servers']),
+        }, follow=True)
+        self.assertEqual(TaskRun.objects.count(), 0)
+        self.assertContains(response, '当前筛选范围')
     def test_manual_run_modal_only_exposes_a_configured_profile_selector(self):
         response = self.client.get(reverse('asset_list', args=['servers']))
 
@@ -312,6 +361,7 @@ class TaskUiTestCase(TestCase):
 
     def test_task_list_and_detail_show_progress_errors_and_filtered_export(self):
         """Omitting target details would hide why a partial/failed task needs attention."""
+        login_reader(self.client)
         task = enqueue_task(
             self.server_profile,
             [self.linux.pk],
@@ -350,6 +400,7 @@ class TaskUiTestCase(TestCase):
 
     def test_task_progress_is_display_only_not_a_broken_queryset_filter(self):
         """Progress is a model property, so exposing ORM filter/sort controls would be fake."""
+        login_reader(self.client)
         response = self.client.get(reverse('task_list'))
 
         self.assertEqual(response.status_code, 200)
@@ -363,7 +414,7 @@ class TaskUiTestCase(TestCase):
             [self.linux.pk],
             TaskRun.Source.MANUAL,
         )
-        user = get_user_model().objects.create_user('operator', password='secret')
+        user = get_user_model().objects.create_user('operator', password='secret', is_staff=True)
         self.client.force_login(user)
 
         listing = self.client.get(reverse('task_list'))
@@ -383,12 +434,13 @@ class TaskUiTestCase(TestCase):
         )
         stop_url = reverse('task_cancel', args=[task.pk])
 
+        self.client.logout()
         anonymous = self.client.post(stop_url)
         task.refresh_from_db()
         self.assertEqual(anonymous.status_code, 302)
         self.assertEqual(task.status, TaskRun.Status.QUEUED)
 
-        user = get_user_model().objects.create_user('operator', password='secret')
+        user = get_user_model().objects.create_user('operator', password='secret', is_staff=True)
         self.client.force_login(user)
         self.assertEqual(self.client.get(stop_url).status_code, 405)
         response = self.client.post(stop_url)

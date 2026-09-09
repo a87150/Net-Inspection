@@ -6,6 +6,7 @@ from django.db import connection
 from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from tests.auth import login_reader
 from django.utils import timezone
 
 from index.common.table_query import apply_table_filters
@@ -16,6 +17,7 @@ from net.models import Computer, ComputerAnalysis, ComputerAnalysisProfile, Comp
 
 class PeopleResultPaginationTests(TestCase):
     def setUp(self):
+        login_reader(self.client)
         profile = ComputerAnalysisProfile.objects.create(name='people pages', matching_mode='people')
         self.roster = [dict(id=str(i), employee_id=f'E{i:03}', name=f'Person {i:03}', department='IT')
                        for i in range(1, 24)]

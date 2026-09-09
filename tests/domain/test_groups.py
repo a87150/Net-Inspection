@@ -86,6 +86,8 @@ class DomainGroupSyncTests(TestCase):
 
 class DomainGroupWorkspaceTests(TestCase):
     def setUp(self):
+        from tests.auth import login_admin
+        login_admin(self.client)
         Domain_Account.objects.create(account_name='启用账号', login_name='active', is_active=True)
         Domain_Account.objects.create(account_name='停用账号', login_name='inactive', is_active=False)
         Domain_Computer.objects.create(computer_name='ACTIVE-PC', is_active=True)

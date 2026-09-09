@@ -1,12 +1,13 @@
-from django.contrib.auth import get_user_model
+from tests.auth import login_admin, login_reader
 from django.test import TestCase
 from django.urls import reverse
-from net.models import Network_Device, Server, SecurityDevice, TaskRun
+from net.models import InspectionProfile, Network_Device, Server, SecurityDevice, TaskRun
+from net.inspections.queue import enqueue_task
 
 
 class AssetCreateTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user('device-editor', password='fixture'))
+        login_admin(self.client, username='device-editor')
 
     def test_each_device_list_can_create_one_device(self):
         for kind, model, fields in (
@@ -73,3 +74,42 @@ class AssetCreateTests(TestCase):
         self.client.logout()
         self.assertEqual(self.client.post('/assets/servers/add/', {'ip': '192.0.2.5'}).status_code, 302)
         self.assertFalse(Server.objects.exists())
+    def test_admin_can_edit_one_device_without_replacing_an_empty_password(self):
+        server = Server.objects.create(ip='192.0.2.70', name='旧名称', username='operator', password='saved-secret')
+        response = self.client.post(reverse('asset_edit', args=['servers', server.pk]), {'ip': server.ip, 'name': '新名称', 'username': 'new-operator', 'password': ''})
+        self.assertRedirects(response, reverse('asset_edit', args=['servers', server.pk]))
+        server.refresh_from_db()
+        self.assertEqual(server.name, '新名称')
+        self.assertEqual(server.username, 'new-operator')
+        self.assertEqual(server.password, 'saved-secret')
+
+    def test_invalid_edit_reopens_the_same_device_modal_without_writing(self):
+        server = Server.objects.create(ip='192.0.2.71', name='原服务器')
+        response = self.client.post(reverse('asset_edit', args=['servers', server.pk]), {'ip': 'invalid', 'name': '未保存名称'})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['open_edit_device_modal'])
+        self.assertEqual(response.context['edit_device'].pk, server.pk)
+        self.assertIn('ip', response.context['device_form'].errors)
+        server.refresh_from_db()
+        self.assertEqual(server.name, '原服务器')
+
+    def test_edit_blocks_connection_changes_while_this_device_has_an_active_task(self):
+        server = Server.objects.create(ip='192.0.2.73', name='原服务器', username='operator', password='saved-secret')
+        profile = InspectionProfile.objects.create(name='活动服务器', device_type='server', selected_items=['cpu'])
+        enqueue_task(profile, [server.pk], TaskRun.Source.MANUAL)
+        response = self.client.post(reverse('asset_edit', args=['servers', server.pk]), {
+            'ip': server.ip, 'name': '原服务器', 'username': 'new-operator', 'password': '',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['open_edit_device_modal'])
+        self.assertContains(response, '活动巡检任务')
+        server.refresh_from_db()
+        self.assertEqual(server.username, 'operator')
+    def test_edit_rejects_another_asset_kind_and_reader_writes(self):
+        server = Server.objects.create(ip='192.0.2.72', name='原服务器')
+        self.assertEqual(self.client.post(reverse('asset_edit', args=['networks', server.pk]), {}).status_code, 404)
+        login_reader(self.client)
+        response = self.client.post(reverse('asset_edit', args=['servers', server.pk]), {'ip': server.ip, 'name': '读者不能修改'})
+        self.assertEqual(response.status_code, 403)
+        server.refresh_from_db()
+        self.assertEqual(server.name, '原服务器')

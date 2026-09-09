@@ -30,7 +30,7 @@ class PcScriptDownloadTests(TestCase):
             self.client.force_login(self.user)
             response = self.client.get(self.url)
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response['Cache-Control'], 'no-store')
+            self.assertIn('no-store', response['Cache-Control'].split(', '))
             self.assertEqual(response['X-Content-Type-Options'], 'nosniff')
             self.assertIn('attachment;', response['Content-Disposition'])
             self.assertTrue(response.content.startswith(b'\xef\xbb\xbf'))

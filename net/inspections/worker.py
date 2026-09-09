@@ -317,10 +317,12 @@ class TaskWorker:
             if stop_event.is_set():
                 return task is not None
             from net.alerts.service import deliver_due_alerts, reconcile_terminal_targets
+            from net.alerts.task_summaries import reconcile_terminal_tasks
 
             # Reconciliation closes the commit/restart gap; transport calls are
             # lease-claimed and occur outside the record transaction.
             reconcile_terminal_targets(limit=max(1, self.threads * 8))
+            reconcile_terminal_tasks(limit=max(1, self.threads * 8))
             delivered = deliver_due_alerts(limit=self.threads)
             return task is not None or bool(delivered) or bool(handoffs)
         finally:

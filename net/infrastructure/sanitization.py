@@ -147,7 +147,8 @@ def sanitize_configuration_items(items, *, secrets=()):
     from net.devices.security import configuration as security
 
     if not isinstance(items, dict):
-        return {}
+        # Issue findings are a list, not an item map. Preserve their structure.
+        return sanitize_configuration(items, secrets=secrets)
     result = sanitize_configuration({key: value for key, value in items.items()
                                      if key != 'config_info'}, secrets=secrets)
     if 'config_info' not in items:
@@ -158,6 +159,24 @@ def sanitize_configuration_items(items, *, secrets=()):
         if item.get('status') in ('failed', 'unsupported'):
             safe_item = {'status': item['status'],
                          'message': sanitize_configuration(str(item.get('message', '')), secrets=secrets)}
+        elif item.get('status') == 'success' and 'backup_id' in item:
+            try:
+                from uuid import UUID
+                from datetime import datetime
+                backup_id = str(UUID(str(item['backup_id'])))
+                captured_at = datetime.fromisoformat(item['captured_at']).isoformat()
+                checksum = item['sha256']
+                size = int(item['byte_size'])
+                if not re.fullmatch(r'[0-9a-f]{64}', checksum) or not 0 < size <= 4 * 1024 * 1024:
+                    raise ValueError('invalid backup metadata')
+                if item['scope'] not in ('running-config', 'current-configuration'):
+                    raise ValueError('invalid backup scope')
+                safe_item = {'status': 'success', 'backup_id': backup_id,
+                             'captured_at': captured_at, 'sha256': checksum,
+                             'byte_size': size, 'scope': item['scope'],
+                             'message': '原始配置已独立备份，仅管理员可以下载。'}
+            except (ValueError, TypeError, KeyError):
+                pass
         elif item.get('status') == 'success':
             try:
                 vendor = item.get('vendor')

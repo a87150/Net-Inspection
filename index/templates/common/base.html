@@ -11,6 +11,7 @@
     <script defer src="{% static 'app/js/common/table_tools.js' %}"></script>
     <script defer src="{% static 'app/js/common/table_workspace.js' %}"></script>
     <script defer src="{% static 'app/js/common/modal_feedback.js' %}"></script>
+    <script defer src="{% static 'app/js/common/modal_transport.js' %}"></script>
     <script defer src="{% static 'app/js/common/form_accessibility.js' %}"></script>
     <script defer src="{% static 'app/js/common/conditional_fields.js' %}"></script>
     <script defer src="{% static 'app/js/inspections/task_ui.js' %}"></script>
@@ -33,7 +34,7 @@
                     </li>
                     <li class="nav-item dropdown" data-nav-menu="domain">
                         <button class="nav-link dropdown-toggle" id="navDomainToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navDomainMenu">域控管理</button>
-                        <ul class="dropdown-menu app-navbar__dropdown-menu" id="navDomainMenu" aria-labelledby="navDomainToggle"><li><a class="dropdown-item" href="{% url 'domain_controller_settings' %}">域控管理</a></li><li><a class="dropdown-item" href="{% url 'domain_account_list' %}">域账号</a></li><li><a class="dropdown-item" href="{% url 'domain_computer_list' %}">域计算机</a></li><li><a class="dropdown-item" href="{% url 'domain_group_list' %}">域分组</a></li></ul>
+                        <ul class="dropdown-menu app-navbar__dropdown-menu" id="navDomainMenu" aria-labelledby="navDomainToggle">{% if can_administer %}<li><a class="dropdown-item" href="{% url 'domain_controller_settings' %}">域控管理</a></li>{% endif %}<li><a class="dropdown-item" href="{% url 'domain_account_list' %}">域账号</a></li><li><a class="dropdown-item" href="{% url 'domain_computer_list' %}">域计算机</a></li><li><a class="dropdown-item" href="{% url 'domain_group_list' %}">域分组</a></li></ul>
                     </li>
                     <li class="nav-item dropdown" data-nav-menu="computers">
                         <button class="nav-link dropdown-toggle" id="navComputersToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navComputersMenu">PC</button>
@@ -54,7 +55,7 @@
                     <li class="nav-item"><a class="nav-link" href="{% url 'task_list' %}">后台任务</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'alert_list' %}">告警记录</a></li>
                 </ul>
-                <a class="navbar-text app-navbar__context" href="{% url 'admin:index' %}"><span class="status-dot status-dot--success" aria-hidden="true"></span>运维管理台</a>
+                {% if can_administer %}<a class="navbar-text app-navbar__context" href="{% url 'admin:index' %}"><span class="status-dot status-dot--success" aria-hidden="true"></span>运维管理台</a>{% endif %}
                 {% if user.is_authenticated %}
                 <div class="dropdown ms-3" data-account-menu>
                     <button class="btn btn-outline-light btn-sm dropdown-toggle d-inline-flex align-items-center gap-2" id="accountMenuToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="accountMenu" aria-label="账号 {{ user.get_username }}，查看权限组">

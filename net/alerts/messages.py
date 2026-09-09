@@ -20,6 +20,19 @@ def _finding_text(finding):
 def build_alert_message(event):
     """Build one message containing the event's complete run-target context."""
     event_type = _display(event.event_type)
+    if event_type == 'summary':
+        from .templates import render_task_summary
+        data = dict(getattr(event, 'summary_data', None) or {})
+        detail_url = _display(data.get('details_url') or f'/tasks/{event.task_id}/')
+        data['details_url'] = detail_url
+        title, text = data.get('message_title'), data.get('message_text')
+        if not isinstance(title, str) or not isinstance(text, str):
+            # Legacy summaries must never pick up edits made after the event.
+            defaults = render_task_summary(data, template={})
+            title = title if isinstance(title, str) else defaults['title']
+            text = text if isinstance(text, str) else defaults['text']
+        return AlertMessage(title=title, text=text,
+                            facts={'event_type': 'summary'}, detail_url=detail_url)
     findings = list(event.findings or [])
     finding_titles = [_display(item.get('title') or item.get('key') or 'Unknown finding') for item in findings]
     project = f'{_display(event.profile_type)}/{_display(event.profile_id)}'

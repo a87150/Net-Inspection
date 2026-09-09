@@ -90,7 +90,8 @@ class DomainSyncTaskTests(TestCase):
         self.assertFalse(Domain_Account.objects.exists())
 
     def test_non_admin_cannot_queue_or_schedule(self):
-        self.client.logout()
+        from tests.auth import login_reader
+        login_reader(self.client)
         for action in ('sync', 'schedule'):
             response = self.client.post(reverse('domain_controller_settings'), {'action': action})
             self.assertEqual(response.status_code, 403)

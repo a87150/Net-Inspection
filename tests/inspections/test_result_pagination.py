@@ -7,6 +7,7 @@ from django.db.models import QuerySet
 from django.test import RequestFactory, TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from tests.auth import login_reader
 from django.utils import timezone
 
 from index.common.table_query import apply_table_filters
@@ -18,6 +19,7 @@ from net.models import (Computer, ComputerAnalysis, ComputerLogFile, Error_Compu
 
 class ResultPaginationTests(TestCase):
     def setUp(self):
+        login_reader(self.client)
         self.factory = RequestFactory()
 
     def test_network_filters_and_pages_in_sql_without_payloads(self):

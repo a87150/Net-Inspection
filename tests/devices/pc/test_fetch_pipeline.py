@@ -9,6 +9,7 @@ from net.devices.pc.executor import execute_computer_fetch_target
 from .test_source_models import valid_smb_source
 from .connector_fakes import memory_connector
 from .test_remote_import import payload
+from .helpers import analysis_task_url
 
 
 class FetchPipelineTests(TestCase):
@@ -89,6 +90,8 @@ class RemoteFullStoryTests(TransactionTestCase):
             self.assertTrue(target.analysis_handoff_task_id)
 
     def test_frozen_personnel_fields_filter_render_and_export(self):
+        from tests.auth import login_reader
+        login_reader(self.client)
         from django.urls import reverse
         from net.devices.pc.logs import import_log_bytes
         from net.models import ComputerAnalysis
@@ -99,7 +102,7 @@ class RemoteFullStoryTests(TransactionTestCase):
             'enrichment': {'employee_number': 'TEST-001', 'personnel_name': '测试姓名',
                            'department': '研发组', 'site': '长沙'}})
         query = {'filter_department': '研发组'}
-        response = self.client.get(reverse('computer_analysis_list'), query)
+        response = self.client.get(analysis_task_url(), query)
         self.assertContains(response, 'TEST-001')
         self.assertContains(response, '研发组')
         exported = self.client.get(reverse('table_export', args=['computer_inspections']), query)

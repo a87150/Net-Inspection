@@ -37,3 +37,17 @@ def create_log_file(**fields):
                 day -= timedelta(days=1)
             fields['collected_date'] = day
     return ComputerLogFile.objects.create(**fields)
+
+
+def analysis_task_url(*records):
+    """Bind legacy result fixtures to an explicit task for detail-table tests."""
+    from django.urls import reverse
+    from net.models import ComputerAnalysis, ComputerAnalysisProfile, TaskRun, TaskTargetRun
+    profile = ComputerAnalysisProfile.objects.create(name=f'Detail-{uuid4().hex}')
+    task = TaskRun.objects.create(task_type='computer_analysis', source='manual', analysis_profile=profile)
+    for record in records or ComputerAnalysis.objects.all():
+        target, _ = TaskTargetRun.objects.get_or_create(task=task, target_type='computer_log',
+            target_id=str(record.log_file_id), defaults={'result_type': 'computer_analysis', 'result_id': str(record.pk)})
+        record.task_target = target
+        record.save(update_fields=['task_target'])
+    return reverse('task_detail', args=[task.pk])

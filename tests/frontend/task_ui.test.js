@@ -6,14 +6,15 @@ const context = {module: {exports: {}}, document: {addEventListener() {}}, URL};
 vm.runInNewContext(fs.readFileSync(require.resolve('../../static/app/js/inspections/task_ui.js'), 'utf8'), context);
 const ui = context.module.exports;
 
-test('profile switch reloads selected full state and retains row scope', () => {
+test('profile switch loads dialog state without navigation and retains row scope', () => {
     assert.equal(typeof ui.switchProfile, 'function');
-    const location = {href:'http://localhost/assets/servers/?filter_server_type=linux', assign(url) {this.next=url;}};
+    const location = {href:'http://localhost/assets/servers/?filter_server_type=linux', assign() {throw new Error('must not navigate');}};
     const form = {querySelectorAll: () => []};
     const select = {value:'memory-profile', closest: (selector) => selector === 'form' ? form : {id:'runTaskModal'}};
     const doc = {querySelectorAll: () => [{value:'row-b'}], querySelector: () => ({value:'selected'})};
-    ui.switchProfile(select, location, doc);
-    const url = new URL(location.next);
+    let requested;
+    ui.switchProfile(select, location, doc, {navigate(modal, url) {requested = url;}});
+    const url = new URL(requested);
     assert.equal(url.searchParams.get('task_profile'), 'memory-profile');
     assert.equal(url.searchParams.get('task_modal'), 'run');
     assert.equal(url.searchParams.get('task_targets'), 'row-b');
@@ -24,10 +25,12 @@ test('row action clears previous selection and chooses exactly clicked row', () 
     assert.equal(typeof ui.selectRow, 'function');
     const boxes = [{value:'a',checked:true},{value:'b',checked:false}];
     const modes = [{value:'all',checked:true},{value:'selected',checked:false}];
-    const doc = {querySelectorAll: selector => selector.includes('target_ids') ? boxes : modes};
+    const single = {value:''};
+    const doc = {querySelectorAll: selector => selector.includes('target_ids') ? boxes : modes, querySelector: () => single};
     ui.selectRow(doc, 'b');
     assert.deepEqual(boxes.map(box=>box.checked), [false,true]);
     assert.deepEqual(modes.map(mode=>mode.checked), [false,true]);
+    assert.equal(single.value, 'b');
 });
 
 test('target device bulk actions affect only visible device choices', () => {
@@ -71,4 +74,15 @@ test('generic checkbox bulk actions skip disabled choices', () => {
     assert.deepEqual(inputs.map(input => input.checked), [true,true,true]);
     ui.updateCheckboxSelection(inputs, 'invert');
     assert.deepEqual(inputs.map(input => input.checked), [false,true,false]);
+});
+
+test('returning to bulk mode clears the previous row-only target', () => {
+    const boxes = [{value:'a', checked:true}, {value:'b', checked:false}];
+    const mode = {value:'selected', type:'hidden'};
+    const single = {value:'a'};
+    const doc = {querySelectorAll: selector => selector.includes('target_ids') ? boxes : [mode], querySelector: () => single};
+    ui.clearRowTarget(doc);
+    assert.deepEqual(boxes.map(box => box.checked), [false, false]);
+    assert.equal(mode.value, '');
+    assert.equal(single.value, '');
 });

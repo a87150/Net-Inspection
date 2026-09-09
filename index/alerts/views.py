@@ -4,6 +4,7 @@ from urllib.parse import urlencode, urlsplit
 from uuid import UUID, uuid4
 
 from django.contrib import messages
+from index.common.access import is_admin
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
@@ -82,6 +83,8 @@ def alert_modal_context(request, *, profile=None):
 
     It intentionally exposes only channel labels and non-secret form values.
     """
+    if not is_admin(request.user):
+        return {}
     failure = request.session.get('alert_form_failure', {})
     if (failure.get('token') == request.GET.get('alert_form_token')
             and failure.get('modal') == request.GET.get('alert_modal')):

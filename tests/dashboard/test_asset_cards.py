@@ -2,12 +2,14 @@ from unittest.mock import patch
 
 from django.test import TestCase
 from django.urls import reverse
+from tests.auth import login_admin, login_reader
 
 from net.models import Computer
 
 
 class AssetDashboardUiTests(TestCase):
     def setUp(self):
+        login_admin(self.client)
         self.pc = Computer.objects.create(
             computer_name='PC-DETAIL',
             cpu_model='Intel Core i7',
@@ -30,6 +32,7 @@ class AssetDashboardUiTests(TestCase):
 
     def test_pc_detail_exposes_inventory_but_not_enabled(self):
         """PC details must retain static inventory while hiding collection-only enabled state."""
+        login_reader(self.client)
         response = self.client.get(
             reverse('asset_detail', args=['computers', self.pc.pk]),
         )
@@ -45,6 +48,9 @@ class AssetDashboardUiTests(TestCase):
         self.assertContains(response, 'PC 数据由 PowerShell 自动采集上报。')
         self.assertNotContains(response, '计算机数据由 PowerShell 自动采集上报。')
 class DashboardHierarchyTests(TestCase):
+    def setUp(self):
+        login_admin(self.client)
+
     def summaries(self):
         common = {'total': 10, 'normal': 10, 'abnormal': 0, 'unchecked': 0, 'last_run_at': None}
         return [

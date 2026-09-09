@@ -72,12 +72,13 @@ class DirectoryPerson:
     external_user_id: str = ''
     hire_date: str = ''
     departure_date: str = ''
+    phone: str = ''
 
     def __post_init__(self):
         if not isinstance(self.employee_id, str) or not self.employee_id.strip():
             raise DirectoryPayloadError()
         object.__setattr__(self, 'employee_id', self.employee_id.strip())
-        for field_name in ('name', 'email', 'department', 'leader', 'external_user_id'):
+        for field_name in ('name', 'email', 'department', 'leader', 'external_user_id', 'phone'):
             object.__setattr__(self, field_name, _optional_text(getattr(self, field_name)))
         for field_name in ('hire_date', 'departure_date'):
             object.__setattr__(self, field_name, _optional_date(getattr(self, field_name)))

@@ -4,10 +4,11 @@ from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 from django.contrib import messages
+from index.common.access import is_admin, admin_required
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
-from django.db import transaction
+from django.db import OperationalError, transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import NoReverseMatch, reverse
@@ -40,7 +41,7 @@ from net.models import (
     TaskTargetRun,
 )
 from net.inspections.executor import _database_guard
-from net.inspections.queue import cancel_task, enqueue_computer_fetch_task, enqueue_task
+from net.inspections.queue import cancel_task, enqueue_computer_fetch_task, enqueue_task, is_sqlite_busy
 
 
 PROJECTS = {
@@ -85,6 +86,8 @@ def _project_profiles(project_kind):
 
 def task_modal_context(request, project_kind, *, allow_target_selection=False, target_source='assets'):
     """Shared modal state for list/record pages without mutating state on GET."""
+    if not is_admin(request.user):
+        return {'task_default_profile': None}
     state = _take_modal_state(request)
     profiles = list(_project_profiles(project_kind))
     default_profile = next(
@@ -146,7 +149,14 @@ def task_modal_context(request, project_kind, *, allow_target_selection=False, t
                 pc_analysis_form.initial[name] = getattr(defaults, name)
         if not pc_analysis_form.initial.get('interval_value'):
             pc_analysis_form.initial['interval_value'] = 30
+    single_asset = None
+    if allow_target_selection and project_kind in PROJECTS and request.GET.get('task_single_target'):
+        try:
+            single_asset = PROJECTS[project_kind][1].objects.get(pk=request.GET['task_single_target'])
+        except (ValidationError, ValueError, PROJECTS[project_kind][1].DoesNotExist):
+            raise Http404
     return {
+        'task_single_asset': single_asset,
         'pc_log_source': pc_source,
         'pc_log_source_form': pc_source_form,
         'pc_analysis_form': pc_analysis_form,
@@ -256,6 +266,30 @@ def _target_ids_from_request(post_data, profile, target_mode):
     return target_ids
 
 
+@admin_required
+@require_POST
+def single_device_task_create(request, kind, pk):
+    if kind not in PROJECTS:
+        raise Http404
+    device_type, model, _table = PROJECTS[kind]
+    asset = get_object_or_404(model, pk=pk)
+    profile = _profile_from_post(request.POST.get('profile_id'))
+    if not isinstance(profile, InspectionProfile) or not profile.is_enabled or profile.device_type != device_type:
+        profile = None
+    fallback = reverse('asset_list', kwargs={'kind': kind}) + f'?task_modal=run&task_single_target={asset.pk}'
+    if profile is None:
+        messages.error(request, '请选择该设备类型的启用巡检配置。')
+        return redirect(fallback)
+    try:
+        # The URL owns the target. Posted ranges can never expand a row task.
+        task = enqueue_task(profile, [asset.pk], TaskRun.Source.MANUAL)
+    except ValidationError as exc:
+        messages.error(request, '任务未创建：' + '；'.join(exc.messages))
+        return redirect(fallback)
+    messages.success(request, '单台巡检已入队，共 1 个目标。')
+    return redirect('task_detail', pk=task.pk)
+
+
 @require_POST
 def manual_task_create(request):
     fallback = reverse('index')
@@ -264,6 +298,9 @@ def manual_task_create(request):
     if profile is None or not profile.is_enabled:
         messages.error(request, '请选择一个启用的任务配置。')
         _remember_modal(request, 'run')
+        return redirect(next_url)
+    if request.POST.get('single_target_id') and not request.POST.get('target_mode'):
+        messages.error(request, '单台巡检范围丢失，请从设备列表重新打开。')
         return redirect(next_url)
     if not request.POST.get('target_mode'):
         try:
@@ -276,6 +313,20 @@ def manual_task_create(request):
                     _selected_target_ids(profile),
                     TaskRun.Source.MANUAL,
                 )
+        except ValidationError as exc:
+            messages.error(request, '任务未创建：' + '；'.join(exc.messages))
+            _remember_modal(request, 'run')
+            return redirect(next_url)
+        messages.success(request, f'任务已入队，共 {task.total_targets} 个目标。')
+        return redirect('task_detail', pk=task.pk)
+    single_target_id = request.POST.get('single_target_id')
+    if single_target_id and (request.POST.get('target_mode') != 'selected' or request.POST.getlist('target_ids') != [single_target_id]):
+        messages.error(request, '任务未创建：单设备巡检只能包含当前设备。')
+        _remember_modal(request, 'run')
+        return redirect(next_url)
+    if request.POST.get('target_mode') == 'selected' and not request.POST.getlist('selected_items') and isinstance(profile, InspectionProfile):
+        try:
+            task = enqueue_task(profile, _target_ids_from_request(request.POST, profile, 'selected'), TaskRun.Source.MANUAL)
         except ValidationError as exc:
             messages.error(request, '任务未创建：' + '；'.join(exc.messages))
             _remember_modal(request, 'run')
@@ -474,7 +525,7 @@ def task_cancel(request, pk):
         require_people_owner(request, task)
     if (
         task.task_type in {TaskRun.TaskType.DOMAIN_OPERATION, TaskRun.TaskType.DOMAIN_SYNC}
-        and not request.user.has_perm('net.manage_domain_operations')
+        and not is_admin(request.user)
     ):
         raise PermissionDenied
     default_url = (
@@ -487,6 +538,10 @@ def task_cancel(request, pk):
         cancel_task(task.pk)
     except ValidationError as exc:
         messages.error(request, '任务未结束：' + '；'.join(exc.messages))
+    except OperationalError as exc:
+        if not is_sqlite_busy(exc):
+            raise
+        messages.error(request, '任务未结束：数据库正忙，请稍后重试结束任务。')
     else:
         messages.success(request, '任务已结束；正在执行的外部调用将在超时后退出。')
     return redirect(next_url)
@@ -543,7 +598,7 @@ def task_detail(request, pk):
     )
     domain_retry_available = bool(
         domain_operation
-        and request.user.has_perm('net.manage_domain_operations')
+        and is_admin(request.user)
         and task.status in TaskRun.AGGREGATED_TERMINAL_STATUSES
         and task.failed_targets > 0
         and not domain_manual_intervention

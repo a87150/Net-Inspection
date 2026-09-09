@@ -1,3 +1,4 @@
+{% if can_administer %}
 {% load static %}
 <div class="modal fade inspection-config-modal" id="profileConfigModal" data-auto-open="{{ profile_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="profileConfigModalLabel" aria-hidden="true">
  <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
@@ -8,7 +9,7 @@
    {% if request.user.is_staff or request.user.is_superuser %}
     <form id="pc-source-config-form" class="inspection-config-layout" method="post" action="{% url 'pc_log_source_save' %}" data-pc-source-form>
     {% csrf_token %}
-    {% include 'devices/pc/source_fields.html' with form=pc_log_source_form %}
+    {% if can_administer %}{% include 'devices/pc/source_fields.html' with form=pc_log_source_form %}{% endif %}
     </form>
    {% else %}<div class="alert alert-secondary mb-0">日志来源设置与采集脚本下载需要管理员权限。</div>{% endif %}
    <form id="pc-analysis-config-form" class="inspection-config-layout" method="post" enctype="multipart/form-data" action="{% url 'computer_analysis_profile_configure' %}">
@@ -54,7 +55,8 @@
  </div></div>
 </div>
 {% if request.user.is_staff or request.user.is_superuser %}{% if pc_log_source %}
-<form id="pc-source-test-form" method="post" action="{% url 'pc_log_source_test' %}" hidden>{% csrf_token %}</form>
-<form id="pc-source-preview-form" method="post" action="{% url 'pc_log_source_preview' %}" hidden>{% csrf_token %}</form>
+<form id="pc-source-test-form" data-modal-owner="profileConfigModal" method="post" action="{% url 'pc_log_source_test' %}" hidden>{% csrf_token %}</form>
+<form id="pc-source-preview-form" data-modal-owner="profileConfigModal" method="post" action="{% url 'pc_log_source_preview' %}" hidden>{% csrf_token %}</form>
 {% endif %}{% endif %}
 <script src="{% static 'app/js/pc_source.js' %}" defer></script>
+{% endif %}

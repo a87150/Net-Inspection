@@ -4,6 +4,7 @@ from io import StringIO
 
 from django.test import TestCase
 from django.urls import NoReverseMatch, reverse
+from tests.auth import login_reader
 from django.utils import timezone
 
 from tests.devices.pc.helpers import create_log_file
@@ -26,6 +27,7 @@ from net.models import (
 
 class ProjectRecordWorkspaceTests(TestCase):
     def setUp(self):
+        login_reader(self.client)
         self.analysis_profile = ComputerAnalysisProfile.objects.create(
             name='记录页分析配置',
             analysis_items=['system'],
@@ -168,9 +170,11 @@ class ProjectRecordWorkspaceTests(TestCase):
         self.assertEqual(task_ids, [latest_task.pk, old_task.pk])
         self.assertNotIn(scan_task.pk, task_ids)
         self.assertEqual(
-            list(response.context['page_obj'].object_list), [latest_analysis],
+            response.context['latest_analysis_statistics']['total'], 1,
         )
         self.assertNotContains(response, old_analysis.summary)
+        detail = self.client.get(reverse('task_detail', args=[latest_task.pk]))
+        self.assertEqual(list(detail.context['page_obj']), [latest_analysis])
 
     def test_task_metrics_exclude_pending_and_cancelled_from_failure_rate(self):
         task = TaskRun.objects.create(

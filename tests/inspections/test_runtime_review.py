@@ -7,6 +7,7 @@ from unittest.mock import patch
 from django.db import IntegrityError, connections, transaction
 from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
+from tests.auth import login_admin
 from django.utils import timezone
 
 from tests.devices.pc.helpers import create_log_file
@@ -22,6 +23,7 @@ from net.inspections.executor import _begin_target
 
 class ReviewUiTests(TestCase):
     def setUp(self):
+        login_admin(self.client)
         self.cpu = InspectionProfile.objects.create(name='A CPU', device_type='server', selected_items=['cpu'])
         self.memory = InspectionProfile.objects.create(name='B Memory', device_type='server', selected_items=['memory'], timeout_seconds=123, concurrent_workers=7)
         Schedule.objects.create(inspection_profile=self.memory, kind='daily', daily_time=time(4, 25))
@@ -106,11 +108,14 @@ class ScheduleUniquenessTests(TransactionTestCase):
     def test_two_requests_save_one_schedule(self):
         profile = InspectionProfile.objects.create(name='Concurrent', device_type='server', selected_items=['cpu'])
         barrier = Barrier(2)
+        clients = {hour: Client() for hour in (1, 2)}
+        for hour, client in clients.items():
+            login_admin(client, username=f'schedule-admin-{hour}')
         def save(hour):
             connections.close_all()
             try:
                 barrier.wait(timeout=5)
-                return Client().post('/tasks/profiles/inspection/', {
+                return clients[hour].post('/tasks/profiles/inspection/', {
                     'profile_id': profile.pk, 'name': 'Concurrent', 'selected_items': ['cpu'],
                     'timeout_seconds': 60, 'concurrent_workers': 2, 'schedule_enabled': 'on',
                     'schedule_kind': 'daily', 'daily_time': f'{hour:02d}:00', 'next': '/assets/servers/',

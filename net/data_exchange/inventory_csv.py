@@ -89,10 +89,11 @@ ENTITY_SPECS = {
         'key': 'employee_id',
         'columns': [
             ('姓名', 'name', _text), ('工号', 'employee_id', _text), ('邮箱', 'email', _text),
+            ('手机号', 'phone', _text),
             ('部门', 'department', _text), ('上级', 'leader', _text), ('是否在职', 'is_active', _boolean),
             ('入职日期', 'hire_date', _date), ('离职日期', 'departure_date', _date),
         ],
-        'sample': ('张三', 'H10001', 'zhangsan@example.invalid', '信息技术部', '李经理', '是', '2026-01-15', ''),
+        'sample': ('张三', 'H10001', 'zhangsan@example.invalid', '13800138000', '信息技术部', '李经理', '是', '2026-01-15', ''),
     },
     'accounts': {
         'name': '域账号',
@@ -452,6 +453,9 @@ def import_csv(entity, uploaded_file):
         for label, field, converter in spec['columns']:
             aliases[label.strip()] = (field, converter)
             aliases[field] = (field, converter)
+        if entity == 'people':
+            for alias in ('电话', '手机号码', '联系电话', 'mobile'):
+                aliases[alias] = ('phone', _text)
         normalized_headers = [_text(name) for name in reader.fieldnames]
         if any(len(name) > MAX_CSV_CELL_CHARS for name in normalized_headers):
             raise ValueError(f'单元格内容不能超过 {MAX_CSV_CELL_CHARS} 个字符')
@@ -502,7 +506,11 @@ def import_csv(entity, uploaded_file):
                 if not mapping:
                     continue
                 field, converter = mapping
-                if _text(raw_value) == '' and field != spec['key']:
+                # Missing phone columns preserve existing values; an explicit
+                # blank cell clears the phone. Short CSV rows remain absent.
+                if entity == 'people' and field == 'phone' and raw_value is None:
+                    continue
+                if _text(raw_value) == '' and field != spec['key'] and not (entity == 'people' and field == 'phone'):
                     if converter not in {_date, _non_negative_integer, _gib}:
                         continue
                 try:

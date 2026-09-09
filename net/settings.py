@@ -12,12 +12,16 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 import os
 from pathlib import Path
+from net.infrastructure.environment import load_environment
+
+load_environment()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 # Stable service encryption keys; the Web and Worker must share each value.
 DOMAIN_OPERATION_ENCRYPTION_KEY = os.getenv('DOMAIN_OPERATION_ENCRYPTION_KEY', '')
 PC_LOG_SOURCE_ENCRYPTION_KEY = os.getenv('PC_LOG_SOURCE_ENCRYPTION_KEY', '')
+DEVICE_BACKUP_ENCRYPTION_KEY = os.getenv('DEVICE_BACKUP_ENCRYPTION_KEY', '')
 # Forwarded host and scheme are trusted only when the deployment explicitly
 # enables this setting for a proxy that it controls.
 NET_TRUST_PROXY_HEADERS = (
@@ -70,7 +74,9 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'index.common.access.AccessMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    'net.infrastructure.page_cache.PageCacheMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
@@ -88,6 +94,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'index.common.access.access_context',
             ],
         },
     },
@@ -98,6 +105,10 @@ STATICFILES_DIRS = [
 ]
 
 WSGI_APPLICATION = 'net.wsgi.application'
+
+LOGIN_URL = '/login/'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/'
 
 
 # Database
@@ -112,7 +123,10 @@ if os.getenv('DB_ENGINE', 'sqlite').lower() == 'mysql':
             'PASSWORD': os.getenv('DB_PASSWORD', ''),
             'HOST': os.getenv('DB_HOST', '127.0.0.1'),
             'PORT': os.getenv('DB_PORT', '3306'),
-            'OPTIONS': {'charset': 'utf8mb4'},
+            'CONN_MAX_AGE': 60,
+            'CONN_HEALTH_CHECKS': True,
+            'OPTIONS': {'charset': 'utf8mb4', 'isolation_level': 'read committed',
+                        'init_command': "SET sql_mode='STRICT_TRANS_TABLES', time_zone='+00:00'", 'connect_timeout': 5},
         }
     }
 else:
@@ -128,6 +142,19 @@ else:
     }
 
 # Permission for the explicit sqlite_wal maintenance command, not a startup hook.
+NET_PAGE_CACHE_ENABLED = os.getenv('NET_PAGE_CACHE_ENABLED', 'false').lower() in {'1', 'true', 'yes'}
+NET_PAGE_CACHE_SECONDS = int(os.getenv('NET_PAGE_CACHE_SECONDS', '15'))
+CACHES = {
+    'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'},
+    'pages': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': os.getenv('NET_REDIS_URL', 'redis://127.0.0.1:6379/1'),
+        'KEY_PREFIX': 'net-inspection',
+        'TIMEOUT': NET_PAGE_CACHE_SECONDS,
+        'OPTIONS': {'socket_connect_timeout': 0.2, 'socket_timeout': 0.2},
+    },
+}
+
 NET_SQLITE_WAL_ENABLED = os.getenv('NET_SQLITE_WAL_ENABLED', 'false').strip().lower() in {'1', 'true', 'yes'}
 
 # Password validation

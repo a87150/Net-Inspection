@@ -3,6 +3,7 @@ import uuid
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 
 
@@ -113,6 +114,7 @@ class Domain_Controller_Config(models.Model):
     user_filter = models.CharField(max_length=500, default='(&(objectCategory=person)(objectClass=user))')
     computer_filter = models.CharField(max_length=500, default='(objectCategory=computer)')
     group_filter = models.CharField(max_length=500, default='(objectCategory=group)')
+    inactive_days = models.PositiveIntegerField('未登录天数', default=60, validators=[MinValueValidator(1), MaxValueValidator(36500)])
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):

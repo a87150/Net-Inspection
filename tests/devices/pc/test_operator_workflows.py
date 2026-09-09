@@ -3,8 +3,9 @@ from datetime import datetime, time, timezone as dt_timezone
 from unittest.mock import patch
 from django.test import TestCase, Client
 from django.urls import reverse
+from tests.auth import login_admin, login_reader
 from django.utils import timezone
-from tests.devices.pc.helpers import create_log_file
+from tests.devices.pc.helpers import create_log_file, analysis_task_url
 
 from net.models import (Computer, ComputerAnalysisProfile, ComputerLogFile, InspectionProfile,
                         People, Schedule, Server, Server_Inspection, TaskRun)
@@ -13,6 +14,7 @@ from net.inspections.schedules import enqueue_due_schedules
 
 class FinalOperatorTests(TestCase):
     def setUp(self):
+        login_admin(self.client)
         self.server = Server.objects.create(name='operator', ip='192.0.2.80', server_type='linux')
         self.profile = InspectionProfile.objects.create(name='operator', device_type='server', selected_items=['cpu'])
         self.now = datetime(2026, 9, 1, 0, 0, tzinfo=dt_timezone.utc)
@@ -93,6 +95,7 @@ class FinalOperatorTests(TestCase):
         self.assertIn('value="" selected', str(form['rule_server_type']))
 
     def test_local_midnight_record_filter_and_csv_agree(self):
+        login_reader(self.client)
         record = Server_Inspection.objects.create(server=self.server, summary='local-next-day')
         Server_Inspection.objects.filter(pk=record.pk).update(created_at=datetime(2026, 8, 31, 17, tzinfo=dt_timezone.utc))
         query = {'filter_time_from': '2026-09-01', 'filter_time_to': '2026-09-01'}
@@ -110,7 +113,9 @@ class FinalOperatorTests(TestCase):
         self.assertContains(self.client.get('/computers/logs/'), 'fixture.json')
         self.assertContains(self.client.get('/computers/logs/'), '按文件时间升序排列')
         self.assertContains(self.client.get(detail), '重新分析')
-        self.assertEqual(Client(enforce_csrf_checks=True).post(detail+'analyze/', {}).status_code, 403)
+        csrf_client = Client(enforce_csrf_checks=True)
+        login_admin(csrf_client)
+        self.assertEqual(csrf_client.post(detail+'analyze/', {}).status_code, 403)
         response = self.client.post(detail+'analyze/', {'profile_id': profile.pk, 'selected_items': ['activation']})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(log.analyses.count(), 0)
@@ -122,6 +127,7 @@ class FinalOperatorTests(TestCase):
             'selected_items': ['activation']}).status_code, 400)
 
     def test_provenance_latest_and_record_metrics(self):
+        login_reader(self.client)
         person = People.objects.create(employee_id='CSV', source='csv', platform_user_id='safe-platform')
         self.assertContains(self.client.get(reverse('person_detail', args=[person.pk])), 'safe-platform')
         old = Server_Inspection.objects.create(server=self.server, status='failed', summary='old failure')
@@ -138,6 +144,7 @@ class FinalOperatorTests(TestCase):
         self.assertIn('CPU 12%', csv.content.decode())
 
     def test_analysis_list_renders_shared_summary_columns(self):
+        login_reader(self.client)
         from net.devices.pc.analysis import analyze_log
         Computer.objects.create(computer_name='METRICS')
         log = create_log_file(source_path='metrics.json', modified_at=timezone.now(),
@@ -149,7 +156,7 @@ class FinalOperatorTests(TestCase):
         self.assertEqual(analysis.details['severity_counts'], {'info': 1, 'warning': 0, 'critical': 0})
         self.assertEqual(analysis.exceptions[0]['analysis_item'], 'activation')
         self.assertFalse(analysis.errors.exists())
-        page = self.client.get('/computers/analyses/')
+        page = self.client.get(analysis_task_url(analysis))
         self.assertContains(page, 'CPU 23%')
         self.assertContains(page, '<td data-column-key="execution_status">成功</td>', html=True)
         self.assertContains(page, '<td data-column-key="status"><span class="badge text-bg-info">提示</span></td>', html=True)

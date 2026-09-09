@@ -28,6 +28,8 @@ from net.inspections.queue import enqueue_task
 
 class AlertUiTests(TestCase):
     def setUp(self):
+        from tests.auth import login_admin
+        login_admin(self.client)
         self.profile = InspectionProfile.objects.create(
             name='UI server profile',
             device_type=InspectionProfile.DeviceType.SERVER,
@@ -132,6 +134,8 @@ class AlertUiTests(TestCase):
     def test_test_send_requires_csrf_uses_saved_channel_and_audits_disabled_result(self):
         """Accepting endpoint fields here would let the browser supply a secret-bearing target."""
         csrf_client = Client(enforce_csrf_checks=True)
+        from tests.auth import login_admin
+        login_admin(csrf_client)
         config = csrf_client.get(reverse('alert_list'))
         token = config.cookies['csrftoken'].value
 
@@ -241,6 +245,10 @@ class AlertUiTests(TestCase):
         )
         event = self.event()
         now = timezone.now()
+        from net.alerts.service import process_persisted_target
+        from net.alerts.task_summaries import process_task_summary
+        process_persisted_target(event.target_run)
+        event = process_task_summary(event.task)
         AlertDelivery.objects.filter(event=event, channel=self.primary).update(
             status=AlertDelivery.Status.SENT, delivered_at=now,
         )
@@ -250,11 +258,11 @@ class AlertUiTests(TestCase):
         AlertEvent.objects.filter(pk=event.pk).update(status=AlertEvent.Status.PARTIAL)
 
         listing = self.client.get(reverse('alert_list'), {
-            'filter_event_type': AlertEvent.EventType.ABNORMAL,
+            'filter_event_type': AlertEvent.EventType.SUMMARY,
             'filter_delivery_outcome': 'sent',
         })
         self.assertEqual(listing.status_code, 200)
-        self.assertContains(listing, '异常告警')
+        self.assertContains(listing, '任务总结')
         self.assertEqual(list(listing.context['page_obj'].object_list), [event])
         self.assertContains(listing, '导出筛选结果')
 
@@ -263,16 +271,16 @@ class AlertUiTests(TestCase):
         self.assertContains(detail, 'primary disabled channel')
         self.assertContains(detail, 'secondary email channel')
         self.assertContains(detail, '任务详情')
-        self.assertContains(detail, '目标执行详情')
+        self.assertNotContains(detail, '目标执行详情')
         self.assertNotContains(detail, 'private-token')
         self.assertNotContains(detail, 'mail-password-value')
 
         exported = self.client.get(reverse('table_export', args=['alert_events']), {
-            'filter_event_type': AlertEvent.EventType.ABNORMAL,
+            'filter_event_type': AlertEvent.EventType.SUMMARY,
             'filter_delivery_outcome': 'sent',
         })
         self.assertEqual(exported.status_code, 200)
-        self.assertIn('异常告警', exported.content.decode('utf-8-sig'))
+        self.assertIn('任务总结', exported.content.decode('utf-8-sig'))
 
     def test_delivery_filter_and_csv_use_channel_rows_independent_of_event_status(self):
         """Aggregate status or a non-distinct delivery join must not change event membership."""

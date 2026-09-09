@@ -29,12 +29,12 @@ from net.models import People, PeopleSyncSource
 
 _PREVIEW_SALT = 'net.people.sync.preview.v1'
 _PREVIEW_MAX_AGE_SECONDS = 300
-_PREVIEW_VERSION = 1
+_PREVIEW_VERSION = 2
 _SAFE_SKIP_REASON_RE = re.compile(r'^[a-z0-9_:-]{1,64}$')
-_RECORD_FIELDS = ('employee_id', 'name', 'email', 'department', 'leader', 'external_user_id')
+_RECORD_FIELDS = ('employee_id', 'name', 'email', 'department', 'leader', 'external_user_id', 'phone')
 _DATE_RECORD_FIELDS = ('hire_date', 'departure_date')
 _PERSON_STATE_FIELDS = (
-    'employee_id', 'name', 'email', 'department', 'leader', 'is_active',
+    'employee_id', 'name', 'email', 'phone', 'department', 'leader', 'is_active',
     'source', 'sync_source_id', 'platform_user_id', 'last_synced_at', 'hire_date', 'departure_date',
 )
 
@@ -336,6 +336,7 @@ def _validate_record_shape(record):
 def _person_from_record(source, record, synced_at):
     return People(
         employee_id=record['employee_id'], name=record['name'], email=record['email'],
+        phone=record['phone'],
         department=record['department'], leader=record['leader'],
         platform_user_id=record['external_user_id'], source=source.source_type,
         sync_source=source, is_active=True, last_synced_at=synced_at,
@@ -347,6 +348,7 @@ def _person_from_record(source, record, synced_at):
 def _set_person_record(person, source, record, synced_at):
     person.name = record['name']
     person.email = record['email']
+    person.phone = record['phone']
     person.department = record['department']
     person.leader = record['leader']
     person.platform_user_id = record['external_user_id']
@@ -387,10 +389,10 @@ def _claimable_by_source(person):
 def _person_matches_record(person, record):
     return (
         person.name or '', person.email or '', person.department or '', person.leader or '',
-        person.platform_user_id or '', person.is_active,
+        person.platform_user_id or '', person.is_active, person.phone,
     ) == (
         record['name'], record['email'], record['department'], record['leader'],
-        record['external_user_id'], True,
+        record['external_user_id'], True, record['phone'],
     ) and all(
         field_name not in record or getattr(person, field_name) == _record_date(record, field_name)
         for field_name in _DATE_RECORD_FIELDS

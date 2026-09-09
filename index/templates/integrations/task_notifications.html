@@ -1,3 +1,4 @@
+{% if can_administer %}
 <section data-people-task-notifications data-status-url="{% url 'people_task_status' %}" data-csrf-token="{{ csrf_token }}" aria-live="polite">
     <div data-people-running-list></div>
     <div class="modal fade" id="peopleTaskCompletionModal" tabindex="-1" aria-labelledby="peopleTaskCompletionLabel" aria-hidden="true">
@@ -8,3 +9,4 @@
         </div></div>
     </div>
 </section>
+{% endif %}

@@ -116,10 +116,23 @@ def _asset_context(target):
     else:
         raise ValueError(f'当前 Worker 不支持目标类型：{target_type}')
 
-    secrets = model.objects.filter(pk=target.target_id).values(*secret_fields).first()
-    if secrets is None:
+    connection_fields = {
+        TaskTargetRun.TargetType.NETWORK_DEVICE: (
+            'ip', 'port', 'vendor', 'connection_type', 'snmp_version', 'snmp_port',
+            'snmp_security_level', 'snmp_username', 'snmp_auth_protocol',
+            'snmp_priv_protocol', 'snmp_context_name', 'snmp_retries',
+        ),
+        TaskTargetRun.TargetType.SERVER: ('ip', 'port', 'server_type', 'api_url', 'verify_ssl'),
+        TaskTargetRun.TargetType.MONITOR: ('ip', 'vendor', 'device_type', 'api_url', 'verify_ssl'),
+    }[target_type]
+    # Fetch endpoint and credentials together: an enqueue/edit race must not
+    # send newly saved credentials to the old endpoint in a frozen snapshot.
+    current = model.objects.filter(pk=target.target_id).values(*connection_fields, *secret_fields).first()
+    if current is None:
         raise LookupError('巡检目标已不存在，无法解析执行凭据。')
-    snapshot.update(secrets)
+    if any(snapshot[field] != current[field] for field in connection_fields if field in snapshot):
+        raise ValueError('设备连接配置在任务入队后已变更，请重新执行巡检。')
+    snapshot.update({field: current[field] for field in secret_fields})
     return SimpleNamespace(**snapshot)
 
 
@@ -140,7 +153,22 @@ def _collect(target, task, asset):
     timeout = _timeout_seconds(task)
     selection = {'selected_items': list(task.selected_items_snapshot)}
     if target.target_type == TaskTargetRun.TargetType.NETWORK_DEVICE:
-        return collect_network(asset, timeout, **selection)
+        from net.devices.configuration_backups import latest_configuration_backup, backup_due
+        saved_asset = Network_Device.objects.get(pk=target.target_id)
+        backup = None
+        if 'config_info' in selection['selected_items'] and not backup_due(saved_asset):
+            backup = latest_configuration_backup(saved_asset)
+            if backup is not None:
+                selection['selected_items'].remove('config_info')
+        if not selection['selected_items'] and backup is not None:
+            # A reused backup proves neither online nor offline status. Verify
+            # basic device access without fetching the configuration again.
+            selection['selected_items'] = ['device_info']
+        result = collect_network(asset, timeout, **selection)
+        if backup is not None:
+            result.data['config_info'] = _backup_metadata(backup)
+            result.raw['config_info'] = _backup_metadata(backup)
+        return result
     if target.target_type == TaskTargetRun.TargetType.SERVER:
         if str(getattr(asset, 'server_type', '')).lower() == 'windows':
             return collect_windows_http(asset, timeout, **selection)
@@ -154,6 +182,45 @@ def _collect(target, task, asset):
     return _missing_configuration(f'当前 Worker 不支持目标类型：{target.target_type}')
 
 
+def _backup_metadata(backup):
+    return {'status': 'success', 'backup_id': str(backup.pk),
+            'captured_at': backup.captured_at.isoformat(), 'scope': backup.scope,
+            'sha256': backup.sha256, 'byte_size': backup.byte_size,
+            'message': '原始配置已独立备份，仅管理员可以下载。'}
+
+
+def _persist_configuration_backup(target, collection, now):
+    """Keep raw configuration out of ordinary inspection JSON, even on failure."""
+    from net.devices.configuration_backups import store_configuration_backup
+    from net.data_exchange.adapters import UnsupportedConfiguration
+    item = collection.data.get('config_info')
+    if not isinstance(item, dict):
+        return
+    metadata = None
+    if item.get('status') == 'success' and 'content' in item:
+        model = {TaskTargetRun.TargetType.NETWORK_DEVICE: Network_Device,
+                 TaskTargetRun.TargetType.MONITOR: SecurityDevice}.get(target.target_type)
+        if model is not None:
+            try:
+                with transaction.atomic():
+                    asset = model.objects.get(pk=target.target_id)
+                    backup = store_configuration_backup(asset, item, task_target=target, captured_at=now)
+                metadata = _backup_metadata(backup)
+            except UnsupportedConfiguration:
+                metadata = {'status': 'unsupported', 'message': '该厂商或接口尚不支持完整配置备份，局部配置不能用于整机恢复。'}
+            except Exception:
+                metadata = {'status': 'failed', 'message': '原始配置备份保存失败，请检查备份密钥和数据库；下次巡检会重试。'}
+    if metadata is None:
+        allowed = ('status', 'backup_id', 'captured_at', 'scope', 'sha256', 'byte_size', 'message')
+        metadata = {key: item[key] for key in allowed if key in item}
+    collection.data['config_info'] = metadata
+    for key in list(collection.raw):
+        if key == 'config_info' or key.partition(':')[2] == 'config_info':
+            collection.raw[key] = metadata
+    if metadata.get('status') != 'success' and collection.status == RecordStatus.SUCCESS:
+        collection.status = RecordStatus.PARTIAL if len(collection.data) > 1 else RecordStatus.FAILED
+
+
 def _record_status(collection):
     return (
         collection.status
@@ -165,11 +232,18 @@ def _record_status(collection):
 def _selected_details(task, collection):
     data = collection.data if isinstance(collection.data, dict) else {}
     selected = set(task.selected_items_snapshot or [])
-    return {
+    result = {
         key: value
         for key, value in data.items()
         if key in selected
     }
+    raw = collection.raw if isinstance(collection.raw, dict) else {}
+    errors = raw.get('collection_errors')
+    if isinstance(errors, dict):
+        selected_errors = {key: value for key, value in errors.items() if key in selected}
+        if selected_errors:
+            result['collection_errors'] = selected_errors
+    return result
 
 
 def _record_spec(target):
@@ -214,7 +288,12 @@ def _selected_raw(target, task, raw):
     elif target.target_type == TaskTargetRun.TargetType.MONITOR:
         aliases = SECURITY_FIELDS
     elif target.target_snapshot.get('server_type') == 'windows':
-        aliases = WINDOWS_FIELDS
+        result = selected_fields(raw, task.selected_items_snapshot, WINDOWS_FIELDS)
+        if isinstance(raw, dict) and isinstance(raw.get('collection_errors'), dict):
+            errors = {key: value for key, value in raw['collection_errors'].items() if key in task.selected_items_snapshot}
+            if errors:
+                result['collection_errors'] = errors
+        return result
     else:
         aliases = LINUX_FIELDS
     return selected_fields(raw, task.selected_items_snapshot, aliases)
@@ -240,6 +319,7 @@ def _persist_collection(target_run_id, worker_id, collection, lease_guard=None, 
             ):
                 return ExecutionOutcome(str(target.pk), target.status, stale=True)
 
+            _persist_configuration_backup(target, collection, now)
             status = _record_status(collection)
             if 'config_info' in task.selected_items_snapshot and not secrets:
                 # Also cover worker-level failure persistence, which did not
@@ -261,7 +341,8 @@ def _persist_collection(target_run_id, worker_id, collection, lease_guard=None, 
                     task.profile_snapshot['issue_project'], task.selected_items_snapshot, details,
                     reachable=bool(collection.reachable), status=status,
                     overrides=task.profile_snapshot.get('issue_severity_overrides', {}),
-                    thresholds=task.profile_snapshot.get('issue_thresholds', {}), message=collection.message)
+                    thresholds=task.profile_snapshot.get('issue_thresholds', {}), message=collection.message,
+                    server_type=target.target_snapshot.get('server_type') if target.target_type == TaskTargetRun.TargetType.SERVER else None)
                 details['issue_findings'] = scrub_items(findings, secrets=secrets)
                 details['normal_issue_items'] = normal_items
             elif status != RecordStatus.SUCCESS:

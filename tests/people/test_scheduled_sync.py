@@ -157,6 +157,8 @@ class PeopleScheduledEnqueueTests(TestCase):
 
 class PeopleScheduledWorkerTests(TransactionTestCase):
     def setUp(self):
+        from tests.auth import login_reader
+        login_reader(self.client)
         self.source = PeopleSyncSource.objects.create(
             name='飞书', source_key='people-provider-feishu', source_type='feishu',
             credentials={'app_id': 'app', 'app_secret': 'secret'},
@@ -231,6 +233,8 @@ class PeopleScheduledWorkerTests(TransactionTestCase):
 
     def test_scheduled_task_is_not_a_browser_operation(self):
         client = Client()
+        from tests.auth import login_admin
+        login_admin(client)
         self.assertEqual(client.get('/integrations/people/tasks/status/').json()['tasks'], [])
         response = client.get(f'/tasks/{self.task.pk}/')
         self.assertEqual(response.status_code, 200)

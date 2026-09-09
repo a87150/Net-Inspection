@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from io import StringIO
 
 from django.contrib import messages
+from index.common.access import is_admin
 from django.core.management import call_command
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
@@ -82,7 +83,7 @@ def _history_url(kind, asset):
     return ''
 
 
-def asset_list(request, kind, *, integration_context=None, creation_form=None):
+def asset_list(request, kind, *, integration_context=None, creation_form=None, edit_device=None):
     page = _asset_page(kind)
     table_definition = get_table_definition(page.table_key)
     objects, table_state = apply_table_filters(
@@ -105,8 +106,8 @@ def asset_list(request, kind, *, integration_context=None, creation_form=None):
         'pagination_query': query_without_page(request),
         'inspection_type': page.inspection_kind,
         'collection_hint': page.collection_hint,
-        'import_enabled': kind in IMPORTABLE_ENTITIES,
-        'personnel_api_import': kind == 'people',
+        'import_enabled': is_admin(request.user) and kind in IMPORTABLE_ENTITIES,
+        'personnel_api_import': is_admin(request.user) and kind == 'people',
         'data_source_note': (
             'PC 数据由 PowerShell 自动采集上报。'
             if kind == 'computers' else ''
@@ -116,11 +117,14 @@ def asset_list(request, kind, *, integration_context=None, creation_form=None):
         ),
     }
     from .forms import DEVICE_KINDS, device_form, device_form_sections
-    if kind in DEVICE_KINDS and request.user.is_authenticated:
-        form = creation_form if creation_form is not None else device_form(kind)
+    if kind in DEVICE_KINDS and is_admin(request.user):
+        form = creation_form if creation_form is not None else device_form(kind, instance=edit_device)
         context.update(device_form=form, device_form_sections=device_form_sections(form),
-                       open_add_device_modal=creation_form is not None)
-    if kind == 'people':
+                       open_add_device_modal=creation_form is not None and edit_device is None,
+                       open_edit_device_modal=edit_device is not None,
+                       edit_device=edit_device,
+                       device_modal_mode='edit' if edit_device is not None else 'add')
+    if kind == 'people' and is_admin(request.user):
         from index.people.integrations import people_modal_context
         modal_context = integration_context if integration_context is not None else people_modal_context(request)
         modal_context['open_import_modal'] = modal_context.get('open_import_modal') or context['open_import_modal']

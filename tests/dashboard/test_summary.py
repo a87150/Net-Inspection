@@ -5,6 +5,7 @@ from unittest.mock import patch
 from django.db import DatabaseError
 from django.test import TestCase
 from django.urls import reverse
+from tests.auth import login_admin
 from django.utils import timezone
 
 from net.models import (
@@ -29,6 +30,9 @@ from tests.devices.pc.helpers import create_log_file
 
 
 class DashboardSummaryTests(TestCase):
+    def setUp(self):
+        login_admin(self.client)
+
     def _analysis(self, computer, name, *, status=RecordStatus.SUCCESS, created_at):
         log_file = create_log_file(
             computer=computer,

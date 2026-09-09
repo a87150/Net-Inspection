@@ -4,6 +4,8 @@ from html.parser import HTMLParser
 
 from django.test import TestCase
 from django.urls import reverse
+from tests.auth import login_admin, login_reader
+from tests.devices.pc.helpers import analysis_task_url
 from django.utils import timezone
 
 from net.models import (
@@ -43,6 +45,7 @@ def submitted_hidden_fields(response):
 
 class DetailRouteTests(TestCase):
     def setUp(self):
+        login_reader(self.client)
         self.person = People.objects.create(
             name='张三', employee_id='EMP-001', department='运维部',
         )
@@ -182,7 +185,7 @@ class DetailRouteTests(TestCase):
             log_file=other_log,
             summary='另一台计算机分析完成',
         )
-        history_url = reverse('computer_analysis_list')
+        history_url = analysis_task_url(self.analysis)
         initial = self.client.get(history_url, {'target': self.computer.pk})
         submitted = submitted_hidden_fields(initial)
         submitted.update({'filter_computer_name': 'PC-ROUTE', 'page_size': '50'})
@@ -210,13 +213,16 @@ class DetailRouteTests(TestCase):
                 self.assertEqual(self.client.get(detail_url).status_code, 200)
 
     def test_computer_record_copy_uses_log_analysis_record_wording(self):
+        task_url = analysis_task_url(self.analysis)
         list_response = self.client.get(reverse('computer_analysis_list'))
         detail_url = reverse('computer_analysis_detail', args=[self.analysis.pk])
 
         self.assertEqual(list_response.status_code, 200)
         self.assertContains(list_response, '日志分析记录')
         self.assertNotContains(list_response, '计算机巡检')
-        self.assertContains(list_response, detail_url)
+        self.assertContains(list_response, task_url)
+        self.assertNotContains(list_response, detail_url)
+        self.assertContains(self.client.get(task_url), detail_url)
 
         detail_response = self.client.get(detail_url)
         self.assertEqual(detail_response.status_code, 200)
@@ -227,6 +233,7 @@ class DetailRouteTests(TestCase):
         self.assertEqual(self.client.get('/detail/computers/').status_code, 404)
 
     def test_homepage_project_cards_expose_separate_workspace_entries(self):
+        login_admin(self.client)
         response = self.client.get(reverse('index'))
         items = {item['key']: item for item in response.context['items']}
         expected = {
@@ -272,6 +279,7 @@ class DetailRouteTests(TestCase):
         self.assertNotContains(response, '人员巡检')
 
     def test_homepage_uses_the_inspection_taskbar_instead_of_activity_panels(self):
+        login_admin(self.client)
         response = self.client.get(reverse('index'))
 
         self.assertContains(response, '巡检任务栏')

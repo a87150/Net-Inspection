@@ -7,7 +7,8 @@ from io import StringIO
 from unittest.mock import patch
 
 from django.core.management import call_command
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase, TransactionTestCase, override_settings
+from cryptography.fernet import Fernet
 from django.urls import reverse
 
 from tests.devices.pc.helpers import create_log_file
@@ -83,9 +84,10 @@ class InfrastructureExecutorTests(TestCase):
         self, linux_collect, windows_collect,
     ):
         target, _task = self._claimed_target()
-        self.server.server_type = 'windows'
-        self.server.ip = '192.0.2.111'
-        self.server.save(update_fields=['server_type', 'ip'])
+        # Non-connection edits preserve the queued target and selected fields.
+        # Connection changes are rejected by test_connection_edit_guard.
+        self.server.name = 'renamed after enqueue'
+        self.server.save(update_fields=['name'])
         linux_collect.return_value = CollectionResult(
             True,
             'success',
@@ -134,6 +136,7 @@ class TaskWorkerTests(TransactionTestCase):
 
     @patch('net.devices.network.collector.collect_network_ssh')
     @patch('net.devices.network.collector.collect_network_snmp')
+    @override_settings(DEVICE_BACKUP_ENCRYPTION_KEY=Fernet.generate_key().decode())
     def test_worker_combines_hybrid_results_with_frozen_public_settings_and_live_secrets(
         self, snmp_collect, ssh_collect,
     ):
@@ -183,8 +186,7 @@ class TaskWorkerTests(TransactionTestCase):
         device.snmp_community = 'live-community-secret'
         device.snmp_auth_password = 'live-auth-password'
         device.snmp_priv_password = 'live-priv-password'
-        device.connection_type = 'ssh'
-        device.snmp_port = 2161
+        device.device_name = 'renamed after enqueue'
         device.save()
         seen = {}
 
@@ -215,7 +217,11 @@ class TaskWorkerTests(TransactionTestCase):
             return CollectionResult(
                 True,
                 'success',
-                data={'logs': ['live-priv-password']},
+                data={'logs': ['live-priv-password'], 'config_info': {
+                    'status': 'success', 'vendor': 'cisco', 'format': 'text',
+                    'scope': 'running-config', 'complete': True,
+                    'content': 'hostname edge\nusername admin secret live-priv-password\nend\n',
+                }},
                 raw={
                     'cpu': 'SSH collision evidence',
                     'show logging | last 100': 'SSH log evidence',
@@ -230,7 +236,8 @@ class TaskWorkerTests(TransactionTestCase):
 
         inspection = Network_Device_Inspection.objects.get()
         self.assertEqual(inspection.status, 'success')
-        self.assertEqual(set(inspection.details) - {'issue_findings', 'normal_issue_items'}, {'cpu', 'memory', 'logs'})
+        self.assertEqual(set(inspection.details) - {'issue_findings', 'normal_issue_items'}, {'cpu', 'memory', 'logs', 'config_info'})
+        self.assertEqual(inspection.details['config_info']['status'], 'success')
         self.assertEqual(inspection.raw_output, {
             'snmp:cpu': {'1.3.6.1': '[REDACTED]'},
             'ssh:cpu': 'SSH collision evidence',
@@ -243,7 +250,7 @@ class TaskWorkerTests(TransactionTestCase):
             ['cpu', 'memory'],
         ))
         self.assertEqual(seen['ssh'], (
-            'live-ssh-user', 'live-ssh-password', 9, ['logs'],
+            'live-ssh-user', 'live-ssh-password', 9, ['logs', 'config_info'],
         ))
         persisted = json.dumps([
             inspection.details,
@@ -284,7 +291,8 @@ class TaskWorkerTests(TransactionTestCase):
 
         inspection = Network_Device_Inspection.objects.get()
         self.assertEqual(inspection.status, 'partial')
-        self.assertEqual({key: value for key, value in inspection.details.items() if key not in {'issue_findings', 'normal_issue_items'}}, {'logs': ['accepted']})
+        self.assertEqual({key: value for key, value in inspection.details.items() if key not in {'issue_findings', 'normal_issue_items', 'config_info'}}, {'logs': ['accepted']})
+        self.assertEqual(inspection.details['config_info']['status'], 'failed')
         self.assertEqual(inspection.details['issue_findings'][0]['rule_key'], 'missing.cpu')
         run = TaskRun.objects.get()
         run.refresh_from_db()
@@ -482,6 +490,8 @@ class WorkerCommandAndLegacyEntryTests(TestCase):
         self.assertEqual(TaskRun.objects.filter(status=TaskRun.Status.QUEUED).count(), 1)
 
     def test_web_manual_entry_enqueues_without_running_collectors(self):
+        from tests.auth import login_admin
+        login_admin(self.client)
         device = Network_Device.objects.create(
             device_name='SW-WEB-QUEUE', ip='192.0.2.141', username='reader', password='secret',
         )

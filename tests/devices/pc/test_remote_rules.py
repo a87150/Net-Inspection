@@ -107,6 +107,8 @@ class RemoteRuleTests(RemoteRuleFixture, TestCase):
                 self.assertEqual(self.analyze([item], 'macos').result_level, 'info')
 
     def test_identity_uses_login_suffix_and_does_not_trust_claimed_match(self):
+        from net.models import People
+        People.objects.create(employee_id='TEST-PC', name='Personnel Name')
         system = self.payloads['windows']['系统信息概览']
         system['当前登录用户工号'] = 'EXAMPLE\\test-pc'
         self.assertEqual(self.analyze(['identity_match']).status, 'success')

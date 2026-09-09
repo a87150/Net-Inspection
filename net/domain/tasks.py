@@ -5,10 +5,12 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 import hashlib
 import json
+import time
 from uuid import NAMESPACE_URL, uuid5
 
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, OperationalError, connection, transaction
+from django.db.models import F
 from django.utils import timezone
 
 from net.domain.secrets import PASSWORD_ACTIONS, store_operation_secret
@@ -26,6 +28,7 @@ from net.models import (
     TaskTargetRun,
 )
 from net.inspections.executor import _database_guard
+from net.inspections.queue import is_sqlite_busy
 
 
 _DOMAIN_TARGETS = {
@@ -161,6 +164,26 @@ def enqueue_domain_operation(
     *, requested_by, object_type, action, target_ids, parameters, password=None,
     _trusted_recovery_stage=None,
 ):
+    """Retry only fully rolled-back local enqueue transactions, never LDAP writes."""
+    if isinstance(target_ids, Iterable) and not isinstance(target_ids, (str, bytes)):
+        target_ids = tuple(target_ids)
+    for attempt in range(3):
+        try:
+            return _enqueue_domain_operation_once(
+                requested_by=requested_by, object_type=object_type, action=action,
+                target_ids=target_ids, parameters=parameters, password=password,
+                _trusted_recovery_stage=_trusted_recovery_stage,
+            )
+        except OperationalError as exc:
+            if not is_sqlite_busy(exc) or connection.in_atomic_block or attempt == 2:
+                raise
+            time.sleep(0.1 * (attempt + 1))
+
+
+def _enqueue_domain_operation_once(
+    *, requested_by, object_type, action, target_ids, parameters, password=None,
+    _trusted_recovery_stage=None,
+):
     """Queue a validated operation, retaining passwords only in one-time storage."""
     if requested_by is None or getattr(requested_by, 'pk', None) is None:
         raise ValidationError({'requested_by': '必须提供已保存的操作发起人。'})
@@ -193,6 +216,10 @@ def enqueue_domain_operation(
 
     with _database_guard():
         with transaction.atomic():
+            if connection.vendor == 'sqlite':
+                # select_for_update is a no-op on SQLite. Take the cross-process
+                # write reservation before SELECTs to avoid lock-upgrade deadlocks.
+                Domain_Controller_Config.objects.filter(pk=1).update(name=F('name'))
             lock_row = (
                 Domain_Controller_Config.objects.select_for_update().filter(pk=1).first()
             )

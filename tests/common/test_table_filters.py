@@ -5,6 +5,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
+from tests.auth import login_reader
 from django.utils import timezone
 
 from index.common.table_options import build_field_option_context, build_field_options
@@ -13,6 +14,7 @@ from index.common.table_registry import TABLE_DEFINITIONS, get_table_definition
 from net.models import (
     Computer,
     ComputerAnalysis,
+    ComputerAnalysisProfile,
     ComputerLogFile,
     Error_Computer,
     Network_Device,
@@ -20,6 +22,8 @@ from net.models import (
     People,
     RecordStatus,
     Server,
+    TaskRun,
+    TaskTargetRun,
 )
 
 
@@ -93,6 +97,7 @@ class TableOptionGenerationTests(TestCase):
 
 class CompactFilterWorkspaceTests(TestCase):
     def setUp(self):
+        login_reader(self.client)
         People.objects.bulk_create([
             People(
                 name='张三', employee_id='P001', department='研发部',
@@ -276,7 +281,7 @@ class CompactFilterWorkspaceTests(TestCase):
         self.assertEqual(reset.path, reverse('record_list', args=['networks']))
         self.assertEqual(parse_qs(reset.query), {'target': [str(device.pk)]})
 
-    def test_computer_analysis_reset_query_preserves_target_scope(self):
+    def test_computer_analysis_statistics_have_no_record_filter_controls(self):
         computer = Computer.objects.create(computer_name='PC-RESET')
         response = self.client.get(reverse('computer_analysis_list'), {
             'target': str(computer.pk),
@@ -285,10 +290,8 @@ class CompactFilterWorkspaceTests(TestCase):
         parser = _WorkspaceMarkupParser()
         parser.feed(response.content.decode())
 
-        self.assertEqual(len(parser.reset_links), 1)
-        reset = urlsplit(parser.reset_links[0])
-        self.assertEqual(reset.path, reverse('computer_analysis_list'))
-        self.assertEqual(parse_qs(reset.query), {'target': [str(computer.pk)]})
+        self.assertEqual(len(parser.reset_links), 0)
+        self.assertContains(response, '最新任务统计')
 
     def test_global_and_project_record_workspaces_have_distinct_preference_keys(self):
         cases = (
@@ -354,6 +357,9 @@ class _WorkspaceMarkupParser(HTMLParser):
 
 
 class FilteredCsvExportTests(TestCase):
+    def setUp(self):
+        login_reader(self.client)
+
     def test_export_uses_all_filtered_rows_and_escapes_formula_prefixes(self):
         People.objects.bulk_create([
             People(
@@ -418,7 +424,6 @@ class FilteredCsvExportTests(TestCase):
         cases = (
             (reverse('asset_list', args=['people']), reverse('table_export', args=['people'])),
             (reverse('domain_account_list'), reverse('table_export', args=['domain_accounts'])),
-            (reverse('computer_analysis_list'), reverse('table_export', args=['computer_inspections'])),
             (reverse('inspection_records'), reverse('table_export', args=['inspection_records'])),
             (reverse('error_records'), reverse('table_export', args=['error_records'])),
             (reverse('computer_error_list'), reverse('table_export', args=['computer_errors'])),
@@ -457,6 +462,7 @@ class FilteredCsvExportTests(TestCase):
 
 class ComputerAnalysisOutcomeTests(TestCase):
     def setUp(self):
+        login_reader(self.client)
         computer = Computer.objects.create(computer_name='PC-OUTCOME')
         abnormal_log = ComputerLogFile.objects.create(
             source_path='abnormal.json',
@@ -487,14 +493,20 @@ class ComputerAnalysisOutcomeTests(TestCase):
             error_type='磁盘异常',
             error_message='磁盘剩余空间不足',
         )
+        profile = ComputerAnalysisProfile.objects.create(name='Outcome details', analysis_items=['resource'])
+        self.task = TaskRun.objects.create(task_type='computer_analysis', source='manual', analysis_profile=profile)
+        for record in (self.normal, self.abnormal):
+            record.task_target = TaskTargetRun.objects.create(task=self.task, target_type='computer_log',
+                target_id=str(record.log_file_id), result_type='computer_analysis', result_id=str(record.pk))
+            record.save(update_fields=['task_target'])
 
     def test_anomaly_outcome_is_consistent_in_html_filter_options_and_csv(self):
         abnormal_response = self.client.get(
-            reverse('computer_analysis_list'),
+            reverse('task_detail', args=[self.task.pk]),
             {'filter_status': 'warning'},
         )
         normal_response = self.client.get(
-            reverse('computer_analysis_list'),
+            reverse('task_detail', args=[self.task.pk]),
             {'filter_status': 'normal'},
         )
 

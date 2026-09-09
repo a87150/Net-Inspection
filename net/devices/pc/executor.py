@@ -312,6 +312,20 @@ def _persist_analysis(target_run_id, worker_id, prepared, expected_attempts, lea
                 return ExecutionOutcome(str(target.pk), target.status, stale=True)
             if expected_attempts != (task.attempt_count, target.attempt_count):
                 return ExecutionOutcome(str(target.pk), target.status, stale=True)
+            if prepared is None:
+                target.status = TaskRun.Status.SUCCESS
+                target.finished_at = timezone.now()
+                target.result_type = target.result_id = ''
+                target.result_snapshot = {
+                    'ignored': True,
+                    'summary': '以人员为主：日志未匹配人员，已忽略，不参与分析与告警。',
+                }
+                target.error_message = ''
+                save_target(target, {'status', 'finished_at', 'result_type', 'result_id',
+                                     'result_snapshot', 'error_message'})
+                if not _analysis_lease_live(task, worker_id, lease_guard):
+                    return _rollback_analysis(target)
+                return ExecutionOutcome(str(target.pk), target.status)
             try:
                 # Include caller-side failures after insertion in the savepoint.
                 with transaction.atomic():
@@ -364,6 +378,14 @@ def execute_computer_target(target_run, *, worker_id, lease_guard=None):
         outcome = _failure(target_run_id, worker_id, '日志文件已不存在，无法执行分析。',
                            lease_guard, expected_attempts=expected_attempts)
     else:
+        if started.task.profile_snapshot.get('matching_mode') == 'people':
+            from net.devices.pc.matching import match_person
+            payload = log_file.payload if isinstance(log_file.payload, dict) else {}
+            system = payload.get('系统信息概览', {})
+            person, _ = match_person(system if isinstance(system, dict) else {},
+                                     started.task.parameters_snapshot.get('personnel_roster', []))
+            if person is None:
+                return _persist_analysis(target_run_id, worker_id, None, expected_attempts, lease_guard)
         try:
             prepared = prepare_log(
                 log_file, list(started.task.selected_items_snapshot),

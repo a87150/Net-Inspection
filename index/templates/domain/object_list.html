@@ -5,12 +5,12 @@
 <header class="page-heading">
     <div class="page-heading__copy"><p class="page-heading__eyebrow">域控对象</p><h1 class="page-heading__title">{{ item_name }}列表</h1></div>
     <div class="page-heading__actions">
-        {% if domain_object_type == 'account' and can_manage_domain %}<button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#domainAccountImportModal">批量导入账号</button>{% endif %}
-        <a class="btn btn-outline-secondary" href="{% url 'domain_controller_settings' %}">返回域控管理</a>
+        {% if domain_object_type == 'account' and can_manage_domain %}{% if can_administer %}<button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#domainAccountImportModal">批量导入账号</button>{% endif %}{% endif %}
+        {% if can_administer %}<a class="btn btn-outline-secondary" href="{% url 'domain_controller_settings' %}">返回域控管理</a>{% endif %}
     </div>
 </header>
 
-{% include 'domain/operation_modal.html' %}
+{% if can_administer %}{% include 'domain/operation_modal.html' %}{% endif %}
 
 {% if domain_object_type == 'account' and can_manage_domain %}
 <div class="modal fade domain-account-import-modal" id="domainAccountImportModal" data-auto-open="{% if request.GET.domain_modal == 'account_import' %}true{% else %}false{% endif %}" tabindex="-1" aria-labelledby="domainAccountImportModalLabel" aria-hidden="true">
@@ -32,13 +32,13 @@
 <div class="card surface-card table-scroll-shell"><p class="table-scroll-hint">可横向滚动查看更多域对象字段</p><div class="table-responsive" role="region" aria-label="{{ item_name }}数据表" tabindex="0"><table class="table data-table table-hover align-middle mb-0">
 {% include 'common/table_caption.html' %}
     <thead><tr>
-        {% if can_manage_domain %}<th scope="col" class="text-center"><span class="visually-hidden">选择</span></th>{% endif %}
+        {% if can_administer and can_manage_domain %}<th scope="col" class="text-center"><span class="visually-hidden">选择</span></th>{% endif %}
         {% include 'common/table_sort_headers.html' %}
         <th scope="col" class="table-actions-column table-actions-cell">操作</th>
     </tr></thead>
     <tbody>
     {% for obj in page_obj %}
-    <tr>{% if can_manage_domain %}<td class="text-center"><input class="form-check-input" type="checkbox" value="{{ obj.pk }}" data-domain-target-checkbox aria-label="选择{{ obj }}"></td>{% endif %}{% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ obj|get_attr:field.source|format_table_value:field.kind }}</td>{% endfor %}<td class="text-end table-actions-cell"><a class="btn btn-outline-dark btn-sm" href="{% url detail_route obj.pk %}">查看详情</a></td></tr>
+    <tr>{% if can_administer and can_manage_domain %}<td class="text-center"><input class="form-check-input" type="checkbox" value="{{ obj.pk }}" data-domain-target-checkbox aria-label="选择{{ obj }}"></td>{% endif %}{% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ obj|get_attr:field.source|format_table_value:field.kind }}</td>{% endfor %}<td class="text-end table-actions-cell"><a class="btn btn-outline-dark btn-sm" href="{% url detail_route obj.pk %}">查看详情</a></td></tr>
     {% empty %}<tr><td colspan="20"><div class="empty-state"><strong>暂无{{ item_name }}</strong><span>请配置域控后执行同步。</span></div></td></tr>{% endfor %}
     </tbody>
 </table></div></div>

@@ -1,4 +1,5 @@
 from html.parser import HTMLParser
+import re
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -36,6 +37,24 @@ class ConfigMarkup(HTMLParser):
 
 
 class PCConfigLayoutTests(TestCase):
+    def test_rendered_profile_identity_updates_same_configuration_repeatedly(self):
+        profile = ComputerAnalysisProfile.objects.get(name='配置样式')
+        original_count = ComputerAnalysisProfile.objects.count()
+        for workers in (5, 6):
+            page = self.client.get(reverse('computer_analysis_list'), {'task_profile': str(profile.pk)})
+            html = page.content.decode().split('id="pc-analysis-config-form"', 1)[1].split('</form>', 1)[0]
+            identity = re.search(r'name="profile_id"[^>]*value="([^"]+)"', html).group(1)
+            response = self.client.post(reverse('computer_analysis_profile_configure'), {
+                'profile_id': identity, 'name': profile.name,
+                'analysis_items': ['cpu_health'], 'concurrent_workers': workers,
+                'next': reverse('computer_analysis_list'),
+            })
+            self.assertEqual(response.status_code, 302)
+            profile.refresh_from_db()
+            self.assertEqual(profile.concurrent_workers, workers)
+            self.assertEqual(profile.analysis_items, ['cpu_health'])
+            self.assertEqual(ComputerAnalysisProfile.objects.count(), original_count)
+
     def setUp(self):
         valid_smb_source()
         ComputerAnalysisProfile.objects.create(name='配置样式', analysis_items=['cpu_health', 'group_policy'])
@@ -67,11 +86,13 @@ class PCConfigLayoutTests(TestCase):
             b.get('form') for b in parsed.buttons if b.get('type') == 'submit'})
         self.assertContains(response, 'modal-dialog-scrollable modal-shell')
 
-    def test_non_admin_keeps_analysis_without_source_controls(self):
+    def test_non_admin_can_read_analysis_without_configuration_controls(self):
         self.user.is_staff = False
         self.user.save()
         response = self.client.get(reverse('computer_analysis_list'))
         parsed = ConfigMarkup(response.content.decode())
-        self.assertIn('pc-analysis-config-form', parsed.forms)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('pc-analysis-config-form', parsed.forms)
+        self.assertNotContains(response, 'form="pc-analysis-config-form"')
         self.assertNotIn('pc-source-config-form', parsed.forms)
         self.assertNotContains(response, 'form="pc-source-config-form"')

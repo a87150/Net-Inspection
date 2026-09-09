@@ -9,6 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
+from tests.auth import login_admin, login_reader
 
 from index.common.table_registry import get_table_definition
 from net.models import (
@@ -58,7 +59,11 @@ def extract_div(document, element_id):
 
 
 class FilteredExportContractTests(TestCase):
+    def setUp(self):
+        login_reader(self.client)
+
     def test_each_manual_import_template_has_csv_and_xlsx_sample_data(self):
+        login_admin(self.client)
         cases = (
             ('people', People, '工号', 'H10001', 'employee_id', 1),
             ('networks', Network_Device, 'IP地址', '192.0.2.10', 'ip', 3),
@@ -176,6 +181,7 @@ class FilteredExportContractTests(TestCase):
         self.assertEqual({row['部门'] for row in rows}, {'运维部'})
 
     def test_importable_asset_modal_contains_import_only_for_its_entity(self):
+        login_admin(self.client)
         cases = (
             ('people', 'people'),
             ('networks', 'networks'),
@@ -218,6 +224,7 @@ class FilteredExportContractTests(TestCase):
                     )
 
     def test_automatic_source_pages_have_filtered_export_without_import_modal(self):
+        login_admin(self.client)
         pages = (
             (reverse('asset_list', args=['computers']), 'computers'),
             (reverse('domain_computer_list'), 'domain_computers'),
@@ -240,6 +247,9 @@ class FilteredExportContractTests(TestCase):
 
 
 class PersonnelApiImportContractTests(TestCase):
+    def setUp(self):
+        login_admin(self.client)
+
     def test_people_import_modal_offers_fixed_settings_for_both_providers(self):
         response = self.client.get(reverse('asset_list', args=['people']))
         document = response.content.decode(response.charset)
@@ -280,6 +290,9 @@ class PersonnelApiImportContractTests(TestCase):
 
 
 class CsvImportIsolationTests(TestCase):
+    def setUp(self):
+        login_admin(self.client)
+
     def _post_server_csv(self, content):
         upload = SimpleUploadedFile(
             'servers.csv', content.encode('utf-8-sig'), content_type='text/csv',
@@ -468,6 +481,9 @@ class CsvImportIsolationTests(TestCase):
 
 
 class CsvModelValidationTests(TestCase):
+    def setUp(self):
+        login_admin(self.client)
+
     def _post(self, body):
         upload = SimpleUploadedFile(
             'servers.csv', body.encode('utf-8-sig'), content_type='text/csv',
@@ -552,6 +568,9 @@ class CsvModelValidationTests(TestCase):
 
 
 class CanonicalIpImportTests(TestCase):
+    def setUp(self):
+        login_admin(self.client)
+
     def _post(self, body):
         upload = SimpleUploadedFile(
             'servers.csv', body.encode('utf-8-sig'), content_type='text/csv',

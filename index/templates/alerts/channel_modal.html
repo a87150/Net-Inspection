@@ -1,3 +1,4 @@
+{% if can_administer %}
 <div class="modal fade alert-channel-modal" id="alertChannelModal" data-auto-open="{{ alert_channel_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="alertChannelModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
         {% for channel in alert_channels %}<form id="alert-channel-test-{{ channel.pk }}" method="post" action="{% url 'alert_test_send' %}" class="d-none">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><input type="hidden" name="channel_id" value="{{ channel.pk }}"></form>{% endfor %}
@@ -13,3 +14,4 @@
         </form>
     </div></div>
 </div>
+{% endif %}

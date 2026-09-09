@@ -1,3 +1,4 @@
+{% if can_administer %}
 <input type="hidden" name="simple_source_form" value="1">
 {{ form.share_name }}{{ form.remote_root_directory }}{{ form.remote_incoming_directory }}
 {{ form.non_field_errors }}
@@ -23,6 +24,7 @@
  </div>
  <p class="form-text mt-3 mb-0">保存后自动补全端口和暂存目录；未自定义归档位置时，在日志目录下使用 _processed（已处理）和 _failed（格式错误）子目录。有效日志即使分析出异常，也放到已处理目录。</p>
 </section>
+{% endif %}
 <details data-source-advanced class="inspection-config-block"{% if form.errors %} open{% endif %}>
  <summary class="fw-semibold">高级设置（一般不用修改）</summary>
  <div class="form-text mt-2">归档路径基准：{% if form.source_type.value == 'ftp' %}FTP{% else %}共享文件夹{% endif %}根目录 {{ form.remote_root_directory.value|default:'/' }}。</div>

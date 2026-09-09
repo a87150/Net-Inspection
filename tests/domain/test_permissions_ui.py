@@ -24,7 +24,7 @@ class DomainPermissionUiTests(TestCase):
     def setUp(self):
         user_model = get_user_model()
         self.unprivileged_user = user_model.objects.create_user(
-            username='domain-reader', password='test-password', is_staff=True,
+            username='domain-reader', password='test-password',
         )
         self.permitted_user = user_model.objects.create_user(
             username='domain-operator', password='test-password', is_staff=True,
@@ -32,7 +32,7 @@ class DomainPermissionUiTests(TestCase):
         self.superuser = user_model.objects.create_superuser(
             username='domain-admin', password='test-password', email='admin@example.test',
         )
-        self.permitted_user.user_permissions.add(
+        self.unprivileged_user.user_permissions.add(
             Permission.objects.get(
                 content_type__app_label='net', codename='manage_domain_operations',
             ),
@@ -54,6 +54,14 @@ class DomainPermissionUiTests(TestCase):
         if role is not None:
             self.client.force_login(role)
 
+    def _assert_guest_login_redirect(self, response):
+        from urllib.parse import urlencode
+        self.assertRedirects(
+            response,
+            '/login/?' + urlencode({'next': response.request['PATH_INFO']}),
+            fetch_redirect_response=False,
+        )
+
     def test_four_roles_keep_domain_lists_read_only_and_hide_privileged_controls(self):
         """Making a list require permission would break inventory visibility."""
         cases = (
@@ -69,11 +77,13 @@ class DomainPermissionUiTests(TestCase):
                 settings_response = self.client.get(reverse('domain_controller_settings'))
                 computer_response = self.client.get(reverse('domain_computer_list'))
 
-                self.assertEqual(settings_response.status_code, 200)
+                self.assertEqual(settings_response.status_code, 200 if can_manage else (302 if user is None else 403))
+                self.assertNotIn('Never-Render-This-Bind-Password', settings_response.content.decode())
+                if user is None:
+                    self._assert_guest_login_redirect(settings_response)
+                    self._assert_guest_login_redirect(computer_response)
+                    continue
                 self.assertEqual(computer_response.status_code, 200)
-                self.assertNotContains(
-                    settings_response, 'Never-Render-This-Bind-Password',
-                )
                 self.assertEqual(
                     '域控连接设置' in settings_response.content.decode(), can_manage,
                 )
@@ -108,7 +118,7 @@ class DomainPermissionUiTests(TestCase):
             'group_filter': '(objectCategory=group)',
         }
         roles = (
-            ('anonymous', None, 403),
+            ('anonymous', None, 302),
             ('unprivileged', self.unprivileged_user, 403),
             ('permitted', self.permitted_user, 302),
             ('superuser', self.superuser, 302),
@@ -122,6 +132,8 @@ class DomainPermissionUiTests(TestCase):
                         reverse('domain_controller_settings'), {**payload, 'action': action},
                     )
                     self.assertEqual(response.status_code, expected_status)
+                    if user is None:
+                        self._assert_guest_login_redirect(response)
                     self.assertNotIn(
                         'Submitted-Bind-Password-Must-Not-Render',
                         response.content.decode('utf-8', errors='replace'),
@@ -140,7 +152,7 @@ class DomainPermissionUiTests(TestCase):
             'target_ids': [str(self.computer.pk)],
         }
         roles = (
-            ('anonymous', None, 403),
+            ('anonymous', None, 302),
             ('unprivileged', self.unprivileged_user, 403),
             ('permitted', self.permitted_user, 302),
             ('superuser', self.superuser, 302),
@@ -178,6 +190,8 @@ class DomainPermissionUiTests(TestCase):
                 payload = {**create_payload, 'action': 'disable' if label != 'superuser' else 'enable'}
                 response = self.client.post(create_url, payload)
                 self.assertEqual(response.status_code, expected_status)
+                if user is None:
+                    self._assert_guest_login_redirect(response)
 
         retry_url = f'/domain/operations/{failed_operation.pk}/retry/'
         for label, user, expected_status in roles:
@@ -185,6 +199,8 @@ class DomainPermissionUiTests(TestCase):
                 self._login_as(user)
                 response = self.client.post(retry_url)
                 self.assertEqual(response.status_code, expected_status)
+                if user is None:
+                    self._assert_guest_login_redirect(response)
 
     def test_computer_operation_ui_offers_only_supported_non_password_actions(self):
         """Adding password controls to computers would create an unsupported AD request."""
@@ -259,7 +275,9 @@ class DomainPermissionUiTests(TestCase):
                     'initial_password_confirm': 'Initial-Password-Only-In-Secret!',
                 })
 
-                self.assertEqual(response.status_code, 302 if allowed else 403)
+                self.assertEqual(response.status_code, 302 if allowed or user is None else 403)
+                if user is None:
+                    self._assert_guest_login_redirect(response)
                 self.assertEqual(
                     DomainOperation.objects.filter(action='create_user').count(),
                     before + int(allowed),

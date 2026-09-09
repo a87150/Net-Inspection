@@ -55,6 +55,7 @@ class FinalPipelineTests(TestCase):
         return task, log
 
     def test_actual_missing_abnormal_normal_share_item_identity(self):
+        People.objects.create(employee_id='FINAL-PC', name='Pipeline Person')
         self.run_payload({})
         bad = {'Windows激活信息': {'许可证状态': '未授权'},
                'BitLocker状态': {'磁盘卷信息': [{'卷': 'C:', '转换状态': '未加密'}]},
@@ -179,6 +180,7 @@ class FinalPipelineTests(TestCase):
         self.assertFalse(TaskRun.objects.exists())
 
     def test_remote_import_is_sanitized_queued_then_reanalyzed(self):
+        People.objects.create(employee_id='FINAL-PC', name='Pipeline Person')
         payload = self.payload({'password': 'never-persist'})
         outcome = import_payload(payload)
         log = outcome.log_file

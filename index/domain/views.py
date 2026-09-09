@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from django.contrib.auth.decorators import permission_required
 from django.contrib import messages
+from index.common.access import admin_required, is_admin
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.http import Http404
@@ -11,6 +11,7 @@ from django.urls import reverse
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition
 from index.domain.forms import DomainControllerConfigForm
+from index.domain.connection_form import DomainInactivityForm
 from net.models import (
     Domain_Account,
     Domain_Computer,
@@ -19,6 +20,7 @@ from net.models import (
     Schedule, TaskRun,
 )
 from net.domain.sync import test_domain_connection
+from net.domain.statistics import get_domain_statistics
 from net.domain.sync_tasks import enqueue_domain_sync
 from index.domain.schedule_form import DomainSyncScheduleForm
 
@@ -91,10 +93,19 @@ def _display_value(obj, field):
     return display_method() if callable(display_method) else value
 
 
-@permission_required('net.manage_domain_operations', raise_exception=True)
+@admin_required
 def _domain_controller_settings_mutation(request):
     config, _ = Domain_Controller_Config.objects.get_or_create(pk=1)
     action = request.POST.get('action', 'save')
+    if action == 'inactivity':
+        inactivity_form = DomainInactivityForm(request.POST)
+        if inactivity_form.is_valid():
+            config.inactive_days = inactivity_form.cleaned_data['inactive_days']
+            config.save(update_fields=['inactive_days'])
+            messages.success(request, '未登录天数设置已保存，统计已更新。')
+            return redirect(reverse('domain_controller_settings') + '?inactivity_modal=1')
+        return _render_domain_settings(request, config, DomainControllerConfigForm(instance=config),
+                                       inactivity_form=inactivity_form)
     if action == 'schedule':
         schedule = Schedule.objects.filter(domain_config=config).first()
         schedule_form = DomainSyncScheduleForm(request.POST, config=config, instance=schedule)
@@ -140,31 +151,27 @@ def _domain_controller_settings_mutation(request):
     return _render_domain_settings(request, config, form, open_domain_modal=True)
 
 
-def _render_domain_settings(request, config, form, *, open_domain_modal=False, schedule_form=None):
-    can_manage_domain = request.user.has_perm('net.manage_domain_operations')
+def _render_domain_settings(request, config, form, *, open_domain_modal=False, schedule_form=None, inactivity_form=None):
+    can_manage_domain = is_admin(request.user)
     return render(request, 'domain/controller_settings.html', {
-        'form': form,
-        'config': config,
+        'form': form if can_manage_domain else None,
+        'config': config if can_manage_domain else None,
         'open_domain_modal': open_domain_modal or request.GET.get('modal') == '1',
-        'domain_schedule': Schedule.objects.filter(domain_config=config).first(),
-        'domain_schedule_form': schedule_form if schedule_form is not None else DomainSyncScheduleForm(config=config, instance=Schedule.objects.filter(domain_config=config).first()),
+        'domain_schedule': Schedule.objects.filter(domain_config=config).first() if can_manage_domain else None,
+        'domain_schedule_form': (schedule_form if schedule_form is not None else DomainSyncScheduleForm(config=config, instance=Schedule.objects.filter(domain_config=config).first())) if can_manage_domain else None,
         'domain_sync_tasks': Paginator(TaskRun.objects.filter(task_type='domain_sync').order_by('-created_at'), 10).get_page(request.GET.get('sync_page')),
         'can_manage_domain': can_manage_domain,
-        'account_total': Domain_Account.objects.count(),
-        'account_active': Domain_Account.objects.filter(is_active=True).count(),
-        'account_inactive': Domain_Account.objects.filter(is_active=False).count(),
-        'computer_total': Domain_Computer.objects.count(),
-        'computer_active': Domain_Computer.objects.filter(is_active=True).count(),
-        'computer_inactive': Domain_Computer.objects.filter(is_active=False).count(),
-        'group_total': Domain_Group.objects.count(),
-        'security_group_total': Domain_Group.objects.filter(group_category='security').count(),
-        'distribution_group_total': Domain_Group.objects.filter(group_category='distribution').count(),
+        'inactivity_form': inactivity_form if inactivity_form is not None else DomainInactivityForm(initial={'inactive_days': config.inactive_days if config else 60}),
+        'open_inactivity_modal': inactivity_form is not None or request.GET.get('inactivity_modal') == '1',
+        **get_domain_statistics(inactive_days=config.inactive_days if config else 60),
     })
 
 
 def domain_controller_settings(request):
     if request.method == 'POST':
         return _domain_controller_settings_mutation(request)
+    if not is_admin(request.user):
+        return _render_domain_settings(request, None, None)
     config, _ = Domain_Controller_Config.objects.get_or_create(pk=1)
     form = DomainControllerConfigForm(instance=config)
     return _render_domain_settings(request, config, form)
@@ -192,7 +199,7 @@ def domain_object_list(request, object_type):
         'detail_route': page.detail_route,
         'can_manage_domain': (
             object_type != 'groups'
-            and request.user.has_perm('net.manage_domain_operations')
+            and is_admin(request.user)
         ),
         'domain_object_type': {
             'accounts': 'account', 'computers': 'computer', 'groups': 'group',
@@ -200,7 +207,7 @@ def domain_object_list(request, object_type):
         'domain_operation_actions': DOMAIN_OPERATION_ACTIONS.get(
             {'accounts': 'account', 'computers': 'computer'}.get(object_type),
             (),
-        ),
+        ) if is_admin(request.user) else (),
     })
 
 

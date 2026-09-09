@@ -3,6 +3,7 @@
 from urllib.parse import urlencode
 
 from django.contrib import messages
+from index.common.access import is_admin
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.forms.utils import ErrorDict, ErrorList
@@ -45,6 +46,8 @@ def require_people_owner(request, task):
 def people_modal_context(
     request, *, form=None, source=None, provider=None, open_modal=False, error='',
 ):
+    if not is_admin(request.user):
+        return {}
     feedback = request.session.pop(PROVIDER_FORM_FEEDBACK_SESSION_KEY, None)
     provider = provider or request.GET.get('provider') or (
         feedback.get('provider') if feedback else None

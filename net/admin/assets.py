@@ -91,9 +91,9 @@ class MonitorAdminForm(SecretPreservingModelForm):
 
 @admin.register(People)
 class PeopleAdmin(admin.ModelAdmin):
-    list_display = ('name', 'employee_id', 'department', 'leader', 'is_active', 'source', 'last_synced_at')
+    list_display = ('name', 'employee_id', 'phone', 'department', 'leader', 'is_active', 'source', 'last_synced_at')
     list_filter = ('is_active', 'source', 'department')
-    search_fields = ('name', 'employee_id', 'email', 'department', 'leader', 'platform_user_id')
+    search_fields = ('name', 'employee_id', 'email', 'phone', 'department', 'leader', 'platform_user_id')
     raw_id_fields = ('sync_source',)
     date_hierarchy = 'last_synced_at'
 

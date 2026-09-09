@@ -26,10 +26,13 @@ function refreshDomainOperationSummary(doc, actionSelect, form) {
     }
 }
 
+const boundDomainForms = new WeakSet();
 function bindDomainOperationModal(doc) {
     const actionSelect = doc.querySelector('[data-domain-operation-action]');
     const form = doc.querySelector('[data-domain-operation-form]');
     if (!actionSelect || !form) return;
+    if (boundDomainForms.has(form)) return;
+    boundDomainForms.add(form);
     const refresh = () => refreshDomainOperationSummary(doc, actionSelect, form);
 
     actionSelect.addEventListener('change', refresh);
@@ -60,4 +63,5 @@ if (typeof module !== 'undefined') {
 }
 if (typeof document !== 'undefined') {
     document.addEventListener('DOMContentLoaded', () => bindDomainOperationModal(document));
+    document.addEventListener('app:modal-updated', () => bindDomainOperationModal(document));
 }

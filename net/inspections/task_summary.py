@@ -9,6 +9,7 @@ def _outcome_expression(prefix='', task_prefix='task__'):
     def match(**values):
         return Q(**{prefix + key: value for key, value in values.items()})
     return Case(
+        When(match(result_snapshot__ignored=True), then=Value('ignored')),
         When(match(status__in=('queued', 'running')), then=Value('pending')),
         When(match(status='cancelled'), then=Value('cancelled')),
         When(match(status__in=('failed', 'partial')), then=Value('abnormal')),
@@ -21,9 +22,24 @@ def _outcome_expression(prefix='', task_prefix='task__'):
         default=Value('pending'), output_field=CharField())
 
 
-def _summary_counts(task_ids):
+def _legacy_orphan_targets(task_ids):
+    """Scope old persisted results without loading their evidence JSON or rewriting history."""
+    condition = Q(pk__in=[])
+    tasks = TaskRun.objects.filter(pk__in=task_ids, task_type='computer_analysis',
+                                   profile_snapshot__matching_mode='people').only('pk', 'parameters_snapshot')
+    for task in tasks:
+        records = ComputerAnalysis.objects.filter(task_target__task_id=task.pk)
+        matched = records.filter(report_enrichment__personnel_id__in=_frozen_roster_ids(task))
+        orphan_targets = records.exclude(pk__in=matched.values('pk')).values('task_target_id')
+        condition |= Q(task_id=task.pk, pk__in=orphan_targets)
+    return condition
+
+
+def _summary_counts(task_ids, *, people_task_ids=None):
     rows = TaskTargetRun.objects.filter(task_id__in=task_ids).order_by().annotate(
-        outcome=_outcome_expression()).values('task_id', 'outcome').annotate(count=Count('pk'))
+        outcome=Case(When(_legacy_orphan_targets(task_ids if people_task_ids is None else people_task_ids), then=Value('ignored')),
+                     default=_outcome_expression(), output_field=CharField())
+    ).values('task_id', 'outcome').annotate(count=Count('pk'))
     counts = {}
     for row in rows:
         counts.setdefault(row['task_id'], {})[row['outcome']] = row['count']
@@ -32,9 +48,13 @@ def _summary_counts(task_ids):
 
 def _prepare_summaries(tasks):
     tasks = list(tasks)
-    counts = _summary_counts([task.pk for task in tasks]) if tasks else {}
+    people_ids = [task.pk for task in tasks if task.task_type == 'computer_analysis'
+                  and task.profile_snapshot.get('matching_mode') == 'people']
+    counts = _summary_counts([task.pk for task in tasks], people_task_ids=people_ids) if tasks else {}
+    missing = _missing_people_counts(tasks)
     for task in tasks:
         task._summary_counts = counts.get(task.pk, {})
+        task._missing_people_count = missing.get(task.pk, 0)
     return tasks
 
 
@@ -81,6 +101,8 @@ def project_task_queryset(kind):
 
 
 def _target_outcome(task, target):
+    if isinstance(target.result_snapshot, dict) and target.result_snapshot.get('ignored'):
+        return 'ignored'
     if target.status in {TaskRun.Status.QUEUED, TaskRun.Status.RUNNING}:
         return 'pending'
     if target.status == TaskRun.Status.CANCELLED:
@@ -110,10 +132,12 @@ def summarize_task(task) -> dict:
         'pending': 0,
         'cancelled': 0,
         'fetch_success': 0,
+        'ignored': 0,
     }
     if hasattr(task, '_summary_counts'):
         counts.update(task._summary_counts)
-    elif 'target_runs' in getattr(task, '_prefetched_objects_cache', {}):
+    elif ('target_runs' in getattr(task, '_prefetched_objects_cache', {})
+          and task.profile_snapshot.get('matching_mode') != 'people'):
         for target in task.target_runs.all():
             counts[_target_outcome(task, target)] += 1
     else:
@@ -135,13 +159,16 @@ def summarize_task(task) -> dict:
 
     profile = task.inspection_profile or task.analysis_profile
     profile_snapshot = task.profile_snapshot if isinstance(task.profile_snapshot, dict) else {}
+    missing_people = (task._missing_people_count if hasattr(task, '_missing_people_count')
+                      else _missing_people_without_logs([task]))
+    counts['abnormal'] += missing_people
     return {
         'task': task,
         'type_label': task.get_task_type_display(),
         'profile_label': profile.name if profile else profile_snapshot.get('name', '—'),
         'source_label': task.get_source_display(),
         'status_label': task.get_status_display(),
-        'total': max(task.total_targets, materialized_count),
+        'total': max(task.total_targets, materialized_count) - counts['ignored'] + missing_people,
         'integrity_warning': integrity_warning,
         **counts,
     }
@@ -166,7 +193,7 @@ def _frozen_roster_ids(task):
     }
 
 
-def _missing_people_without_logs(tasks):
+def _missing_people_counts(tasks):
     if isinstance(tasks, QuerySet):
         people_tasks = list(tasks.filter(
             task_type=TaskRun.TaskType.COMPUTER_ANALYSIS,
@@ -183,7 +210,7 @@ def _missing_people_without_logs(tasks):
         ]
     roster_by_task = {task.pk: _frozen_roster_ids(task) for task in people_tasks}
     if not roster_by_task:
-        return 0
+        return {}
     matched_by_task = {task_id: set() for task_id in roster_by_task}
     matched_rows = ComputerAnalysis.objects.filter(
         task_target__task_id__in=roster_by_task,
@@ -191,10 +218,14 @@ def _missing_people_without_logs(tasks):
     for task_id, person_id in matched_rows:
         if person_id not in (None, ''):
             matched_by_task[task_id].add(str(person_id))
-    return sum(
-        len(roster_ids - matched_by_task[task_id])
+    return {
+        task_id: len(roster_ids - matched_by_task[task_id])
         for task_id, roster_ids in roster_by_task.items()
-    )
+    }
+
+
+def _missing_people_without_logs(tasks):
+    return sum(_missing_people_counts(tasks).values())
 
 
 def _finish_metrics(*, task_count, latest_task_at, normal_count, abnormal_count):
@@ -216,7 +247,9 @@ def build_project_task_metrics(tasks):
     missing_people = _missing_people_without_logs(tasks)
     if isinstance(tasks, QuerySet):
         summary = tasks.aggregate(task_count=Count('pk'), latest_task_at=Max('created_at'))
-        rows = TaskTargetRun.objects.filter(task_id__in=tasks.order_by().values('pk')).annotate(
+        task_ids = tasks.order_by().values('pk')
+        rows = TaskTargetRun.objects.filter(task_id__in=task_ids).exclude(
+            _legacy_orphan_targets(task_ids)).annotate(
             outcome=_outcome_expression())
         counts = rows.aggregate(normal_count=Count('pk', filter=Q(outcome='normal')),
                                 abnormal_count=Count('pk', filter=Q(outcome='abnormal')))
@@ -224,11 +257,10 @@ def build_project_task_metrics(tasks):
                                abnormal_count=counts['abnormal_count'] + missing_people)
     normal_count = 0
     abnormal_count = missing_people
+    scoped_counts = _summary_counts([task.pk for task in tasks])
     for task in tasks:
-        for target in task.target_runs.all():
-            outcome = _target_outcome(task, target)
-            normal_count += outcome == 'normal'
-            abnormal_count += outcome == 'abnormal'
+        normal_count += scoped_counts.get(task.pk, {}).get('normal', 0)
+        abnormal_count += scoped_counts.get(task.pk, {}).get('abnormal', 0)
     return _finish_metrics(task_count=len(tasks), normal_count=normal_count,
                            abnormal_count=abnormal_count,
                            latest_task_at=tasks[0].created_at if tasks else None)

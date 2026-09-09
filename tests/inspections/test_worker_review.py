@@ -9,7 +9,8 @@ from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qs, urlsplit
 import requests
 
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase, TransactionTestCase, override_settings
+from cryptography.fernet import Fernet
 from django.db import close_old_connections, connections
 from django.core.management import call_command
 from django.utils import timezone
@@ -309,19 +310,29 @@ class SelectedCollectionTests(TestCase):
                           for issue in record.details['issue_findings']], [('cpu', 'info')])
         self.assertEqual(record.details['normal_issue_items'], ['inspection_collection'])
 
-    @patch('net.infrastructure.ssh_collectors._read_channel', return_value='CPU usage: 20%\nswitch#')
-    @patch('net.infrastructure.ssh_collectors._connect')
-    def test_network_cpu_only_never_sends_logs_services_or_vlan(self, connect, read):
+    @patch('net.infrastructure.ssh_collectors._connect_network')
+    @override_settings(DEVICE_BACKUP_ENCRYPTION_KEY=Fernet.generate_key().decode())
+    def test_network_cpu_only_never_sends_logs_services_or_vlan(self, connect):
+        connect.return_value.find_prompt.return_value = 'switch#'
+        connect.return_value.send_command.return_value = 'CPU usage: 20%\nswitch#'
         asset = Network_Device.objects.create(
             ip='192.0.2.202', vendor='cisco', username='reader', password='secret',
         )
+        from net.devices.configuration_backups import store_configuration_backup
+        backup = store_configuration_backup(asset, {
+            'status': 'success', 'vendor': 'cisco', 'format': 'text', 'complete': True,
+            'scope': 'running-config', 'content': 'hostname switch\nend\n',
+        })
         record = self.execute(asset, 'network_device', ['cpu'])
-        sent = [call.args[0] for call in connect.return_value.invoke_shell.return_value.send.call_args_list]
-        self.assertEqual(sent, ['terminal length 0\n', 'show processes cpu\n'])
-        self.assertEqual(record.raw_output, {'show processes cpu': 'CPU usage: 20%'})
-        self.assert_selected_details(record, {'cpu': {'usage_percent': 20}})
+        sent = [call.args[0] for call in connect.return_value.send_command.call_args_list]
+        self.assertEqual(sent, ['terminal length 0', 'show processes cpu'])
+        self.assertEqual(record.raw_output['show processes cpu'], 'CPU usage: 20%')
+        self.assertEqual(record.raw_output['config_info']['backup_id'], str(backup.pk))
+        self.assertEqual(record.details['cpu'], {'usage_percent': 20})
+        self.assertEqual(record.details['config_info']['backup_id'], str(backup.pk))
+        self.assertEqual(set(record.details), {'cpu', 'config_info', 'issue_findings', 'normal_issue_items'})
         self.assertEqual(record.details['issue_findings'], [])
-        self.assertEqual(set(record.details['normal_issue_items']), {'inspection_collection', 'cpu'})
+        self.assertEqual(set(record.details['normal_issue_items']), {'inspection_collection', 'cpu', 'config_info'})
 
     @patch('net.infrastructure.http_collectors.requests.get')
     def test_windows_cpu_request_and_raw_exclude_unselected_fields(self, get):

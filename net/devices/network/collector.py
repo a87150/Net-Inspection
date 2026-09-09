@@ -41,7 +41,8 @@ def _network_item_plan(mode, selected_items):
         return [item for item in requested if item == 'traffic'], [item for item in requested if item != 'traffic'], False
     snmp_items = [item for item in requested if item in SNMP_ITEMS]
     if mode == 'snmp':
-        return snmp_items, [], False
+        # Metrics stay SNMP-only; native configuration requires SSH.
+        return snmp_items, [item for item in requested if item == 'config_info'], False
     ssh_items = [item for item in requested if item in SSH_ONLY_ITEMS]
     return snmp_items, ssh_items, mode == 'auto'
 

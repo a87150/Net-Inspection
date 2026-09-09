@@ -9,27 +9,28 @@
         <p class="page-heading__description">{% if item_key == 'people' %}展示姓名、工号、部门、邮箱、上级和启用状态。{% else %}仅展示名称、地址、型号和系统版本等基础信息。{% endif %}</p>
     </div>
     <div class="page-heading__actions">
-        {% if device_form %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#addDeviceModal">添加设备</button>{% endif %}
-        {% if import_enabled %}<button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#importModal">{% if item_key == 'people' %}导入人员{% else %}导入设备{% endif %}</button>{% endif %}
-        {% if task_project_kind %}
-        <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#profileConfigModal">{{ task_config_label }}</button>
-        <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#alertPolicyModal">告警配置</button>
-        <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#runTaskModal">{{ task_action_label }}</button>
+        {% if can_administer and item_key == 'servers' %}<a class="btn btn-outline-secondary" href="{% url 'windows_server_script_download' %}">下载 Windows 服务脚本</a>{% endif %}
+        {% if can_administer and device_form %}{% if can_administer %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#addDeviceModal">添加设备</button>{% endif %}{% endif %}
+        {% if can_administer and import_enabled %}{% if can_administer %}<button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#importModal">{% if item_key == 'people' %}导入人员{% else %}导入设备{% endif %}</button>{% endif %}{% endif %}
+        {% if can_administer and task_project_kind %}
+        {% if can_administer %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#profileConfigModal">{{ task_config_label }}</button>{% endif %}
+        {% if can_administer %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#alertPolicyModal">告警配置</button>{% endif %}
+        {% if can_administer %}<button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#runTaskModal">{{ task_action_label }}</button>{% endif %}
         {% endif %}
     </div>
 </header>
 {% if collection_hint %}<div class="alert alert-info"><strong>采集方式：</strong>{{ collection_hint }}</div>{% endif %}
-{% if item_key == 'networks' or item_key == 'monitors' %}<div class="alert alert-secondary">配置下载仅使用最近成功的已保存配置项，不连接设备。{% if item_key == 'monitors' %}当前支持 Dahua / 大华 Network 具名可读配置节；{% else %}当前支持 Cisco / 思科、H3C / 华三的当前运行配置；{% endif %}脱敏快照非完整恢复备份，二进制或未知配置不支持。</div>{% endif %}
+{% if can_administer and item_key == 'networks' or can_administer and item_key == 'monitors' %}<div class="alert alert-secondary">配置下载仅使用最近成功的已保存配置项，不连接设备。{% if item_key == 'monitors' %}当前支持 Dahua / 大华 Network 具名可读配置节；{% else %}当前支持 Cisco / 思科、H3C / 华三的当前运行配置；{% endif %}脱敏快照非完整恢复备份，二进制或未知配置不支持。</div>{% endif %}
 {% if data_source_note %}<div class="alert alert-info">{{ data_source_note }}</div>{% endif %}
-{% if item_key == 'computers' and not pc_log_source %}<div class="alert alert-warning">请先保存日志来源，再下载 PC 采集脚本。<a href="{% url 'computer_analysis_list' %}?task_modal=profile">前往分析配置</a></div>{% endif %}
-{% if import_enabled %}{% include 'common/import_modal.html' %}{% endif %}
-{% if device_form %}{% include 'devices/add_modal.html' %}{% endif %}
-{% if people_operation %}{% include 'integrations/preview_modal.html' %}{% endif %}
-{% if personnel_api_import %}{% include 'integrations/task_notifications.html' %}{% endif %}
-{% if task_project_kind %}{% include 'inspections/profile_modal.html' %}{% include 'inspections/run_modal.html' %}{% include 'alerts/policy_modal.html' %}{% endif %}
+{% if can_administer and item_key == 'computers' and not pc_log_source %}<div class="alert alert-warning">请先保存日志来源，再下载 PC 采集脚本。<a href="{% url 'computer_analysis_list' %}?task_modal=profile">前往分析配置</a></div>{% endif %}
+{% if can_administer and import_enabled %}{% if can_administer %}{% include 'common/import_modal.html' %}{% endif %}{% endif %}
+{% if can_administer and device_form %}{% if can_administer %}{% include 'devices/add_modal.html' %}{% endif %}{% endif %}
+{% if can_administer and people_operation %}{% if can_administer %}{% include 'integrations/preview_modal.html' %}{% endif %}{% endif %}
+{% if can_administer and personnel_api_import %}{% if can_administer %}{% include 'integrations/task_notifications.html' %}{% endif %}{% endif %}
+{% if can_administer and task_project_kind %}{% if can_administer %}{% include 'inspections/profile_modal.html' %}{% endif %}{% if can_administer %}{% include 'inspections/run_modal.html' %}{% endif %}{% if can_administer %}{% include 'alerts/policy_modal.html' %}{% endif %}{% endif %}
 
 <div data-table-workspace data-table-key="{{ table_definition.key }}">
-    {% if item_key == 'networks' or item_key == 'monitors' %}{% query_transform request page=None as config_query %}<a class="btn btn-outline-success mb-3" href="{% url 'configuration_zip' item_key %}{% if config_query %}?{{ config_query }}{% endif %}" data-filtered-export>导出筛选设备配置 ZIP</a>{% endif %}
+    {% if can_administer and item_key == 'networks' or can_administer and item_key == 'monitors' %}{% query_transform request page=None as config_query %}<a class="btn btn-outline-success mb-3" href="{% url 'configuration_zip' item_key %}{% if config_query %}?{{ config_query }}{% endif %}" data-filtered-export>导出筛选设备配置 ZIP</a>{% endif %}
     <div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
     <div class="card surface-card table-scroll-shell">
         <p class="table-scroll-hint">可横向滚动查看更多字段，最右侧操作列保持可见</p>
@@ -38,17 +39,17 @@
 {% include 'common/table_caption.html' %}
                 <thead><tr>
                     {% include 'common/table_sort_headers.html' %}
-                    {% if task_allow_target_selection %}<th scope="col"><span class="visually-hidden">选择目标</span></th>{% endif %}<th scope="col" class="table-actions-column table-actions-cell">操作</th>
+                    {% if can_administer and task_allow_target_selection %}<th scope="col"><span class="visually-hidden">选择目标</span></th>{% endif %}<th scope="col" class="table-actions-column table-actions-cell">操作</th>
                 </tr></thead>
                 <tbody>
                 {% for obj in page_obj %}
                 <tr>
                     {% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ obj|get_attr:field.source|format_table_field:field }}</td>{% endfor %}
-                    {% if task_allow_target_selection %}<td><input class="form-check-input" type="checkbox" name="target_ids" value="{{ obj.pk }}" form="manualTaskForm" aria-label="选择 {{ obj }}"{% if obj.pk|stringformat:'s' in task_selected_ids %} checked{% endif %}></td>{% endif %}
+                    {% if can_administer and task_allow_target_selection %}<td><input class="form-check-input" type="checkbox" name="target_ids" value="{{ obj.pk }}" form="manualTaskForm" aria-label="选择 {{ obj }}"{% if obj.pk|stringformat:'s' in task_selected_ids %} checked{% endif %}></td>{% endif %}
                     <td class="text-end table-actions-cell"><div class="d-inline-flex gap-2 table-row-actions">
-                        <a href="{% url 'asset_detail' item_key obj.pk %}" class="btn btn-outline-dark btn-sm">查看详情</a>
-                        {% if item_key == 'networks' or item_key == 'monitors' %}<a href="{% url 'configuration_download' item_key obj.pk %}" class="btn btn-outline-success btn-sm">下载配置</a>{% endif %}
-                        {% if task_allow_target_selection %}<button class="btn btn-outline-primary btn-sm" type="button" data-task-target="{{ obj.pk }}" data-bs-toggle="modal" data-bs-target="#runTaskModal">{{ task_action_label }}</button>{% endif %}
+                        <a href="{% url 'asset_detail' item_key obj.pk %}" class="btn btn-outline-dark btn-sm">查看详情</a>{% if can_administer and item_key == 'networks' or can_administer and item_key == 'servers' or can_administer and item_key == 'monitors' %}<a href="{% url 'asset_edit' item_key obj.pk %}" class="btn btn-outline-secondary btn-sm">修改配置</a>{% endif %}
+                        {% if can_administer and item_key == 'networks' or can_administer and item_key == 'monitors' %}<a href="{% url 'configuration_download' item_key obj.pk %}" class="btn btn-outline-success btn-sm">下载配置</a>{% endif %}
+                        {% if can_administer and task_allow_target_selection %}{% if can_administer %}<a class="btn btn-outline-primary btn-sm" href="?task_modal=run&amp;task_single_target={{ obj.pk }}" data-single-device-run>{{ task_action_label }}</a>{% endif %}{% endif %}
                     </div></td>
                 </tr>
                 {% empty %}<tr><td colspan="20"><div class="empty-state"><strong>{% if item_key == 'computers' %}暂无 PC 数据{% else %}暂无资产数据{% endif %}</strong><span>{% if item_key == 'computers' %}请运行 PowerShell PC 信息采集脚本并上报。{% elif item_key == 'people' %}可点击右上角“导入人员”添加人员。{% else %}可点击右上角“导入设备”添加资产。{% endif %}</span></div></td></tr>{% endfor %}

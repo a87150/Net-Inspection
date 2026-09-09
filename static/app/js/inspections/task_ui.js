@@ -1,17 +1,30 @@
-function switchProfile(select, location, doc) {
+function switchProfile(select, location, doc, transport = typeof window !== 'undefined' ? window.AppModalTransport : null) {
     const url = new URL(location.href);
+    const single = select.closest('.modal').querySelector?.('[name="single_target_id"]')?.value;
+    if (single) url.searchParams.set('task_single_target', single);
+    else url.searchParams.delete('task_single_target');
     url.searchParams.set('task_profile', select.value);
     url.searchParams.set('task_modal', select.closest('.modal').id === 'runTaskModal' ? 'run' : 'profile');
     url.searchParams.set('task_mode', doc.querySelector('[name="target_mode"]:checked')?.value || 'all');
     url.searchParams.set('task_targets', Array.from(doc.querySelectorAll('[name="target_ids"]:checked'), box => box.value).join(','));
-    // Never let a changed profile ID submit the old profile's rendered values.
-    select.closest('form').querySelectorAll('[type="submit"]').forEach(button => { button.disabled = true; });
-    location.assign(url.toString());
+    return transport?.navigate(select.closest('.modal'), url.toString());
 }
 
 function selectRow(doc, id) {
     doc.querySelectorAll('[name="target_ids"]').forEach(box => { box.checked = box.value === id; });
-    doc.querySelectorAll('[name="target_mode"]').forEach(mode => { mode.checked = mode.value === 'selected'; });
+    doc.querySelectorAll('[name="target_mode"]').forEach(mode => { if (mode.type === 'hidden') mode.value = 'selected'; else mode.checked = mode.value === 'selected'; });
+    const singleTarget = doc.querySelector('[name="single_target_id"]');
+    if (singleTarget) singleTarget.value = id;
+}
+
+function clearRowTarget(doc) {
+    doc.querySelectorAll('[name="target_ids"]').forEach(box => { box.checked = false; });
+    doc.querySelectorAll('[name="target_mode"]').forEach(mode => {
+        if (mode.type === 'hidden') mode.value = '';
+        else mode.checked = false;
+    });
+    const singleTarget = doc.querySelector('[name="single_target_id"]');
+    if (singleTarget) singleTarget.value = '';
 }
 
 function filterTargetDeviceChoices(choices, query, visibility, vendor = '', deviceType = '') {
@@ -80,20 +93,31 @@ function bindBulkChoiceGroup(group) {
     group.querySelector('[data-bulk-invert]').addEventListener('click', () => updateCheckboxSelection(inputs(), 'invert'));
 }
 
-if (typeof module !== 'undefined') module.exports = {switchProfile, selectRow, filterTargetDeviceChoices, updateTargetDeviceSelection, updateCheckboxSelection};
+if (typeof module !== 'undefined') module.exports = {switchProfile, selectRow, clearRowTarget, filterTargetDeviceChoices, updateTargetDeviceSelection, updateCheckboxSelection};
 
-document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('#task-profile, #config-profile').forEach(select => {
+const boundTaskControls = new WeakSet();
+function bindTaskUI(root) {
+    const once = (selector, bind) => root.querySelectorAll(selector).forEach(element => {
+        if (boundTaskControls.has(element)) return;
+        boundTaskControls.add(element);
+        bind(element);
+    });
+    once('#task-profile, #config-profile', select => {
         select.addEventListener('change', () => switchProfile(select, window.location, document));
     });
-    document.querySelectorAll('[data-task-target]').forEach(button => {
+    once('[data-task-target]', button => {
         button.addEventListener('click', () => selectRow(document, button.dataset.taskTarget));
+    });    once('[data-bs-target="#runTaskModal"]', button => {
+        if (!button.dataset.taskTarget) button.addEventListener('click', () => {
+            clearRowTarget(document);
+            const url = new URL(window.location.href);
+            url.searchParams.delete('task_single_target');
+            url.searchParams.set('task_modal', 'run');
+            window.AppModalTransport?.navigate(document.getElementById('runTaskModal'), url.toString());
+        });
     });
-    document.querySelectorAll('[data-target-device-picker]').forEach(bindTargetDevicePicker);
-    document.querySelectorAll('[data-bulk-choice-group]').forEach(bindBulkChoiceGroup);
-    document.querySelectorAll('.modal[data-auto-open="true"]').forEach((modal) => {
-        if (window.bootstrap?.Modal) window.bootstrap.Modal.getOrCreateInstance(modal).show();
-    });
+    once('[data-target-device-picker]', bindTargetDevicePicker);
+    once('[data-bulk-choice-group]', bindBulkChoiceGroup);
 
     const updateFileTimeFields = (select) => {
         const form = select.closest('form');
@@ -101,8 +125,15 @@ document.addEventListener('DOMContentLoaded', () => {
         form.querySelectorAll('[data-recent-days]').forEach((field) => { field.hidden = dateRange; });
         form.querySelectorAll('[data-date-range]').forEach((field) => { field.hidden = !dateRange; });
     };
-    document.querySelectorAll('[data-file-time-mode]').forEach((select) => {
+    once('[data-file-time-mode]', (select) => {
         updateFileTimeFields(select);
         select.addEventListener('change', () => updateFileTimeFields(select));
+    });
+}
+if (typeof window !== 'undefined') window.AppTaskUI = {bind: bindTaskUI};
+document.addEventListener('DOMContentLoaded', () => {
+    bindTaskUI(document);
+    document.querySelectorAll('.modal[data-auto-open="true"]').forEach((modal) => {
+        if (window.bootstrap?.Modal) window.bootstrap.Modal.getOrCreateInstance(modal).show();
     });
 });

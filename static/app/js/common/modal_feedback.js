@@ -1,6 +1,15 @@
 'use strict';
 
 const MODAL_DRAFT_PREFIX = 'net-modal-form:';
+const DRAFT_IDENTITY_FIELDS = new Set([
+    'profile_id', 'channel_id', 'source_id', 'policy_id', 'batch_id',
+    'provider', 'scope', 'channel_type', 'device_type',
+]);
+
+function isDraftIdentity(field) {
+    return DRAFT_IDENTITY_FIELDS.has(field.name)
+        && (String(field.type).toLowerCase() === 'hidden' || field.name.endsWith('_id'));
+}
 
 function moveFlashMessagesToModal(document, modal) {
     if (!modal) return false;
@@ -26,7 +35,10 @@ function canRetainField(field) {
     return Boolean(field.name)
         && !field.disabled
         && field.name !== 'csrfmiddlewaretoken'
-        && !['password', 'file', 'submit', 'button', 'reset', 'image'].includes(type);
+        && !isDraftIdentity(field)
+        // IDs and routing tokens belong to the freshly rendered server form.
+        // A create draft may contain an empty ID even after saving succeeds.
+        && !['hidden', 'password', 'file', 'submit', 'button', 'reset', 'image'].includes(type);
 }
 
 function captureFormDraft(form) {
@@ -51,21 +63,15 @@ function captureFormDraft(form) {
 
 function restoreFormDraft(form, draft) {
     if (!Array.isArray(draft)) return false;
-    const fields = Array.from(form.elements || []).filter(canRetainField);
     const used = new Set();
-
-    fields.forEach(field => {
+    const restore = field => {
         const type = String(field.type || '').toLowerCase();
-        let index = draft.findIndex((entry, candidateIndex) => (
+        const index = draft.findIndex((entry, candidateIndex) => (
             !used.has(candidateIndex)
+            && entry && entry.type === type
             && entry.name === field.name
             && (type !== 'radio' && type !== 'checkbox' || entry.value === String(field.value ?? ''))
         ));
-        if (index < 0) {
-            index = draft.findIndex((entry, candidateIndex) => (
-                !used.has(candidateIndex) && entry.name === field.name
-            ));
-        }
         if (index < 0) return;
 
         const entry = draft[index];
@@ -78,10 +84,41 @@ function restoreFormDraft(form, draft) {
                 option.selected = selected.has(String(option.value));
             });
         } else {
+            if (type === 'select-one' && field.options
+                && !Array.from(field.options).some(option => String(option.value) === entry.value)) return;
             field.value = entry.value;
         }
-    });
+    };
+    const signal = () => {
+        const EventClass = form.ownerDocument?.defaultView?.Event;
+        if (EventClass && form.dispatchEvent) form.dispatchEvent(new EventClass('modal-draft-restored'));
+    };
+    // Restore controlling selections first, then enable their dependent fields.
+    // Never dispatch change: profile selectors can navigate away on change.
+    let restoredCount;
+    do {
+        restoredCount = used.size;
+        Array.from(form.elements || []).filter(canRetainField)
+            .filter(field => String(field.type).toLowerCase().startsWith('select-')).forEach(restore);
+        signal();
+        // A protocol change can enable another controlling select (SMB auth).
+        // Each entry is consumed once, so chained controls always terminate.
+    } while (used.size > restoredCount);
+    Array.from(form.elements || []).filter(canRetainField)
+        .filter(field => !String(field.type).toLowerCase().startsWith('select-')).forEach(restore);
+    signal();
     return true;
+}
+
+function formDraftScope(form) {
+    const identities = Array.from(form.elements || [])
+        .filter(isDraftIdentity)
+        .map(field => [field.name, String(field.value ?? '')]);
+    return JSON.stringify([
+        form.ownerDocument?.location?.pathname || '',
+        form.getAttribute?.('action') || '',
+        identities,
+    ]);
 }
 
 function formDraftKey(form) {
@@ -101,6 +138,8 @@ function availableStorage(document) {
 function installModalFeedback(document) {
     document.addEventListener('DOMContentLoaded', () => {
         const modal = document.querySelector('.modal[data-auto-open="true"]');
+        const savedSuccessfully = Array.from(document.querySelectorAll('[data-flash-message]'))
+            .some(message => message.classList?.contains('alert-success'));
         moveFlashMessagesToModal(document, modal);
 
         const storage = availableStorage(document);
@@ -109,10 +148,14 @@ function installModalFeedback(document) {
 
         forms.forEach(form => {
             const key = formDraftKey(form);
+            const scope = formDraftScope(form);
             if (typeof form.addEventListener === 'function') {
                 form.addEventListener('submit', () => {
+                    // In-dialog transport keeps drafts in memory; do not leave
+                    // stale pre-save identities for a later full-page visit.
+                    if (document.defaultView?.AppModalTransport) return;
                     try {
-                        storage.setItem(key, JSON.stringify(captureFormDraft(form)));
+                        storage.setItem(key, JSON.stringify({version: 2, scope, fields: captureFormDraft(form)}));
                     } catch (_error) {
                         // Form submission must never depend on browser storage.
                     }
@@ -124,7 +167,10 @@ function installModalFeedback(document) {
             );
             try {
                 const saved = storage.getItem(key);
-                if (belongsToOpenModal && saved) restoreFormDraft(form, JSON.parse(saved));
+                if (belongsToOpenModal && saved && !savedSuccessfully) {
+                    const draft = JSON.parse(saved);
+                    if (draft?.version === 2 && draft.scope === scope) restoreFormDraft(form, draft.fields);
+                }
                 if (belongsToOpenModal || !modal) storage.removeItem(key);
             } catch (_error) {
                 storage.removeItem(key);

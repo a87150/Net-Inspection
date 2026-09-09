@@ -83,7 +83,8 @@ class DemoLauncherTests(SimpleTestCase):
             original_path = settings.BASE_DIR / 'db.sqlite3'
             original = hashlib.sha256(original_path.read_bytes()).hexdigest() if original_path.exists() else None
             cmd = [sys.executable, '-m', 'deploy.demo', '--runtime-dir', str(root), '--prepare-only']
-            env = {**os.environ, 'DB_ENGINE': 'mysql', 'DJANGO_SQLITE_PATH': str(settings.BASE_DIR / 'db.sqlite3')}
+            env = {**os.environ, 'DB_ENGINE': 'sqlite', 'NET_ENV_FILE': str(root / 'absent.env'),
+                   'DJANGO_SQLITE_PATH': str(settings.BASE_DIR / 'db.sqlite3')}
             for attempt in range(2):
                 result = subprocess.run(cmd, cwd=settings.BASE_DIR, env=env, capture_output=True, timeout=45)
                 self.assertEqual(result.returncode, 0, result.stderr.decode(errors='replace'))

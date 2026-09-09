@@ -10,8 +10,9 @@ from unittest.mock import Mock, patch
 from urllib.parse import unquote
 from zipfile import ZipFile
 
+from cryptography.fernet import Fernet
 import requests
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 
 from index.inspections.forms import inspection_item_choices
@@ -118,10 +119,12 @@ class VirtualLoop(asyncio.SelectorEventLoop):
 
 class ConfigurationTests(TestCase):
     def setUp(self):
+        from tests.auth import login_admin
+        login_admin(self.client)
         # Any accidental outbound request fails even in download and UI tests.
         self.http = self.enterContext(patch('requests.get', side_effect=AssertionError('device HTTP forbidden')))
         self.native_http = self.enterContext(patch('aiohttp.ClientSession.get', side_effect=AssertionError('device HTTP forbidden')))
-        self.connect = self.enterContext(patch('net.infrastructure.ssh_collectors._connect', side_effect=AssertionError('device SSH forbidden')))
+        self.connect = self.enterContext(patch('net.infrastructure.ssh_collectors._connect_network', side_effect=AssertionError('device SSH forbidden')))
         self.enterContext(patch('net.infrastructure.ssh_collectors.time', Clock()))
         self.device = Network_Device.objects.create(
             ip='192.0.2.10', device_name='edge', vendor='Cisco',
@@ -132,6 +135,16 @@ class ConfigurationTests(TestCase):
             api_username='api-user-private', api_password='api-pass-private',
             api_token='api-token-private')
         self.record_number = 0
+        self.enterContext(override_settings(DEVICE_BACKUP_ENCRYPTION_KEY=Fernet.generate_key()))
+
+    def backup(self, asset=None, content=NETWORK_TEXT, **metadata):
+        from net.devices.configuration_backups import store_configuration_backup
+        backup = store_configuration_backup(asset or self.device, snapshot(content))
+        for key, value in metadata.items():
+            setattr(backup, key, value)
+        if metadata:
+            backup.save(update_fields=list(metadata))
+        return backup
 
     def saved(self, asset, **fields):
         record = asset.inspections.create(**fields)
@@ -151,7 +164,14 @@ class ConfigurationTests(TestCase):
         channel = Shell({paging: paging + '\r\n' + prompt,
                          command: output if output is not None else command + '\r\n' + NETWORK_TEXT + prompt}, prompt)
         self.connect.side_effect = None
-        self.connect.return_value = Mock(invoke_shell=Mock(return_value=channel))
+        channel.pending = []  # Netmiko session preparation consumed the initial prompt.
+        session = Mock(remote_conn=channel)
+        session.find_prompt.return_value = prompt
+        def send_command(command, **kwargs):
+            channel.send(command + '\n')
+            return b''.join(channel.pending).decode('utf-8')
+        session.send_command.side_effect = send_command
+        self.connect.return_value = session
         return channel
 
     def execute(self, asset, kind, items):
@@ -170,16 +190,16 @@ class ConfigurationTests(TestCase):
         self.assertNotIn('config_info', dict(inspection_item_choices('server')))
 
     def test_ssh_capture_persists_item_and_downloads_without_reconnection(self):
-        channel = self.shell()
+        native = NETWORK_TEXT.replace('\n', '\r\n')
+        channel = self.shell('show running-config\r\n' + native + 'edge#')
         record = self.execute(self.device, 'network_device', ['config_info'])
         self.assertEqual(record.details.get('config_info', {}).get('status'), 'success')
-        self.assertEqual(record.raw_output['config_info']['content'], NETWORK_TEXT)
+        self.assertNotIn('content', record.raw_output['config_info'])
         self.assertEqual(channel.commands, ['terminal length 0', 'show running-config'])
         self.connect.side_effect = AssertionError('download must be offline')
         result = self.single()
         self.assertEqual(result.status_code, 200)
-        self.assertIn(NETWORK_TEXT.encode(), result.content)
-        self.assertIn('非完整恢复备份'.encode(), result.content)
+        self.assertEqual(native.encode(), result.content)
 
     def test_canonical_vendor_credential_collision_survives_capture_persist_download(self):
         self.device.username = 'cisco'
@@ -191,17 +211,18 @@ class ConfigurationTests(TestCase):
         from net.inspections.result_storage import expanded_result_snapshot
         for source in (record.details, record.raw_output, expanded_result_snapshot(record.task_target)['details']):
             item = source['config_info']
-            self.assertEqual(item['vendor'], 'cisco')
+            self.assertIn('backup_id', item)
             self.assertEqual(item['status'], 'success')
-            self.assertNotIn('cisco', item['content'])
+            self.assertNotIn('content', item)
+            self.assertNotIn('format', item)
         result = self.single()
         self.assertEqual(result.status_code, 200)
         self.assertIn(b'hostname edge', result.content)
         self.assertNotIn('cisco', unquote(str(result.headers)))
-        self.assertNotIn(b'cisco', result.content)
+        self.assertEqual(native.encode(), result.content)
         with ZipFile(BytesIO(self.exports().build_configuration_zip([self.device]))) as bundle:
             self.assertNotIn('cisco', ''.join(bundle.namelist()))
-            self.assertNotIn(b'cisco', b''.join(bundle.read(name) for name in bundle.namelist()))
+            self.assertNotIn(b'cisco', bundle.read('manifest.csv'))
 
     def test_envelope_key_and_status_credential_collisions_preserve_item_contract(self):
         Server.objects.create(ip='192.0.2.91', username='config_info', password='success', api_token='format')
@@ -212,9 +233,8 @@ class ConfigurationTests(TestCase):
         for source in (record.details, record.raw_output):
             self.assertIn('config_info', source)
             self.assertEqual(source['config_info']['status'], 'success')
-            self.assertEqual(source['config_info']['format'], 'text')
-            for credential in ('config_info', 'success', 'format', 'text'):
-                self.assertNotIn(credential, source['config_info']['content'])
+            self.assertNotIn('format', source['config_info'])
+            self.assertNotIn('content', source['config_info'])
         self.assertEqual(self.single().status_code, 200)
         with ZipFile(BytesIO(self.exports().build_configuration_zip([self.device]))) as bundle:
             rows = list(csv.DictReader(StringIO(bundle.read('manifest.csv').decode('utf-8-sig'))))
@@ -260,10 +280,8 @@ class ConfigurationTests(TestCase):
         self.assertEqual(record.status, 'partial')
         self.assertTrue(record.is_reachable)
         item = record.details['config_info']
-        self.assertEqual(item['status'], 'success')
-        self.assertEqual(item['scope'], 'Network')
-        self.assertFalse(item['full_backup'])
-        self.assertEqual(record.raw_output['config_info']['content'], DAHUA_TEXT)
+        self.assertEqual(item['status'], 'unsupported')
+        self.assertNotIn('content', record.raw_output['config_info'])
         call = self.native_http.call_args
         self.assertEqual(call.args[0], 'https://192.0.2.20/cgi-bin/configManager.cgi')
         self.assertEqual(call.kwargs['params'], {'action': 'getConfig', 'name': 'Network'})
@@ -271,12 +289,11 @@ class ConfigurationTests(TestCase):
         self.http.side_effect = AssertionError('download must be offline')
         self.native_http.side_effect = AssertionError('download must be offline')
         result = self.single(self.camera, 'monitors')
-        self.assertEqual(result.status_code, 200)
-        self.assertIn(DAHUA_TEXT.encode(), result.content)
-        self.assertIn(b'Network', result.content)
+        self.assertEqual(result.status_code, 404)
+        self.assertIn('完整备份'.encode(), result.content)
         archive = self.client.get('/assets/monitors/configurations.zip')
         with ZipFile(BytesIO(archive.content)) as bundle:
-            self.assertIn(DAHUA_TEXT.encode(), b''.join(bundle.read(name) for name in bundle.namelist()))
+            self.assertEqual(bundle.namelist(), ['manifest.csv'])
 
     def test_config_only_dahua_uses_only_named_read_endpoint(self):
         self.native_http.side_effect = [response()]
@@ -303,38 +320,38 @@ class ConfigurationTests(TestCase):
             result = collect_security_api(self.camera, 2, ['config_info'])
             self.assertEqual(result.data.get('config_info', {}).get('status'), 'failed')
 
-    def test_latest_successful_item_ignores_parent_partial_and_newer_failed_item(self):
+    def test_latest_backup_ignores_legacy_inspections(self):
+        self.backup(content='hostname latest\r\npassword private\r\nend\r\n')
         self.saved(self.device, status='success', details={'config_info': snapshot('hostname old\nend\n')})
         self.saved(self.device, status='partial', details={'config_info': snapshot()})
         self.saved(self.device, status='failed', details={'config_info': {'status': 'failed', 'message': 'failure'}})
         self.saved(self.device, status='success', details={'cpu': {'usage': 2}})
         result = self.exports().latest_configuration(self.device)
         self.assertEqual(result.status, 'success')
-        self.assertIn(NETWORK_TEXT.encode(), result.content)
+        self.assertEqual(b'hostname latest\r\npassword private\r\nend\r\n', result.content)
 
-    def test_missing_unsupported_failed_and_raw_only_evidence(self):
+    def test_legacy_status_and_raw_only_evidence_never_supply_a_backup(self):
         service = self.exports()
         self.assertEqual(service.latest_configuration(self.device).status, 'missing')
         self.assertEqual(self.single().status_code, 404)
         for state in ('unsupported', 'failed'):
             self.saved(self.device, details={'config_info': {'status': state, 'message': 'private-error'}})
-            self.assertEqual(service.latest_configuration(self.device).status, state)
+            self.assertEqual(service.latest_configuration(self.device).status, 'missing')
             result = self.single()
-            self.assertEqual(result.status_code, 409)
+            self.assertEqual(result.status_code, 404)
             self.assertNotIn(b'private-error', result.content)
         self.saved(self.device, raw_output={'config_info': snapshot()})
-        self.assertEqual(service.latest_configuration(self.device).status, 'success')
+        self.assertEqual(service.latest_configuration(self.device).status, 'missing')
 
-    def test_security_json_preserves_native_keys_and_rejects_unregistered_scope(self):
+    def test_security_partial_json_is_not_a_complete_backup(self):
         native = {'table.Network.Hostname': 'camera', 'table.Network.eth0.MTU': 1500}
         self.camera.inspections.create(details={'config_info': snapshot(native, vendor='dahua', fmt='json', scope='Network')})
         result = self.exports().latest_configuration(self.camera)
-        self.assertEqual(result.status, 'success')
-        self.assertEqual(json.loads(result.content)['configuration'], native)
-        self.assertEqual(json.loads(result.content)['scope'], 'Network')
+        self.assertEqual(result.status, 'missing')
+        self.assertIn('完整备份', result.message)
         other = SecurityDevice.objects.create(ip='192.0.2.30', vendor='unknown')
         other.inspections.create(details={'config_info': snapshot({'status': 'online'}, vendor='unknown', fmt='json')})
-        self.assertEqual(self.exports().latest_configuration(other).status, 'unsupported')
+        self.assertEqual(self.exports().latest_configuration(other).status, 'missing')
 
     def test_filtered_zip_uses_all_matching_assets_and_manifest_formula_safety(self):
         self.device.device_name = '=SUM(1,2)'
@@ -342,9 +359,12 @@ class ConfigurationTests(TestCase):
         self.device.inspections.create(details={'config_info': snapshot()})
         duplicate = Network_Device.objects.create(ip='192.0.2.11', device_name='=SUM(1,2)', vendor='Cisco')
         duplicate.inspections.create(details={'config_info': snapshot()})
+        self.backup(filename='../../=SUM(1,2).cfg', scope='=ssh-pass-private')
+        self.backup(duplicate, filename='../../=SUM(1,2).cfg')
         missing = Network_Device.objects.create(ip='192.0.2.12', vendor='Cisco')
         failed = Network_Device.objects.create(ip='192.0.2.13', vendor='Cisco')
         failed.inspections.create(details={'config_info': {'status': 'failed'}})
+        self.backup(failed, ciphertext=b'broken')
         unknown = Network_Device.objects.create(ip='192.0.2.14', vendor='Cisco')
         unknown.inspections.create(details={'config_info': {'status': 'unsupported'}})
         Network_Device.objects.create(ip='192.0.2.99', vendor='Other')
@@ -355,14 +375,22 @@ class ConfigurationTests(TestCase):
         with ZipFile(BytesIO(result.content)) as bundle:
             rows = list(csv.DictReader(StringIO(bundle.read('manifest.csv').decode('utf-8-sig'))))
             self.assertEqual(len(rows), 5)
-            self.assertEqual({row['status'] for row in rows}, {'success', 'missing', 'failed', 'unsupported'})
+            self.assertEqual({row['status'] for row in rows}, {'success', 'missing', 'failed'})
             self.assertEqual(len(bundle.namelist()), 3)
             self.assertEqual(len({name.casefold() for name in bundle.namelist()}), 3)
+            self.assertNotIn(b'ssh-pass-private', bundle.read('manifest.csv'))
+            self.assertTrue(all('/' not in name and '..' not in name for name in bundle.namelist()))
+            for row in rows:
+                if row['status'] == 'success':
+                    self.assertEqual(bundle.read(row['filename']), NETWORK_TEXT.encode())
             self.assertTrue(all(row['name'].startswith("'=") for row in rows if row['status'] == 'success'))
             self.assertEqual({row['asset_id'] for row in rows}, {str(x.pk) for x in (self.device, duplicate, missing, failed, unknown)})
 
     @override_settings(SECRET_KEY='application-signing-private', EMAIL_HOST_PASSWORD='smtp-setting-private')
-    def test_all_application_credentials_absent_from_saved_and_archived_surfaces(self):
+    def test_credentials_stay_in_original_downloads_but_not_records_or_manifest(self):
+        # The overridden signing key invalidates the session created in setUp.
+        from tests.auth import login_admin
+        login_admin(self.client)
         Server.objects.create(ip='192.0.2.40', username='server-user-private', password='server-pass-private', api_token='server-token-private')
         Domain_Controller_Config.objects.create(bind_username='ldap-user-private', bind_password='ldap-pass-private')
         PeopleSyncSource.objects.create(name='source', source_key='source', source_type='feishu',
@@ -386,8 +414,11 @@ class ConfigurationTests(TestCase):
         self.assertEqual(single.status_code, 200)
         blob = self.exports().build_configuration_zip([self.device, self.camera])
         with ZipFile(BytesIO(blob)) as bundle:
-            surfaces = saved + unquote(str(single.headers)) + single.content.decode()
-            surfaces += '\n'.join(bundle.namelist()) + b''.join(bundle.read(n) for n in bundle.namelist()).decode('utf-8-sig')
+            self.assertEqual(single.content, native.encode())
+            rows = list(csv.DictReader(StringIO(bundle.read('manifest.csv').decode('utf-8-sig'))))
+            self.assertEqual(bundle.read(rows[0]['filename']), native.encode())
+            surfaces = saved + unquote(str(single.headers))
+            surfaces += '\n'.join(bundle.namelist()) + bundle.read('manifest.csv').decode('utf-8-sig')
             for value in secrets:
                 self.assertNotIn(value, surfaces)
             for name in bundle.namelist():
@@ -401,7 +432,6 @@ class ConfigurationTests(TestCase):
             self.assertContains(result, 'config_info')
             detail = self.client.get(f'/assets/{kind}/{asset.pk}/')
             self.assertContains(detail, f'/assets/{kind}/{asset.pk}/configuration/')
-            self.assertContains(detail, '非完整恢复备份')
         self.assertNotContains(self.client.get('/assets/servers/'), 'configurations.zip')
         self.assertEqual(self.client.get('/assets/servers/configurations.zip').status_code, 404)
 
@@ -495,16 +525,16 @@ class ConfigurationTests(TestCase):
         self.assertEqual(record.details['config_info']['status'], 'success')
         self.assertEqual(self.single().status_code, 200)
 
-    def test_latest_rejects_malformed_success_and_does_not_fall_back_to_same_record_raw(self):
+    def test_legacy_success_and_malformed_items_never_supply_a_backup(self):
         good = self.saved(self.device, details={'config_info': snapshot()})
         for item in (snapshot(''), snapshot('hostname edge\n--More--\nend\n'),
                      {**snapshot(), 'complete': False}, {**snapshot(), 'format': 'binary'},
                      {'status': 'success', 'format': 'text', 'vendor': ['cisco']}):
             self.saved(self.device, details={'config_info': item})
-            self.assertEqual(self.exports().latest_configuration(self.device).status, 'success')
+            self.assertEqual(self.exports().latest_configuration(self.device).status, 'missing')
         good.delete()
         self.saved(self.device, details={'config_info': {'status': 'failed'}}, raw_output={'config_info': snapshot()})
-        self.assertEqual(self.exports().latest_configuration(self.device).status, 'failed')
+        self.assertEqual(self.exports().latest_configuration(self.device).status, 'missing')
 
     def test_failed_attempt_without_item_has_failed_evidence_and_no_secret_error(self):
         # Missing credentials / pre-collector failures still represent selected
@@ -513,14 +543,14 @@ class ConfigurationTests(TestCase):
         self.device.save()
         record = self.execute(self.device, 'network_device', ['config_info'])
         self.assertEqual(record.details.get('config_info', {}).get('status'), 'failed')
-        self.assertEqual(self.exports().latest_configuration(self.device).status, 'failed')
+        self.assertEqual(self.exports().latest_configuration(self.device).status, 'missing')
 
     def test_registered_json_keys_that_contain_credentials_are_redacted_without_losing_scope(self):
         native = {'table.Network.Hostname': 'camera', 'table.Network.Password': 'native-json-private'}
-        self.camera.inspections.create(details={'config_info': snapshot(native, vendor='dahua', fmt='json', scope='Network')})
-        result = self.exports().latest_configuration(self.camera)
-        self.assertNotIn(b'native-json-private', result.content)
-        self.assertEqual(json.loads(result.content)['configuration']['table.Network.Hostname'], 'camera')
+        from net.infrastructure.sanitization import sanitize_configuration
+        result = sanitize_configuration(native)
+        self.assertNotIn('native-json-private', json.dumps(result))
+        self.assertEqual(result['table.Network.Hostname'], 'camera')
 
     def test_native_cli_and_url_credentials_are_removed_but_nonsecret_configuration_stays(self):
         native = ('hostname edge\n snmp-server community community-private ro\n'
@@ -528,12 +558,12 @@ class ConfigurationTests(TestCase):
                   ' description https://example.invalid/api?token=token-private&ok=1\n'
                   ' description https://example.invalid/path username=user-private password=pwd-private\n'
                   'end\n')
-        self.device.inspections.create(details={'config_info': snapshot(native)})
-        result = self.exports().latest_configuration(self.device)
+        from net.infrastructure.sanitization import sanitize_configuration
+        content = sanitize_configuration(native).encode()
         for secret in ('community-private', 'enable-private', 'cli-private', 'token-private', 'pwd-private'):
-            self.assertNotIn(secret.encode(), result.content)
-        self.assertIn(b'hostname edge', result.content)
-        self.assertNotIn(b'ok=1', result.content)  # All opaque query values are omitted.
+            self.assertNotIn(secret.encode(), content)
+        self.assertIn(b'hostname edge', content)
+        self.assertNotIn(b'ok=1', content)  # All opaque query values are omitted.
 
     def test_empty_zip_has_manifest_and_views_reject_post(self):
         result = self.client.get('/assets/networks/configurations.zip', {'q': 'no matching assets'})
@@ -555,3 +585,72 @@ class ConfigurationTests(TestCase):
         record = self.device.inspections.get()
         self.assertNotIn('unrelated-app-private', record.summary)
         self.assertNotIn('unrelated-app-private', json.dumps(record.task_target.result_snapshot))
+
+    def test_original_bytes_and_media_type_are_not_wrapped_or_reencoded(self):
+        from types import SimpleNamespace
+        for raw, media in ((b'\xff\x00password secret\r\n', 'application/octet-stream'),
+                           (b'{ "password": "secret" }\r\n', 'application/json')):
+            # Exercise formats that storage may support in future without
+            # weakening its current native configuration validation.
+            backup = SimpleNamespace(filename='native.cfg', media_type=media, scope='running-config')
+            with self.subTest(media=media), patch(
+                    'net.devices.configuration_backups.latest_configuration_backup', return_value=backup), patch(
+                    'net.devices.configuration_backups.read_configuration_backup', return_value=raw):
+                reply = self.single()
+                self.assertEqual(reply.status_code, 200)
+                self.assertEqual(reply.content, raw)
+                self.assertEqual(reply['Content-Type'], media)
+
+    def test_decryption_integrity_and_missing_key_fail_safely_without_fallback(self):
+        from net.devices.configuration_backups import store_configuration_backup
+        self.saved(self.device, details={'config_info': snapshot()})
+        self.backup()
+        backup = store_configuration_backup(self.device, snapshot('hostname latest\nend\n'),
+                                            captured_at=timezone.now() + timedelta(days=1))
+        original_ciphertext, original_sha256 = backup.ciphertext, backup.sha256
+        for fields in ({'ciphertext': b'private ciphertext'}, {'sha256': '0' * 64}):
+            with self.subTest(fields=fields):
+                backup.ciphertext, backup.sha256 = original_ciphertext, original_sha256
+                for key, value in fields.items():
+                    setattr(backup, key, value)
+                backup.save(update_fields=['ciphertext', 'sha256'])
+                result = self.exports().latest_configuration(self.device)
+                self.assertEqual(result.status, 'failed')
+                self.assertEqual(result.content, b'')
+                reply = self.single()
+                self.assertEqual(reply.status_code, 409)
+                self.assertNotIn(b'private', reply.content)
+                with ZipFile(BytesIO(self.exports().build_configuration_zip([self.device]))) as bundle:
+                    self.assertEqual(bundle.namelist(), ['manifest.csv'])
+                    self.assertNotIn(b'private', bundle.read('manifest.csv'))
+        with override_settings(DEVICE_BACKUP_ENCRYPTION_KEY=''):
+            self.assertEqual(self.exports().latest_configuration(self.device).status, 'failed')
+
+    def test_zip_contains_only_latest_backup_and_reserves_manifest_filename(self):
+        from net.devices.configuration_backups import store_configuration_backup
+        self.backup(filename='manifest.csv')
+        newer = store_configuration_backup(self.device, snapshot('hostname newer\r\nend\r\n'),
+                                           captured_at=timezone.now() + timedelta(days=1))
+        newer.filename = 'manifest.csv'
+        newer.save(update_fields=['filename'])
+        with ZipFile(BytesIO(self.exports().build_configuration_zip([self.device]))) as bundle:
+            self.assertEqual(set(bundle.namelist()), {'manifest.csv', 'manifest-2.csv'})
+            self.assertEqual(bundle.read('manifest-2.csv'), b'hostname newer\r\nend\r\n')
+
+    def test_views_enforce_admin_get_and_no_store_without_middleware(self):
+        from django.contrib.auth.models import AnonymousUser
+        from index.devices.configuration import configuration_download, configuration_zip
+        from tests.auth import login_admin, login_reader
+        admin = login_admin(self.client)
+        reader = login_reader(self.client)
+        self.backup()
+        for view, args in ((configuration_download, ('networks', self.device.pk)),
+                           (configuration_zip, ('networks',))):
+            for user, method, status in ((AnonymousUser(), 'get', 302), (reader, 'get', 403),
+                                         (admin, 'post', 405), (admin, 'get', 200)):
+                with self.subTest(view=view.__name__, status=status):
+                    request = getattr(RequestFactory(), method)('/')
+                    request.user = user
+                    reply = view(request, *args)
+                    self.assertEqual(reply.status_code, status)
+                    self.assertIn('no-store', reply.get('Cache-Control', ''))

@@ -418,6 +418,9 @@ class TaskRun(models.Model):
         related_name='task_runs',
     )
     people_applied_at = models.DateTimeField(null=True, blank=True, editable=False)
+    alert_summary_processed_at = models.DateTimeField(null=True, blank=True)
+    alert_summary_attempted_at = models.DateTimeField(null=True, blank=True)
+    alert_summary_error = models.TextField(blank=True)
     status = models.CharField(
         max_length=16,
         choices=Status.choices,

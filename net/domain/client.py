@@ -4,7 +4,10 @@ import ssl
 import ldap3
 from django.core.exceptions import ValidationError
 from ldap3 import BASE, MODIFY_ADD, MODIFY_REPLACE
-from ldap3.core.exceptions import LDAPAssertionFailedResult, LDAPException, LDAPInvalidDnError
+from ldap3.core.exceptions import (
+    LDAPAssertionFailedResult, LDAPException, LDAPInvalidDnError,
+    LDAPUnavailableCriticalExtensionResult,
+)
 from ldap3.operation.search import compile_filter, parse_filter
 from ldap3.utils.dn import parse_dn
 from ldap3.utils.asn1 import encode
@@ -68,10 +71,14 @@ class DomainClient:
             connect_timeout=8,
             tls=tls,
         )
+        username = effective_bind_username(self.config)
+        # Do not cycle credentials/authentication methods: failed binds can lock AD users.
+        authentication = ldap3.NTLM if '\\' in username and '=' not in username else ldap3.SIMPLE
         return ldap3.Connection(
             server,
-            user=effective_bind_username(self.config),
+            user=username,
             password=self.config.bind_password,
+            authentication=authentication,
             auto_bind=True,
             receive_timeout=20,
         )
@@ -105,21 +112,21 @@ class DomainClient:
                 self.connection_factory()
                 if self.connection_factory is not None else self.connect()
             )
-        except Exception:
-            return DomainActionResult(False, 'LDAP 连接或操作失败。')
+        except Exception as exc:
+            return self._exception_result(exc)
         try:
             return self._execute(
                 connection, action, target_dn, parameters, password,
                 recovery_stage=recovery_stage,
             )
-        except LDAPException:
+        except LDAPException as exc:
             if action == 'create_user':
                 return DomainActionResult(
                     False, '新增用户结果不确定，需要人工核查。',
                     stage='manual_intervention_required',
                     details={'distinguished_name': target_dn},
                 )
-            return DomainActionResult(False, 'LDAP 连接或操作失败。')
+            return self._exception_result(exc)
         finally:
             if connection is not None:
                 try:
@@ -300,20 +307,10 @@ class DomainClient:
 
     def _modify_uac(self, connection, target_dn, action, enabled):
         for _ in range(MAX_UAC_WRITE_ATTEMPTS):
-            if not connection.search(target_dn, '(objectClass=*)', BASE, attributes=['userAccountControl']):
-                return self._result(connection)
-            try:
-                current = int(connection.entries[0].userAccountControl.value)
-            except (AttributeError, IndexError, TypeError, ValueError):
-                return DomainActionResult(False, '无法读取目录对象状态。')
-            if action == 'enable':
-                value = current & ~ACCOUNTDISABLE
-            elif action == 'disable':
-                value = current | ACCOUNTDISABLE
-            elif enabled:
-                value = current | DONT_EXPIRE_PASSWORD
-            else:
-                value = current & ~DONT_EXPIRE_PASSWORD
+            current, error = self._read_uac(connection, target_dn)
+            if error is not None:
+                return error
+            value = self._uac_value(current, action, enabled)
             try:
                 result = self._modify(
                     connection, target_dn,
@@ -322,9 +319,60 @@ class DomainClient:
                 )
             except LDAPAssertionFailedResult:
                 continue
+            except LDAPUnavailableCriticalExtensionResult:
+                return self._modify_uac_compatible(connection, target_dn, action, enabled)
+            if not result.success and (connection.result or {}).get('result') == 12:
+                return self._modify_uac_compatible(connection, target_dn, action, enabled)
             if result.success or not self._is_assertion_failure(connection):
                 return result
         return DomainActionResult(False, '目录对象状态发生并发变化，请重试。')
+
+    def _read_uac(self, connection, target_dn):
+        found = connection.search(target_dn, '(objectClass=*)', BASE, attributes=['userAccountControl'])
+        if not found:
+            result = self._result(connection, False)
+            if (connection.result or {}).get('result') == 0:
+                result = DomainActionResult(False, '未找到目录对象或无法读取其状态，请重新同步后重试。')
+            return None, result
+        try:
+            raw = connection.entries[0].userAccountControl.value
+            if isinstance(raw, (list, tuple)):
+                raw = raw[0] if len(raw) == 1 else None
+            if isinstance(raw, bool):
+                raise ValueError
+            current = int(raw)
+            if current < 0:
+                raise ValueError
+            return current, None
+        except (AttributeError, IndexError, TypeError, ValueError):
+            return None, DomainActionResult(False, '无法读取目录对象状态。')
+
+    @staticmethod
+    def _uac_value(current, action, enabled):
+        if action == 'enable':
+            return current & ~ACCOUNTDISABLE
+        if action == 'disable':
+            return current | ACCOUNTDISABLE
+        return current | DONT_EXPIRE_PASSWORD if enabled else current & ~DONT_EXPIRE_PASSWORD
+
+    def _modify_uac_compatible(self, connection, target_dn, action, enabled):
+        # Windows AD rejects RFC4528 with unavailableCriticalExtension (12),
+        # which guarantees that the rejected request did not modify the object.
+        # Re-read before the ordinary LDAP modify, as in ad_core.py. This path
+        # cannot offer atomic compare-and-swap against external administrators.
+        current, error = self._read_uac(connection, target_dn)
+        if error is not None:
+            return error
+        value = self._uac_value(current, action, enabled)
+        if value == current:
+            return DomainActionResult(True)
+        result = self._modify(connection, target_dn, {'userAccountControl': [(MODIFY_REPLACE, [value])]})
+        if not result.success:
+            return result
+        actual, error = self._read_uac(connection, target_dn)
+        if error is not None or actual != value:
+            return DomainActionResult(False, '已提交状态修改，但回读核对失败，请同步目录核实后再操作。')
+        return DomainActionResult(True)
 
     @staticmethod
     def _uac_assertion_control(current):
@@ -349,11 +397,29 @@ class DomainClient:
             succeeded = result.get('result') == 0
         if succeeded:
             return DomainActionResult(True)
+        return DomainClient._error_result(result.get('result'))
+
+    @staticmethod
+    def _exception_result(exc):
+        code = getattr(exc, 'result', None)
+        if isinstance(code, int) and not isinstance(code, bool) and code != 0:
+            return DomainClient._error_result(code)
+        return DomainActionResult(False, 'LDAP 连接或操作失败。')
+
+    @staticmethod
+    def _error_result(code):
         messages = {
+            8: '域控要求更强的身份验证，请使用 LDAPS 或符合域策略的认证方式。',
+            12: '域控不支持请求的 LDAP 扩展控件。',
+            19: '域控约束或密码策略不满足，请检查密码复杂度、历史限制和对象属性。',
+            20: '属性值已存在；加入分组时请检查对象是否已经在该组中。',
             32: '目录对象不存在。',
+            49: '域控认证失败，请检查账号、密码及账号锁定或停用状态。',
             50: 'LDAP 权限不足。',
+            51: '域控正忙，请稍后重试。',
+            52: '域控服务不可用，请检查连接。',
             53: 'LDAP 当前拒绝执行该操作。',
             64: '目录名称无效。',
             68: '目录对象已存在。',
         }
-        return DomainActionResult(False, messages.get(result.get('result'), 'LDAP 操作失败。'))
+        return DomainActionResult(False, messages.get(code, 'LDAP 操作失败。'))

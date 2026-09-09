@@ -22,7 +22,7 @@ def metric_values(item, evidence):
     if item == 'temperature':
         raw = evidence.get('values_celsius', [])
         return [value for raw_value in raw if (value := number(raw_value)) is not None and -273.15 <= value <= 1000] if isinstance(raw, list) else []
-    value = number(evidence.get('usage_percent', evidence.get('usage')))
+    value = number(evidence.get('usage_percent', evidence.get('used_percent', evidence.get('usage'))))
     if value is None and item == 'memory':
         total, used = number(evidence.get('total_bytes')), number(evidence.get('used_bytes'))
         if total is not None and total > 0 and used is not None:
@@ -41,7 +41,7 @@ def explicit_failure(value):
                for key in ('status', 'state', 'health'))
 
 
-def evaluate_device_issues(project, selected, data, *, reachable, status, overrides=None, thresholds=None, message=''):
+def evaluate_device_issues(project, selected, data, *, reachable, status, overrides=None, thresholds=None, message='', server_type=None):
     rules = PROJECT_RULES[project]
     limits = {**METRIC_DEFAULTS.get(project, {}), **(thresholds or {})}
     issues, normal = [], []
@@ -61,8 +61,12 @@ def evaluate_device_issues(project, selected, data, *, reachable, status, overri
         return issues, normal
     normal.append('inspection_collection')
     items = list(dict.fromkeys(item for item in selected if item in rules))
+    is_linux = project == 'servers' and (str(server_type or '').lower() == 'linux' or (str(data.get('system_info', {}).get('uname', '')).lower().startswith('linux ') if isinstance(data.get('system_info'), dict) else False))
     for item in items:
         evidence = data.get(item)
+        if item == 'config_info' and isinstance(evidence, dict) and evidence.get('status') == 'unsupported':
+            issue(item, '当前厂商或接口不支持完整配置备份。')
+            continue
         if item == 'traffic':
             interfaces = evidence.get('interfaces', []) if isinstance(evidence, dict) else []
             valid = [row for row in interfaces if isinstance(row, dict) and row.get('data_state') == 'known']
@@ -74,8 +78,33 @@ def evaluate_device_issues(project, selected, data, *, reachable, status, overri
             elif interfaces and len(utilizations) == len(interfaces):
                 normal.append(item)
             continue
+        if project == 'servers' and not is_linux and item == 'services' and isinstance(evidence, list):
+            errors = data.get('collection_errors', {}) if isinstance(data, dict) else {}
+            restricted = isinstance(errors, dict) and bool(errors.get('services'))
+            stopped_automatic = [row for row in evidence if isinstance(row, dict)
+                                 and str(row.get('Status', row.get('status', ''))).lower() in {'1', 'stopped'}
+                                 and str(row.get('StartType', row.get('start_type', ''))).lower() in {'2', 'automatic', 'auto'}]
+            if restricted or stopped_automatic:
+                names = [str(row.get('DisplayName') or row.get('display_name') or row.get('Name') or row.get('name') or '?') for row in stopped_automatic]
+                detail = '服务采集存在受限实例，当前结果仅代表已取得的部分证据。' if restricted else ''
+                if names:
+                    detail += ('；' if detail else '') + '检测到已停止的自动启动服务：' + '、'.join(names[:3]) + '；未取得触发器信息，需结合服务触发器配置确认是否需要处理。'
+                issue(item, detail, missing=True)
+                continue
         if item not in data or evidence is None or explicit_failure(evidence):
             issue(item, f'{rules[item][1]}未采集或设备返回异常状态', item not in data or evidence is None)
+            continue
+        if is_linux and item == 'services' and isinstance(evidence, list):
+            if evidence:
+                issue(item, f'检测到 {len(evidence)} 个失败服务：' + '；'.join(str(value) for value in evidence[:3]))
+            else:
+                normal.append(item)
+            continue
+        if is_linux and item == 'logs' and isinstance(evidence, list):
+            if evidence:
+                issue(item, f'取得 {len(evidence)} 行错误级别系统日志（含续行），请查看日志内容。')
+            else:
+                normal.append(item)
             continue
         if item in limits:
             values = metric_values(item, evidence)

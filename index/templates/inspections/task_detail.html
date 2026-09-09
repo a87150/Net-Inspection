@@ -9,16 +9,16 @@
 {% for sync_target in page_obj %}
 {% if sync_target.result_snapshot.message %}<p class="text-success">{{ sync_target.result_snapshot.message }}</p>{% endif %}
 {% endfor %}
-<a href="{% url 'domain_controller_settings' %}">返回域控管理</a>
+{% if can_administer %}<a href="{% url 'domain_controller_settings' %}">返回域控管理</a>{% endif %}
 </div></section>
 {% endif %}
-<header class="page-heading"><div class="page-heading__copy"><p class="page-heading__eyebrow">执行中心</p><h1 class="page-heading__title">任务详情</h1><p class="page-heading__description">{{ task.get_task_type_display }} · {{ task.get_source_display }} · {{ task.get_status_display }}</p></div><div class="page-heading__actions">{% if user.is_authenticated and task.status in task.ACTIVE_STATUSES %}<form method="post" action="{% url 'task_cancel' task.pk %}" onsubmit="return confirm('确定结束这个任务吗？尚未开始的目标会被取消，正在执行的外部调用将在超时后退出。');">{% csrf_token %}<button class="btn btn-outline-danger" type="submit">结束任务</button></form>{% endif %}<a class="btn btn-outline-secondary" href="{% url 'task_list' %}">返回任务列表</a></div></header>
+<header class="page-heading"><div class="page-heading__copy"><p class="page-heading__eyebrow">执行中心</p><h1 class="page-heading__title">任务详情</h1><p class="page-heading__description">{{ task.get_task_type_display }} · {{ task.get_source_display }} · {{ task.get_status_display }}</p></div><div class="page-heading__actions">{% if can_administer and task.status in task.ACTIVE_STATUSES %}<form method="post" action="{% url 'task_cancel' task.pk %}" onsubmit="return confirm('确定结束这个任务吗？尚未开始的目标会被取消，正在执行的外部调用将在超时后退出。');">{% csrf_token %}<button class="btn btn-outline-danger" type="submit">结束任务</button></form>{% endif %}<a class="btn btn-outline-secondary" href="{% url 'task_list' %}">返回任务列表</a></div></header>
 {% if domain_operation %}
 <section class="card surface-card mb-4" data-domain-operation-detail>
     <div class="card-body">
         <div class="d-flex flex-column flex-md-row gap-3 align-items-md-center justify-content-between">
             <div><h2 class="h5 mb-1">域控操作：{{ domain_operation.get_action_display }}</h2><p class="text-secondary mb-0">{{ domain_operation.get_object_type_display }} · {{ domain_operation.target_count }} 个目标 · 参数已脱敏</p></div>
-            {% if domain_retry_available %}<form method="post" action="{% url 'domain_operation_retry' domain_operation.pk %}" data-domain-retry>{% csrf_token %}{% if domain_retry_requires_password %}<label class="visually-hidden" for="domain-retry-password">新的密码</label><input class="form-control form-control-sm" type="password" id="domain-retry-password" name="password" autocomplete="new-password" placeholder="输入新的密码" required>{% endif %}<button class="btn btn-outline-danger" type="submit">重试失败目标</button></form>{% endif %}
+            {% if can_administer and domain_retry_available %}<form method="post" action="{% url 'domain_operation_retry' domain_operation.pk %}" data-domain-retry>{% csrf_token %}{% if domain_retry_requires_password %}<label class="visually-hidden" for="domain-retry-password">新的密码</label><input class="form-control form-control-sm" type="password" id="domain-retry-password" name="password" autocomplete="new-password" placeholder="输入新的密码" required>{% endif %}<button class="btn btn-outline-danger" type="submit">重试失败目标</button></form>{% endif %}
         </div>
         {% if domain_manual_intervention %}<div class="alert alert-warning mt-3 mb-0" data-domain-manual-intervention>新增用户结果不确定，请人工检查目录对象后再处理；系统已禁止自动重试。</div>{% endif %}
         {% if domain_operation.parameter_summary %}<dl class="row small mt-3 mb-0"><dt class="col-sm-3">安全参数摘要</dt><dd class="col-sm-9 mb-0">{% for key, value in domain_operation.parameter_summary.items %}<span class="badge text-bg-light border me-1">{{ key }}：{{ value }}</span>{% endfor %}</dd></dl>{% endif %}

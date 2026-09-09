@@ -299,6 +299,7 @@ def _analysis_rules(value):
         'cpu_temperature_max_celsius': supplied.get('cpu_temperature_max_celsius', 85),
         'site_ip_prefixes': supplied.get('site_ip_prefixes'),
         'personnel_roster': supplied.get('personnel_roster'),
+        'matching_mode': supplied.get('matching_mode'),
         'issue_severity_overrides': supplied.get('issue_severity_overrides') or {},
         'memory_max_percent': supplied.get('memory_max_percent', 90),
         'kms_servers': list(supplied.get('kms_servers') or []),
@@ -337,6 +338,13 @@ def prepare_log(
             personnel_roster=configured_rules['personnel_roster'],
         ),
     }
+    if (configured_rules['matching_mode'] == 'logs'
+            and details['enrichment']['personnel_match'] != 'matched'):
+        issues.append(grade_issue({
+            '问题类型': '日志未匹配人员',
+            '详细问题': '本日志无法唯一关联到任务人员名册中的人员，请核对人员资料和日志身份信息。',
+            'analysis_item': 'identity_match', 'severity': 'warning',
+        }, overrides=configured_rules['issue_severity_overrides']))
     frozen_policy = configured_rules.get('software_policy_snapshot')
     if isinstance(frozen_policy, dict):
         details['rules']['software_policy_snapshot'] = {

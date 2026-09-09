@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timedelta, timezone as datetime_timezone
 
 from django.db import transaction
+from django.utils import timezone
 from ldap3.core.exceptions import LDAPInvalidDnError
 from ldap3.utils.dn import parse_dn
 
@@ -22,6 +23,17 @@ def test_domain_connection(config):
 
 
 def _filetime_to_date(value):
+    if isinstance(value, (list, tuple)):
+        value = value[0] if len(value) == 1 else None
+    if isinstance(value, datetime):
+        if value.year <= 1601:
+            return None
+        if timezone.is_naive(value):
+            value = value.replace(tzinfo=datetime_timezone.utc)
+        try:
+            return value.astimezone(timezone.get_default_timezone()).date()
+        except (OverflowError, ValueError):
+            return None
     try:
         value = int(value or 0)
     except (TypeError, ValueError):
@@ -29,7 +41,10 @@ def _filetime_to_date(value):
     if value <= 0:
         return None
     epoch = datetime(1601, 1, 1, tzinfo=datetime_timezone.utc)
-    return (epoch + timedelta(microseconds=value / 10)).date()
+    try:
+        return _filetime_to_date(epoch + timedelta(microseconds=value // 10))
+    except OverflowError:
+        return None
 
 
 def _ou_from_dn(value):

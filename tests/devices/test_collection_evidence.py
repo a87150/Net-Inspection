@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 import requests
 from django.test import TestCase
 from django.urls import reverse
+from tests.auth import login_reader
 from django.utils import timezone
 
 from net.models import (AlertChannel, AlertDelivery, AlertEvent, InspectionProfile,
@@ -20,6 +21,7 @@ from net.inspections.executor import execute_target
 
 class FinalEvidenceTests(TestCase):
     def setUp(self):
+        login_reader(self.client)
         self.server = Server.objects.create(name='HTTP evidence', ip='192.0.2.22', server_type='windows',
             api_url='https://u:p@example.invalid/status?opaque=hidden-query#hidden-fragment')
         self.profile = InspectionProfile.objects.create(name='evidence', device_type='server', selected_items=['cpu'])
@@ -164,9 +166,11 @@ class FinalEvidenceTests(TestCase):
         from net.infrastructure.ssh_collectors import collect_network_ssh
         device = Network_Device(vendor='cisco', ip='192.0.2.24')
         for output in ('show processes cpu\nswitch#', '% Invalid input\nswitch#', 'CPU usage: 20%'):
-            with self.subTest(output=output), patch('net.infrastructure.ssh_collectors._connect'), patch(
-                    'net.infrastructure.ssh_collectors._read_channel', return_value=output):
+            with self.subTest(output=output), patch('net.infrastructure.ssh_collectors._connect_network') as connect:
+                connect.return_value.find_prompt.return_value = 'switch#'
+                connect.return_value.send_command.return_value = output
                 self.assertEqual(collect_network_ssh(device, selected_items=['cpu']).status, 'failed')
-        with patch('net.infrastructure.ssh_collectors._connect'), patch(
-                'net.infrastructure.ssh_collectors._read_channel', return_value='CPU usage: 20%\nswitch#'):
+        with patch('net.infrastructure.ssh_collectors._connect_network') as connect:
+            connect.return_value.find_prompt.return_value = 'switch#'
+            connect.return_value.send_command.return_value = 'CPU usage: 20%\nswitch#'
             self.assertEqual(collect_network_ssh(device, selected_items=['cpu']).data['cpu']['usage_percent'], 20)

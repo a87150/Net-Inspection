@@ -109,6 +109,7 @@ class PeopleSyncPreviewTests(TestCase):
         self.assertTrue(preview.is_valid)
         self.assertEqual(preview.creates, ({
             'employee_id': 'EMP-100', 'name': '王工', 'email': 'wang@example.test',
+            'phone': '',
             'department': '运维', 'leader': '李主管', 'external_user_id': 'ou-100',
         },))
         self.assertEqual(preview.updates, ())

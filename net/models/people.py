@@ -14,6 +14,7 @@ class People(models.Model):
     name = models.CharField(max_length=255, blank=True, null=True)
     employee_id = models.CharField(max_length=255, blank=True, null=True, unique=True)
     email = models.CharField(max_length=255, blank=True, null=True)
+    phone = models.CharField('手机号', max_length=64, blank=True, default='')
     department = models.CharField(max_length=255, blank=True, null=True)
     leader = models.CharField(max_length=255, blank=True, null=True)
     is_active = models.BooleanField(default=True)

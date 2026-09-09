@@ -1,4 +1,4 @@
-from django.contrib.auth import get_user_model
+from tests.auth import login_admin
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -9,7 +9,7 @@ from .test_source_models import valid_smb_source
 
 class BulkLogAnalysisTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user('bulk-user', password='fixture'))
+        login_admin(self.client, username='bulk-user')
         self.profile = ComputerAnalysisProfile.objects.create(name='bulk', analysis_items=['resource'])
 
     def log(self, index, prefix='match'):

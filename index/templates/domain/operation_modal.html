@@ -1,5 +1,6 @@
+{% if can_administer %}
 {% load static %}
-{% if can_manage_domain %}
+{% if can_administer and can_manage_domain %}
 <section class="card surface-card mb-3" data-domain-operation-controls>
     <div class="card-body d-flex flex-column flex-lg-row gap-3 align-items-lg-end justify-content-between">
         <div>
@@ -13,7 +14,7 @@
                     {% for action_value, action_label in domain_operation_actions %}<option value="{{ action_value }}">{{ action_label }}</option>{% endfor %}
                 </select>
             </div>
-            <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#domainOperationModal">确认操作</button>
+            {% if can_administer %}<button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#domainOperationModal">确认操作</button>{% endif %}
         </div>
     </div>
 </section>
@@ -60,4 +61,5 @@
     </div></div>
 </div>
 <script src="{% static 'app/js/domain/operation_modal.js' %}"></script>
+{% endif %}
 {% endif %}

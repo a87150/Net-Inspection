@@ -5,12 +5,14 @@ from django.test import TestCase
 from django.urls import reverse
 
 from net.models import People
+from tests.auth import login_reader
 
 
 class PeopleStatisticsPageTests(TestCase):
     as_of = date(2026, 9, 2)
 
     def setUp(self):
+        login_reader(self.client)
         People.objects.bulk_create([
             People(
                 employee_id='P-001', name='甲', department='运维部',

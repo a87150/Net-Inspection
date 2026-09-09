@@ -4,6 +4,7 @@ from io import StringIO
 
 from django.test import TestCase
 from django.urls import reverse
+from tests.auth import login_reader
 
 from index.common.table_options import build_field_options
 from index.common.table_registry import get_table_definition
@@ -13,6 +14,7 @@ from net.inspections.queue import enqueue_task
 
 class PublicURLTests(TestCase):
     def setUp(self):
+        login_reader(self.client)
         self.raw = 'https://private-user:private-pass@device.demo.invalid:9443/inspection?token=query-secret&x=opaque-secret#fragment-secret'
         self.safe = 'https://device.demo.invalid:9443/inspection'
         self.assets = [('servers', Server.objects.create(ip='192.0.2.70', name='Fixture', api_url=self.raw)),

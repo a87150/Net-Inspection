@@ -1,3 +1,4 @@
+{% if can_administer %}
 {% load extras %}
 {% if user.is_authenticated %}
 <div class="d-flex flex-wrap gap-2 mb-3">
@@ -27,4 +28,5 @@
   <div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">取消</button>{% if bulk_profile %}<button class="btn btn-primary" type="submit" form="bulk-analysis-form"{% if not bulk_count %} disabled{% elif bulk_mode == 'latest' and bulk_batch_active %} disabled{% endif %}>开始批量分析</button>{% endif %}</div>
  </div></div>
 </div>
+{% endif %}
 {% endif %}

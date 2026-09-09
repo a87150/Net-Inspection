@@ -4,6 +4,7 @@ from io import BytesIO, StringIO
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
+from tests.auth import login_admin
 
 from net.data_exchange.inventory_csv import export_csv, export_xlsx_template, import_file
 from net.data_exchange.xlsx import read_xlsx_rows
@@ -95,6 +96,7 @@ class DeviceImportTemplateTests(TestCase):
                 )
                 self.assertEqual(xlsx_rows, csv_rows)
     def test_import_dialog_warns_that_demonstration_rows_must_be_replaced(self):
+        login_admin(self.client)
         response = self.client.get(reverse('asset_list', args=['networks']))
 
         self.assertContains(response, '请删除或替换模板中的演示数据行')

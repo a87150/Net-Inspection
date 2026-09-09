@@ -8,6 +8,7 @@ from django.core.management import call_command
 
 from django.test import TestCase
 from django.urls import reverse
+from tests.auth import login_reader
 
 from index.common.table_registry import get_table_definition
 from net.models import Computer, Network_Device, People, Server
@@ -18,6 +19,7 @@ from net.data_exchange.xlsx import build_xlsx
 
 class AssetInventoryFieldTests(TestCase):
     def test_asset_table_displays_capacity_values_with_gb_units(self):
+        login_reader(self.client)
         Computer.objects.create(
             computer_name='PC-CAPACITY', memory_total_gb=32, disk_total_gb=512,
         )
@@ -74,6 +76,7 @@ class AssetInventoryFieldTests(TestCase):
         )
 
     def test_pc_table_contract_uses_pc_title_with_existing_key_and_url(self):
+        login_reader(self.client)
         definition = get_table_definition('computers')
         response = self.client.get(reverse('item_list', args=[definition.key]))
 
@@ -205,6 +208,7 @@ class AssetInventoryImportExportTests(TestCase):
         self.assertEqual(rows[0]['序列号'], server.serial_number)
 
     def test_filtered_pc_export_omits_login_account_header_and_data(self):
+        login_reader(self.client)
         Computer.objects.create(
             computer_name='PC-FILTERED', login_account='EXAMPLE\\filtered-user',
         )

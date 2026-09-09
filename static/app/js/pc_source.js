@@ -29,6 +29,7 @@ function initSourceForm(form) {
   });
   timeMode.addEventListener('change', update);
   authMode?.addEventListener('change', update);
+  form.addEventListener('modal-draft-restored', update);
   form.addEventListener('invalid', (event) => {
     const details = event.target.closest('[data-source-advanced]');
     if (details) details.open = true;
@@ -36,12 +37,23 @@ function initSourceForm(form) {
   update();
 }
 if (typeof module !== 'undefined') module.exports = {initSourceForm};
-document.querySelectorAll('[data-pc-source-form]').forEach(initSourceForm);
-document.querySelectorAll('[data-pc-profile-switch]').forEach((select) => {
+const boundSourceControls = new WeakSet();
+function bindSourceForms(root) {
+root.querySelectorAll('[data-pc-source-form]').forEach(form => {
+  if (boundSourceControls.has(form)) return;
+  boundSourceControls.add(form);
+  initSourceForm(form);
+});
+root.querySelectorAll('[data-pc-profile-switch]').forEach((select) => {
+  if (boundSourceControls.has(select)) return;
+  boundSourceControls.add(select);
   select.addEventListener('change', () => {
     const url = new URL(window.location.href);
     url.searchParams.set('task_profile', select.value);
     url.searchParams.set('task_modal', 'profile');
-    window.location.assign(url.toString());
+    window.AppModalTransport?.navigate(select.closest('.modal'), url.toString());
   });
 });
+}
+if (typeof window !== 'undefined') window.AppPCSource = {bind: bindSourceForms};
+bindSourceForms(document);

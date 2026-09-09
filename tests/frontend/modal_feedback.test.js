@@ -51,6 +51,26 @@ function fixture({autoOpen = true} = {}) {
     return {document, modal, body, messages};
 }
 
+test('draft capture excludes server-owned hidden configuration identity', () => {
+    const draft = feedback.captureFormDraft({elements: [
+        {name: 'profile_id', type: 'hidden', value: ''},
+        {name: 'next', type: 'hidden', value: '/old-page/'},
+        {name: 'name', type: 'text', value: 'PC analysis'},
+    ]});
+    assert.deepEqual(draft.map(entry => entry.name), ['name']);
+});
+
+test('legacy create draft cannot clear the newly saved profile id on reopening', () => {
+    const identity = {name: 'profile_id', type: 'hidden', value: 'saved-profile-id'};
+    const name = {name: 'name', type: 'text', value: 'PC analysis'};
+    feedback.restoreFormDraft({elements: [identity, name]}, [
+        {name: 'profile_id', type: 'hidden', value: ''},
+        {name: 'name', type: 'text', value: 'Edited analysis'},
+    ]);
+    assert.equal(identity.value, 'saved-profile-id');
+    assert.equal(name.value, 'Edited analysis');
+});
+
 test('moves page flash messages into the automatically reopened modal', () => {
     assert.equal(typeof feedback.installModalFeedback, 'function');
     const view = fixture();

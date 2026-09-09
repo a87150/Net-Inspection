@@ -1,3 +1,4 @@
+{% if can_administer %}
 <section class="tab-pane fade modal-section import-config-section {% if tab.active %}show active{% endif %}" id="people-panel-{{ tab.provider }}" role="tabpanel" aria-labelledby="people-tab-{{ tab.provider }}">
     <h3 class="h6">{{ tab.label }} API 设置</h3>
     <p class="text-secondary small">按顺序完成三个阶段。只有核对预览并确认导入后才会修改人员数据。</p>
@@ -38,3 +39,4 @@
     </form>
     {% endif %}
 </section>
+{% endif %}

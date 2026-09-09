@@ -1,9 +1,9 @@
-r"""Launch the persistent, loopback-only demo without touching db.sqlite3.
+r"""Launch the loopback Web and Worker using the shared root .env configuration.
 
 Windows: .\.venv\Scripts\python.exe -m deploy.demo
 Linux:   ./.venv/bin/python -m deploy.demo
 Starts the task Worker by default. Use --no-worker for an offline display-only demo.
-This is not a production DB.
+Without an explicit backend, use the isolated SQLite demo. MySQL/MariaDB is never seeded.
 """
 import argparse
 import os
@@ -15,7 +15,22 @@ import sys
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def configure_environment(runtime):
+    defaults = {
+        'DJANGO_SETTINGS_MODULE': 'net.settings', 'DJANGO_DEBUG': 'false',
+        'DJANGO_ALLOWED_HOSTS': '127.0.0.1,localhost',
+        'DJANGO_SECRET_KEY': 'DEMO-ONLY-NOT-FOR-PRODUCTION-LOCAL-ISOLATED-DATABASE',
+        'DB_ENGINE': 'sqlite', 'DJANGO_STATIC_ROOT': str(runtime / 'staticfiles'),
+    }
+    for name, value in defaults.items():
+        os.environ.setdefault(name, value)
+    if os.environ['DB_ENGINE'].lower() == 'sqlite':
+        os.environ['DJANGO_SQLITE_PATH'] = str(runtime / 'demo.sqlite3')
+
+
 def prepare(runtime):
+    from net.infrastructure.environment import load_environment
+    load_environment()
     from net import require_runtime
     require_runtime()
     runtime = runtime.resolve()
@@ -36,22 +51,18 @@ def prepare(runtime):
             pass
         os.environ['PC_LOG_SOURCE_ENCRYPTION_KEY'] = key_path.read_text(encoding='ascii').strip()
     # Deliberately override inherited production/old-database settings.
-    os.environ.update({
-        'DJANGO_SETTINGS_MODULE': 'net.settings', 'DJANGO_DEBUG': 'false',
-        'DJANGO_ALLOWED_HOSTS': '127.0.0.1,localhost',
-        'DJANGO_SECRET_KEY': 'DEMO-ONLY-NOT-FOR-PRODUCTION-LOCAL-ISOLATED-DATABASE',
-        'DB_ENGINE': 'sqlite', 'DJANGO_SQLITE_PATH': str(runtime / 'demo.sqlite3'),
-        'DJANGO_STATIC_ROOT': str(runtime / 'staticfiles'),
-    })
+    configure_environment(runtime)
     import django
     django.setup()
     from django.core.management import call_command
     call_command('migrate', interactive=False, verbosity=0)
-    if not (runtime / '.seeded').exists():
+    if os.environ['DB_ENGINE'].lower() == 'sqlite' and not (runtime / '.seeded').exists():
         call_command('seed_demo_data')
         (runtime / '.seeded').write_text('Seed complete; subsequent starts preserve edits.\n', encoding='utf-8')
     call_command('collectstatic', interactive=False, verbosity=0)
-    print(f'Demo database: {runtime / "demo.sqlite3"}', flush=True)
+    from django.conf import settings
+    database = settings.DATABASES['default']
+    print(f'Database: {database["ENGINE"]} / {database["NAME"]}', flush=True)
     print(f'DEBUG=False; static root: {runtime / "staticfiles"}', flush=True)
 
 

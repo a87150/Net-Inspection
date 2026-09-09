@@ -45,7 +45,7 @@ class MatchingModeTests(TestCase):
         self.assertEqual(reopened['matching_mode'].value(), 'people')
 
     def test_left_join_page_and_export_keep_missing_person_and_filter(self):
-        from django.contrib.auth import get_user_model
+        from tests.auth import login_admin
         from django.urls import reverse
         from net.inspections.queue import enqueue_task, claim_next_task, finish_task
         from net.devices.pc.executor import execute_computer_target
@@ -59,12 +59,14 @@ class MatchingModeTests(TestCase):
         claim_next_task('join-worker', 60)
         execute_computer_target(task.target_runs.get(), worker_id='join-worker')
         finish_task(task.pk, 'join-worker')
-        self.client.force_login(get_user_model().objects.create_user(username='join-user'))
+        login_admin(self.client, username='join-user')
         response = self.client.get(reverse('computer_analysis_list'))
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['latest_analysis_statistics']['total'], 2)
+        self.assertContains(response, 'name="matching_mode"')
+        response = self.client.get(reverse('task_detail', args=[task.pk]))
         self.assertEqual(response.context['page_obj'].paginator.count, 2)
         self.assertContains(response, '未匹配日志')
-        self.assertContains(response, 'name="matching_mode"')
         exported = self.client.get(reverse('table_export', args=['computer_inspections']))
         self.assertEqual(exported.status_code, 200)
         self.assertIn('M2', exported.content.decode('utf-8-sig'))

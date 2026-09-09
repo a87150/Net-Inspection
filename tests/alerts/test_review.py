@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
@@ -10,6 +11,96 @@ from net.models import (
     AlertChannel, AlertDelivery, AlertEvent, AlertPolicy, AlertState,
     ComputerAnalysisProfile, InspectionProfile, TaskRun, TaskTargetRun,
 )
+
+
+class SummaryDeliveryLeaseTests(TestCase):
+    def setUp(self):
+        from net.alerts.service import process_target_findings
+        from net.alerts.task_summaries import process_task_summary
+
+        profile = InspectionProfile.objects.create(name='summary leases', device_type='server')
+        self.channel = AlertChannel.objects.create(name='lease channel', channel_type='feishu')
+        policy = AlertPolicy.objects.create(name='lease policy', inspection_profile=profile, mode='override')
+        policy.channels.add(self.channel)
+        now = timezone.now()
+        task = TaskRun.objects.create(
+            task_type='inspection', inspection_profile=profile, status='success',
+            profile_snapshot={'id': str(profile.pk), 'device_type': 'server'},
+            finished_at=now, progress=100, total_targets=1,
+            completed_targets=1, successful_targets=1,
+        )
+        target = TaskTargetRun.objects.create(
+            task=task, target_type='server', target_id='lease-server',
+            status='success', finished_at=now,
+        )
+        self.audit = process_target_findings(target, [{
+            'key': 'cpu', 'severity': 'warning', 'title': 'CPU', 'state': 'abnormal',
+        }])[0]
+        TaskTargetRun.objects.filter(pk=target.pk).update(alert_processed_at=now)
+        self.event = process_task_summary(task)
+        self.assertIsNotNone(self.event)
+        self.assertEqual(self.event.event_type, 'summary')
+        self.delivery = self.event.deliveries.get()
+
+    def test_active_lease_is_exclusive_and_expired_lease_fences_old_result(self):
+        from net.alerts.base import DeliveryResult
+        from net.alerts.service import _claim_deliveries, _finish_delivery
+
+        now = timezone.now()
+        delivery_id, old_token = _claim_deliveries(event=self.event, now=now)[0]
+        self.delivery.refresh_from_db()
+        self.assertEqual(self.delivery.status, 'sending')
+        self.assertEqual(self.delivery.attempt_count, 1)
+        self.assertEqual(_claim_deliveries(event=self.event, now=now), [])
+        new_id, new_token = _claim_deliveries(
+            event=self.event, now=self.delivery.lease_expires_at + timedelta(seconds=1),
+        )[0]
+        self.assertEqual(new_id, delivery_id)
+        self.assertNotEqual(new_token, old_token)
+        _finish_delivery(delivery_id, old_token, DeliveryResult(True, 'stale accepted', False))
+        self.delivery.refresh_from_db()
+        self.assertEqual(self.delivery.status, 'sending')
+        self.assertEqual(self.delivery.lease_token, new_token)
+        self.assertEqual(self.delivery.attempt_count, 2)
+        self.assertIsNone(self.delivery.delivered_at)
+        _finish_delivery(new_id, new_token, DeliveryResult(True, 'accepted', False))
+        self.delivery.refresh_from_db()
+        self.event.refresh_from_db()
+        self.assertEqual(self.delivery.status, 'sent')
+        self.assertEqual(self.event.status, 'delivered')
+        self.assertEqual(self.delivery.response_summary, 'accepted')
+        self.assertEqual(_claim_deliveries(event=self.event), [])
+
+    def test_expired_final_attempt_fails_without_another_claim(self):
+        from net.alerts.service import _claim_deliveries
+
+        now = timezone.now()
+        for attempt in range(self.delivery.max_attempts):
+            self.assertEqual(len(_claim_deliveries(event=self.event, now=now)), 1)
+            self.delivery.refresh_from_db()
+            self.assertEqual(self.delivery.attempt_count, attempt + 1)
+            now = self.delivery.lease_expires_at + timedelta(seconds=1)
+        self.assertEqual(_claim_deliveries(event=self.event, now=now), [])
+        self.delivery.refresh_from_db()
+        self.event.refresh_from_db()
+        self.assertEqual(self.delivery.status, 'failed')
+        self.assertEqual(self.event.status, 'failed')
+        self.assertEqual(self.delivery.attempt_count, self.delivery.max_attempts)
+        self.assertIsNone(self.delivery.lease_expires_at)
+        self.assertEqual(self.delivery.lease_token, '')
+
+    def test_claim_skips_legacy_device_delivery_even_when_explicitly_requested(self):
+        from net.alerts.service import _claim_deliveries
+
+        legacy = AlertDelivery.objects.create(event=self.audit, channel=self.channel)
+        self.assertEqual(_claim_deliveries(event=self.audit), [])
+        claimed = _claim_deliveries(limit=100)
+        self.assertEqual([delivery_id for delivery_id, _ in claimed], [self.delivery.pk])
+        legacy.refresh_from_db()
+        self.audit.refresh_from_db()
+        self.assertEqual(legacy.status, 'pending')
+        self.assertEqual(legacy.attempt_count, 0)
+        self.assertEqual(self.audit.status, 'recorded')
 
 
 class WebhookCredentialTests(TestCase):
