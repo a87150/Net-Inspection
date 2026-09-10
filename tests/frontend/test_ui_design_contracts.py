@@ -202,10 +202,11 @@ class SharedInterfaceContractTests(TestCase):
         modal = (template_root / 'devices' / 'collection_template_modal.html').read_text(encoding='utf-8')
 
         self.assertIn('collection-template-workspace', body)
-        self.assertIn('interactive-list', body)
-        self.assertIn('interactive-list__item', body)
-        self.assertIn('interactive-list__meta', body)
-        self.assertIn('status-badge', body)
+        self.assertIn('collection-template-picker', body)
+        self.assertIn('name="edit"', body)
+        self.assertIn('class="form-select"', body)
+        self.assertIn('打开模板', body)
+        self.assertNotIn('class="interactive-list"', body)
         self.assertIn('modal-dialog modal-xl modal-dialog-scrollable modal-shell', modal)
         self.assertIn('modal-footer modal-footer--sticky', modal)
         self.assertIn('id="collectionSettingsForm"', body)
@@ -253,6 +254,16 @@ class SharedInterfaceContractTests(TestCase):
         ):
             with self.subTest(selector=selector):
                 self.assertIn(selector, css)
+
+    def test_shared_buttons_center_text_for_links_and_native_buttons(self):
+        css = Path(finders.find('app/css/foundation.css')).read_text(encoding='utf-8')
+        rule = re.search(r'(?m)^\.btn\s*\{(?P<body>[^}]*)\}', css)
+
+        self.assertIsNotNone(rule)
+        self.assertIn('display: inline-flex', rule.group('body'))
+        self.assertIn('align-items: center', rule.group('body'))
+        self.assertIn('justify-content: center', rule.group('body'))
+        self.assertIn('line-height: 1.2', rule.group('body'))
 
     def test_remaining_standalone_content_cards_use_the_shared_surface(self):
         template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'

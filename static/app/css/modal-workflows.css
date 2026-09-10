@@ -224,6 +224,24 @@
     padding: 1rem;
 }
 
+.collection-template-picker {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: .75rem;
+}
+
+.collection-template-picker .form-label {
+    margin-bottom: .35rem;
+    color: var(--color-text-muted);
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.collection-template-picker .btn {
+    min-height: 2.65rem;
+}
+
 .collection-template-presets {
     display: flex;
     align-items: center;
@@ -410,4 +428,10 @@
         align-items: stretch;
         flex-direction: column;
     }
+
+    .collection-template-picker {
+        grid-template-columns: 1fr;
+    }
+
+    .collection-template-picker .btn { width: 100%; }
 }

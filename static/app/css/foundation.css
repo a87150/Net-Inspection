@@ -556,8 +556,12 @@ th[aria-sort="descending"] .table-sort-link::after { color: var(--color-primary)
 }
 
 .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border-radius: var(--radius-sm);
     font-weight: 600;
+    line-height: 1.2;
 }
 
 .btn-primary {
