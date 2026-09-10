@@ -151,6 +151,124 @@ test('selected configuration download uses raw file for one device and zip for m
         'https://example.test/assets/networks/configurations.zip?target_ids=first-id%2Csecond-id',
     );
 });
+test('device bulk selection selects and inverts the current page only', () => {
+    assert.equal(typeof controller.updateTargetSelection, 'function');
+    const targets = [
+        {checked: false, disabled: false},
+        {checked: true, disabled: false},
+        {checked: false, disabled: true},
+    ];
+
+    controller.updateTargetSelection(targets, 'all');
+    assert.deepEqual(targets.map((target) => target.checked), [true, true, false]);
+
+    controller.updateTargetSelection(targets, 'invert');
+    assert.deepEqual(targets.map((target) => target.checked), [false, false, false]);
+});
+
+test('failed configuration download stays on the page and returns inline feedback', async () => {
+    assert.equal(typeof controller.downloadConfiguration, 'function');
+    let assigned = false;
+    const browserWindow = {
+        fetch: async () => ({
+            ok: false,
+            status: 409,
+            headers: {get: () => 'text/plain; charset=utf-8'},
+            text: async () => '所选设备没有可下载的配置。',
+        }),
+        location: {assign() { assigned = true; }},
+    };
+
+    const result = await controller.downloadConfiguration(
+        'https://example.test/assets/networks/configurations.zip?target_ids=one',
+        browserWindow,
+    );
+
+    assert.deepEqual(result, {
+        ok: false,
+        message: '所选设备没有可下载的配置。',
+    });
+    assert.equal(assigned, false);
+});
+
+test('configuration download network errors become inline feedback', async () => {
+    const result = await controller.downloadConfiguration('/configurations.zip', {
+        fetch: async () => { throw new Error('offline'); },
+    });
+
+    assert.deepEqual(result, {ok: false, message: '配置下载失败，请稍后重试。'});
+});
+
+test('configuration download handler renders a same-layer error without navigation', async () => {
+    let prevented = false;
+    const attributes = new Map([['aria-disabled', 'false']]);
+    const link = {
+        href: '/assets/networks/configurations.zip?target_ids=one',
+        getAttribute(name) { return attributes.get(name); },
+        setAttribute(name, value) { attributes.set(name, value); },
+        removeAttribute(name) { attributes.delete(name); },
+    };
+    const feedback = {hidden: true, textContent: ''};
+    const browserWindow = {
+        fetch: async () => ({
+            ok: false,
+            status: 404,
+            headers: {get: () => 'text/plain'},
+            text: async () => '所选设备尚无配置。',
+        }),
+    };
+
+    const result = await controller.handleConfigurationDownload(
+        {preventDefault() { prevented = true; }},
+        link,
+        feedback,
+        browserWindow,
+    );
+
+    assert.equal(prevented, true);
+    assert.equal(feedback.hidden, false);
+    assert.equal(feedback.textContent, '所选设备尚无配置。');
+    assert.deepEqual(result, {ok: false, message: '所选设备尚无配置。'});
+    assert.equal(attributes.has('aria-busy'), false);
+});
+
+test('successful configuration request downloads the returned attachment', async () => {
+    const blob = {type: 'application/zip'};
+    const anchor = {
+        clicked: false,
+        removed: false,
+        click() { this.clicked = true; },
+        remove() { this.removed = true; },
+    };
+    let revoked = '';
+    const browserWindow = {
+        fetch: async () => ({
+            ok: true,
+            headers: {get(name) {
+                return name === 'content-disposition'
+                    ? "attachment; filename*=UTF-8''network-configurations.zip"
+                    : 'application/zip';
+            }},
+            blob: async () => blob,
+        }),
+        URL: {
+            createObjectURL(value) { assert.equal(value, blob); return 'blob:download'; },
+            revokeObjectURL(value) { revoked = value; },
+        },
+        document: {
+            createElement() { return anchor; },
+            body: {appendChild(value) { assert.equal(value, anchor); }},
+        },
+    };
+
+    const result = await controller.downloadConfiguration('/configurations.zip', browserWindow);
+
+    assert.deepEqual(result, {ok: true, message: ''});
+    assert.equal(anchor.download, 'network-configurations.zip');
+    assert.equal(anchor.clicked, true);
+    assert.equal(anchor.removed, true);
+    assert.equal(revoked, 'blob:download');
+});
 
 test('applies intersected stored preferences without clearing filter values', () => {
     assert.equal(typeof controller.initializeWorkspace, 'function');

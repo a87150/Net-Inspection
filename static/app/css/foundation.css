@@ -933,3 +933,15 @@ details > summary {
         animation-iteration-count: 1 !important;
     }
 }
+
+.table-selection-column {
+    width: 3rem;
+    min-width: 3rem;
+    text-align: center;
+}
+
+.table-action-feedback {
+    flex-basis: 100%;
+    padding: .6rem .8rem;
+    font-size: .82rem;
+}

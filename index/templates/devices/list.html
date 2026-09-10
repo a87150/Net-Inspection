@@ -37,14 +37,15 @@
             <table class="table data-table table-hover align-middle mb-0">
 {% include 'common/table_caption.html' %}
                 <thead><tr>
+                    {% if can_administer and task_allow_target_selection %}<th scope="col" class="table-selection-column" data-device-selection-column><span class="visually-hidden">选择目标</span></th>{% endif %}
                     {% include 'common/table_sort_headers.html' %}
-                    {% if can_administer and task_allow_target_selection %}<th scope="col"><span class="visually-hidden">选择目标</span></th>{% endif %}<th scope="col" class="table-actions-column table-actions-cell">操作</th>
+                    <th scope="col" class="table-actions-column table-actions-cell">操作</th>
                 </tr></thead>
                 <tbody>
                 {% for obj in page_obj %}
                 <tr>
+                    {% if can_administer and task_allow_target_selection %}<td class="table-selection-column" data-device-selection-column><input class="form-check-input" type="checkbox" name="target_ids" value="{{ obj.pk }}" form="manualTaskForm" aria-label="选择 {{ obj }}" data-device-selection-target{% if configuration_selection_path %} data-configuration-target{% endif %}{% if obj.pk|stringformat:'s' in task_selected_ids %} checked{% endif %}></td>{% endif %}
                     {% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ obj|get_attr:field.source|format_table_field:field }}</td>{% endfor %}
-                    {% if can_administer and task_allow_target_selection %}<td><input class="form-check-input" type="checkbox" name="target_ids" value="{{ obj.pk }}" form="manualTaskForm" aria-label="选择 {{ obj }}"{% if configuration_selection_path %} data-configuration-target{% endif %}{% if obj.pk|stringformat:'s' in task_selected_ids %} checked{% endif %}></td>{% endif %}
                     <td class="text-end table-actions-cell"><div class="d-inline-flex gap-2 table-row-actions">
                         <a href="{% url 'asset_detail' item_key obj.pk %}" class="btn btn-outline-dark btn-sm">查看详情</a>{% if can_administer and item_key == 'networks' or can_administer and item_key == 'servers' or can_administer and item_key == 'monitors' %}<a href="{% url 'device_collection_settings' item_key obj.pk %}" class="btn btn-outline-primary btn-sm" data-modal-load="collectionTemplateModal">巡检设置</a> <a href="{% url 'asset_edit' item_key obj.pk %}" class="btn btn-outline-secondary btn-sm">修改配置</a>{% endif %}
                         {% if can_administer and task_allow_target_selection %}{% if can_administer %}<a class="btn btn-outline-primary btn-sm" href="?task_modal=run&amp;task_single_target={{ obj.pk }}" data-single-device-run>{{ task_action_label }}</a>{% endif %}{% endif %}

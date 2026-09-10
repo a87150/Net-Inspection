@@ -254,6 +254,79 @@
         if (state.disabled) button.setAttribute('tabindex', '-1'); else button.removeAttribute('tabindex');
     }
 
+    function updateTargetSelection(targets, action) {
+        targets.filter((target) => !target.disabled).forEach((target) => {
+            target.checked = action === 'invert' ? !target.checked : action === 'all';
+        });
+    }
+
+    function configurationFilename(disposition) {
+        const encoded = String(disposition || '').match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+        if (encoded) {
+            try {
+                return decodeURIComponent(encoded);
+            } catch (_error) {
+                return encoded;
+            }
+        }
+        return String(disposition || '').match(/filename="?([^";]+)"?/i)?.[1] || 'device-configurations.zip';
+    }
+
+    async function downloadConfiguration(href, browserWindow) {
+        try {
+            const response = await browserWindow.fetch(href, {
+                credentials: 'same-origin',
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+            });
+            if (!response.ok) {
+                const contentType = String(response.headers?.get?.('content-type') || '').toLowerCase();
+                const detail = contentType.includes('text/plain') ? String(await response.text()).trim() : '';
+                return {
+                    ok: false,
+                    message: detail || `配置下载失败（HTTP ${response.status}）。`,
+                };
+            }
+            const disposition = response.headers?.get?.('content-disposition') || '';
+            if (!/attachment/i.test(disposition)) {
+                return {ok: false, message: '服务器未返回可下载的配置文件。'};
+            }
+            const blob = await response.blob();
+            const objectUrl = browserWindow.URL.createObjectURL(blob);
+            const anchor = browserWindow.document.createElement('a');
+            anchor.href = objectUrl;
+            anchor.download = configurationFilename(disposition);
+            anchor.hidden = true;
+            browserWindow.document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            browserWindow.URL.revokeObjectURL(objectUrl);
+            return {ok: true, message: ''};
+        } catch (_error) {
+            return {ok: false, message: '配置下载失败，请稍后重试。'};
+        }
+    }
+
+    function renderConfigurationFeedback(feedback, message) {
+        if (!feedback) return;
+        feedback.textContent = message || '';
+        feedback.hidden = !message;
+    }
+
+    async function handleConfigurationDownload(event, link, feedback, browserWindow) {
+        if (link.getAttribute('aria-disabled') === 'true') {
+            event.preventDefault();
+            return {ok: false, message: ''};
+        }
+        if (typeof browserWindow?.fetch !== 'function') return null;
+        event.preventDefault();
+        renderConfigurationFeedback(feedback, '');
+        link.setAttribute('aria-busy', 'true');
+        const result = await downloadConfiguration(link.href, browserWindow);
+        link.removeAttribute('aria-busy');
+        if (!result.ok) renderConfigurationFeedback(feedback, result.message);
+        return result;
+    }
+
     function initializeWorkspace(workspace, storage, location = null) {
         const tableKey = workspace.dataset.tableKey;
         if (!tableKey) return;
@@ -269,6 +342,10 @@
             exportLinks: Array.from(workspace.querySelectorAll('[data-filtered-export]')),
             configurationExport: workspace.querySelector('[data-selected-config-export]'),
             configurationTargets: Array.from(workspace.querySelectorAll('[data-configuration-target]')),
+            selectionTargets: Array.from(workspace.querySelectorAll('[data-device-selection-target]')),
+            selectionAll: workspace.querySelector('[data-device-select-all]'),
+            selectionInvert: workspace.querySelector('[data-device-select-invert]'),
+            configurationFeedback: workspace.querySelector('[data-configuration-export-feedback]'),
             suggestionSelects: Array.from(workspace.querySelectorAll('[data-filter-suggestion-select]')),
             activeFilterSources: Array.from(workspace.querySelectorAll('[data-active-filter-source]')),
             activeFilterList: workspace.querySelector('[data-active-filter-list]'),
@@ -305,12 +382,26 @@
         renderActiveFilterChips(elements, workspace.ownerDocument, location);
         updateConfigurationDownload(elements.configurationExport, elements.configurationTargets);
         elements.configurationTargets.forEach((target) => {
-            target.addEventListener('change', () => updateConfigurationDownload(
-                elements.configurationExport, elements.configurationTargets,
-            ));
+            target.addEventListener('change', () => {
+                updateConfigurationDownload(elements.configurationExport, elements.configurationTargets);
+                renderConfigurationFeedback(elements.configurationFeedback, '');
+            });
         });
-        elements.configurationExport?.addEventListener('click', (event) => {
-            if (elements.configurationExport.getAttribute('aria-disabled') === 'true') event.preventDefault();
+        const applyTargetSelection = (action) => {
+            updateTargetSelection(elements.selectionTargets, action);
+            updateConfigurationDownload(elements.configurationExport, elements.configurationTargets);
+            renderConfigurationFeedback(elements.configurationFeedback, '');
+        };
+        elements.selectionAll?.addEventListener('click', () => applyTargetSelection('all'));
+        elements.selectionInvert?.addEventListener('click', () => applyTargetSelection('invert'));
+        elements.configurationExport?.addEventListener('click', async (event) => {
+            const browserWindow = workspace.ownerDocument?.defaultView;
+            await handleConfigurationDownload(
+                event,
+                elements.configurationExport,
+                elements.configurationFeedback,
+                browserWindow,
+            );
         });
         if (storedPreferences) {
             replacePageSizeQuery(location, elements.pageSize, preferences.pageSize);
@@ -467,5 +558,5 @@
         bootstrapApi.Modal.getOrCreateInstance(modalElement).show();
     }
 
-    return {activeFilterDescriptors, bindPartialTableNavigation, clearActiveFilterSource, configurationDownloadHref, configurationDownloadState, initializeWorkspace, initializeAll, openAutoOpenImportModal, refreshTableWorkspaces, renderActiveFilterChips, storageKey};
+    return {activeFilterDescriptors, bindPartialTableNavigation, clearActiveFilterSource, configurationDownloadHref, configurationDownloadState, downloadConfiguration, handleConfigurationDownload, initializeWorkspace, initializeAll, openAutoOpenImportModal, refreshTableWorkspaces, renderActiveFilterChips, storageKey, updateTargetSelection};
 }));

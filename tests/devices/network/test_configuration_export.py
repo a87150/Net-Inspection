@@ -485,6 +485,26 @@ class ConfigurationTests(TestCase):
         self.assertNotContains(server_page, 'data-selected-config-export')
         self.assertEqual(self.client.get('/assets/servers/configurations.zip').status_code, 404)
 
+    def test_device_selection_is_first_column_with_current_page_bulk_actions(self):
+        result = self.client.get('/assets/networks/')
+        html = result.content.decode()
+        header = html[html.index('<thead'):html.index('</thead>')]
+
+        self.assertContains(result, 'data-device-selection-column')
+        self.assertContains(result, 'data-device-select-all')
+        self.assertContains(result, 'data-device-select-invert')
+        self.assertContains(result, 'data-configuration-export-feedback')
+        self.assertLess(
+            header.index('data-device-selection-column'),
+            header.index('data-column-key'),
+        )
+        self.assertLess(html.index('data-device-select-all'), html.index('data-selected-config-export'))
+        for kind in ('servers', 'monitors'):
+            with self.subTest(kind=kind):
+                page = self.client.get(f'/assets/{kind}/')
+                self.assertContains(page, 'data-device-selection-column')
+                self.assertContains(page, 'data-device-select-all')
+
     def test_unknown_network_vendor_never_opens_a_config_connection(self):
         self.device.vendor = 'notcisco'
         result = collect_network_ssh(self.device, 1, ['config_info'])
