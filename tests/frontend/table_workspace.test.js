@@ -130,6 +130,28 @@ function memoryStorage(initialValue = null) {
     };
 }
 
+test('selected configuration download uses raw file for one device and zip for many', () => {
+    assert.equal(typeof controller.configurationDownloadHref, 'function');
+    const zip = 'https://example.test/assets/networks/configurations.zip';
+
+    assert.equal(typeof controller.configurationDownloadState, 'function');
+    assert.deepEqual(controller.configurationDownloadState(zip, []), {
+        href: '',
+        disabled: true,
+        label: '请先选择设备',
+    });
+
+    assert.equal(controller.configurationDownloadHref(zip, []), '');
+    assert.equal(
+        controller.configurationDownloadHref(zip, ['first-id']),
+        'https://example.test/assets/networks/configurations.zip?target_ids=first-id',
+    );
+    assert.equal(
+        controller.configurationDownloadHref(zip, ['first-id', 'second-id']),
+        'https://example.test/assets/networks/configurations.zip?target_ids=first-id%2Csecond-id',
+    );
+});
+
 test('applies intersected stored preferences without clearing filter values', () => {
     assert.equal(typeof controller.initializeWorkspace, 'function');
     const fixture = workspaceFixture();

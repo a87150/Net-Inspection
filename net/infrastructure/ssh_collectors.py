@@ -8,6 +8,7 @@ from net.infrastructure.sanitization import sanitize
 from net.inspections.selection import LINUX_FIELDS, NETWORK_FIELDS, selected_fields
 from net.data_exchange.adapters import MAX_CONFIG_BYTES
 from net.devices.network.configuration import NETWORK_CONFIG, BAD_OUTPUT, network_vendor, validate_native
+from net.devices.network.templates import execute_template_commands, validate_collection_settings
 
 
 LINUX_COMMANDS = {
@@ -145,6 +146,7 @@ def _parse_linux(raw):
 
 
 def collect_linux_ssh(server, timeout=10, selected_items=None):
+    template_data = {}
     timer = Timer()
     try:
         with timer:
@@ -269,8 +271,20 @@ def collect_network_ssh(device, timeout=12, selected_items=None):
     config_vendor = network_vendor(vendor)
     config = {'status': 'unsupported', 'message': '不支持此厂商的只读配置采集。'} if wants_config else None
     raw = {}
+    try:
+        template_settings = validate_collection_settings(getattr(device, 'collection_settings', {}) or {})
+    except Exception:
+        template_settings = {}
+    native_template_commands = {}
+    for _item, _command in zip(NETWORK_FIELDS, NETWORK_COMMANDS[vendor_key]):
+        if _item != 'config_info':
+            native_template_commands.setdefault(_item, []).append(_command)
+    template_items = {item for item, commands in template_settings.get('commands', {}).items() if item in template_settings.get('parsers', {}) or list(commands) != native_template_commands.get(item)}
+    # Only an exact per-item native command set keeps the established parser.
+
     if wants_config and not config_vendor and set(selected_items) == {'config_info'}:
         return CollectionResult(True, 'failed', config['message'], data={'config_info': config}, raw={'config_info': config})
+    template_data = {}
     timer = Timer()
     try:
         with timer:
@@ -297,6 +311,8 @@ def collect_network_ssh(device, timeout=12, selected_items=None):
                 for item, command in zip(NETWORK_FIELDS, NETWORK_COMMANDS[vendor_key]):
                     if selected_items is not None and item not in selected_items:
                         continue
+                    if item in template_items:
+                        continue
                     output = client.send_command(
                         command, read_timeout=timeout,
                         expect_string=r'(?m)^' + re.escape(prompt) + r'\s*$',
@@ -310,10 +326,17 @@ def collect_network_ssh(device, timeout=12, selected_items=None):
                     else:
                         successful_items.add(item)
                         raw[command] = body
+                if template_items:
+                    active_template = dict(template_settings)
+                    active_template['commands'] = {name: commands for name, commands in template_settings['commands'].items() if name in template_items and (selected_items is None or name in selected_items)}
+                    template_data, template_raw = execute_template_commands(active_template, client.send_command, timeout=timeout)
+                    raw.update(template_raw)
+                    successful_items.update(name for name, value in template_data.items() if not (isinstance(value, dict) and value.get('status') in {'failed', 'missing', 'partial'}))
             finally:
                 client.disconnect()
         data = selected_fields(_network_data(raw, vendor_key), selected_items)
         data = {key: value for key, value in data.items() if key in successful_items - failed_items}
+        data.update(_template_network_data(template_data))
         if 'cpu' in data and data['cpu']['usage_percent'] is None:
             del data['cpu']
         if 'temperature' in data and not data['temperature']['values_celsius']:
@@ -321,10 +344,12 @@ def collect_network_ssh(device, timeout=12, selected_items=None):
         if wants_config:
             data['config_info'] = raw['config_info'] = config
         requested = set(selected_items if selected_items is not None else NETWORK_FIELDS[:-1])
-        completed = {key for key in data if key != 'config_info' or config['status'] == 'success'}
+        completed = {key for key in data if (key != 'config_info' or config['status'] == 'success') and not (isinstance(data[key],dict) and data[key].get('status') in {'failed','partial','missing'})}
         missing = requested - completed
         status = 'partial' if missing and completed else 'failed' if missing else 'success'
-        return CollectionResult(True, status, '缺少有效采集证据：' + ', '.join(sorted(missing)) if missing else '',
+        messages = (['缺少有效采集证据：' + ', '.join(sorted(missing))] if missing else [])
+        messages.extend(name+'：'+value['message'] for name,value in template_data.items() if isinstance(value,dict) and value.get('message'))
+        return CollectionResult(True, status, '；'.join(messages),
                                 data=data, raw=raw, duration_ms=timer.duration_ms)
     except Exception as exc:
         if wants_config:
@@ -335,3 +360,66 @@ def collect_network_ssh(device, timeout=12, selected_items=None):
                                     data={'config_info': config}, raw={'config_info': config},
                                     duration_ms=getattr(timer, 'duration_ms', 0))
         return CollectionResult(False, 'failed', f'网络设备 SSH 采集失败：{sanitize(str(exc), secrets=(device.username, device.password))}', duration_ms=getattr(timer, 'duration_ms', 0))
+
+
+def _template_network_data(values):
+    """Normalize parsed template records into established inspection shapes."""
+    result = {}
+    for item, value in values.items():
+        if isinstance(value, dict) and value.get('status') in {'failed', 'missing'}:
+            continue
+        row = value[0] if isinstance(value, list) and len(value) == 1 else value
+        from net.inspections.selection import NETWORK_FUNCTION_ITEMS
+        if item in NETWORK_FUNCTION_ITEMS:
+            rows=[] if isinstance(row,dict) and row.get('_empty_table') else value if isinstance(value,list) else [value]
+            if isinstance(row,dict) and row.get('status')=='partial':
+                result[item]={'records':row.get('records',[]),'status':'partial'}
+            else:
+                records=[{str(k).lower():v for k,v in entry.items()} for entry in rows if isinstance(entry,dict)]
+                identifiers={'routing_table':('destination','network'),'arp_table':('ip_address',),'mac_table':('mac_address','destination_address'),'lldp_neighbors':('neighbor_name','chassis_id'),'wireless_aps':('name','ap_name'),'wireless_clients':('mac_address',)}[item]
+                valid=[record for record in records if any(record.get(key) for key in identifiers)]
+                if records and not valid:continue
+                result[item]={'records':valid,'count':len(valid)}
+                if len(valid)!=len(records):result[item]['status']='partial'
+        elif item == 'cpu' and isinstance(row, dict):
+            normalized_row = {str(key).lower(): value for key, value in row.items()}
+            number = normalized_row.get('usage_percent', normalized_row.get('usage', normalized_row.get('cpu')))
+            try:
+                number = float(number)
+                if 0 <= number <= 100:
+                    result[item] = {'usage_percent': number}
+            except (TypeError, ValueError):
+                pass
+        elif item == 'temperature':
+            rows = value if isinstance(value, list) else [value]
+            numbers = []
+            for record in rows:
+                if isinstance(record, dict):
+                    try: numbers.append(float(record.get('celsius', record.get('temperature'))))
+                    except (TypeError, ValueError): pass
+            if numbers: result[item] = {'values_celsius': numbers}
+        elif item == 'interface_status':
+            result[item] = {'interfaces': value if isinstance(value, list) else [value]}
+        elif item == 'vlan_status':
+            result[item] = {'vlans': value if isinstance(value, list) else [value]}
+        elif item == 'logs':
+            result[item] = value.get('raw', '') if isinstance(value, dict) else str(value)
+        elif item == 'memory' and isinstance(row, dict):
+            import math
+            fields = {str(key).lower(): value for key, value in row.items()}
+            try:
+                total = float(fields.get('total_bytes', fields.get('total', 0)))
+                used = float(fields.get('used_bytes', fields.get('used', 0)))
+                if 'total_kb' in fields and 'used_kb' in fields:
+                    total=float(fields['total_kb'])*1024;used=float(fields['used_kb'])*1024
+                usage = fields.get('usage_percent', fields.get('usage'))
+                usage = float(usage) if usage is not None else (100 * used / total if total > 0 else None)
+                if usage is not None and math.isfinite(usage) and 0 <= usage <= 100:
+                    result[item] = {'usage_percent': usage}
+                    if math.isfinite(total) and math.isfinite(used) and total > 0 and 0 <= used <= total:
+                        result[item].update(total_bytes=int(total), used_bytes=int(used))
+            except (TypeError, ValueError, OverflowError):
+                pass
+        elif item == 'device_info':
+            result[item] = row if isinstance(row, dict) else {'records': value}
+    return result

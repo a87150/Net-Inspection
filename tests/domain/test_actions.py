@@ -58,7 +58,6 @@ class DomainActionValidationTests(SimpleTestCase):
             'add_group': {'group_dn': 'CN=Operators,OU=Groups,DC=example,DC=test'},
             'enable': {},
             'disable': {},
-            'unlock': {},
         }
 
         for action, action_parameters in parameters.items():

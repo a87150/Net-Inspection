@@ -22,7 +22,6 @@ _ACTION_PARAMETERS = {
     'computer': {
         'move_ou': frozenset({'destination_dn'}),
         'add_group': frozenset({'group_dn'}),
-        'unlock': frozenset(),
         'enable': frozenset(),
         'disable': frozenset(),
     },

@@ -1,3 +1,6 @@
+from index.access.views import (access_record_list, access_record_sync, access_source_settings, access_source_save, access_source_test)
+from index.devices.collection_profiles import collection_templates, device_collection_settings
+from index.domain.bitlocker import domain_computer_bitlocker
 from index.inspections.tasks import single_device_task_create
 from django.urls import path
 from django.contrib.auth.views import LoginView, LogoutView
@@ -13,6 +16,14 @@ from index.devices.pc.bulk_analysis import computer_logs_analyze_bulk
 from index.devices.pc.software_policy import pc_software_policy_template_download
 
 urlpatterns = [
+    path("access/records/", access_record_list, name="access_record_list"),
+    path("access/sources/", access_source_settings, name="access_source_settings"),
+    path("access/sources/save/", access_source_save, name="access_source_save"),
+    path("access/sources/test/", access_source_test, name="access_source_test"),
+    path("access/records/sync/", access_record_sync, name="access_record_sync"),
+    path("assets/<str:kind>/templates/", collection_templates, name="collection_templates"),
+    path("assets/<str:kind>/<uuid:pk>/collection-settings/", device_collection_settings, name="device_collection_settings"),
+    path("domain/computers/<uuid:pk>/bitlocker/", domain_computer_bitlocker, name="domain_computer_bitlocker"),
     path('computers/analyses/tasks/<uuid:pk>/problems/', analysis_problem_list, name='analysis_problem_list'),
     path('login/', LoginView.as_view(template_name='registration/login.html'), name='login'),
     path('logout/', LogoutView.as_view(), name='logout'),

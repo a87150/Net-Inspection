@@ -61,6 +61,7 @@ class ProjectIssueSettingsTests(TestCase):
     def test_setting_windows_on_record_pages_target_correct_projects(self):
         for project in ('networks', 'servers', 'monitors'):
             response = self.client.get(reverse('record_list', args=[project]))
-            self.assertContains(response, reverse('issue_severity_settings') + '?project=' + project)
+            self.assertNotContains(response, reverse('collection_templates', args=[project]))
+            self.assertNotContains(response, 'id="issueSeverityModal"')
             choices = response.context['table_state']['field_options']['problem_types']
             self.assertNotIn(('杀毒', '杀毒'), choices)

@@ -353,6 +353,48 @@ class ConfigurationTests(TestCase):
         other.inspections.create(details={'config_info': snapshot({'status': 'online'}, vendor='unknown', fmt='json')})
         self.assertEqual(self.exports().latest_configuration(other).status, 'missing')
 
+    def test_selected_configuration_download_returns_one_file_or_one_zip(self):
+        self.backup(self.device)
+        selected = Network_Device.objects.create(
+            ip='192.0.2.11', device_name='selected', vendor='H3C')
+        self.backup(selected, content='hostname selected\nend\n')
+        unselected = Network_Device.objects.create(
+            ip='192.0.2.12', device_name='unselected', vendor='Cisco')
+        self.backup(unselected, content='hostname unselected\nend\n')
+
+        single = self.client.get('/assets/networks/configurations.zip', {
+            'target_ids': str(selected.pk),
+            'filter_vendor': 'Cisco',
+        })
+        self.assertEqual(single.status_code, 200)
+        self.assertEqual(single.content, b'hostname selected\nend\n')
+        self.assertNotEqual(single['Content-Type'], 'application/zip')
+
+        multiple = self.client.get('/assets/networks/configurations.zip', {
+            'target_ids': f'{self.device.pk},{selected.pk}',
+            'filter_vendor': 'Other',
+        })
+        self.assertEqual(multiple.status_code, 200)
+        self.assertEqual(multiple['Content-Type'], 'application/zip')
+        with ZipFile(BytesIO(multiple.content)) as bundle:
+            rows = list(csv.DictReader(StringIO(bundle.read('manifest.csv').decode('utf-8-sig'))))
+            self.assertEqual({row['asset_id'] for row in rows}, {str(self.device.pk), str(selected.pk)})
+            self.assertNotIn(str(unselected.pk), {row['asset_id'] for row in rows})
+
+    def test_invalid_selected_ids_never_fall_back_to_exporting_all_devices(self):
+        self.backup()
+        url = '/assets/networks/configurations.zip'
+        for value in ('', 'not-a-uuid', f'{self.device.pk},bad', ','.join([str(self.device.pk)] * 501)):
+            with self.subTest(value=value[:40]):
+                reply = self.client.get(url, {'target_ids': value})
+                self.assertEqual(reply.status_code, 400)
+                self.assertIn('no-store', reply['Cache-Control'])
+        missing = self.client.get(url, {'target_ids': '00000000-0000-0000-0000-000000000001'})
+        self.assertEqual(missing.status_code, 404)
+        duplicate = self.client.get(url, {'target_ids': f'{self.device.pk},{self.device.pk}'})
+        self.assertEqual(duplicate.status_code, 200)
+        self.assertEqual(duplicate.content, NETWORK_TEXT.encode())
+
     def test_filtered_zip_uses_all_matching_assets_and_manifest_formula_safety(self):
         self.device.device_name = '=SUM(1,2)'
         self.device.save()
@@ -428,11 +470,19 @@ class ConfigurationTests(TestCase):
     def test_ui_exposes_scoped_downloads_without_changing_other_asset_actions(self):
         for kind, asset in (('networks', self.device), ('monitors', self.camera)):
             result = self.client.get(f'/assets/{kind}/', {'filter_vendor': asset.vendor})
-            self.assertContains(result, f'/assets/{kind}/configurations.zip?')
-            self.assertContains(result, 'config_info')
+            html = result.content.decode()
+            self.assertContains(result, f'href="/assets/{kind}/configurations.zip"')
+            self.assertContains(result, 'data-selected-config-export')
+            self.assertContains(result, '请先选择设备')
+            self.assertNotContains(result, '导出筛选设备配置 ZIP')
+            self.assertNotContains(result, '配置下载仅使用最近成功的已保存配置项')
+            self.assertNotContains(result, f'/assets/{kind}/{asset.pk}/configuration/')
+            self.assertLess(html.index('导出筛选结果'), html.index('data-selected-config-export'))
             detail = self.client.get(f'/assets/{kind}/{asset.pk}/')
             self.assertContains(detail, f'/assets/{kind}/{asset.pk}/configuration/')
-        self.assertNotContains(self.client.get('/assets/servers/'), 'configurations.zip')
+        server_page = self.client.get('/assets/servers/')
+        self.assertNotContains(server_page, 'configurations.zip')
+        self.assertNotContains(server_page, 'data-selected-config-export')
         self.assertEqual(self.client.get('/assets/servers/configurations.zip').status_code, 404)
 
     def test_unknown_network_vendor_never_opens_a_config_connection(self):
@@ -649,7 +699,7 @@ class ConfigurationTests(TestCase):
             for user, method, status in ((AnonymousUser(), 'get', 302), (reader, 'get', 403),
                                          (admin, 'post', 405), (admin, 'get', 200)):
                 with self.subTest(view=view.__name__, status=status):
-                    request = getattr(RequestFactory(), method)('/')
+                    request = getattr(RequestFactory(), method)('/', {'target_ids': str(self.device.pk)})
                     request.user = user
                     reply = view(request, *args)
                     self.assertEqual(reply.status_code, status)

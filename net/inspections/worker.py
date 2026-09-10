@@ -33,6 +33,7 @@ from net.domain.executor import (
 )
 from net.inspections.executor import _database_guard, execute_target, persist_execution_failure
 from net.people.executor import execute_people_target, persist_people_failure
+from net.access.executor import execute_access_target, persist_access_failure
 from net.domain.sync_tasks import execute_domain_sync_target, persist_domain_sync_failure
 from .queue import (
     claim_next_task,
@@ -106,6 +107,8 @@ class TaskWorker:
                     )
                 if task_type == TaskRun.TaskType.DOMAIN_SYNC:
                     executor = execute_domain_sync_target
+                elif task_type == TaskRun.TaskType.ACCESS_SYNC:
+                    executor = execute_access_target
                 elif task_type in TaskRun.PEOPLE_TASK_TYPES:
                     executor = execute_people_target
                 elif task_type == TaskRun.TaskType.COMPUTER_FETCH:
@@ -143,6 +146,8 @@ class TaskWorker:
                             )
                         if task_type == TaskRun.TaskType.DOMAIN_SYNC:
                             persist_failure = persist_domain_sync_failure
+                        elif task_type == TaskRun.TaskType.ACCESS_SYNC:
+                            persist_failure = persist_access_failure
                         elif task_type in TaskRun.PEOPLE_TASK_TYPES:
                             persist_failure = persist_people_failure
                         elif task_type == TaskRun.TaskType.COMPUTER_FETCH:

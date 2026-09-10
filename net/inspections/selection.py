@@ -32,3 +32,10 @@ def selected_fields(payload, selected_items, aliases=None):
     aliases = aliases or {}
     keys = {key for item in selected_items for key in aliases.get(item, (item,))}
     return {key: value for key, value in payload.items() if key in keys}
+
+# Keep NETWORK_FIELDS aligned with the legacy positional command table.
+NETWORK_FUNCTION_ITEMS = {
+    'routing_table': 'IPv4 路由表', 'arp_table': 'ARP 地址表',
+    'mac_table': 'MAC 地址表', 'lldp_neighbors': 'LLDP 邻居',
+    'wireless_aps': '无线 AP 状态', 'wireless_clients': '无线客户端',
+}

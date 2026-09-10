@@ -160,7 +160,7 @@ class SharedInterfaceContractTests(TestCase):
         response = self.client.get(reverse('asset_list', args=['networks']))
         html = response.content.decode(response.charset)
 
-        expected_steps = ('profile', 'parameters', 'items', 'targets', 'schedule')
+        expected_steps = ('profile', 'parameters', 'targets', 'items', 'schedule')
         positions = [html.index(f'data-config-step="{step}"') for step in expected_steps]
         self.assertEqual(positions, sorted(positions))
         self.assertContains(response, 'inspection-config-layout')

@@ -328,6 +328,7 @@ class TaskRun(models.Model):
         PEOPLE_PREVIEW = 'people_preview', '人员目录同步预览'
         PEOPLE_SYNC = 'people_sync', '人员自动同步'
         DOMAIN_OPERATION = 'domain_operation', '域控操作'
+        ACCESS_SYNC = 'access_sync', '门禁记录采集'
 
     class Source(models.TextChoices):
         MANUAL = 'manual', '手动执行'
@@ -500,6 +501,10 @@ class TaskRun(models.Model):
                                inspection_profile__isnull=True, analysis_profile__isnull=True,
                                schedule__isnull=True, source='manual',
                                people_applied_at__isnull=True)
+                    | models.Q(task_type='access_sync', people_source__isnull=True,
+                               inspection_profile__isnull=True, analysis_profile__isnull=True,
+                               schedule__isnull=True, source='manual',
+                               people_applied_at__isnull=True)
                 ),
                 name='net_task_binding_shape_ck',
             ),
@@ -651,6 +656,14 @@ class TaskRun(models.Model):
             ):
                 if contains_sensitive_snapshot_value(getattr(self, field_name)):
                     errors[field_name] = '域控操作快照不能包含敏感载荷。'
+        if self.task_type == self.TaskType.ACCESS_SYNC:
+            if has_inspection or has_analysis or self.people_source_id or self.schedule_id:
+                errors['task_type'] = '门禁记录采集不能关联其他任务配置。'
+            if self.source != self.Source.MANUAL or self.total_targets != 1 or self.selected_items_snapshot:
+                errors['task_type'] = '门禁记录采集必须是单一手动来源任务。'
+            for name in ('profile_snapshot', 'parameters_snapshot', 'target_scope_snapshot'):
+                if contains_sensitive_snapshot_value(getattr(self, name)):
+                    errors[name] = '门禁记录采集快照不能包含敏感载荷。'
         if self.task_type == self.TaskType.DOMAIN_SYNC:
             if has_inspection or has_analysis or self.people_source_id or self.total_targets != 1:
                 errors['task_type'] = '域控同步必须且只能包含一个域控目标。'
@@ -821,6 +834,7 @@ class TaskTargetRun(models.Model):
         PEOPLE_SOURCE = 'people_source', '人员目录来源'
         DOMAIN_ACCOUNT = 'domain_account', '域账号'
         DOMAIN_COMPUTER = 'domain_computer', '域计算机'
+        ACCESS_SOURCE = 'access_source', '门禁平台来源'
 
     IMMUTABLE_FIELDS = (
         'task_id', 'target_type', 'target_id', 'target_snapshot',
@@ -955,6 +969,8 @@ class TaskTargetRun(models.Model):
                 for field_name in ('target_snapshot', 'result_snapshot'):
                     if contains_sensitive_snapshot_value(getattr(self, field_name)):
                         errors[field_name] = '域控操作快照不能包含敏感载荷。'
+            elif task.task_type == TaskRun.TaskType.ACCESS_SYNC:
+                expected_target_type = self.TargetType.ACCESS_SOURCE
             else:
                 expected_target_type = None
             if expected_target_type and self.target_type != expected_target_type:

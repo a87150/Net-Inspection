@@ -5,7 +5,7 @@ const {createPeopleTaskController} = require('../../static/app/js/people/import_
 
 function fixture(payloads, {workflowOpen = false} = {}) {
     const posts = [];
-    const state = {running: [], message: '', href: '', shows: 0, inline: []};
+    const state = {running: [], message: '', href: '', shows: 0, inline: [], jumpHandler: null};
     const root = {
         dataset: {statusUrl: '/status/', csrfToken: 'csrf'},
         querySelector(selector) {
@@ -13,7 +13,8 @@ function fixture(payloads, {workflowOpen = false} = {}) {
                 '[data-people-running-list]': {replaceChildren: (...items) => { state.running = items; }},
                 '[data-people-completion-message]': {set textContent(value) { state.message = value; }},
                 '[data-people-completion-jump]': {
-                    set href(value) { state.href = value; }, addEventListener() {},
+                    set href(value) { state.href = value; },
+                    addEventListener(_name, handler) { state.jumpHandler = handler; },
                 },
                 '[data-people-completion-close]': {addEventListener() {}},
                 '#peopleTaskCompletionModal': {},
@@ -94,4 +95,21 @@ test('completed task stays inside an open workflow without stacking a second mod
     assert.equal(state.shows, 0);
     assert.equal(state.inline.length, 1);
     assert.equal(state.inline[0].children[0].href, '/task/4/');
+});
+
+test('result jump acknowledges the terminal task before navigating to its auto-open preview', async () => {
+    const task = {id: '5', status: 'success', show_terminal: true,
+        message: '预览已完成', jump_url: '/task/5/', ack_url: '/ack/5/'};
+    const {controller, state, posts, window} = fixture([{tasks: [task]}]);
+
+    await controller.poll();
+    const event = {
+        defaultPrevented: false,
+        preventDefault() { this.defaultPrevented = true; },
+    };
+    await state.jumpHandler(event);
+
+    assert.equal(event.defaultPrevented, true);
+    assert.deepEqual(posts, [['/ack/5/', 'kind=terminal']]);
+    assert.deepEqual(window.location.assignCalls, ['/task/5/']);
 });

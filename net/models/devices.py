@@ -71,7 +71,7 @@ class Network_Device(models.Model):
     connection_type = models.CharField(
         max_length=255,
         choices=CONNECTION_TYPE_CHOICES,
-        default='ssh',
+        default='auto',
         blank=True,
         null=True,
     )
@@ -120,6 +120,8 @@ class Network_Device(models.Model):
     def clean(self):
         super().clean()
         if not self.uses_snmp:
+            return
+        if self.effective_connection_type == 'auto' and not self.snmp_community and not self.snmp_username:
             return
         if self.snmp_version == 'v2c' and not self.snmp_community:
             raise ValidationError({'snmp_community': 'SNMPv2c 必须配置 Community。'})

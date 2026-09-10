@@ -31,7 +31,25 @@
         });
     }
 
+    function updateSnmpFields(select) {
+        const form=select.closest('form');
+        if (!form)return;
+        const version=form.querySelector('[data-snmp-version]')?.value;
+        const security=form.querySelector('[data-snmp-security]')?.value;
+        form.querySelectorAll('[data-snmp-group]').forEach(group=>{
+            const kind=group.dataset.snmpGroup;
+            group.hidden=!(kind===version || (version==='v3' && ((kind==='auth' && security!=='noAuthNoPriv') || (kind==='priv' && security==='authPriv'))));
+        });
+    }
+
     function bindScheduleFields(root) {
+        root.querySelectorAll('[data-snmp-version], [data-snmp-security]').forEach(select=>{
+            if (select.dataset.snmpBound!==undefined)return;
+            select.dataset.snmpBound='';
+            select.addEventListener('change',()=>updateSnmpFields(select));
+            select.closest('form')?.addEventListener('modal-draft-restored',()=>updateSnmpFields(select));
+            updateSnmpFields(select);
+        });
         root.querySelectorAll('[data-server-type]').forEach(select => {
             if (select.dataset.serverBound !== undefined) return;
             select.dataset.serverBound = '';
@@ -48,5 +66,5 @@
         });
     }
 
-    return {updateServerFields, bindScheduleFields, setGroupEnabled, updateScheduleFields};
+    return {updateSnmpFields, updateServerFields, bindScheduleFields, setGroupEnabled, updateScheduleFields};
 }));

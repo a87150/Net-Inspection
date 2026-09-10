@@ -1,6 +1,7 @@
 """Snapshot-driven infrastructure collection and result persistence."""
 
 from __future__ import annotations
+from copy import copy, deepcopy
 
 from dataclasses import dataclass
 from contextlib import nullcontext
@@ -133,7 +134,30 @@ def _asset_context(target):
     if any(snapshot[field] != current[field] for field in connection_fields if field in snapshot):
         raise ValueError('设备连接配置在任务入队后已变更，请重新执行巡检。')
     snapshot.update({field: current[field] for field in secret_fields})
+    if 'collection_settings' in snapshot:
+        from net.devices.collection_profiles import attach_live_credentials
+        from net.inspections.issues import DEVICE_PROJECTS
+        effective = attach_live_credentials(DEVICE_PROJECTS[target_type], target.target_id, snapshot['collection_settings'])
+        snapshot['collection_settings'] = effective
+        if target_type == TaskTargetRun.TargetType.MONITOR:
+            snapshot.update(effective.get('snmp', {}))
     return SimpleNamespace(**snapshot)
+
+
+def _device_task(target, task):
+    """Use per-target settings without changing the shared persisted task envelope."""
+    effective = target.target_snapshot.get('collection_settings', {})
+    if not effective:
+        return task
+    result = copy(task)
+    result.profile_snapshot = deepcopy(task.profile_snapshot)
+    if 'selected_items' in effective:
+        result.selected_items_snapshot = [item for item in task.selected_items_snapshot if item in effective['selected_items'] or (item == 'config_info' and target.target_type == TaskTargetRun.TargetType.NETWORK_DEVICE)]
+    for key, source in [('issue_severity_overrides','severity_overrides'),('issue_thresholds','thresholds')]:
+        result.profile_snapshot[key] = {**result.profile_snapshot.get(key,{}), **effective.get(source,{})}
+    if 'alert_items' in effective:
+        result.profile_snapshot['device_alert_items'] = effective['alert_items']
+    return result
 
 
 def _timeout_seconds(task):
@@ -151,6 +175,7 @@ def _missing_configuration(message):
 
 def _collect(target, task, asset):
     timeout = _timeout_seconds(task)
+    task = _device_task(target, task)
     selection = {'selected_items': list(task.selected_items_snapshot)}
     if target.target_type == TaskTargetRun.TargetType.NETWORK_DEVICE:
         from net.devices.configuration_backups import latest_configuration_backup, backup_due
@@ -176,9 +201,8 @@ def _collect(target, task, asset):
             return _missing_configuration('未配置 Linux SSH 账号和密码')
         return collect_linux_ssh(asset, timeout, **selection)
     if target.target_type == TaskTargetRun.TargetType.MONITOR:
-        if not getattr(asset, 'api_url', ''):
-            return _missing_configuration('未配置安防设备 API 地址')
-        return collect_security_api(asset, timeout, **selection)
+        from net.devices.security.collector import collect_security
+        return collect_security(asset, timeout, api_collector=collect_security_api, **selection)
     return _missing_configuration(f'当前 Worker 不支持目标类型：{target.target_type}')
 
 
@@ -279,7 +303,7 @@ def _selected_raw(target, task, raw):
         return {
             key: value
             for key, value in raw.items()
-            if key in allowed or (
+            if key in allowed or key in {command for item, commands in target.target_snapshot.get('collection_settings', {}).get('commands', {}).items() if item in selected for command in commands} or (
                 isinstance(key, str)
                 and key.partition(':')[0] in {'snmp', 'ssh'}
                 and key.partition(':')[2] in allowed
@@ -319,6 +343,7 @@ def _persist_collection(target_run_id, worker_id, collection, lease_guard=None, 
             ):
                 return ExecutionOutcome(str(target.pk), target.status, stale=True)
 
+            task = _device_task(target, task)
             _persist_configuration_backup(target, collection, now)
             status = _record_status(collection)
             if 'config_info' in task.selected_items_snapshot and not secrets:
@@ -343,6 +368,10 @@ def _persist_collection(target_run_id, worker_id, collection, lease_guard=None, 
                     overrides=task.profile_snapshot.get('issue_severity_overrides', {}),
                     thresholds=task.profile_snapshot.get('issue_thresholds', {}), message=collection.message,
                     server_type=target.target_snapshot.get('server_type') if target.target_type == TaskTargetRun.TargetType.SERVER else None)
+                enabled_alerts = task.profile_snapshot.get('device_alert_items')
+                if enabled_alerts is not None:
+                    findings = [finding for finding in findings if finding.get('analysis_item') in enabled_alerts]
+                    normal_items = [item for item in normal_items if item in enabled_alerts]
                 details['issue_findings'] = scrub_items(findings, secrets=secrets)
                 details['normal_issue_items'] = normal_items
             elif status != RecordStatus.SUCCESS:

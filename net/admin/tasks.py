@@ -1,11 +1,13 @@
 """Admin registrations for task configuration, schedules, and task history."""
 
 from django.contrib import admin
+from django.utils.html import format_html_join
 
 from net.models import (
     ComputerAnalysisProfile, InspectionProfile, PCLogSourceConfig,
     PeopleSyncSource, Schedule, TaskRun, TaskTargetRun,
 )
+from net.secret_masks import MASKED_SECRET
 
 
 @admin.register(InspectionProfile)
@@ -89,5 +91,16 @@ class PeopleSyncSourceAdmin(admin.ModelAdmin):
     list_display = ('name', 'source_type', 'source_key', 'is_enabled', 'last_tested_at', 'last_synced_at', 'updated_at')
     list_filter = ('source_type', 'is_enabled')
     search_fields = ('name', 'source_key')
-    readonly_fields = ('last_tested_at', 'last_synced_at', 'created_at', 'updated_at')
+    readonly_fields = ('credential_status', 'last_tested_at', 'last_synced_at', 'created_at', 'updated_at')
     date_hierarchy = 'updated_at'
+
+    @admin.display(description='已保存凭据')
+    def credential_status(self, obj):
+        credentials = obj.credentials if obj else {}
+        if not credentials:
+            return '未保存'
+        return format_html_join(
+            '',
+            '<span class="secret-mask-status">{}：{}</span><br>',
+            ((name, MASKED_SECRET) for name in sorted(credentials)),
+        )

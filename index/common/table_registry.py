@@ -265,7 +265,18 @@ TABLE_DEFINITIONS = {
             _field('content_hash', '内容哈希', visible=False, default_filter=False),
         ), 'modified_at', 'desc', ('source_path', 'content_hash'), 20,
     ),
-    'task_runs': TableDefinition(
+    'access_records': TableDefinition(
+        'access_records', '门禁记录', (
+            _field('occurred_at', '通行时间', 'datetime'),
+            _field('person_name', '人员姓名'), _field('employee_number', '工号'),
+            _field('door_name', '门点名称'),
+            _field('direction', '方向', 'choice', choices=(('in', '进入'), ('out', '离开'), ('unknown', '未知'))),
+            _field('result', '通行状态', 'choice', choices=(('passed', '通过'), ('denied', '拒绝'), ('unknown', '未知'))),
+            _field('card_number', '卡号', default_filter=False),
+            _field('source', '平台来源', source='source__name', default_filter=False),
+            _field('imported_at', '入库时间', 'datetime', visible=False, default_filter=False),
+        ), 'occurred_at', 'desc', ('person_name', 'employee_number', 'door_name', 'card_number', 'source'), 20,
+    ),    'task_runs': TableDefinition(
         'task_runs', '后台任务', (
             _field('task_type', '任务类型', 'choice', choices=(
                 ('inspection', '设备巡检'),

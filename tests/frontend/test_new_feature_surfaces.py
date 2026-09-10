@@ -1,5 +1,7 @@
 from datetime import date
+from pathlib import Path
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -47,6 +49,10 @@ class NewFeatureSurfaceDesignTests(TestCase):
         self.assertContains(response, 'modal-body modal-body--scroll')
         self.assertContains(response, 'analysis-problems-modal__body')
         self.assertContains(response, 'modal-footer modal-footer--sticky')
+
+        css = Path(settings.BASE_DIR, 'static/app/css/modal-workflows.css').read_text(encoding='utf-8')
+        self.assertIn('.analysis-problems-table .table-responsive', css)
+        self.assertIn('max-height: none', css)
 
     def test_configuration_backup_history_uses_shared_readable_table_workspace(self):
         asset = Network_Device.objects.create(

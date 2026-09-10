@@ -1,0 +1,7 @@
+{% extends 'common/base.html' %}
+{% block title %}配置模板{% endblock %}
+{% block content %}
+<header class="page-heading"><h1 class="h3">{{ title }}</h1><a class="btn btn-outline-secondary" href="{% url 'asset_list' kind %}">返回设备列表</a></header>
+<button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#collectionTemplateModal">{% if template_mode %}配置模板{% else %}巡检设置{% endif %}</button>
+{% include 'devices/collection_template_modal.html' with template_modal_loaded=True open_template_modal=True %}
+{% endblock %}

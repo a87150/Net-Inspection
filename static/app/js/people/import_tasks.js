@@ -106,7 +106,20 @@ function createPeopleTaskController({document, window, fetchImpl = fetch, pollIn
     closeElements.forEach(element => {
         element.addEventListener('click', () => acknowledgeTerminal());
     });
-    jumpElement?.addEventListener('click', () => acknowledgeTerminal());
+    async function followTerminalResult(event) {
+        event.preventDefault();
+        const task = currentTerminal;
+        if (!task) return;
+        const workflow = document.querySelector('#importModal.show, #peoplePreviewModal.show');
+        try {
+            await acknowledgeTerminal(task);
+        } catch (_error) {
+            messageElement.textContent = '结果确认失败，请重试后再查看。';
+            return;
+        }
+        if (!workflow) window.location.assign(task.jump_url);
+    }
+    jumpElement?.addEventListener('click', followTerminalResult);
     return {start, stop, poll, dismissRunning, acknowledgeTerminal};
 }
 

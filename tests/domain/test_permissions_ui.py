@@ -209,7 +209,7 @@ class DomainPermissionUiTests(TestCase):
         response = self.client.get(reverse('domain_computer_list'))
 
         self.assertEqual(response.status_code, 200)
-        for action in ('move_ou', 'add_group', 'enable', 'disable', 'unlock'):
+        for action in ('move_ou', 'add_group', 'enable', 'disable'):
             self.assertContains(response, f'value="{action}"')
         self.assertNotContains(response, 'value="remove_group"')
         for action in ('create_user', 'reset_password', 'must_change_password', 'password_never_expires'):

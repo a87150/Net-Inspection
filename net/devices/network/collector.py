@@ -5,10 +5,10 @@ from collections import Counter
 from net.devices.network.snmp import SNMP_ITEMS, collect_network_snmp
 from net.devices.network.ssh import collect_network_ssh
 from net.infrastructure.collection import CollectionResult
-from net.inspections.selection import NETWORK_FIELDS
+from net.inspections.selection import NETWORK_FIELDS, NETWORK_FUNCTION_ITEMS
 
 
-SSH_ONLY_ITEMS = frozenset({'logs', 'config_info'})
+SSH_ONLY_ITEMS = frozenset({'logs', 'config_info'}) | frozenset(NETWORK_FUNCTION_ITEMS)
 _DEFAULT_ITEMS = tuple(dict.fromkeys(NETWORK_FIELDS[:-1]))
 
 
@@ -117,6 +117,10 @@ def collect_network(
     if mode not in {'ssh', 'snmp', 'hybrid', 'auto'}:
         mode = getattr(device, 'connection_type', 'ssh')
     snmp_items, ssh_items, auto_fallback = _network_item_plan(mode, requested)
+    settings = getattr(device, 'collection_settings', {}) or {}
+    methods = {item:method for item,method in settings.get('item_methods',{}).items() if item in requested and method in {'snmp','ssh'}}
+    snmp_items = [item for item in requested if (item in snmp_items and methods.get(item)!='ssh') or methods.get(item)=='snmp']
+    ssh_items = [item for item in requested if (item in ssh_items and methods.get(item)!='snmp') or methods.get(item)=='ssh']
     use_default_snmp = snmp_collector is None
     use_default_ssh = ssh_collector is None
     snmp_collector = snmp_collector or collect_network_snmp
@@ -138,8 +142,13 @@ def collect_network(
                 for item in snmp_items
                 if item not in snmp_data or not _item_completed(snmp_data[item])
             ]
-            fallback = set(missing_snmp)
-            ssh_items = [item for item in requested if item in SSH_ONLY_ITEMS or (item in fallback and item != 'traffic')]
+            fallback = {item for item in missing_snmp if item not in methods}
+            ssh_items = [item for item in requested if (item in SSH_ONLY_ITEMS and methods.get(item)!='snmp') or methods.get(item)=='ssh' or (item in fallback and item != 'traffic')]
+
+    settings = getattr(device, 'collection_settings', {}) or {}
+    template_items = {item for item in settings.get('commands', {}) if item in requested and methods.get(item)!='snmp' and (mode!='snmp' or methods.get(item)=='ssh')}
+    if template_items:
+        ssh_items = [item for item in requested if item in ssh_items or item in template_items]
 
     if ssh_items:
         if use_default_ssh and (
@@ -154,7 +163,16 @@ def collect_network(
             'ssh',
             ssh_result,
         ))
-    return _merge_network_results(requested, results)
+    merged = _merge_network_results(requested, results)
+    if template_items and ssh_items:
+        # An explicit device command is authoritative when it produced valid evidence.
+        for item in template_items:
+            value = (ssh_result.data or {}).get(item)
+            if value is not None and _item_completed(value):
+                merged.data[item] = value
+            elif merged.status == 'success':
+                merged.status = 'partial'
+    return merged
 
 
 __all__ = [

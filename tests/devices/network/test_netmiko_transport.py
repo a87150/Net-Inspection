@@ -52,3 +52,17 @@ class NetmikoTransportTests(SimpleTestCase):
         self.assertEqual(result.status, 'failed')
         self.assertNotIn('private-password', result.message)
         session.disconnect.assert_called_once()
+
+    def test_selected_template_command_overrides_native_cpu(self):
+        session = Mock()
+        session.find_prompt.return_value = 'edge#'
+        session.send_command.side_effect = ['edge#', 'CPU: 37%']
+        device = SimpleNamespace(vendor='huawei', ip='192.0.2.1', port=22,
+                                 username='reader', password='private-password',
+                                 collection_settings={'commands': {'cpu': ['display custom cpu']},
+                                                      'parsers': {'cpu': {'engine': 'regex', 'template': r'CPU: (?P<usage>\d+)%'}}})
+        with patch('netmiko.ConnectHandler', return_value=session):
+            result = ssh.collect_network_ssh(device, timeout=3, selected_items=['cpu'])
+        self.assertEqual(result.status, 'success', result.message)
+        self.assertEqual(result.data['cpu']['usage_percent'], 37.0)
+        self.assertEqual([call.args[0] for call in session.send_command.call_args_list], ['screen-length 0 temporary', 'display custom cpu'])

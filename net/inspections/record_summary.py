@@ -65,4 +65,8 @@ def key_metrics(details):
     for key, label in (('status_data', '设备状态'), ('vlan_status', 'VLAN')):
         if key in details:
             parts.append(f'{label}已采集')
+    from net.inspections.selection import NETWORK_FUNCTION_ITEMS
+    for key,label in NETWORK_FUNCTION_ITEMS.items():
+        value=details.get(key)
+        if isinstance(value,dict) and isinstance(value.get('records'),list):parts.append(f'{label} {len(value["records"])} 条')
     return sanitize('；'.join(parts))[:1000] or '无可用指标'

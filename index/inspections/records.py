@@ -159,7 +159,8 @@ def record_detail(request, kind, pk):
     inspection = get_object_or_404(
         page.model.objects.select_related(page.asset_field), pk=pk,
     )
-    detail_fields = list((inspection.details or {}).items())
+    from net.inspections.selection import NETWORK_FUNCTION_ITEMS
+    detail_fields = [(NETWORK_FUNCTION_ITEMS.get(key,key),value) for key,value in (inspection.details or {}).items()]
     if inspection.raw_output:
         detail_fields.append(('原始响应', inspection.raw_output))
     error_manager = getattr(inspection, 'errors', None)

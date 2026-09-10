@@ -229,6 +229,14 @@ def _validated_target_inputs(profile, target_ids, selected_items, *, context=Non
         (target_id, _target_snapshot(records_by_id[target_id], snapshot_fields))
         for target_id in target_id_list
     ]
+    if isinstance(profile, InspectionProfile):
+        from net.devices.collection_profiles import collection_settings_for_assets
+        from net.inspections.issues import DEVICE_PROJECTS
+        all_settings = collection_settings_for_assets(DEVICE_PROJECTS[target_type], records_by_id.values())
+        for target_id, snapshot in targets:
+            effective = all_settings[target_id]
+            if effective:
+                snapshot['collection_settings'] = effective
     return task_type, target_type, profile_snapshot, targets
 
 
@@ -288,6 +296,20 @@ def enqueue_task(profile, target_ids, source, overrides=None, *, _frozen_parent=
     if target_type == TaskTargetRun.TargetType.NETWORK_DEVICE:
         selected_items = list(dict.fromkeys([*selected_items, 'config_info']))
         profile_snapshot = dict(profile_snapshot, selected_items=selected_items)
+    if task_type == TaskRun.TaskType.INSPECTION:
+        applicable = []
+        skipped = []
+        for target_id, snapshot in targets:
+            supported = snapshot.get('collection_settings', {}).get('selected_items')
+            if supported is not None and not set(selected_items).intersection(supported):
+                skipped.append(target_id)
+            else:
+                applicable.append((target_id, snapshot))
+        if not applicable:
+            raise ValidationError({'selected_items': '当前设备没有适用于所选项目的巡检任务，请重新选择设备或项目。'})
+        targets = applicable
+        if skipped:
+            parameters['inapplicable_target_ids'] = skipped
     target_scope_snapshot = {
         # Child context is inherited below, never re-resolved from live policy.
         'targets': [

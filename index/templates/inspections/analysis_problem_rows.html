@@ -1,9 +1,9 @@
-<p class="small text-secondary">任务时间：{{ task.created_at|date:'Y-m-d H:i:s' }} · {{ category }} · 共 {{ page_obj.paginator.count }} 条受影响分析记录（同一 PC 可能有多条记录）</p>
+<p class="small text-secondary">任务时间：{{ task.created_at|date:'Y-m-d H:i:s' }} · {{ category }} · 共 {{ page_obj.paginator.count }} 条{% if category == '人员缺少日志' %}缺少日志的人员{% else %}受影响分析记录（同一 PC 可能有多条记录）{% endif %}</p>
 <div class="table-scroll-shell analysis-problems-table">
   <p class="table-scroll-hint">可横向滚动查看完整问题内容</p>
   <div class="table-responsive" role="region" aria-label="问题明细数据表" tabindex="0">
   <table class="table data-table table-sm align-middle mb-0">
-    <thead><tr><th scope="col">PC 名称</th><th scope="col">具体问题及等级</th><th scope="col">详情</th></tr></thead>
+    <thead><tr><th scope="col">{% if category == '人员缺少日志' %}人员{% else %}PC 名称{% endif %}</th><th scope="col">具体问题及等级</th><th scope="col">详情</th></tr></thead>
     <tbody>{% for row in rows %}<tr>
       <td class="text-break">{% if row.record.missing_log %}{{ row.record.report_enrichment.personnel_name }} · {{ row.record.report_enrichment.employee_number }}{% else %}{{ row.record.computer.computer_name }}{% endif %}</td>
       <td>{% for finding in row.findings %}<div class="mb-2">

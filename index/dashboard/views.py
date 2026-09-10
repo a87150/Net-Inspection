@@ -61,6 +61,8 @@ def _with_card_actions(item):
         primary = {'label': f"查看{item['name']}", 'url': item['list_url']}
     if item.get('record_url'):
         secondary.append({'label': item['record_label'], 'url': item['record_url']})
+    if item.get('key') == 'monitors':
+        secondary.append({'label': '门禁记录', 'url': reverse('access_record_list')})
     if item.get('detail_url'):
         secondary.append({'label': item['detail_label'], 'url': item['detail_url']})
     item['primary_action'] = primary

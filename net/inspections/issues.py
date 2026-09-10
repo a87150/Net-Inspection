@@ -32,6 +32,9 @@ PROJECT_RULES = {
         ('channel_status', '视频通道/门禁闸机通道'), ('storage_status', '录像/存储'),
         ('config_info', '设备配置'), ('inspection_collection', '采集连接'))},
 }
+from net.inspections.selection import NETWORK_FUNCTION_ITEMS
+PROJECT_RULES['networks'].update({key:(label,label) for key,label in NETWORK_FUNCTION_ITEMS.items()})
+
 METRIC_DEFAULTS = {'networks': {'cpu': 90, 'memory': 90, 'temperature': 85, 'traffic': 90},
                    'servers': {'cpu': 90, 'memory': 90, 'storage_status': 90}}
 

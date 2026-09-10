@@ -11,14 +11,14 @@ function switchProfile(select, location, doc, transport = typeof window !== 'und
 }
 
 function selectRow(doc, id) {
-    doc.querySelectorAll('[name="target_ids"]').forEach(box => { box.checked = box.value === id; });
+    doc.querySelectorAll('[name="target_ids"]').forEach(box => { box.checked = box.value === id; box.dispatchEvent?.(new Event('change', {bubbles: true})); });
     doc.querySelectorAll('[name="target_mode"]').forEach(mode => { if (mode.type === 'hidden') mode.value = 'selected'; else mode.checked = mode.value === 'selected'; });
     const singleTarget = doc.querySelector('[name="single_target_id"]');
     if (singleTarget) singleTarget.value = id;
 }
 
 function clearRowTarget(doc) {
-    doc.querySelectorAll('[name="target_ids"]').forEach(box => { box.checked = false; });
+    doc.querySelectorAll('[name="target_ids"]').forEach(box => { box.checked = false; box.dispatchEvent?.(new Event('change', {bubbles: true})); });
     doc.querySelectorAll('[name="target_mode"]').forEach(mode => {
         if (mode.type === 'hidden') mode.value = '';
         else mode.checked = false;
@@ -50,6 +50,11 @@ function updateCheckboxSelection(inputs, action) {
     });
 }
 
+function applicableTargetItems(choices) {
+    const selected = choices.filter(choice => choice.input.checked);
+    return new Set((selected.length ? selected : choices).flatMap(choice => choice.items || []));
+}
+
 function bindTargetDevicePicker(picker) {
     const search = picker.querySelector('[data-target-device-search]');
     const vendor = picker.querySelector('[data-target-device-vendor]');
@@ -63,16 +68,22 @@ function bindTargetDevicePicker(picker) {
         label: option.dataset.targetDeviceLabel || option.textContent,
         vendor: option.dataset.targetDeviceVendor || '',
         deviceType: option.dataset.targetDeviceType || '',
+        items: (option.dataset.targetDeviceItems || '').split(',').filter(Boolean),
         input: option.querySelector('input[type="checkbox"]'),
     }));
     const refresh = () => {
-        filterTargetDeviceChoices(choices, search.value, visibility.value, vendor.value, deviceType.value);
+        filterTargetDeviceChoices(choices, search.value, visibility.value, vendor?.value || '', deviceType.value);
         const selectedCount = choices.filter(choice => choice.input.checked).length;
         mode.value = selectedCount ? 'selected' : 'all';
         count.textContent = `已选 ${selectedCount} / ${choices.length} 台`;
+        const allowed = applicableTargetItems(choices);
+        if (choices.length) picker.closest('form').querySelectorAll('[name="selected_items"]').forEach(input => {
+            input.disabled = !allowed.has(input.value);
+            input.closest('label').hidden = input.disabled;
+        });
     };
     search.addEventListener('input', refresh);
-    vendor.addEventListener('change', refresh);
+    vendor?.addEventListener('change', refresh);
     deviceType.addEventListener('change', refresh);
     visibility.addEventListener('change', refresh);
     picker.querySelector('[data-target-device-select-all]').addEventListener('click', () => {
@@ -93,7 +104,7 @@ function bindBulkChoiceGroup(group) {
     group.querySelector('[data-bulk-invert]').addEventListener('click', () => updateCheckboxSelection(inputs(), 'invert'));
 }
 
-if (typeof module !== 'undefined') module.exports = {switchProfile, selectRow, clearRowTarget, filterTargetDeviceChoices, updateTargetDeviceSelection, updateCheckboxSelection};
+if (typeof module !== 'undefined') module.exports = {applicableTargetItems, switchProfile, selectRow, clearRowTarget, filterTargetDeviceChoices, updateTargetDeviceSelection, updateCheckboxSelection};
 
 const boundTaskControls = new WeakSet();
 function bindTaskUI(root) {
@@ -117,6 +128,31 @@ function bindTaskUI(root) {
         });
     });
     once('[data-target-device-picker]', bindTargetDevicePicker);
+    once('[data-inspection-rule]', (rule) => {
+        const method=rule.querySelector('[data-rule-method] select');
+        const mode=rule.querySelector('[data-rule-mode] select');
+        const update=()=>{
+            const editor=rule.querySelector('[data-rule-editor]');
+            if (editor) {
+                editor.hidden=mode?.value==='inherit';
+                editor.querySelectorAll('input, select, textarea, button').forEach(control=>{control.disabled=editor.hidden;});
+            }
+            rule.querySelectorAll('[data-rule-protocol]').forEach(section=>{
+                section.hidden=!method || method.value!==section.dataset.ruleProtocol;
+            });
+        };
+        method?.addEventListener('change',update);
+        mode?.addEventListener('change',update);
+        rule.closest('form')?.addEventListener('modal-draft-restored',update);
+        update();
+    });
+    once('[data-template-parent] select', (select) => {
+        select.addEventListener('change',()=>{
+            const form=select.closest('form');
+            const preview=form?.querySelector('button[name="preview_inheritance"]');
+            if (preview)form.requestSubmit(preview);
+        });
+    });
     once('[data-bulk-choice-group]', bindBulkChoiceGroup);
 
     const updateFileTimeFields = (select) => {

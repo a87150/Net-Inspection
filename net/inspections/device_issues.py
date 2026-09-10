@@ -116,6 +116,23 @@ def evaluate_device_issues(project, selected, data, *, reachable, status, overri
             else:
                 normal.append(item)
             continue
+        if project=='networks':
+            from net.inspections.selection import NETWORK_FUNCTION_ITEMS
+            if item in NETWORK_FUNCTION_ITEMS:
+                records=evidence.get('records') if isinstance(evidence,dict) else None
+                if not isinstance(records,list) or evidence.get('status')=='partial':
+                    issue(item,'没有完整的结构化记录，无法判定此项目。',True)
+                    continue
+                if item=='wireless_aps':
+                    healthy={'nor','normal','run','r/m','r/b','registered','online','up','stdby','standby'}
+                    offline={'fault','idle','i','j','ja','il','c','dc','quit','offline','down','disconnected','unregistered'}
+                    bad=[row for row in records if str(row.get('state','')).lower() in offline]
+                    unknown=[row for row in records if str(row.get('state','')).lower() not in healthy|offline]
+                    if bad:issue(item,f'返回记录中有 {len(bad)} 台 AP 未在线；仅判断已返回 AP，不推断未登记设备。')
+                    if unknown:issue(item,f'{len(unknown)} 条 AP 记录缺少可识别的状态。',True)
+                    if bad or unknown:continue
+                normal.append(item)
+                continue
         if item == 'interface_status' and isinstance(evidence, dict):
             failed = [str(row.get('name') or row.get('index') or '?') for row in evidence.get('interfaces', [])
                       if isinstance(row, dict) and row.get('admin_status') == 'up' and row.get('oper_status') == 'down']

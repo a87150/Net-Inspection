@@ -23,6 +23,8 @@ class AnalysisProblemListTests(TestCase):
         ])
         self.analysis(self.task(), [{'analysis_item': 'software', '详细问题': 'OLD-TASK-ISSUE'}])
         response = self.client.get(self.url, {'category': '软件'})
+        self.assertContains(response, '<th scope="col">PC 名称</th>', html=True)
+        self.assertNotContains(response, '<th scope="col">人员</th>', html=True)
         self.assertContains(response, record.computer.computer_name)
         self.assertContains(response, '没有软件清单')
         self.assertContains(response, '提示')

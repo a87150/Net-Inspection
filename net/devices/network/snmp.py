@@ -28,6 +28,7 @@ from pysnmp.hlapi.v3arch.asyncio import (
 from pysnmp.proto.rfc1905 import EndOfMibView, NoSuchInstance, NoSuchObject
 
 from net.infrastructure.collection import CollectionResult, Timer
+from net.devices.network.templates import resolve_symbolic_oid, validate_collection_settings
 
 
 SYS_DESCR = "1.3.6.1.2.1.1.1.0"
@@ -192,7 +193,7 @@ def _raw_for(snapshot, scalar_oids=(), table_oids=()):
     raw = {}
     for oid in scalar_oids:
         if oid in snapshot["scalars"] and snapshot["scalars"][oid] is not None:
-            value = snapshot["scalars"][oid]
+            value = snapshot.get("_original_scalars", {}).get(oid, snapshot["scalars"][oid])
             raw[oid] = value.hex() if isinstance(value, bytes) else value
     for oid in table_oids:
         rows = snapshot["tables"].get(oid, [])
@@ -233,7 +234,7 @@ def _parse_device_info(snapshot, vendor):
 
 
 def _parse_cpu(snapshot, vendor):
-    vendor_oids = VENDOR_OIDS.get(_vendor_key(vendor), {}).get("cpu", ())
+    vendor_oids = snapshot.get("_vendor_oids", VENDOR_OIDS.get(_vendor_key(vendor), {})).get("cpu", ())
     usage = _first_numeric(snapshot["scalars"], vendor_oids, lambda value: 0 <= value <= 100)
     if usage is None:
         loads = [_number(value) for value in _table(snapshot, HR_PROCESSOR_LOAD).values()]
@@ -243,7 +244,7 @@ def _parse_cpu(snapshot, vendor):
 
 
 def _parse_memory(snapshot, vendor):
-    registry = VENDOR_OIDS.get(_vendor_key(vendor), {})
+    registry = snapshot.get("_vendor_oids", VENDOR_OIDS.get(_vendor_key(vendor), {}))
     total = _first_numeric(snapshot["scalars"], registry.get("memory_total", ()), lambda value: value > 0)
     used = (
         _first_numeric(
@@ -288,7 +289,7 @@ def _parse_memory(snapshot, vendor):
 
 
 def _parse_temperature(snapshot, vendor):
-    vendor_oids = VENDOR_OIDS.get(_vendor_key(vendor), {}).get("temperature", ())
+    vendor_oids = snapshot.get("_vendor_oids", VENDOR_OIDS.get(_vendor_key(vendor), {})).get("temperature", ())
     value = _first_numeric(snapshot["scalars"], vendor_oids)
     if value is not None:
         return {"values_celsius": [float(value)]}
@@ -394,12 +395,14 @@ def parse_snmp_snapshot(snapshot, selected_items, vendor):
     snapshot = {
         "scalars": dict(snapshot.get("scalars", {})),
         "tables": dict(snapshot.get("tables", {})),
+        "_original_scalars": dict(snapshot.get("_original_scalars", {})),
         'traffic': snapshot.get('traffic'),
+        '_vendor_oids': snapshot.get('_vendor_oids', VENDOR_OIDS.get(_vendor_key(vendor), {})),
     }
     selection = _ITEM_ORDER if selected_items is None else selected_items
     requested = [item for item in selection if item in SNMP_ITEMS]
     data, raw, completed = {}, {}, set()
-    registry = VENDOR_OIDS.get(_vendor_key(vendor), {})
+    registry = snapshot.get("_vendor_oids", VENDOR_OIDS.get(_vendor_key(vendor), {}))
     definitions = {
         "device_info": (
             _parse_device_info,
@@ -671,14 +674,54 @@ async def _first_available(session, candidates, scalars, predicate=lambda value:
     return None
 
 
+class _MappedOidSession:
+    """Keep normalized snapshot keys while querying device-specific OIDs."""
+    def __init__(self, session, mapping, transforms=None):
+        self.session, self.mapping = session, mapping
+        self.transforms=transforms or {}
+        self.original_scalars = {}
+
+    async def get(self, oid):
+        value=await self.session.get(self.mapping.get(oid, oid))
+        transform=self.transforms.get(oid)
+        if transform:
+            self.original_scalars[oid] = value
+            value=_number(value)
+            if value is not None:value=value*transform.get('scale',1)+transform.get('offset',0)
+        return value
+
+    async def walk(self, oid):
+        return await self.session.walk(self.mapping.get(oid, oid))
+
+    def __getattr__(self, name):
+        return getattr(self.session, name)
+
+
 async def _collect_snapshot(device, timeout, selected_items, session_factory):
     session = None
     snapshot = {"scalars": {}, "tables": {}}
-    vendor_registry = VENDOR_OIDS.get(_vendor_key(device.vendor), {})
+    vendor_registry = dict(VENDOR_OIDS.get(_vendor_key(device.vendor), {}))
+    template_settings = validate_collection_settings(getattr(device, 'collection_settings', {}) or {})
+    try:
+        custom_oids = {name: resolve_symbolic_oid(oid, template_settings.get('mib_modules', [])) for name, oid in template_settings.get('snmp_oids', {}).items()}
+    except (ValueError, TypeError) as exc:
+        raise SnmpQueryError('invalid_configuration') from exc
+    standard_oids = {name.lower(): value for name, value in globals().items()
+                     if name.isupper() and isinstance(value, str) and value.startswith('1.3.6.')}
+    scalar_names = {'cpu', 'memory_total', 'memory_used', 'temperature'}
+    if set(custom_oids) - scalar_names - set(standard_oids):
+        raise SnmpQueryError('invalid_configuration')
+    for name in scalar_names:
+        if name in custom_oids:
+            vendor_registry[name] = (custom_oids[name],)
+    snapshot['_vendor_oids'] = vendor_registry
+    oid_mapping = {standard_oids[name]: oid for name, oid in custom_oids.items() if name in standard_oids}
     selection = _ITEM_ORDER if selected_items is None else selected_items
     requested = [item for item in selection if item in SNMP_ITEMS]
     try:
-        session = session_factory(device, timeout)
+        transforms={oid: transform for name,transform in template_settings.get('snmp_transforms',{}).items() for oid in vendor_registry.get(name,())}
+        session = _MappedOidSession(session_factory(device, timeout), oid_mapping, transforms)
+        snapshot["_original_scalars"] = session.original_scalars
         if "device_info" in requested:
             for oid in (SYS_NAME, SYS_DESCR, SYS_OBJECT_ID, SYS_UPTIME):
                 snapshot["scalars"][oid] = await _safe_get(session, oid)

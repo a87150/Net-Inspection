@@ -118,6 +118,7 @@
                 }
                 const activeTab = current.querySelector('[data-bs-toggle="tab"].active')?.id;
                 current.replaceWith(replacement);
+                if (replacement.querySelector('[data-config-saved]')) state.reloadOnClose = true;
                 // Hidden forms outside the dialog are used by PC test/preview buttons.
                 page.querySelectorAll('form[data-modal-owner]').forEach(form => {
                     if (form.dataset.modalOwner !== modal.id || form.closest('.modal')) return;
@@ -234,7 +235,12 @@
             if (href.startsWith('#')) return;
             let modal = link.closest('.modal');
             const url = new URL(href, modal?.dataset.loadedUrl || win.location.href);
-            if (url.origin !== win.location.origin || !switchParameters.some(key => url.searchParams.has(key))) return;
+            if (url.origin !== win.location.origin || !(switchParameters.some(key => url.searchParams.has(key))
+                || (modal && link.hasAttribute('data-modal-navigate')) || link.hasAttribute('data-modal-load'))) return;
+            if (!modal && link.hasAttribute('data-modal-load')) {
+                modal = doc.getElementById(link.dataset.modalLoad);
+                if (modal) win.bootstrap?.Modal.getOrCreateInstance(modal).show();
+            }
             if (!modal && link.hasAttribute('data-single-device-run')) {
                 modal = doc.getElementById('runTaskModal');
                 if (modal) win.bootstrap?.Modal.getOrCreateInstance(modal).show();
@@ -250,6 +256,7 @@
         doc.addEventListener('hidden.bs.modal', event => {
             const state = states.get(event.target);
             if (state) state.drafts.clear(); // Credentials never enter browser storage.
+            if (state?.reloadOnClose) win.location.reload();
         });
         return {navigate};
     }

@@ -6,6 +6,7 @@ from django import forms
 from django.contrib import admin
 
 from net.models import AlertChannel, AlertDelivery, AlertEvent, AlertPolicy, AlertState, AlertTestSend, DomainOperation
+from net.secret_masks import MASKED_SECRET
 
 
 _SENSITIVE_SETTINGS_KEY = re.compile(
@@ -21,11 +22,14 @@ def _is_sensitive_settings_key(key):
 
 def _safe_settings(value):
     if isinstance(value, dict):
-        return {
-            key: _safe_settings(item)
-            for key, item in value.items()
-            if not _is_sensitive_settings_key(key)
-        }
+        safe = {}
+        for key, item in value.items():
+            if _is_sensitive_settings_key(key):
+                if item not in (None, '', [], {}):
+                    safe[key] = MASKED_SECRET
+            else:
+                safe[key] = _safe_settings(item)
+        return safe
     if isinstance(value, list):
         return [_safe_settings(item) for item in value]
     return value
@@ -44,7 +48,7 @@ def _merge_settings(existing, submitted):
         for key, value in submitted.items():
             previous = existing.get(key, _MISSING)
             if _is_sensitive_settings_key(key):
-                if value not in (None, ''):
+                if value not in (None, '', MASKED_SECRET):
                     merged[key] = value
             elif previous is _MISSING:
                 merged[key] = value

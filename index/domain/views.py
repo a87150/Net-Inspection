@@ -75,7 +75,6 @@ DOMAIN_OPERATION_ACTIONS = {
         ('add_group', '加入安全组'),
         ('enable', '启用'),
         ('disable', '停用'),
-        ('unlock', '解锁'),
     ),
 }
 

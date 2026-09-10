@@ -103,6 +103,10 @@ def asset_list(request, kind, *, integration_context=None, creation_form=None, e
         'table_state': table_state,
         'page_sizes': PAGE_SIZES,
         'table_export_path': reverse('table_export', args=[page.table_key]),
+        'configuration_selection_path': (
+            reverse('configuration_zip', args=[kind])
+            if is_admin(request.user) and kind in {'networks', 'monitors'} else ''
+        ),
         'pagination_query': query_without_page(request),
         'inspection_type': page.inspection_kind,
         'collection_hint': page.collection_hint,

@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from net.models import ComputerAnalysisProfile, InspectionProfile, Schedule
 from net.inspections.selection import (
     LINUX_FIELDS,
-    NETWORK_FIELDS,
+    NETWORK_FIELDS, NETWORK_FUNCTION_ITEMS,
     SECURITY_FIELDS,
     WINDOWS_FIELDS,
 )
@@ -24,6 +24,7 @@ _INSPECTION_LABELS = {
     'channel_status': '通道状态',
     'config_info': '设备配置（只读、脱敏，非完整恢复备份）',
 }
+_INSPECTION_LABELS.update(NETWORK_FUNCTION_ITEMS)
 _ANALYSIS_LABELS = {
     'activation': 'Windows 激活', 'software': '已安装软件',
     'processes': '运行进程', 'bitlocker': 'BitLocker',
@@ -40,7 +41,7 @@ _ANALYSIS_LABELS = {
 def inspection_item_choices(device_type):
     """Return only collector keys that this project type can execute."""
     if device_type == InspectionProfile.DeviceType.NETWORK_DEVICE:
-        keys = set(NETWORK_FIELDS) | {'traffic'}
+        keys = set(NETWORK_FIELDS) | set(NETWORK_FUNCTION_ITEMS) | {'traffic'}
     elif device_type == InspectionProfile.DeviceType.SERVER:
         keys = set(LINUX_FIELDS) | set(WINDOWS_FIELDS)
     elif device_type == InspectionProfile.DeviceType.MONITOR:
@@ -116,9 +117,14 @@ class InspectionProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
         from net.inspections.schedules import _ASSET_MODELS, target_rule_fields
         target_devices = list(_ASSET_MODELS[device_type].objects.order_by('pk'))
         self.fields['target_rule_ids'].choices = [(str(obj.pk), str(obj)) for obj in target_devices]
+        from net.devices.collection_profiles import collection_settings_for_assets, supported_collection_items
+        from net.inspections.issues import DEVICE_PROJECTS
+        kind = DEVICE_PROJECTS[device_type]
+        effective = collection_settings_for_assets(kind,target_devices)
         self.target_device_options = [
             {
                 'id': str(obj.pk),
+                'items': supported_collection_items(kind,obj,effective[str(obj.pk)]),
                 'label': str(obj),
                 'vendor': str(getattr(obj, 'vendor', None) or getattr(obj, 'manufacturer', None) or '未填写'),
                 'device_type': str(getattr(obj, 'device_type', None) or getattr(obj, 'server_type', None) or '未分类'),
@@ -180,6 +186,17 @@ class InspectionProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
                 _selected_target_ids(candidate)
             except ValidationError as exc:
                 self.add_error('target_rule_mode', '；'.join(exc.messages))
+        if not self.errors and self.target_device_options:
+            scoped_ids = None
+            if mode == 'selected':
+                scoped_ids = set(cleaned.get('target_rule_ids', []))
+            elif mode == 'filtered':
+                from net.inspections.schedules import _selected_target_ids
+                scoped_ids = set(_selected_target_ids(InspectionProfile(device_type=self.device_type,target_selector=selector)))
+            options = [option for option in self.target_device_options if scoped_ids is None or option['id'] in scoped_ids]
+            available = {item for option in options for item in option['items']}
+            if set(cleaned.get('selected_items', [])) - available:
+                self.add_error('selected_items','所选设备不支持部分巡检项目，请按当前设备重新选择。')
         cleaned['target_selector'] = selector
         return cleaned
 

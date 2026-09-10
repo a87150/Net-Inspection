@@ -95,3 +95,18 @@ test('server type exposes only applicable parameters and disables the others', (
     assert.equal(linux.hidden, false);
     assert.ok(windows.controls.every(control => control.disabled));
 });
+
+test('SNMP version and security show only needed credentials without discarding values', () => {
+    const groups=['v2c','v3','auth','priv'].map(kind=>({dataset:{snmpGroup:kind},hidden:false}));
+    const version={value:'v2c'},security={value:'authPriv'};
+    const form={querySelector:selector=>selector==='[data-snmp-version]'?version:security,querySelectorAll:()=>groups};
+    const select={closest:()=>form};
+    controller.updateSnmpFields(select);
+    assert.deepEqual(groups.map(g=>g.hidden),[false,true,true,true]);
+    version.value='v3';security.value='noAuthNoPriv';controller.updateSnmpFields(select);
+    assert.deepEqual(groups.map(g=>g.hidden),[true,false,true,true]);
+    security.value='authNoPriv';controller.updateSnmpFields(select);
+    assert.deepEqual(groups.map(g=>g.hidden),[true,false,false,true]);
+    security.value='authPriv';controller.updateSnmpFields(select);
+    assert.deepEqual(groups.map(g=>g.hidden),[true,false,false,false]);
+});

@@ -90,7 +90,7 @@ class ReviewUiTests(TestCase):
 
     def test_row_execution_can_restore_exactly_one_selected_asset(self):
         response = self.client.get('/assets/servers/', {'task_targets': str(self.second.pk), 'task_mode': 'selected', 'task_modal': 'run'})
-        self.assertContains(response, f'data-task-target="{self.second.pk}"')
+        self.assertContains(response, f'task_single_target={self.second.pk}" data-single-device-run')
         self.assertEqual(response.context['task_selected_ids'], [str(self.second.pk)])
         self.client.post('/tasks/manual/', {'profile_id': self.memory.pk, 'target_mode': 'selected', 'target_ids': [self.second.pk], 'selected_items': ['memory']})
         self.assertEqual(list(TaskRun.objects.get().target_runs.values_list('target_id', flat=True)), [str(self.second.pk)])

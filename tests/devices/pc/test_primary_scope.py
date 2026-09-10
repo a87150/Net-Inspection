@@ -57,6 +57,10 @@ class PrimaryScopeTests(TestCase):
         response = self.client.get(reverse('analysis_problem_list', args=[task.pk]),
                                    {'category': '人员缺少日志'})
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '<th scope="col">人员</th>', html=True)
+        self.assertNotContains(response, '<th scope="col">PC 名称</th>', html=True)
+        self.assertNotContains(response, '同一 PC 可能有多条记录')
+        self.assertContains(response, 'Two · A2')
         self.assertContains(response, 'A2')
 
     def test_logs_mode_reports_orphan_but_not_person_without_log(self):

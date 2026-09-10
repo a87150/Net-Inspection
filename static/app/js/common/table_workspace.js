@@ -227,6 +227,33 @@
         return false;
     }
 
+    function configurationDownloadHref(zipHref, selectedIds) {
+        if (!selectedIds.length) return '';
+        const url = new URL(zipHref);
+        url.search = '';
+        url.searchParams.set('target_ids', selectedIds.join(','));
+        return url.toString();
+    }
+
+    function configurationDownloadState(zipHref, selectedIds) {
+        return {
+            href: configurationDownloadHref(zipHref, selectedIds),
+            disabled: selectedIds.length === 0,
+            label: selectedIds.length ? `下载所选配置（${selectedIds.length}）` : '请先选择设备',
+        };
+    }
+
+    function updateConfigurationDownload(button, targets) {
+        if (!button) return;
+        const ids = targets.filter((target) => target.checked).map((target) => target.value);
+        const state = configurationDownloadState(button.href, ids);
+        if (state.href) button.href = state.href;
+        button.textContent = state.label;
+        button.classList.toggle('disabled', state.disabled);
+        button.setAttribute('aria-disabled', String(state.disabled));
+        if (state.disabled) button.setAttribute('tabindex', '-1'); else button.removeAttribute('tabindex');
+    }
+
     function initializeWorkspace(workspace, storage, location = null) {
         const tableKey = workspace.dataset.tableKey;
         if (!tableKey) return;
@@ -240,6 +267,8 @@
             reset: workspace.querySelector('[data-table-reset]'),
             moreFilters: workspace.querySelector('[data-more-filters]'),
             exportLinks: Array.from(workspace.querySelectorAll('[data-filtered-export]')),
+            configurationExport: workspace.querySelector('[data-selected-config-export]'),
+            configurationTargets: Array.from(workspace.querySelectorAll('[data-configuration-target]')),
             suggestionSelects: Array.from(workspace.querySelectorAll('[data-filter-suggestion-select]')),
             activeFilterSources: Array.from(workspace.querySelectorAll('[data-active-filter-source]')),
             activeFilterList: workspace.querySelector('[data-active-filter-list]'),
@@ -274,6 +303,15 @@
         );
         applyPreferences(elements, preferences);
         renderActiveFilterChips(elements, workspace.ownerDocument, location);
+        updateConfigurationDownload(elements.configurationExport, elements.configurationTargets);
+        elements.configurationTargets.forEach((target) => {
+            target.addEventListener('change', () => updateConfigurationDownload(
+                elements.configurationExport, elements.configurationTargets,
+            ));
+        });
+        elements.configurationExport?.addEventListener('click', (event) => {
+            if (elements.configurationExport.getAttribute('aria-disabled') === 'true') event.preventDefault();
+        });
         if (storedPreferences) {
             replacePageSizeQuery(location, elements.pageSize, preferences.pageSize);
         }
@@ -429,5 +467,5 @@
         bootstrapApi.Modal.getOrCreateInstance(modalElement).show();
     }
 
-    return {activeFilterDescriptors, bindPartialTableNavigation, clearActiveFilterSource, initializeWorkspace, initializeAll, openAutoOpenImportModal, refreshTableWorkspaces, renderActiveFilterChips, storageKey};
+    return {activeFilterDescriptors, bindPartialTableNavigation, clearActiveFilterSource, configurationDownloadHref, configurationDownloadState, initializeWorkspace, initializeAll, openAutoOpenImportModal, refreshTableWorkspaces, renderActiveFilterChips, storageKey};
 }));
