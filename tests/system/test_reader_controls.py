@@ -143,7 +143,7 @@ class ReaderControlsTests(TestCase):
                              user in (self.staff, self.superuser))
             if user.is_authenticated:
                 self.assertIn('name="csrfmiddlewaretoken"', html)
-                self.assertEqual(Forms(html).forms, [{'method': 'post', 'action': reverse('logout'), 'class': 'ms-3'}])
+                self.assertEqual(Forms(html).forms, [{'method': 'post', 'action': reverse('logout')}])
 
     def test_inactive_staff_cannot_build_admin_context(self):
         self.staff.is_active = False

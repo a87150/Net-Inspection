@@ -196,6 +196,79 @@ class SharedInterfaceContractTests(TestCase):
         self.assertContains(response, 'alert-channel-editor')
         self.assertNotContains(response, '渠道管理：</span>')
 
+    def test_collection_template_workflow_uses_glass_list_and_scroll_shell(self):
+        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        body = (template_root / 'devices' / 'collection_settings_body.html').read_text(encoding='utf-8')
+        modal = (template_root / 'devices' / 'collection_template_modal.html').read_text(encoding='utf-8')
+
+        self.assertIn('collection-template-workspace', body)
+        self.assertIn('interactive-list', body)
+        self.assertIn('interactive-list__item', body)
+        self.assertIn('interactive-list__meta', body)
+        self.assertIn('status-badge', body)
+        self.assertIn('modal-dialog modal-xl modal-dialog-scrollable modal-shell', modal)
+        self.assertIn('modal-footer modal-footer--sticky', modal)
+        self.assertIn('id="collectionSettingsForm"', body)
+        self.assertIn('form="collectionSettingsForm"', modal)
+
+    def test_plain_history_and_task_links_use_the_shared_interactive_list(self):
+        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        paths = (
+            'devices/pc/log_detail.html',
+            'common/import_modal.html',
+            'domain/sync_task_list.html',
+        )
+
+        for relative_path in paths:
+            with self.subTest(template=relative_path):
+                source = (template_root / relative_path).read_text(encoding='utf-8')
+                self.assertIn('interactive-list', source)
+                self.assertIn('interactive-list__item', source)
+
+    def test_legacy_error_cards_use_shared_status_surfaces(self):
+        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        paths = (
+            'devices/pc/inspection_detail.html',
+            'inspections/detail.html',
+            'inspections/issue_findings.html',
+            'inspections/record_detail.html',
+        )
+
+        for relative_path in paths:
+            with self.subTest(template=relative_path):
+                source = (template_root / relative_path).read_text(encoding='utf-8')
+                self.assertNotIn('card border-danger', source)
+                self.assertIn('surface-card', source)
+
+    def test_shared_interactive_list_has_responsive_accessible_states(self):
+        css = Path(finders.find('app/css/foundation.css')).read_text(encoding='utf-8')
+
+        for selector in (
+            '.interactive-list',
+            '.interactive-list__item',
+            '.interactive-list__item:hover',
+            '.interactive-list__item:focus-visible',
+            '.interactive-list__meta',
+            '.interactive-list__empty',
+        ):
+            with self.subTest(selector=selector):
+                self.assertIn(selector, css)
+
+    def test_remaining_standalone_content_cards_use_the_shared_surface(self):
+        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        paths = (
+            'registration/login.html',
+            'common/table_filter.html',
+            'public/list.html',
+            'public/summary.html',
+            'inspections/traffic_table.html',
+        )
+
+        for relative_path in paths:
+            with self.subTest(template=relative_path):
+                source = (template_root / relative_path).read_text(encoding='utf-8')
+                self.assertIn('surface-card', source)
+
 
 class AdminVisualContractTests(TestCase):
     def setUp(self):

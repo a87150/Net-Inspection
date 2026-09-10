@@ -194,6 +194,68 @@
     box-shadow: 0 10px 28px -24px rgba(24, 38, 68, .9);
 }
 
+.collection-template-workspace {
+    display: grid;
+    gap: 1rem;
+}
+
+.collection-template-intro {
+    padding: .95rem 1rem;
+    border: 1px solid rgba(128, 149, 184, .2);
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, .48);
+    color: var(--color-text-muted);
+    font-size: .86rem;
+    line-height: 1.65;
+}
+
+.collection-template-intro p:last-child {
+    margin-bottom: 0;
+}
+
+.collection-template-library__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.collection-template-library .card-body {
+    padding: 1rem;
+}
+
+.collection-template-presets {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.collection-template-presets__actions {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    gap: .45rem;
+}
+
+.collection-template-editor {
+    overflow: visible;
+}
+
+.inspection-rule-card {
+    background: rgba(255, 255, 255, .5);
+}
+
+.inspection-rule-card[open] {
+    border-color: rgba(49, 87, 213, .28);
+    background: rgba(255, 255, 255, .78);
+}
+
+.collection-template-workspace pre {
+    max-height: 24rem;
+    overflow: auto;
+}
+
 /* Recently added workflows inherit the same glass hierarchy as the main console. */
 .alert-template-layout [data-template-section="content"] {
     grid-column: 1 / -1;
@@ -342,5 +404,10 @@
     .analysis-problems-modal__body {
         margin: .65rem;
         padding: .75rem !important;
+    }
+
+    .collection-template-presets {
+        align-items: stretch;
+        flex-direction: column;
     }
 }

@@ -343,6 +343,25 @@ body.app-shell {
 .badge.text-bg-secondary { background: #f0f3f7 !important; color: #526077 !important; }
 .badge.text-bg-info { background: #eaf3ff !important; color: #2259a5 !important; }
 
+.status-badge--success { background: #e8f7f0; color: #126846; }
+.status-badge--danger { background: #fff0f1; color: #a42d3d; }
+.status-badge--warning { background: #fff5dd; color: #8a4f00; }
+.status-badge--info { background: #eaf3ff; color: #2259a5; }
+.status-badge--neutral { background: #f0f3f7; color: #526077; }
+
+.status-surface .list-group-item {
+    background: rgba(255, 255, 255, .42);
+}
+
+.status-surface--danger {
+    border-color: rgba(188, 57, 75, .2) !important;
+    background: linear-gradient(145deg, rgba(255, 255, 255, .9), rgba(255, 241, 243, .7));
+}
+
+.status-surface--danger > .card-header {
+    background: rgba(255, 240, 242, .62);
+}
+
 .status-badge::before,
 .badge.text-bg-success::before,
 .badge.text-bg-danger::before,

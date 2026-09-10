@@ -58,16 +58,18 @@
                 {% if can_administer %}<a class="navbar-text app-navbar__context" href="{% url 'admin:index' %}"><span class="status-dot status-dot--success" aria-hidden="true"></span>运维管理台</a>{% endif %}
                 {% if user.is_authenticated %}
                 <div class="dropdown ms-3" data-account-menu>
-                    <button class="btn btn-outline-light btn-sm dropdown-toggle d-inline-flex align-items-center gap-2" id="accountMenuToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="accountMenu" aria-label="账号 {{ user.get_username }}，查看权限组">
+                    <button class="app-account-trigger dropdown-toggle d-inline-flex align-items-center gap-2" id="accountMenuToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="accountMenu" aria-label="账号 {{ user.get_username }}，查看用户组">
                         <span>{{ user.get_username }}</span>
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end app-navbar__dropdown-menu" id="accountMenu" aria-labelledby="accountMenuToggle">
-                        <li><h2 class="dropdown-header">权限组</h2></li>
-                        {% for group in user.groups.all %}
-                        <li><span class="dropdown-item-text">{{ group.name }}</span></li>
-                        {% empty %}
-                        <li><span class="dropdown-item-text text-secondary">未分配权限组</span></li>
-                        {% endfor %}
+                        <li><h2 class="dropdown-header">用户组</h2></li>
+                        {% if user.is_superuser %}
+                        <li><span class="dropdown-item-text app-account-role" data-account-role="superuser">超级管理员</span></li>
+                        {% elif can_administer %}
+                        <li><span class="dropdown-item-text app-account-role" data-account-role="administrator">管理员</span></li>
+                        {% else %}
+                        <li><span class="dropdown-item-text app-account-role" data-account-role="regular">普通用户</span></li>
+                        {% endif %}
                         <li><hr class="dropdown-divider"></li>
                         <li>
                             <form method="post" action="{% url 'logout' %}">

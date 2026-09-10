@@ -1,7 +1,7 @@
 {% extends 'common/base.html' %}
 {% block title %}{{ title }} · 公开列表{% endblock %}
 {% block content %}
-<section class="card p-4">
+<section class="card surface-card p-4">
     <h1>{{ title }}</h1>
     <p class="text-muted">公开基础信息 · 共 {{ page_obj.paginator.count }} 条</p>
     <form method="get" class="row g-3 mb-4">
