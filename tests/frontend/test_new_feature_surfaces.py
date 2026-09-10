@@ -98,3 +98,8 @@ class NewFeatureSurfaceDesignTests(TestCase):
         select_start = html.index('<select', html.index('id="access-source-id"') - 100)
         select_end = html.index('>', select_start)
         self.assertNotIn('multiple', html[select_start:select_end])
+
+        css = Path(settings.BASE_DIR, 'static/app/css/operations.css').read_text(encoding='utf-8')
+        access_card_rule = css.split('.access-sync-card {', 1)[1].split('}', 1)[0]
+        self.assertIn('width: 100%', access_card_rule)
+        self.assertNotIn('max-width:', access_card_rule)

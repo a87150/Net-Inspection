@@ -1073,7 +1073,7 @@ code {
 }
 /* Compact access-platform picker above the access record table. */
 .access-sync-card {
-    max-width: 48rem;
+    width: 100%;
 }
 
 .access-sync-card__body {
