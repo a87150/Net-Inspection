@@ -21,6 +21,7 @@ class AssetDashboardUiTests(TestCase):
 
         self.assertContains(response, '>PC<')
         self.assertContains(response, '人员总数')
+        self.assertContains(response, '设备总数', count=3)
         self.assertContains(response, '上次分析日期')
         self.assertContains(response, '上次巡检日期')
         self.assertContains(response, 'metric-card__footer metric-card__actions')
