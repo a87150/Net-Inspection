@@ -82,3 +82,16 @@ class NewFeatureSurfaceDesignTests(TestCase):
         self.assertContains(response, 'table-scroll-shell')
         self.assertContains(response, 'table-scroll-hint')
         self.assertContains(response, 'table data-table')
+
+    def test_access_record_sync_uses_compact_single_source_picker(self):
+        response = self.client.get(reverse('access_record_list'))
+        html = response.content.decode(response.charset)
+
+        self.assertContains(response, 'access-sync-card')
+        self.assertContains(response, 'access-sync-card__controls')
+        self.assertContains(response, 'id="access-source-id"')
+        self.assertContains(response, 'name="source_ids"')
+        self.assertContains(response, '请选择已启用的门禁管理平台')
+        select_start = html.index('<select', html.index('id="access-source-id"') - 100)
+        select_end = html.index('>', select_start)
+        self.assertNotIn('multiple', html[select_start:select_end])

@@ -1071,3 +1071,82 @@ code {
     .metric-card__primary-action { width: 100%; }
     .metric-card__last-run { grid-column: 1; text-align: left !important; }
 }
+/* Compact access-platform picker above the access record table. */
+.access-sync-card {
+    position: relative;
+    isolation: isolate;
+}
+
+.access-sync-card::before {
+    position: absolute;
+    z-index: -1;
+    top: -4rem;
+    right: -2rem;
+    width: 12rem;
+    height: 12rem;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(102, 136, 255, .14), rgba(102, 136, 255, 0) 70%);
+    content: '';
+    pointer-events: none;
+}
+
+.access-sync-card__body {
+    padding: 1.15rem 1.25rem;
+}
+
+.access-sync-card__layout {
+    display: grid;
+    grid-template-columns: minmax(15rem, .75fr) minmax(24rem, 1.25fr);
+    align-items: end;
+    gap: 1.25rem;
+}
+
+.access-sync-card__copy {
+    min-width: 0;
+}
+
+.access-sync-card__copy h2 {
+    color: var(--color-text);
+    font-weight: 720;
+}
+
+.access-sync-card__controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: .7rem;
+}
+
+.access-sync-card__controls .form-label {
+    margin-bottom: .35rem;
+    color: var(--color-text-muted);
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.access-sync-card__controls .btn {
+    min-height: 2.65rem;
+}
+
+.access-sync-card__empty {
+    margin-top: .8rem;
+    padding-top: .75rem;
+    border-top: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: .8rem;
+}
+
+@media (max-width: 767.98px) {
+    .access-sync-card__layout,
+    .access-sync-card__controls {
+        grid-template-columns: 1fr;
+    }
+
+    .access-sync-card__controls .btn {
+        width: 100%;
+    }
+
+    .access-sync-card__body {
+        padding: 1rem;
+    }
+}
