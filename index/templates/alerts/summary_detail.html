@@ -1,0 +1,16 @@
+<h2 class="h5">{{ event.summary_data.message_title|default:'任务总结' }}</h2>
+<p class="text-secondary">{{ event.summary_data.task_name }} · {{ event.summary_data.task_status }}</p>
+<dl class="row">
+    <dt class="col-sm-4">目标统计</dt>
+    <dd class="col-sm-8">总数 {{ event.summary_data.total|default:0 }} · 正常 {{ event.summary_data.normal|default:0 }} · 异常 {{ event.summary_data.abnormal|default:0 }} · 恢复 {{ event.summary_data.recovered|default:0 }}</dd>
+    <dt class="col-sm-4">执行统计</dt>
+    <dd class="col-sm-8">失败 {{ event.summary_data.failed|default:0 }} · 取消 {{ event.summary_data.cancelled|default:0 }} · 跳过 {{ event.summary_data.skipped|default:0 }} · 提示 {{ event.summary_data.info|default:0 }}</dd>
+</dl>
+<h3 class="h6">已固定的通知内容</h3>
+<div class="text-break">
+    {% if event.summary_data.message_text %}
+        {{ event.summary_data.message_text|linebreaksbr }}
+    {% else %}
+        {{ event.summary|default:'此历史总结未保存通知正文，请查看任务详情。' }}
+    {% endif %}
+</div>

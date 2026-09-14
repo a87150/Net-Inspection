@@ -92,6 +92,23 @@ test('keeps flash messages at page level when no modal is automatically reopened
 
     assert.equal(view.body.stack, null);
 });
+
+test('renders transport errors through the shared modal feedback surface', () => {
+    assert.equal(typeof feedback.showModalFeedback, 'function');
+    const view = fixture();
+
+    const message = feedback.showModalFeedback(
+        view.document,
+        view.modal,
+        '连接失败，请重试。',
+        'danger',
+    );
+
+    assert.equal(message.className, 'alert alert-danger');
+    assert.equal(message.textContent, '连接失败，请重试。');
+    assert.equal(message.attributes.role, 'status');
+    assert.equal(view.body.stack, message);
+});
 test('keeps valid modal values while excluding passwords and uploaded files', () => {
     assert.equal(typeof feedback.captureFormDraft, 'function');
     const fields = [

@@ -1,0 +1,33 @@
+<tr>
+    <td>{{ target.get_target_type_display }}</td>
+    <td class="text-break">
+        {% if domain_operation %}
+        <div>{{ target.domain_name }}</div><small class="text-secondary">{{ target.domain_dn }}</small>
+        {% else %}
+        {{ target.target_id }}
+        {% endif %}
+    </td>
+    <td>{% include 'common/status_badge.html' with status=target.status label=target.get_status_display %}</td>
+    <td>{{ target.result_type|default:'-' }}</td>
+    <td class="text-break">{% include 'common/text_disclosure.html' with text=target.error_message disclosure_label="查看错误详情" %}</td>
+    <td>
+        {% if task.task_type == 'domain_sync' %}
+        <span class="text-secondary">不参与设备告警</span>
+        {% elif target.alert_processing_error %}
+        {% include 'common/status_badge.html' with status="retry" label="告警处理待重试" %}
+        <div class="small text-break mt-1">{{ target.alert_processing_error }}</div>
+        <div class="small text-secondary">最近尝试 {{ target.alert_attempted_at|date:'Y-m-d H:i:s' }}</div>
+        {% elif target.alert_processed_at %}
+        {% include 'common/status_badge.html' with status="success" label="告警已处理" %}
+        {% else %}
+        {% include 'common/status_badge.html' with status="queued" label="等待处理" %}
+        {% endif %}
+    </td>
+    <td>
+        {% if target.people_sync_counts %}
+        <span class="small text-nowrap">新增 {{ target.people_sync_counts.created }} · 更新 {{ target.people_sync_counts.updated }} · 未变化 {{ target.people_sync_counts.unchanged }} · 停用 {{ target.people_sync_counts.deactivated }} · 跳过 {{ target.people_sync_counts.skipped }}</span>
+        {% elif target.result_url %}
+        <a class="btn btn-outline-primary btn-sm" href="{{ target.result_url }}">查看结果</a>
+        {% else %}—{% endif %}
+    </td>
+</tr>

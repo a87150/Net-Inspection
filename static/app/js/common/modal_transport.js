@@ -1,6 +1,9 @@
 /* Shared in-dialog navigation. Writes remain CSRF-protected POSTs. */
 (function () {
     'use strict';
+    const modalFeedback = typeof module === 'object' && module.exports
+        ? require('./modal_feedback.js')
+        : window.AppModalFeedback;
     const identities = new Set(['profile_id', 'channel_id', 'channel_type', 'scope', 'provider', 'source_id', 'policy_id']);
     const switchParameters = ['alert_modal', 'task_modal', 'bulk_mode'];
 
@@ -40,14 +43,7 @@
             return states.get(modal);
         };
         function feedback(modal, text, kind = 'danger') {
-            const body = modal.querySelector('.modal-body');
-            body.querySelector('[data-modal-feedback]')?.remove();
-            const message = doc.createElement('div');
-            message.className = 'alert alert-' + kind;
-            message.dataset.modalFeedback = '';
-            message.setAttribute('role', 'status');
-            message.textContent = text;
-            body.prepend(message);
+            modalFeedback.showModalFeedback(doc, modal, text, kind);
         }
         function rebind(modal) {
             win.AppConditionalFields?.bindScheduleFields(modal);

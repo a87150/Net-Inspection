@@ -590,8 +590,12 @@ function partialNavigationFixture({fetchError = null} = {}) {
     const replacement = replacementFixture.workspace;
     const originalQuerySelector = replacement.querySelector.bind(replacement);
     const focusedSortLink = {focused: false, focus() { this.focused = true; }};
+    const resultSummary = {textContent: '共 18 条，当前显示第 1–18 条'};
+    const liveRegion = {textContent: ''};
     replacement.querySelector = (selector) => (
-        selector === '[data-sort-key="name"]' ? focusedSortLink : originalQuerySelector(selector)
+        selector === '[data-sort-key="name"]' ? focusedSortLink
+            : selector === '[data-result-summary]' ? resultSummary
+                : originalQuerySelector(selector)
     );
 
     const current = {
@@ -606,6 +610,7 @@ function partialNavigationFixture({fetchError = null} = {}) {
     const documentListeners = new Map();
     const documentRoot = {
         addEventListener(type, listener) { documentListeners.set(type, listener); },
+        getElementById(id) { return id === 'app-live-region' ? liveRegion : null; },
         querySelectorAll(selector) {
             assert.equal(selector, '[data-table-workspace]');
             return [current];
@@ -652,7 +657,7 @@ function partialNavigationFixture({fetchError = null} = {}) {
         },
     };
     return {
-        browserWindow, current, documentListeners, documentRoot, focusedSortLink,
+        browserWindow, current, documentListeners, documentRoot, focusedSortLink, liveRegion,
         history, location, replacement, requests, windowListeners,
     };
 }
@@ -690,6 +695,7 @@ test('sort click fetches the server-sorted page and replaces the table workspace
     assert.equal(fixture.current.replacedWith, fixture.replacement);
     assert.deepEqual(fixture.history.pushed, [link.href]);
     assert.equal(fixture.focusedSortLink.focused, true);
+    assert.equal(fixture.liveRegion.textContent, '列表已更新。共 18 条，当前显示第 1–18 条');
     assert.deepEqual(fixture.location.assigned, []);
 });
 

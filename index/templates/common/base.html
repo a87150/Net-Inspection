@@ -6,20 +6,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}网络巡检中心{% endblock %}</title>
     <link href="{% static 'vendor/bootstrap/css/bootstrap.min.css' %}" rel="stylesheet">
+    <link href="{% static 'app/css/tokens.css' %}" rel="stylesheet">
+    <link href="{% static 'app/css/foundation.css' %}" rel="stylesheet">
+    <link href="{% static 'app/css/operations.css' %}" rel="stylesheet">
+    <link href="{% static 'app/css/modal-workflows.css' %}" rel="stylesheet">
     <link href="{% static 'app/css/style.css' %}" rel="stylesheet">
+    {% block page_css %}{% endblock %}
     <script defer src="{% static 'vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
-    <script defer src="{% static 'app/js/common/table_tools.js' %}"></script>
-    <script defer src="{% static 'app/js/common/table_workspace.js' %}"></script>
-    <script defer src="{% static 'app/js/common/modal_feedback.js' %}"></script>
-    <script defer src="{% static 'app/js/common/modal_transport.js' %}"></script>
     <script defer src="{% static 'app/js/common/form_accessibility.js' %}"></script>
-    <script defer src="{% static 'app/js/common/conditional_fields.js' %}"></script>
-    <script defer src="{% static 'app/js/inspections/task_ui.js' %}"></script>
-    <script defer src="{% static 'app/js/people/import_tasks.js' %}"></script>
-    <script defer src="{% static 'app/js/people/modal.js' %}"></script>
+    <script defer src="{% static 'app/js/common/confirm_dialog.js' %}"></script>
 </head>
 <body class="app-shell">
     <a class="skip-link" href="#main-content">跳至主要内容</a>
+    <div class="visually-hidden" id="app-live-region" role="status" aria-live="polite" aria-atomic="true"></div>
     <nav class="navbar navbar-expand-lg navbar-dark app-navbar app-header" aria-label="主导航">
         <div class="container-fluid app-navbar__inner">
             {% url 'index' as brand_url %}{% include 'common/brand.html' with brand_url=brand_url %}
@@ -95,6 +94,22 @@
         {% endif %}
         {% block content %}{% endblock %}
     </main>
+    <div class="modal fade" id="appConfirmModal" tabindex="-1" aria-labelledby="appConfirmTitle" aria-describedby="appConfirmText" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-shell">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h2 class="modal-title fs-5" id="appConfirmTitle">确认操作</h2>
+                    <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="关闭"></button>
+                </div>
+                <div class="modal-body"><p class="mb-0" id="appConfirmText" data-confirm-text>请确认是否继续。</p></div>
+                <div class="modal-footer modal-footer--sticky">
+                    <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">取消</button>
+                    <button class="btn btn-danger" type="button" data-confirm-submit>确认执行</button>
+                </div>
+            </div>
+        </div>
+    </div>
     <footer class="app-footer"><span>Network Inspection Center</span><span>终端、基础设施与目录服务统一运维</span></footer>
+    {% block page_scripts %}{% endblock %}
 </body>
 </html>

@@ -25,7 +25,7 @@
     <tbody>
     {% for obj in page_obj %}
     <tr>
-        {% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{% if field.key == 'latest_status' %}{% if obj.latest_status == 'normal' %}<span class="status-dot status-dot--success" aria-hidden="true"></span><span class="badge text-bg-success">正常</span>{% elif obj.latest_status == 'abnormal' and obj.latest_reachable is True %}<span class="status-dot status-dot--warning" aria-hidden="true"></span><span class="badge text-bg-warning">在线/采集异常</span>{% elif obj.latest_status == 'abnormal' %}<span class="status-dot status-dot--danger" aria-hidden="true"></span><span class="badge text-bg-danger">不可达</span>{% else %}<span class="status-dot status-dot--muted" aria-hidden="true"></span><span class="badge text-bg-secondary">未巡检</span>{% endif %}{% else %}{{ obj|get_attr:field.source|format_table_value:field.kind }}{% endif %}</td>{% endfor %}
+        {% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{% if field.key == 'latest_status' %}{% if obj.latest_status == 'normal' %}{% include 'common/status_badge.html' with status="normal" label="正常" %}{% elif obj.latest_status == 'abnormal' and obj.latest_reachable is True %}{% include 'common/status_badge.html' with status="warning" label="在线/采集异常" %}{% elif obj.latest_status == 'abnormal' %}{% include 'common/status_badge.html' with status="abnormal" label="不可达" %}{% else %}{% include 'common/status_badge.html' with status="unknown" label="未巡检" %}{% endif %}{% else %}{{ obj|get_attr:field.source|format_table_value:field.kind }}{% endif %}</td>{% endfor %}
         {% if can_administer and inspection_type %}
         <td class="text-end table-actions-cell"><form method="post" action="{% url 'run_infrastructure_inspection' %}">
             {% csrf_token %}
@@ -43,7 +43,11 @@
 {% if recent_records %}
 <section class="card surface-card mt-4"><div class="card-header surface-card__header"><h2 class="h5 mb-0">{{ item_name }}最近巡检</h2></div>
 <div class="table-responsive" role="region" aria-label="{{ item_name }}最近巡检" tabindex="0"><table class="table data-table table-hover align-middle mb-0"><thead><tr><th scope="col">设备</th><th scope="col">结果</th><th scope="col">时间</th><th scope="col"></th></tr></thead><tbody>
-{% for record in recent_records %}<tr><td>{{ record.asset }}</td><td>{% if record.ok %}<span class="badge text-bg-success">{{ record.summary }}</span>{% else %}<span class="badge text-bg-danger">{{ record.summary }}</span>{% endif %}</td><td>{{ record.time|date:"Y-m-d H:i:s" }}</td><td><a href="{{ record.url }}" class="btn btn-outline-secondary btn-sm">查看详情</a></td></tr>{% endfor %}
+{% for record in recent_records %}<tr><td>{{ record.asset }}</td><td>{% if record.ok %}{% include 'common/status_badge.html' with status="normal" label=record.summary %}{% else %}{% include 'common/status_badge.html' with status="abnormal" label=record.summary %}{% endif %}</td><td>{{ record.time|date:"Y-m-d H:i:s" }}</td><td><a href="{{ record.url }}" class="btn btn-outline-secondary btn-sm">查看详情</a></td></tr>{% endfor %}
 </tbody></table></div></section>
 {% endif %}
+{% endblock %}
+{% block page_scripts %}
+{% include 'common/scripts/table_workspace.html' %}
+{% include 'common/scripts/modal_workflows.html' %}
 {% endblock %}

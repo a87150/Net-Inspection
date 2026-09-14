@@ -59,3 +59,9 @@
     {% include 'common/pagination.html' %}
 </div>
 {% endblock %}
+{% block page_scripts %}
+{% include 'common/scripts/table_workspace.html' %}
+{% include 'common/scripts/modal_workflows.html' %}
+{% if task_project_kind %}{% include 'common/scripts/inspection_workflows.html' %}{% endif %}
+{% if people_operation or personnel_api_import %}{% include 'common/scripts/people_workflows.html' %}{% endif %}
+{% endblock %}

@@ -2,7 +2,7 @@
 <section aria-labelledby="latest-analysis-title">
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
     <div><p class="page-heading__eyebrow mb-1">最新结果</p><h2 class="h5 mb-0" id="latest-analysis-title">最新任务统计</h2></div>
-    {% if latest_task %}<div class="d-flex flex-wrap align-items-center gap-3"><span class="small text-secondary">{{ latest_task.created_at|date:'Y-m-d H:i:s' }} · {{ latest_task.get_status_display }}</span><a class="btn btn-outline-primary" href="{% url 'task_detail' latest_task.pk %}">查看任务详情</a></div>{% endif %}
+    {% if latest_task %}<div class="d-flex flex-wrap align-items-center gap-3"><span class="small text-secondary">{{ latest_task.created_at|date:'Y-m-d H:i:s' }}</span>{% include 'common/status_badge.html' with status=latest_task.status label=latest_task.get_status_display %}<a class="btn btn-outline-primary" href="{% url 'task_detail' latest_task.pk %}">查看任务详情</a></div>{% endif %}
   </div>
   {% if latest_task %}
   <div class="row g-3 mb-3">

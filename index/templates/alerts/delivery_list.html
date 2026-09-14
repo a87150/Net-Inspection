@@ -1,0 +1,18 @@
+<h2 class="h5">渠道送达</h2>
+<div class="list-group list-group-flush">
+    {% for delivery in event.deliveries.all %}
+    <div class="list-group-item px-0">
+        <div class="d-flex justify-content-between gap-2">
+            <strong>{{ delivery.channel.name }}</strong>
+            {% include 'common/status_badge.html' with status=delivery.status label=delivery.get_status_display %}
+        </div>
+        <div class="small text-secondary">
+            尝试 {{ delivery.attempt_count }} / {{ delivery.max_attempts }}
+            {% if delivery.delivered_at %} · {{ delivery.delivered_at|date:'Y-m-d H:i:s' }}{% endif %}
+        </div>
+        {% if delivery.response_summary %}<div class="small text-break mt-1">{{ delivery.response_summary }}</div>{% endif %}
+    </div>
+    {% empty %}
+    <p class="text-secondary">该事件没有可用的已启用渠道。</p>
+    {% endfor %}
+</div>

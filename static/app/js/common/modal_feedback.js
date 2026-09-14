@@ -110,6 +110,19 @@ function restoreFormDraft(form, draft) {
     return true;
 }
 
+function showModalFeedback(document, modal, text, kind = 'danger') {
+    const body = modal?.querySelector('.modal-body');
+    if (!body) return null;
+    body.querySelector('[data-modal-feedback]')?.remove?.();
+    const message = document.createElement('div');
+    message.className = `alert alert-${kind}`;
+    message.setAttribute('data-modal-feedback', '');
+    message.setAttribute('role', 'status');
+    message.textContent = text;
+    body.prepend(message);
+    return message;
+}
+
 function formDraftScope(form) {
     const identities = Array.from(form.elements || [])
         .filter(isDraftIdentity)
@@ -179,12 +192,13 @@ function installModalFeedback(document) {
     });
 }
 
-if (typeof module !== 'undefined') {
-    module.exports = {
-        captureFormDraft,
-        installModalFeedback,
-        moveFlashMessagesToModal,
-        restoreFormDraft,
-    };
-}
+const modalFeedbackApi = {
+    captureFormDraft,
+    installModalFeedback,
+    moveFlashMessagesToModal,
+    restoreFormDraft,
+    showModalFeedback,
+};
+if (typeof module !== 'undefined') module.exports = modalFeedbackApi;
+if (typeof window !== 'undefined') window.AppModalFeedback = modalFeedbackApi;
 if (typeof document !== 'undefined') installModalFeedback(document);

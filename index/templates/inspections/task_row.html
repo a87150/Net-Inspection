@@ -1,0 +1,19 @@
+<tr>
+    <td>{{ task.get_task_type_display }}</td>
+    <td>{{ task.get_source_display }}</td>
+    <td>{% include 'common/status_badge.html' with status=task.status label=task.get_status_display %}</td>
+    <td>{{ task.progress }}%</td>
+    <td>{{ task.created_at|date:'Y-m-d H:i:s' }}</td>
+    <td class="text-end table-actions-cell">
+        <div class="d-inline-flex gap-2">
+            <a class="btn btn-outline-dark btn-sm" href="{% url 'task_detail' task.pk %}">查看进度</a>
+            {% if can_administer and task.status in task.ACTIVE_STATUSES %}
+            <form method="post" action="{% url 'task_cancel' task.pk %}" data-confirm-message="确定结束这个任务吗？尚未开始的目标会被取消，正在执行的外部调用将在超时后退出。">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button class="btn btn-outline-danger btn-sm" type="submit">结束任务</button>
+            </form>
+            {% endif %}
+        </div>
+    </td>
+</tr>

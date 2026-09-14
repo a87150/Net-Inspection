@@ -1,4 +1,1 @@
-@import url("tokens.css");
-@import url("foundation.css");
-@import url("operations.css");
-@import url("modal-workflows.css");
+/* Compatibility entrypoint. Templates link the ordered design layers directly. */

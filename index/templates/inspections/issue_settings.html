@@ -1,10 +1,21 @@
-{% if can_administer %}
-{% load static %}<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>问题等级设置</title><link href="{% static 'vendor/bootstrap/css/bootstrap.min.css' %}" rel="stylesheet"></head>
-<body class="bg-body-tertiary"><main class="container-fluid p-3">
-<p>{{ project_label }}专属规则，只影响本项目的新任务，不修改其他项目。历史记录、运行中任务不变。数据不足默认仅提示；任务执行失败仍单独显示，不因降低问题等级而掩盖。</p>
-{% if saved %}<div class="alert alert-success" role="status">已保存，可继续调整；关闭窗口后对新任务生效。</div>{% endif %}
-<form method="post" action="{% url 'issue_severity_settings' %}?project={{ project }}">{% csrf_token %}{{ form.updated_at }}{{ form.updated_at.errors }}{{ form.non_field_errors }}
-<div class="table-responsive"><table class="table align-middle"><thead><tr><th>类型</th><th>检查项目</th><th>实际问题</th><th>数据缺失 / 未知</th><th>超限阈值（温度℃，其余%）</th></tr></thead><tbody>
-{% for category, label, rule, missing, threshold in form.rule_rows %}<tr><td>{{ category }}</td><td>{{ label }}</td><td>{{ rule }}{{ rule.errors }}</td><td>{{ missing }}{{ missing.errors }}</td><td>{% if threshold %}{{ threshold }}{{ threshold.errors }}{% else %}—{% endif %}</td></tr>{% endfor %}
-</tbody></table></div><div class="sticky-bottom bg-body py-2"><button class="btn btn-primary" type="submit">保存问题等级</button></div></form></main></body></html>
-{% endif %}
+{% extends 'common/base.html' %}
+{% block title %}问题等级设置{% endblock %}
+{% block content %}
+<header class="page-heading">
+    <div class="page-heading__copy">
+        <p class="page-heading__eyebrow">异常规则</p>
+        <h1 class="page-heading__title">问题等级设置</h1>
+        <p class="page-heading__description">配置{{ project_label }}的新任务判定等级和超限阈值。</p>
+    </div>
+    <div class="page-heading__actions">
+        <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#issueSeverityModal">打开设置</button>
+    </div>
+</header>
+<section class="card surface-card">
+    <div class="card-body">
+        <p class="mb-0 text-secondary">设置窗口已准备就绪；关闭后仍可通过“打开设置”继续调整。</p>
+    </div>
+</section>
+{% include 'inspections/issue_settings_modal.html' with auto_open=True %}
+{% endblock %}
+{% block page_scripts %}{% include 'common/scripts/modal_workflows.html' %}{% endblock %}

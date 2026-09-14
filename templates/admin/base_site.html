@@ -2,7 +2,7 @@
 {% load i18n static %}
 
 {% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | 网络巡检中心{% endblock %}
-{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'app/css/style.css' %}">{% endblock %}
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'app/css/tokens.css' %}"><link rel="stylesheet" href="{% static 'app/css/foundation.css' %}"><link rel="stylesheet" href="{% static 'app/css/operations.css' %}"><link rel="stylesheet" href="{% static 'app/css/modal-workflows.css' %}"><link rel="stylesheet" href="{% static 'app/css/style.css' %}">{% endblock %}
 {% block finalstyle %}<link rel="stylesheet" href="{% static 'app/css/admin.css' %}">{% endblock %}
 {% block bodyclass %}{{ block.super }} app-shell admin-shell{% endblock %}
 {% block branding %}{% url 'admin:index' as brand_url %}{% include 'common/brand.html' with brand_url=brand_url %}{% endblock %}

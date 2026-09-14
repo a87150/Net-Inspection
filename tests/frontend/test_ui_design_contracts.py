@@ -40,24 +40,36 @@ class SharedInterfaceContractTests(TestCase):
         self.assertIn('href="/destination/"', html)
         self.assertIn('网络巡检中心', html)
         self.assertIn('Operations Console', html)
-    def test_style_entrypoint_resolves_ordered_local_design_layers(self):
+    def test_shared_shell_links_ordered_local_design_layers_without_css_imports(self):
+        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        base = (template_root / 'common' / 'base.html').read_text(encoding='utf-8')
         entrypoint = Path(finders.find('app/css/style.css'))
         source = entrypoint.read_text(encoding='utf-8')
-        imports = re.findall(r'@import url\("([^"]+)"\);', source)
+        layers = ('tokens.css', 'foundation.css', 'operations.css', 'modal-workflows.css')
 
-        self.assertEqual(imports, [
-            'tokens.css',
-            'foundation.css',
-            'operations.css',
-            'modal-workflows.css',
-        ])
-        combined = ''.join(
-            (entrypoint.parent / name).read_text(encoding='utf-8')
-            for name in imports
-        )
+        self.assertNotIn('@import', source)
+        positions = [base.index(f"app/css/{name}") for name in layers]
+        self.assertEqual(positions, sorted(positions))
+        combined = ''.join((entrypoint.parent / name).read_text(encoding='utf-8') for name in layers)
         for selector in (':root', '.app-navbar', '.data-table', '.glass-card', '.modal-surface'):
             with self.subTest(selector=selector):
                 self.assertIn(selector, combined)
+
+    def test_page_specific_workflows_are_not_loaded_by_the_shared_shell(self):
+        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        base = (template_root / 'common' / 'base.html').read_text(encoding='utf-8')
+
+        self.assertIn('{% block page_scripts %}', base)
+        self.assertNotIn('common/table_tools.js', base)
+        self.assertNotIn('inspections/task_ui.js', base)
+        self.assertNotIn('people/import_tasks.js', base)
+        self.assertNotIn('people/modal.js', base)
+
+        device_list = (template_root / 'devices' / 'list.html').read_text(encoding='utf-8')
+        self.assertIn("common/scripts/table_workspace.html", device_list)
+        self.assertIn("common/scripts/modal_workflows.html", device_list)
+        self.assertIn("common/scripts/inspection_workflows.html", device_list)
+        self.assertIn("common/scripts/people_workflows.html", device_list)
     def test_core_pages_use_shared_application_chrome(self):
         urls = (
             reverse('index'),
@@ -446,7 +458,44 @@ class ModalVisualContractTests(TestCase):
         self.assertContains(people, 'import-config-section')
         self.assertContains(accounts, 'domain-account-import-modal')
         self.assertContains(accounts, 'domain-operation-modal')
-        self.assertContains(accounts, 'modal-footer--sticky', count=2)
+        self.assertGreaterEqual(
+            accounts.content.decode(accounts.charset).count('modal-footer--sticky'),
+            2,
+        )
+
+    def test_issue_settings_loads_in_the_current_glass_modal_without_iframe(self):
+        records = self.client.get(reverse('computer_analysis_list'))
+        settings = self.client.get(reverse('issue_severity_settings') + '?project=computers')
+
+        self.assertContains(records, 'data-modal-load="issueSeverityModal"')
+        self.assertNotContains(records, '<iframe')
+        for response in (records, settings):
+            self.assertContains(response, 'id="issueSeverityModal"')
+            self.assertContains(response, 'modal-dialog-scrollable modal-shell')
+            self.assertContains(response, 'modal-content modal-surface')
+            self.assertContains(response, 'modal-footer modal-footer--sticky')
+
+    def test_remaining_workflow_modals_use_the_shared_shell(self):
+        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        paths = (
+            'devices/add_modal.html',
+            'devices/pc/bulk_analysis_modal.html',
+            'domain/bitlocker_modal.html',
+            'access/source_modal.html',
+        )
+        for relative_path in paths:
+            with self.subTest(template=relative_path):
+                source = (template_root / relative_path).read_text(encoding='utf-8')
+                self.assertIn('modal-shell', source)
+                self.assertIn('modal-surface', source)
+                self.assertIn('modal-footer--sticky', source)
+
+    def test_templates_do_not_use_inline_native_confirmation(self):
+        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        sources = '\n'.join(path.read_text(encoding='utf-8') for path in template_root.rglob('*.html'))
+
+        self.assertNotIn('onsubmit="return confirm(', sources)
+        self.assertIn('data-confirm-message=', sources)
 
 class PcListActionContractTests(TestCase):
     def test_pc_list_header_does_not_offer_script_downloads(self):

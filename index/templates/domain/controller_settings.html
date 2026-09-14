@@ -21,7 +21,7 @@
             <p class="small text-secondary mb-1">统计来自本地同步数据，并非精确实时状态；lastLogonTimestamp 有更新与同步延迟。</p>
             <p class="small mb-0">最近成功同步：{% if latest_successful_sync %}{{ latest_successful_sync|date:'Y-m-d H:i:s T' }}{% else %}暂无成功同步记录{% endif %}</p>
         </div>
-        {% if can_administer and can_manage_domain %}<form method="post">{% csrf_token %}<button class="btn btn-primary" name="action" value="sync">从域控同步</button></form>{% else %}<p class="text-secondary mb-0">测试连接、保存配置和同步需要域控运维权限。</p>{% endif %}
+        {% if can_administer and can_manage_domain %}<form method="post">{% csrf_token %}<button class="btn btn-primary" type="submit" name="action" value="sync">从域控同步</button></form>{% else %}<p class="text-secondary mb-0">测试连接、保存配置和同步需要域控运维权限。</p>{% endif %}
     </div>
 </section>
 
@@ -75,9 +75,9 @@
             </div>
             <div class="modal-footer modal-footer--sticky">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
-                <button class="btn btn-outline-secondary" name="action" value="save">保存配置</button>
-                <button class="btn btn-outline-primary" name="action" value="test">测试连接</button>
-                <button class="btn btn-primary" name="action" value="sync">保存并从域控同步</button>
+                <button class="btn btn-outline-secondary" type="submit" name="action" value="save">保存配置</button>
+                <button class="btn btn-outline-primary" type="submit" name="action" value="test">测试连接</button>
+                <button class="btn btn-primary" type="submit" name="action" value="sync">保存并从域控同步</button>
             </div>
         </form>
         <form method="post" id="domain-sync-schedule-form" hidden>{% csrf_token %}<input type="hidden" name="action" value="schedule"></form>
@@ -88,3 +88,7 @@
 <script>document.addEventListener('DOMContentLoaded', function () { bootstrap.Modal.getOrCreateInstance(document.getElementById('domainConfigModal')).show(); });</script>
 {% endif %}
 {% endif %}{% endblock %}
+{% block page_scripts %}
+{% include 'common/scripts/modal_workflows.html' %}
+{% include 'common/scripts/inspection_workflows.html' %}
+{% endblock %}

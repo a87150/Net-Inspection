@@ -10,7 +10,7 @@
         <p class="page-heading__description">{% if record_type == 'computer_analysis' %}每次日志分析独立保存，可进入详情查看动态指标和异常。{% else %}每次巡检独立保存，可进入详情查看动态指标和采集回显。{% endif %}</p>
     </div>
     <div class="page-heading__actions">
-        {% if can_administer and task_project_kind == 'computers' %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#issueSeverityModal">问题等级设置</button>{% endif %}
+        {% if can_administer and task_project_kind == 'computers' %}<a class="btn btn-outline-primary" href="{% url 'issue_severity_settings' %}?project=computers" data-modal-load="issueSeverityModal">问题等级设置</a>{% endif %}
         {% if record_kind == 'servers' %}{% if can_administer %}<a class="btn btn-outline-primary" href="{% url 'windows_server_script_download' %}">下载 Windows 采集脚本</a>{% endif %}{% endif %}
         {% if record_type == 'computer_analysis' %}<a class="btn btn-outline-primary" href="{% url 'computer_log_list' %}">导入日志证据 / 重新分析</a>{% endif %}
         {% if can_administer and task_project_kind %}{% if can_administer %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#profileConfigModal">{{ task_config_label }}</button>{% endif %}{% if can_administer %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#alertPolicyModal">告警配置</button>{% endif %}{% if can_administer %}<button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#runTaskModal">{{ task_action_label }}</button>{% endif %}{% endif %}
@@ -45,4 +45,9 @@
 
 {% include 'inspections/results_table.html' %}
 {% endif %}
+{% endblock %}
+{% block page_scripts %}
+{% include 'common/scripts/table_workspace.html' %}
+{% include 'common/scripts/modal_workflows.html' %}
+{% include 'common/scripts/inspection_workflows.html' %}
 {% endblock %}

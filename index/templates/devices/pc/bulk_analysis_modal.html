@@ -6,9 +6,9 @@
  {% query_transform request bulk_mode='latest' as latest_url %}<a class="btn btn-primary" href="?{{ latest_url }}">分析最新批次</a>
 </div>
 <div class="modal fade" id="bulkAnalysisModal" tabindex="-1" aria-labelledby="bulkAnalysisModalLabel" aria-hidden="true"{% if bulk_open %} data-auto-open="true"{% endif %}>
- <div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content modal-surface">
+ <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
   <div class="modal-header"><h2 class="modal-title fs-5" id="bulkAnalysisModalLabel">{% if bulk_mode == 'latest' %}分析最新批次{% else %}分析筛选结果{% endif %}</h2><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="关闭"></button></div>
-  <div class="modal-body">
+  <div class="modal-body modal-body--scroll">
    {% if bulk_error %}<div class="alert alert-danger">{{ bulk_error }}</div>{% endif %}
    <p>可分析日志：<strong>{{ bulk_count }}</strong> 份（仅包含已成功入库的日志）。</p>
    {% if bulk_mode == 'latest' %}<p class="small text-secondary">最近有可分析日志的获取批次：{{ bulk_batch.created_at|date:'Y-m-d H:i:s'|default:'暂无' }} · {{ bulk_batch.get_status_display }}。忽略列表筛选；自动跳过没有可分析日志的空批次。</p>{% if bulk_batch_active %}<div class="alert alert-warning">最新批次尚未结束，请等待获取完成。</div>{% endif %}{% else %}<p class="small text-secondary">分析所有分页中符合当前筛选条件的日志；未设置筛选时分析全部已入库日志。</p>{% endif %}
@@ -25,7 +25,7 @@
    {% else %}<p class="alert alert-warning">请先在 PC 分析配置中启用一个分析配置。</p>{% endif %}
    <p class="small text-secondary mt-3">提交后在后台执行，不扫描目录、不移动文件，历史分析结果保留。</p>
   </div>
-  <div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">取消</button>{% if bulk_profile %}<button class="btn btn-primary" type="submit" form="bulk-analysis-form"{% if not bulk_count %} disabled{% elif bulk_mode == 'latest' and bulk_batch_active %} disabled{% endif %}>开始批量分析</button>{% endif %}</div>
+  <div class="modal-footer modal-footer--sticky"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">取消</button>{% if bulk_profile %}<button class="btn btn-primary" type="submit" form="bulk-analysis-form"{% if not bulk_count %} disabled{% elif bulk_mode == 'latest' and bulk_batch_active %} disabled{% endif %}>开始批量分析</button>{% endif %}</div>
  </div></div>
 </div>
 {% endif %}

@@ -9,3 +9,8 @@
 {% include 'common/table_sort_headers.html' %}<th scope="col" class="table-actions-column table-actions-cell">操作</th></tr></thead><tbody>
 {% for log in page_obj %}<tr>{% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ log|get_attr:field.source|format_table_value:field.kind }}</td>{% endfor %}<td class="table-actions-cell"><a class="btn btn-outline-dark btn-sm" href="{% url 'computer_log_detail' log.pk %}">查看证据</a></td></tr>{% empty %}<tr><td colspan="5"><div class="empty-state"><strong>暂无导入日志</strong><span>后台获取日志后，证据状态会显示在这里。</span></div></td></tr>{% endfor %}
 </tbody></table></div></div>{% include 'common/pagination.html' %}</div>{% endblock %}
+{% block page_scripts %}
+{% include 'common/scripts/table_workspace.html' %}
+{% include 'common/scripts/modal_workflows.html' %}
+{% include 'common/scripts/inspection_workflows.html' %}
+{% endblock %}
