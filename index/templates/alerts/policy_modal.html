@@ -1,0 +1,80 @@
+{% if can_administer %}
+<div class="modal fade alert-policy-modal" id="alertPolicyModal" data-auto-open="{{ alert_policy_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="alertPolicyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell">
+<div class="modal-content modal-surface">
+        <form method="post" action="{% url 'alert_policy_save' %}">
+{% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+<input type="hidden" name="scope" value="{{ alert_policy_scope }}">
+<input type="hidden" name="profile_id" value="{{ alert_policy_profile_id }}">
+            <div class="modal-header">
+<h2 class="modal-title fs-5" id="alertPolicyModalLabel">
+{% if alert_policy_scope == 'default' %}默认{% else %}项目{% endif %}告警策略</h2>
+<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭">
+</button>
+</div>
+            <div class="modal-body modal-body--scroll">
+                {% if alert_policy_errors %}
+<div class="alert alert-danger" role="alert">
+<strong>告警策略未保存</strong>
+<ul class="mb-0">
+{% for error in alert_policy_errors %}
+<li>{{ error }}</li>
+{% endfor %}
+</ul>
+</div>
+{% endif %}
+                <div class="modal-section alert-policy-modal__section">
+                    {% if alert_policy_scope == 'default' %}
+<div class="mb-3">
+<label class="form-label" for="alert-policy-name">策略名称</label>
+<input class="form-control" id="alert-policy-name" name="name" value="{{ alert_policy_name }}" required>
+</div>
+{% endif %}
+                    {% if alert_policy_scope != 'default' %}
+<p class="text-secondary small mb-3">当前有效渠道来源：{{ alert_effective_source_name }}。继承模式与发送服务使用同一个默认策略来源。</p>
+<fieldset class="mb-0">
+<legend class="fs-6">策略模式</legend>
+<label class="form-check mb-2">
+<input class="form-check-input" type="radio" name="mode" value="inherit"{% if alert_policy_mode == 'inherit' %} checked{% endif %}>
+<span class="form-check-label">继承默认告警策略</span>
+</label>
+<label class="form-check">
+<input class="form-check-input" type="radio" name="mode" value="override"{% if alert_policy_mode == 'override' %} checked{% endif %}>
+<span class="form-check-label">使用项目告警策略</span>
+</label>
+</fieldset>
+{% else %}
+<input type="hidden" name="mode" value="override">
+{% endif %}
+                </div>
+                <fieldset class="modal-section alert-policy-modal__section" data-bulk-choice-group>
+<div class="bulk-choice-group__heading">
+<legend class="fs-6">渠道（可多选）</legend>
+<div class="bulk-choice-group__actions">
+<button class="btn btn-outline-primary btn-sm" type="button" data-bulk-select-all>全选</button>
+<button class="btn btn-outline-secondary btn-sm" type="button" data-bulk-invert>反选</button>
+</div>
+</div>
+<div class="row row-cols-1 row-cols-md-2 g-2">
+{% for channel in alert_channels %}
+<label class="col form-check">
+<input class="form-check-input" type="checkbox" data-bulk-choice name="channels" value="{{ channel.pk }}"{% if channel.pk in alert_policy_channel_ids %} checked{% endif %}>
+<span class="form-check-label">{{ channel.name }} · {{ channel.get_channel_type_display }}{% if not channel.is_enabled %}（已停用）{% endif %}
+</span>
+</label>
+{% empty %}
+<p class="text-secondary">请先新增至少一个渠道。</p>
+{% endfor %}
+</div>
+</fieldset>
+            </div>
+            <div class="modal-footer modal-footer--sticky">
+<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+<button class="btn btn-primary" type="submit">保存策略</button>
+</div>
+        </form>
+    </div>
+</div>
+</div>
+{% endif %}

@@ -1,0 +1,66 @@
+<div class="modal fade issue-settings-modal" id="issueSeverityModal"
+     {% if auto_open %}data-auto-open="true"{% endif %}
+     tabindex="-1" aria-labelledby="issueSeverityTitle" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell">
+        <div class="modal-content modal-surface">
+            <div class="modal-header">
+                <div>
+                    <p class="modal-kicker mb-1">异常规则</p>
+                    <h2 id="issueSeverityTitle" class="modal-title fs-5">问题等级设置</h2>
+                </div>
+                <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body modal-body--scroll">
+                {% if form %}
+                <div class="modal-section mb-3">
+                    <p class="mb-1">{{ project_label }}专属规则，只影响新任务，不修改历史记录或运行中任务。</p>
+                    <p class="small text-secondary mb-0">数据不足默认仅提示；任务执行失败仍单独显示，不会因降低问题等级而隐藏。</p>
+                    {% if project == "computers" %}<p class="small text-secondary mt-2 mb-0">阈值留空时继续使用各 PC 分析配置中的原值。</p>{% endif %}
+                </div>
+                {% if saved %}<div class="alert alert-success" role="status">已保存，设置将用于新入队任务。</div>{% endif %}
+                <form id="issueSeverityForm" method="post" action="{% url 'issue_severity_settings' %}?project={{ project }}">
+                    {% csrf_token %}
+                    {{ form.updated_at }}
+                    {{ form.updated_at.errors }}
+                    {{ form.non_field_errors }}
+                    <div class="card surface-card table-scroll-shell">
+                        <p class="table-scroll-hint">可横向滚动查看全部等级和阈值设置</p>
+                        <div class="table-responsive" role="region" aria-label="问题等级规则" tabindex="0">
+                            <table class="table data-table align-middle mb-0">
+                                <thead><tr><th scope="col">类型</th><th scope="col">检查项目</th><th scope="col">实际问题</th><th scope="col">数据不足 / 未知</th><th scope="col">超限阈值</th></tr></thead>
+                                <tbody>
+                                {% for category, label, rule, missing, thresholds in form.rule_rows %}
+                                <tr>
+                                    <td><span class="status-badge status-badge--neutral">{{ category }}</span></td>
+                                    <td class="fw-semibold">{{ label }}</td>
+                                    <td>{{ rule }}{{ rule.errors }}</td>
+                                    <td>{{ missing }}{{ missing.errors }}</td>
+                                    <td class="issue-threshold-cell">
+                                        {% for threshold in thresholds %}
+                                        <div class="issue-threshold-field">
+                                            <label class="form-label small" for="{{ threshold.id_for_label }}">{{ threshold.label }}</label>
+                                            {{ threshold }}{{ threshold.errors }}
+                                        </div>
+                                        {% empty %}<span class="text-secondary">不适用</span>{% endfor %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </form>
+                {% else %}
+                <div class="modal-loading-state" role="status">
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                    <span>正在加载问题等级设置…</span>
+                </div>
+                {% endif %}
+            </div>
+            <div class="modal-footer modal-footer--sticky">
+                <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">关闭</button>
+                {% if form %}<button class="btn btn-primary" type="submit" form="issueSeverityForm">保存问题等级</button>{% endif %}
+            </div>
+        </div>
+    </div>
+</div>

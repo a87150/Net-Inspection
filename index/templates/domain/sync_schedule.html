@@ -1,0 +1,13 @@
+<section class="config-section-card" data-domain-config-section="schedule">
+ <h3 class="h6">定时同步域账号、域计算机和域分组</h3>
+ <p class="small text-secondary">由后台 Worker 执行；与手动同步共用任务队列，已有同步任务时不会重复启动。</p>
+ <div class="row g-3">
+ {% for field in domain_schedule_form %}
+ <div class="col-md-4" {% if field.name == 'interval_value' or field.name == 'interval_unit' %}data-schedule-interval{% elif field.name == 'daily_time' %}data-schedule-daily{% endif %}>
+ <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}
+ </div>
+ {% endfor %}
+ </div>
+ <p class="small text-secondary mt-3">上次入队：{{ domain_schedule.last_enqueued_at|date:'Y-m-d H:i'|default:'暂无' }}；下次执行：{{ domain_schedule.next_run_at|date:'Y-m-d H:i'|default:'未启用' }}。{% if domain_schedule.last_schedule_status == 'blocked' %} 上次调度：等待活动任务结束。{% elif domain_schedule.last_schedule_status == 'error' %} 上次调度失败：{{ domain_schedule.last_schedule_error }}{% endif %}</p>
+ <button class="btn btn-primary" type="submit" form="domain-sync-schedule-form">保存定时同步设置</button>
+</section>

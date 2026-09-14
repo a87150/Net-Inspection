@@ -1,0 +1,14 @@
+{% load extras %}
+{% for field in table_definition.fields %}
+<th scope="col" data-column-key="{{ field.key }}"{% if field.sortable %} aria-sort="{% if table_state.sort == field.key %}{% if table_state.order == 'asc' %}ascending{% else %}descending{% endif %}{% else %}none{% endif %}"{% endif %}{% if not field.default_visible %} hidden{% endif %}>
+    {% if field.sortable %}
+        {% if table_state.sort == field.key and table_state.order == 'asc' %}
+            {% query_transform request page=None sort=field.key order='desc' page_size=table_state.page_size as sort_query %}
+            <a class="table-sort-link" data-sort-key="{{ field.key }}" href="?{{ sort_query }}" aria-label="按{{ field.label }}降序排列">{{ field.label }}</a>
+        {% else %}
+            {% query_transform request page=None sort=field.key order='asc' page_size=table_state.page_size as sort_query %}
+            <a class="table-sort-link" data-sort-key="{{ field.key }}" href="?{{ sort_query }}" aria-label="按{{ field.label }}升序排列">{{ field.label }}</a>
+        {% endif %}
+    {% else %}{{ field.label }}{% endif %}
+</th>
+{% endfor %}

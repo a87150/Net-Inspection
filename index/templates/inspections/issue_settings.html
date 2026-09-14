@@ -1,0 +1,21 @@
+{% extends 'common/base.html' %}
+{% block title %}问题等级设置{% endblock %}
+{% block content %}
+<header class="page-heading">
+    <div class="page-heading__copy">
+        <p class="page-heading__eyebrow">异常规则</p>
+        <h1 class="page-heading__title">问题等级设置</h1>
+        <p class="page-heading__description">配置{{ project_label }}的新任务判定等级和超限阈值。</p>
+    </div>
+    <div class="page-heading__actions">
+        <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#issueSeverityModal">打开设置</button>
+    </div>
+</header>
+<section class="card surface-card">
+    <div class="card-body">
+        <p class="mb-0 text-secondary">设置窗口已准备就绪；关闭后仍可通过“打开设置”继续调整。</p>
+    </div>
+</section>
+{% include 'inspections/issue_settings_modal.html' with auto_open=True %}
+{% endblock %}
+{% block page_scripts %}{% include 'common/scripts/modal_workflows.html' %}{% endblock %}

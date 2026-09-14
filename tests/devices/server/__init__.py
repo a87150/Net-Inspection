@@ -1,0 +1,1 @@
+"""Server collector tests."""

@@ -1,0 +1,94 @@
+{% extends 'common/base.html' %}
+{% load static %}
+{% block title %}域控管理{% endblock %}
+{% block content %}{% if can_administer %}
+<header class="page-heading">
+    <div class="page-heading__copy"><p class="page-heading__eyebrow">目录服务</p><h1 class="page-heading__title">域控管理</h1><p class="page-heading__description">统一配置 Active Directory，并同步查看域账号、域计算机和域分组。</p></div>
+    {% if can_administer and can_manage_domain %}<div class="page-heading__actions"><button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#domainStatisticsModal">未登录天数设置</button>{% if can_administer %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#domainConfigModal">域控连接设置</button>{% endif %}</div>{% endif %}
+</header>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-md-4"><a class="card surface-card metric-card h-100 text-decoration-none text-body" href="{% url 'domain_account_list' %}"><div class="card-body"><div class="metric-label">域账号</div><div class="metric">{{ account_total }}</div><div class="small mt-2">启用 <span class="text-success">{{ account_active }}</span> · <span class="{% if account_inactive %}text-danger{% endif %}">停用 {{ account_inactive }}</span></div><div class="small mt-2">超过 <span data-domain-inactive-days>{{ inactive_days }}</span> 天未登录 <span data-domain-stale="account" class="{% if account_stale %}text-danger{% else %}text-secondary{% endif %}">{{ account_stale }}</span></div><div class="small text-secondary mt-1">缺少登录记录 {{ account_missing_login }} <span>（以上仅统计启用账号）</span></div><div class="small text-primary mt-2">查看域账号</div></div></a></div>
+    <div class="col-12 col-md-4"><a class="card surface-card metric-card h-100 text-decoration-none text-body" href="{% url 'domain_computer_list' %}"><div class="card-body"><div class="metric-label">域计算机</div><div class="metric">{{ computer_total }}</div><div class="small mt-2">启用 <span class="text-success">{{ computer_active }}</span> · <span class="{% if computer_inactive %}text-danger{% endif %}">停用 {{ computer_inactive }}</span></div><div class="small mt-2">超过 <span data-domain-inactive-days>{{ inactive_days }}</span> 天未登录 <span data-domain-stale="computer" class="{% if computer_stale %}text-danger{% else %}text-secondary{% endif %}">{{ computer_stale }}</span></div><div class="small text-secondary mt-1">缺少登录记录 {{ computer_missing_login }} <span>（以上仅统计启用计算机）</span></div><div class="small text-primary mt-2">查看域计算机</div></div></a></div>
+    <div class="col-12 col-md-4"><a class="card surface-card metric-card h-100 text-decoration-none text-body" href="{% url 'domain_group_list' %}"><div class="card-body"><div class="metric-label">域分组</div><div class="metric">{{ group_total }}</div><div class="small mt-2">安全组 {{ security_group_total }} · 通讯组 {{ distribution_group_total }}</div><div class="small text-primary mt-2">查看域分组</div></div></a></div>
+</div>
+
+<section class="card surface-card mb-4">
+    <div class="card-body d-flex flex-column flex-md-row gap-3 align-items-md-center justify-content-between">
+        <div>
+            <h2 class="h5 mb-1">同步域控对象</h2>
+            <p class="text-secondary mb-2">域账号、域计算机和域分组由域控同步；新增域账号可使用批量表格。</p>
+            <p class="small text-secondary mb-1">统计来自本地同步数据，并非精确实时状态；lastLogonTimestamp 有更新与同步延迟。</p>
+            <p class="small mb-0">最近成功同步：{% if latest_successful_sync %}{{ latest_successful_sync|date:'Y-m-d H:i:s T' }}{% else %}暂无成功同步记录{% endif %}</p>
+        </div>
+        {% if can_administer and can_manage_domain %}<form method="post">{% csrf_token %}<button class="btn btn-primary" type="submit" name="action" value="sync">从域控同步</button></form>{% else %}<p class="text-secondary mb-0">测试连接、保存配置和同步需要域控运维权限。</p>{% endif %}
+    </div>
+</section>
+
+<section class="card surface-card mb-4">
+    <div class="card-body"><h2 class="h5 mb-1">当前连接摘要</h2><p class="mb-0">域控服务器：<code>{{ config.host }}</code> · 搜索根目录：<code>{{ config.base_dn }}</code></p></div>
+</section>
+
+{% if can_administer and can_manage_domain %}
+{% include 'domain/sync_task_list.html' %}
+{% include 'domain/inactivity_modal.html' %}
+<script src="{% static 'app/js/domain/statistics.js' %}" defer></script>
+<div class="modal fade domain-config-modal" id="domainConfigModal" data-auto-open="{{ open_domain_modal|yesno:'true,false' }}" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="domainConfigModalLabel" aria-describedby="domainConfigModalDescription" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
+        <form method="post">
+            {% csrf_token %}
+            <div class="modal-header"><div><p class="page-heading__eyebrow mb-1">目录服务配置</p><h2 class="modal-title fs-5" id="domainConfigModalLabel">域控连接设置</h2></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+            <div class="modal-body modal-body--scroll">
+                <p class="text-secondary mb-4" id="domainConfigModalDescription">按用途分区维护连接、身份验证、目录范围和对象筛选条件。</p>
+                {% if form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+                <div class="config-modal-grid">
+                    <section class="config-section-card" data-domain-config-section="connection">
+                        <div class="config-section-heading"><span class="config-section-index">01</span><div><h3>连接信息</h3><p>设置配置名称、服务器地址、端口和加密方式。</p></div></div>
+                        <div class="row g-3">
+                            <div class="col-md-6"><label class="form-label" for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>{{ form.name }}{% for error in form.name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                            <div class="col-md-6"><label class="form-label" for="{{ form.host.id_for_label }}">{{ form.host.label }}</label>{{ form.host }}{% for error in form.host.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                            <div class="col-md-6"><label class="form-label" for="{{ form.port.id_for_label }}">{{ form.port.label }}</label>{{ form.port }}{% if form.port.help_text %}<div class="form-text">{{ form.port.help_text }}</div>{% endif %}{% for error in form.port.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                            <div class="col-md-6 d-flex align-items-center"><div class="form-check config-toggle-card">{{ form.use_ssl }}<label class="form-check-label" for="{{ form.use_ssl.id_for_label }}"><strong>{{ form.use_ssl.label }}</strong><span>{{ form.use_ssl.help_text }}</span></label></div>{% for error in form.use_ssl.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                        </div>
+                    </section>
+                    <section class="config-section-card" data-domain-config-section="authentication">
+                        <div class="config-section-heading"><span class="config-section-index">02</span><div><h3>身份验证</h3><p>填写用于读取目录对象的绑定账号；已保存密码会显示为星号。</p></div></div>
+                        <div class="row g-3">
+                            <div class="col-md-6"><label class="form-label" for="{{ form.bind_username.id_for_label }}">{{ form.bind_username.label }}</label>{{ form.bind_username }}{% if form.bind_username.help_text %}<div class="form-text">{{ form.bind_username.help_text }}</div>{% endif %}{% for error in form.bind_username.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                            <div class="col-md-6"><label class="form-label" for="{{ form.bind_password.id_for_label }}">{{ form.bind_password.label }}</label>{{ form.bind_password }}{% if form.bind_password.help_text %}<div class="form-text">{{ form.bind_password.help_text }}</div>{% endif %}{% for error in form.bind_password.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                        </div>
+                    </section>
+                    <section class="config-section-card" data-domain-config-section="directory">
+                        <div class="config-section-heading"><span class="config-section-index">03</span><div><h3>目录范围</h3><p>限定账号、计算机和分组的统一搜索根目录。</p></div></div>
+                        <label class="form-label" for="{{ form.base_dn.id_for_label }}">{{ form.base_dn.label }}</label>{{ form.base_dn }}{% if form.base_dn.help_text %}<div class="form-text">{{ form.base_dn.help_text }}</div>{% endif %}{% for error in form.base_dn.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </section>
+                    <section class="config-section-card" data-domain-config-section="filters">
+                        <div class="config-section-heading"><span class="config-section-index">04</span><div><h3>对象筛选</h3><p>分别设置域账号、域计算机和域分组的 LDAP 筛选器。</p></div></div>
+                        <div class="row g-3">
+                            <div class="col-12"><label class="form-label" for="{{ form.user_filter.id_for_label }}">{{ form.user_filter.label }}</label>{{ form.user_filter }}{% for error in form.user_filter.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                            <div class="col-12"><label class="form-label" for="{{ form.computer_filter.id_for_label }}">{{ form.computer_filter.label }}</label>{{ form.computer_filter }}{% for error in form.computer_filter.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                            <div class="col-12"><label class="form-label" for="{{ form.group_filter.id_for_label }}">{{ form.group_filter.label }}</label>{{ form.group_filter }}{% for error in form.group_filter.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+                        </div>
+                    </section>
+                </div>
+                {% include 'domain/sync_schedule.html' %}
+            </div>
+            <div class="modal-footer modal-footer--sticky">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-outline-secondary" type="submit" name="action" value="save">保存配置</button>
+                <button class="btn btn-outline-primary" type="submit" name="action" value="test">测试连接</button>
+                <button class="btn btn-primary" type="submit" name="action" value="sync">保存并从域控同步</button>
+            </div>
+        </form>
+        <form method="post" id="domain-sync-schedule-form" hidden>{% csrf_token %}<input type="hidden" name="action" value="schedule"></form>
+    </div></div>
+</div>
+{% else %}<div class="modal fade domain-config-modal" id="domainConfigModal" data-auto-open="{{ open_domain_modal|yesno:'true,false' }}" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="domainConfigModalLabel" aria-describedby="domainConfigModalDescription" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface"><div class="modal-header"><h2 class="modal-title fs-5 visually-hidden" id="domainConfigModalLabel">需要域控运维权限</h2></div><div class="modal-body modal-body--scroll"><p id="domainConfigModalDescription" class="visually-hidden">当前账号不能修改该连接。</p></div></div></div></div>{% endif %}
+{% if open_domain_modal %}
+<script>document.addEventListener('DOMContentLoaded', function () { bootstrap.Modal.getOrCreateInstance(document.getElementById('domainConfigModal')).show(); });</script>
+{% endif %}
+{% endif %}{% endblock %}
+{% block page_scripts %}
+{% include 'common/scripts/modal_workflows.html' %}
+{% include 'common/scripts/inspection_workflows.html' %}
+{% endblock %}

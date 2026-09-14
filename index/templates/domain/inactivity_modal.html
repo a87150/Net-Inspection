@@ -1,0 +1,29 @@
+<div class="modal fade domain-statistics-modal" id="domainStatisticsModal" data-auto-open="{{ open_inactivity_modal|yesno:'true,false' }}" tabindex="-1" aria-labelledby="domainStatisticsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
+        <form method="post" action="{% url 'domain_controller_settings' %}">
+            {% csrf_token %}<input type="hidden" name="action" value="inactivity">
+            <div class="modal-header"><h2 class="modal-title fs-5" id="domainStatisticsModalLabel">未登录天数设置</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+            <div class="modal-body modal-body--scroll">
+                <div data-domain-statistics-values data-days="{{ inactive_days }}" data-account="{{ account_stale }}" data-computer="{{ computer_stale }}" hidden></div>
+                <div class="domain-statistics-layout">
+                    <section class="modal-section" data-domain-statistics-section="setting">
+                        <div class="config-section-heading"><span class="config-section-index">01</span><div><h3>统计阈值</h3><p>域账号与域计算机共用这一未登录天数。</p></div></div>
+                        <label class="form-label" for="{{ inactivity_form.inactive_days.id_for_label }}">{{ inactivity_form.inactive_days.label }}</label>
+                        {{ inactivity_form.inactive_days }}
+                        {% for error in inactivity_form.inactive_days.errors %}<div class="text-danger small mt-1" role="alert">{{ error }}</div>{% endfor %}
+                        <p class="form-text mb-0">默认 60 天；只有启用且记录过登录日期的对象会参与统计。</p>
+                    </section>
+                    <section class="modal-section" data-domain-statistics-section="impact" aria-live="polite">
+                        <div class="config-section-heading"><span class="config-section-index">02</span><div><h3>当前影响</h3><p>保存后，页面统计会立即按新阈值重新计算。</p></div></div>
+                        <div class="domain-statistics-impact">
+                            <div><span>未登录域账号</span><strong>{{ account_stale|default:0 }}</strong></div>
+                            <div><span>未登录域计算机</span><strong>{{ computer_stale|default:0 }}</strong></div>
+                        </div>
+                        <p class="form-text mb-0">当前按超过 <strong>{{ inactive_days }}</strong> 天未登录统计；无登录日期的对象不会计入。</p>
+                    </section>
+                </div>
+            </div>
+            <div class="modal-footer modal-footer--sticky"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">关闭</button><button class="btn btn-primary" type="submit">保存设置</button></div>
+        </form>
+    </div></div>
+</div>

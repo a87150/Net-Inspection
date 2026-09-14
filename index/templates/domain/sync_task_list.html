@@ -1,0 +1,12 @@
+<section class="card surface-card mb-4"><div class="card-body">
+ <h2 class="h5">域控同步任务</h2>
+ <p class="small text-secondary">每页 10 次，点击查看同步数量、失败原因或结束运行中的任务。</p>
+ <div class="interactive-list" role="list">
+ {% for sync_task in domain_sync_tasks %}<a class="interactive-list__item" role="listitem" href="{% url 'task_detail' sync_task.pk %}"><span class="interactive-list__content"><strong class="interactive-list__title">{{ sync_task.created_at|date:'Y-m-d H:i:s' }}</strong><span class="interactive-list__meta"><span>{{ sync_task.get_source_display }}</span></span></span><span class="interactive-list__aside">{% include 'common/status_badge.html' with status=sync_task.status label=sync_task.get_status_display %}<span class="interactive-list__action">查看详情</span></span></a>{% empty %}<div class="interactive-list__empty"><strong>暂无同步任务</strong><span>完成域控同步后，任务状态和结果会显示在这里。</span></div>{% endfor %}
+ </div>
+ <div class="d-flex flex-wrap align-items-center justify-content-center gap-2 mt-3">
+ {% if domain_sync_tasks.has_previous %}<a class="btn btn-outline-secondary btn-sm" href="?sync_page={{ domain_sync_tasks.previous_page_number }}">上一页</a>{% endif %}
+ <span>第 {{ domain_sync_tasks.number }} / {{ domain_sync_tasks.paginator.num_pages }} 页</span>
+ {% if domain_sync_tasks.has_next %}<a class="btn btn-outline-secondary btn-sm" href="?sync_page={{ domain_sync_tasks.next_page_number }}">下一页</a>{% endif %}
+ </div>
+</div></section>

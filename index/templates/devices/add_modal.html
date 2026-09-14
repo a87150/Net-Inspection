@@ -1,0 +1,20 @@
+{% if can_administer %}
+<div class="modal fade" id="{% if device_modal_mode == 'edit' %}editDeviceModal{% else %}addDeviceModal{% endif %}" tabindex="-1" aria-labelledby="{% if device_modal_mode == 'edit' %}editDeviceModalLabel{% else %}addDeviceModalLabel{% endif %}" aria-hidden="true"{% if open_add_device_modal or open_edit_device_modal %} data-auto-open="true"{% endif %}>
+ <div class="modal-dialog modal-dialog-scrollable modal-lg modal-shell"><div class="modal-content modal-surface">
+  <form method="post" action="{% if device_modal_mode == 'edit' %}{% url 'asset_edit' item_key edit_device.pk %}{% else %}{% url 'asset_create' item_key %}{% endif %}" class="d-flex flex-column overflow-hidden">
+   {% csrf_token %}
+   <div class="modal-header"><h2 class="modal-title fs-5" id="{% if device_modal_mode == 'edit' %}editDeviceModalLabel{% else %}addDeviceModalLabel{% endif %}">{% if device_modal_mode == 'edit' %}修改{{ item_name }}{% else %}添加{{ item_name }}{% endif %}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+   <div class="modal-body modal-body--scroll">
+    <p class="text-secondary small">填写设备名称、IP 和巡检连接参数即可。硬件与系统信息由巡检采集并自动回填。保存不会立即巡检；编辑时密码留空会保留已保存的值，校验失败后密码不会回显。</p>
+    {% if device_form.non_field_errors %}<div class="alert alert-danger">{{ device_form.non_field_errors }}</div>{% endif %}
+    {% for section in device_form_sections %}
+    <section class="config-section-card mb-3"{% if section.snmp_group %} data-snmp-group="{{ section.snmp_group }}"{% endif %}{% if section.server_type %} data-server-fields="{{ section.server_type }}"{% endif %}{% if section.network_fields %} data-network-fields="{{ section.network_fields }}"{% endif %}>{% if section.advanced %}<details{% if section.expanded %} open{% endif %}><summary class="h6">{{ section.title }}</summary>{% else %}<h3 class="h6">{{ section.title }}</h3>{% endif %}{% if section.server_type == "windows" and not section.advanced %}<p class="small text-secondary">默认使用设备 IP 和 9180 端口。令牌与 Windows 巡检脚本一致，无需 SSH 账号密码。</p>{% endif %}<div class="row g-3">
+     {% for field in section.fields %}<div class="col-md-6"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="text-danger">*</span>{% endif %}</label>{{ field }}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}{% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>{% endfor %}
+    </div>{% if section.advanced %}</details>{% endif %}</section>
+    {% endfor %}
+   </div>
+   <div class="modal-footer modal-footer--sticky"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button><button type="submit" class="btn btn-primary">{% if device_modal_mode == 'edit' %}保存修改{% else %}保存设备{% endif %}</button></div>
+  </form>
+ </div></div>
+</div>
+{% endif %}

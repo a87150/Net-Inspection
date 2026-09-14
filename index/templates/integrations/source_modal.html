@@ -1,0 +1,42 @@
+{% if can_administer %}
+<section class="tab-pane fade modal-section import-config-section {% if tab.active %}show active{% endif %}" id="people-panel-{{ tab.provider }}" role="tabpanel" aria-labelledby="people-tab-{{ tab.provider }}">
+    <h3 class="h6">{{ tab.label }} API 设置</h3>
+    <p class="text-secondary small">按顺序完成三个阶段。只有核对预览并确认导入后才会修改人员数据。</p>
+    <ol class="small text-secondary ps-3">
+        <li><strong>第 1 步：测试连接</strong>——验证 API 凭据和通讯录接口。</li>
+        <li><strong>第 2 步：预览数据</strong>——读取目录并计算新增、更新、停用和跳过，不写数据库。</li>
+        <li><strong>第 3 步：执行导入</strong>——核对预览后确认写入。</li>
+    </ol>
+    <form method="post" action="{% url 'people_provider_save' tab.provider %}" class="d-grid gap-3">
+        {% csrf_token %}
+        {% if tab.form.errors %}<div class="alert alert-danger mb-0" role="alert">请检查 API 设置。{{ tab.form.non_field_errors }}</div>{% endif %}
+        {% for field in tab.form.visible_fields %}<div><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}{% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}</div>{% endfor %}
+        <button class="btn btn-dark" type="submit">保存设置</button>
+    </form>
+    <div class="border-top mt-3 pt-3">
+        <div class="d-flex flex-wrap gap-2">
+            <form method="post" action="{% url 'people_test' %}">{% csrf_token %}<input type="hidden" name="provider" value="{{ tab.provider }}"><button type="submit" class="btn btn-outline-primary" {% if not tab.selected or not tab.selected.is_enabled %}disabled{% endif %}>第 1 步：测试连接</button></form>
+            <form method="post" action="{% url 'people_preview' %}">{% csrf_token %}<input type="hidden" name="provider" value="{{ tab.provider }}"><button type="submit" class="btn btn-primary" {% if not tab.selected or not tab.selected.is_enabled or not tab.selected.connection_test_current %}disabled{% endif %}>第 2 步：预览数据</button></form>
+        </div>
+        {% if not tab.selected %}<div class="small text-secondary mt-2">请先保存{{ tab.label }} API 设置。</div>
+        {% elif tab.selected.connection_test_current %}<div class="small text-success mt-2">当前配置已通过连接测试，可以预览数据。</div>
+        {% else %}<div class="small text-danger mt-2">当前配置尚未通过连接测试，请先完成第 1 步。</div>{% endif %}
+    </div>
+    {% if tab.selected %}
+    <form method="post" action="{% url 'people_schedule_save' tab.provider %}" class="border-top mt-3 pt-3 d-grid gap-2">
+        {% csrf_token %}
+        <h4 class="h6 mb-1">自动定时同步</h4>
+        <label class="form-check"><input class="form-check-input" type="checkbox" name="is_enabled"{% if tab.schedule and tab.schedule.is_enabled %} checked{% endif %}><span class="form-check-label">启用自动同步</span></label>
+        <div class="row g-2">
+            <div class="col-md-4"><label class="form-label small">执行方式</label><select class="form-select form-select-sm" name="kind" data-schedule-kind><option value="interval"{% if not tab.schedule or tab.schedule.kind == 'interval' %} selected{% endif %}>每隔 N 分钟/小时</option><option value="daily"{% if tab.schedule.kind == 'daily' %} selected{% endif %}>每天指定时间</option></select></div>
+            <div class="col-md-2" data-schedule-interval><label class="form-label small">间隔</label><input class="form-control form-control-sm" type="number" min="1" name="interval_value" value="{{ tab.schedule.interval_value|default:30 }}"></div>
+            <div class="col-md-3" data-schedule-interval><label class="form-label small">单位</label><select class="form-select form-select-sm" name="interval_unit"><option value="minutes"{% if not tab.schedule or tab.schedule.interval_unit == 'minutes' %} selected{% endif %}>分钟</option><option value="hours"{% if tab.schedule.interval_unit == 'hours' %} selected{% endif %}>小时</option></select></div>
+            <div class="col-md-3" data-schedule-daily><label class="form-label small">执行时间</label><input class="form-control form-control-sm" type="time" name="daily_time" value="{{ tab.schedule.daily_time|time:'H:i' }}"></div>
+        </div>
+        {% if tab.schedule %}<div class="small text-secondary">最近入队：{{ tab.schedule.last_enqueued_at|date:'Y-m-d H:i'|default:'暂无' }}；下次执行：{{ tab.schedule.next_run_at|date:'Y-m-d H:i'|default:'待计算' }}；最近结果：{% if tab.latest_sync_task %}{{ tab.latest_sync_task.get_status_display }}{% else %}暂无{% endif %}。{% if tab.schedule.last_schedule_status == 'blocked' %} 上次调度：等待活动任务结束。{% elif tab.schedule.last_schedule_status == 'error' %} 上次调度失败：{{ tab.schedule.last_schedule_error }}{% endif %}</div>{% endif %}
+        {% if tab.schedule and tab.schedule.is_enabled and not tab.selected.connection_test_current %}<div class="small text-danger">配置已变化，自动同步计划将等待重新测试。</div>{% endif %}
+        <button class="btn btn-outline-dark btn-sm justify-self-start" type="submit">保存自动同步计划</button>
+    </form>
+    {% endif %}
+</section>
+{% endif %}

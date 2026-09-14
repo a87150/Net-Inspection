@@ -1,0 +1,34 @@
+{% extends 'common/base.html' %}
+{% load extras %}
+{% block title %}后台任务{% endblock %}
+{% block content %}
+<header class="page-heading">
+    <div class="page-heading__copy">
+        <p class="page-heading__eyebrow">执行中心</p>
+        <h1 class="page-heading__title">任务执行中心 <span class="page-heading__subtitle">任务列表</span></h1>
+        <p class="page-heading__description">手动和定时任务均由独立 Worker 执行；本页只展示进度与结果。</p>
+    </div>
+    <div class="page-heading__actions"><a class="btn btn-outline-secondary" href="{% url 'index' %}">返回总览</a></div>
+</header>
+<div data-table-workspace data-table-key="task-runs">
+    <div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
+    <div class="card surface-card table-scroll-shell execution-list-workspace">
+        <p class="table-scroll-hint">可横向滚动查看完整任务信息</p>
+        <div class="table-responsive" role="region" aria-label="后台任务数据表" tabindex="0">
+            <table class="table data-table table-hover align-middle mb-0">
+                {% include 'common/table_caption.html' %}
+                <thead><tr>{% include 'common/table_sort_headers.html' %}<th scope="col" class="table-actions-column table-actions-cell">操作</th></tr></thead>
+                <tbody>
+                    {% for task in page_obj %}
+                        {% include 'inspections/task_row.html' %}
+                    {% empty %}
+                    <tr><td colspan="10">{% include 'common/empty_state.html' with empty_title="暂无后台任务" empty_message="从资产或日志分析记录页面创建手动执行任务。" %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% include 'common/pagination.html' %}
+</div>
+{% endblock %}
+{% block page_scripts %}{% include 'common/scripts/table_workspace.html' %}{% endblock %}

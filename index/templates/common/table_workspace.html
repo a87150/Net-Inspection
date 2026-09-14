@@ -1,0 +1,94 @@
+{% load extras %}
+<form method="get" class="table-query-form" data-table-query-form>
+    <input type="hidden" name="{{ table_state.parameter_names.sort }}" value="{{ table_state.sort }}">
+    <input type="hidden" name="{{ table_state.parameter_names.order }}" value="{{ table_state.order }}">
+    {% for name, value in table_state.preserved_parameters.items %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+
+    <div class="table-filter-bar">
+        <div class="table-filter-field table-filter-field--keyword" data-active-filter-source data-filter-key="keyword" data-filter-label="关键字" data-filter-parameters="{{ table_state.parameter_names.q }}"{% if table_state.q %} data-filter-active{% endif %}>
+            <label class="form-label small text-secondary" for="{{ table_definition.key }}-keyword-filter">关键字</label>
+            <input class="form-control" id="{{ table_definition.key }}-keyword-filter" name="{{ table_state.parameter_names.q }}" value="{{ table_state.q }}" placeholder="名称、地址或其他关键字">
+        </div>
+        {% if status_options %}
+        <div class="table-filter-field" data-active-filter-source data-filter-key="status" data-filter-label="状态" data-filter-parameters="{{ table_state.parameter_names.status }}"{% if table_state.status %} data-filter-active{% endif %}>
+            <label class="form-label small text-secondary" for="{{ table_definition.key }}-status-filter">状态</label>
+            <select class="form-select" id="{{ table_definition.key }}-status-filter" name="{{ table_state.parameter_names.status }}">
+                <option value="">全部状态</option>
+                {% for value, label in status_options %}<option value="{{ value }}"{% if table_state.status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+        </div>
+        {% endif %}
+        {% for field in table_definition.fields %}
+            {% if field.filterable and field.default_filter %}
+                {% include 'common/table_field_filter.html' with field=field %}
+            {% endif %}
+        {% endfor %}
+        <div class="table-filter-actions">
+            <button class="btn btn-primary text-nowrap d-inline-flex align-items-center justify-content-center" type="submit" data-filter-submit>筛选</button>
+            <a class="btn btn-outline-secondary text-nowrap d-inline-flex align-items-center justify-content-center" href="{{ request.path }}{% if table_state.reset_query %}?{{ table_state.reset_query }}{% endif %}" data-query-reset>重置查询</a>
+            {% if can_administer and task_allow_target_selection %}<button class="btn btn-outline-primary text-nowrap d-inline-flex align-items-center justify-content-center" type="button" data-device-select-all>全选</button><button class="btn btn-outline-secondary text-nowrap d-inline-flex align-items-center justify-content-center" type="button" data-device-select-invert>反选</button>{% endif %}
+            {% if table_export_path %}{% query_transform request page=None as export_query %}<a class="btn btn-outline-success text-nowrap d-inline-flex align-items-center justify-content-center" href="{{ table_export_path }}{% if export_query %}?{{ export_query }}{% endif %}" data-filtered-export>导出筛选结果</a>{% endif %}
+            {% if configuration_selection_path %}<a class="btn btn-outline-primary text-nowrap d-inline-flex align-items-center justify-content-center disabled" href="{{ configuration_selection_path }}" data-selected-config-export aria-disabled="true" tabindex="-1">请先选择设备</a>{% endif %}
+        </div>
+        {% if configuration_selection_path %}<div class="alert alert-danger table-action-feedback mb-0" role="alert" aria-live="assertive" data-configuration-export-feedback hidden></div>{% endif %}
+    </div>
+
+    <div class="table-active-filters" data-active-filter-list aria-label="当前筛选" aria-live="polite" hidden></div>
+
+    <details class="table-more-filters" data-more-filters{% if table_state.has_active_optional_filters %} open{% endif %}>
+        <summary>更多筛选</summary>
+        <div class="table-more-filters__grid">
+            {% for field in table_definition.fields %}
+                {% if field.filterable and not field.default_filter %}
+                    {% include 'common/table_field_filter.html' with field=field %}
+                {% endif %}
+            {% endfor %}
+        </div>
+    </details>
+
+    <details class="table-config">
+        <summary>自定义表格</summary>
+        <div class="table-config__grid">
+            <fieldset>
+                <legend>显示列</legend>
+                <div class="d-flex flex-wrap gap-3">
+                    {% for field in table_definition.fields %}
+                    <label class="form-check">
+                        <input class="form-check-input" type="checkbox" data-column-toggle data-column-key="{{ field.key }}"{% if field.default_visible %} checked{% endif %}>
+                        <span class="form-check-label">{{ field.label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </fieldset>
+            <fieldset>
+                <legend>显示筛选项</legend>
+                <div class="d-flex flex-wrap gap-3">
+                    {% for field in table_definition.fields %}
+                    {% if field.filterable %}
+                    {% with active_filter=table_state.filters|get_item:field.key %}
+                    <label class="form-check">
+                        <input class="form-check-input" type="checkbox" data-filter-toggle data-filter-key="{{ field.key }}"{% if active_filter %} data-filter-active{% endif %}{% if field.default_filter or active_filter %} checked{% endif %}>
+                        <span class="form-check-label">{{ field.label }}</span>
+                    </label>
+                    {% endwith %}
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </fieldset>
+            <div class="table-config__reset">
+                <button class="btn btn-outline-secondary btn-sm" type="button" data-table-reset>恢复默认表格</button>
+            </div>
+        </div>
+    </details>
+    <div class="table-result-bar" data-table-result-bar>
+        <p class="small text-secondary mb-0" data-result-summary aria-live="polite">
+            {% if page_obj.paginator.count %}共 {{ page_obj.paginator.count }} 条，当前显示第 {{ page_obj.start_index }}–{{ page_obj.end_index }} 条{% else %}共 0 条，当前无结果{% endif %}
+        </p>
+        <div class="table-result-bar__page-size">
+            <label class="small text-secondary text-nowrap mb-0" for="table-page-size-{{ table_definition.key }}">每页条数</label>
+            <select class="form-select form-select-sm" id="table-page-size-{{ table_definition.key }}" name="{{ table_state.parameter_names.page_size }}" data-page-size data-default-page-size="{{ table_definition.default_page_size }}">
+                {% for size in page_sizes %}<option value="{{ size }}"{% if table_state.page_size == size %} selected{% endif %}>{{ size }}</option>{% endfor %}
+            </select>
+        </div>
+    </div>
+</form>

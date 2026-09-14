@@ -1,0 +1,15 @@
+{% load extras %}
+{% if page_obj.paginator.num_pages > 1 %}
+{% page_window page_obj 2 as visible_pages %}
+<nav class="page-pagination" aria-label="分页"><ul class="pagination justify-content-center mb-0">
+    {% if page_obj.has_previous %}<li class="page-item">{% query_transform request page=page_obj.previous_page_number page_size=table_state.page_size as previous_query %}<a class="page-link" data-page="previous" href="?{{ previous_query }}">上一页</a></li>{% endif %}
+    <li class="page-item{% if page_obj.number == 1 %} active{% endif %}">{% query_transform request page=1 page_size=table_state.page_size as first_query %}{% if page_obj.number == 1 %}<span class="page-link" aria-current="page">1</span>{% else %}<a class="page-link" data-page="1" href="?{{ first_query }}">1</a>{% endif %}</li>
+    {% for page_number in visible_pages %}
+        {% if forloop.first and page_number > 2 %}<li class="page-item disabled" aria-hidden="true"><span class="page-link">…</span></li>{% endif %}
+        <li class="page-item{% if page_obj.number == page_number %} active{% endif %}">{% query_transform request page=page_number page_size=table_state.page_size as page_query %}{% if page_obj.number == page_number %}<span class="page-link" aria-current="page">{{ page_number }}</span>{% else %}<a class="page-link" data-page="{{ page_number }}" href="?{{ page_query }}">{{ page_number }}</a>{% endif %}</li>
+        {% if forloop.last and page_number < page_obj.paginator.num_pages|add:'-1' %}<li class="page-item disabled" aria-hidden="true"><span class="page-link">…</span></li>{% endif %}
+    {% endfor %}
+    <li class="page-item{% if page_obj.number == page_obj.paginator.num_pages %} active{% endif %}">{% query_transform request page=page_obj.paginator.num_pages page_size=table_state.page_size as last_query %}{% if page_obj.number == page_obj.paginator.num_pages %}<span class="page-link" aria-current="page">{{ page_obj.paginator.num_pages }}</span>{% else %}<a class="page-link" data-page="{{ page_obj.paginator.num_pages }}" href="?{{ last_query }}">{{ page_obj.paginator.num_pages }}</a>{% endif %}</li>
+    {% if page_obj.has_next %}<li class="page-item">{% query_transform request page=page_obj.next_page_number page_size=table_state.page_size as next_query %}<a class="page-link" data-page="next" href="?{{ next_query }}">下一页</a></li>{% endif %}
+</ul></nav>
+{% endif %}

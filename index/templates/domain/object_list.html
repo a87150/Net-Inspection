@@ -1,0 +1,52 @@
+{% extends 'common/base.html' %}
+{% load extras %}
+{% block title %}{{ item_name }}列表{% endblock %}
+{% block content %}
+{% if domain_object_type == 'computer' and can_manage_domain %}{% include 'domain/bitlocker_modal.html' %}{% endif %}
+<header class="page-heading">
+    <div class="page-heading__copy"><p class="page-heading__eyebrow">域控对象</p><h1 class="page-heading__title">{{ item_name }}列表</h1></div>
+    <div class="page-heading__actions">
+        {% if domain_object_type == 'account' and can_manage_domain %}{% if can_administer %}<button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#domainAccountImportModal">批量导入账号</button>{% endif %}{% endif %}
+        {% if can_administer %}<a class="btn btn-outline-secondary" href="{% url 'domain_controller_settings' %}">返回域控管理</a>{% endif %}
+    </div>
+</header>
+
+{% if can_administer %}{% include 'domain/operation_modal.html' %}{% endif %}
+
+{% if domain_object_type == 'account' and can_manage_domain %}
+<div class="modal fade domain-account-import-modal" id="domainAccountImportModal" data-auto-open="{% if request.GET.domain_modal == 'account_import' %}true{% else %}false{% endif %}" tabindex="-1" aria-labelledby="domainAccountImportModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface"><form method="post" action="{% url 'domain_account_import' %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="modal-header"><h2 class="modal-title fs-5" id="domainAccountImportModalLabel">批量导入域账号</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+        <div class="modal-body modal-body--scroll d-grid gap-3">
+            <section class="config-section-card import-config-section"><div class="config-section-heading"><span class="config-section-index">01</span><div><h3>上传账号表格</h3><p>下载模板并按规定字段填写，单次最多处理 500 行。</p></div></div><div><label class="form-label" for="domain-account-import-file">账号表格</label><input class="form-control" id="domain-account-import-file" type="file" name="file" accept=".csv,.xlsx" required><div class="form-text">必填列：用户DN、登录名、显示名称；最多 500 行。</div></div><div class="d-flex flex-wrap gap-2 mt-3"><a class="btn btn-outline-secondary btn-sm" href="{% url 'domain_account_import_template' 'csv' %}">下载 CSV 模板</a><a class="btn btn-outline-secondary btn-sm" href="{% url 'domain_account_import_template' 'xlsx' %}">下载 Excel 模板</a></div></section>
+            <section class="config-section-card import-config-section"><div class="config-section-heading"><span class="config-section-index">02</span><div><h3>初始密码</h3><p>为本批账号设置统一初始密码，并再次输入确认。</p></div></div><div class="row g-3"><div class="col-md-6"><label class="form-label" for="domain-account-import-password">统一初始密码</label><input class="form-control" id="domain-account-import-password" type="password" name="initial_password" autocomplete="new-password" required></div><div class="col-md-6"><label class="form-label" for="domain-account-import-password-confirm">确认初始密码</label><input class="form-control" id="domain-account-import-password-confirm" type="password" name="initial_password_confirm" autocomplete="new-password" required></div></div></section>
+            <p class="small text-secondary mb-0">文件只在本次请求内解析；密码不写入表格和任务快照。</p>
+        </div>
+        <div class="modal-footer modal-footer--sticky"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">校验并创建任务</button></div>
+    </form></div></div>
+</div>
+{% endif %}
+
+<div data-table-workspace data-table-key="{{ table_definition.key }}">
+<div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
+<div class="card surface-card table-scroll-shell"><p class="table-scroll-hint">可横向滚动查看更多域对象字段</p><div class="table-responsive" role="region" aria-label="{{ item_name }}数据表" tabindex="0"><table class="table data-table table-hover align-middle mb-0">
+{% include 'common/table_caption.html' %}
+    <thead><tr>
+        {% if can_administer and can_manage_domain %}<th scope="col" class="text-center"><span class="visually-hidden">选择</span></th>{% endif %}
+        {% include 'common/table_sort_headers.html' %}
+        <th scope="col" class="table-actions-column table-actions-cell">操作</th>
+    </tr></thead>
+    <tbody>
+    {% for obj in page_obj %}
+    <tr>{% if can_administer and can_manage_domain %}<td class="text-center"><input class="form-check-input" type="checkbox" value="{{ obj.pk }}" data-domain-target-checkbox aria-label="选择{{ obj }}"></td>{% endif %}{% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ obj|get_attr:field.source|format_table_value:field.kind }}</td>{% endfor %}<td class="text-end table-actions-cell"><a class="btn btn-outline-dark btn-sm" href="{% url detail_route obj.pk %}">查看详情</a>{% if domain_object_type == 'computer' and can_manage_domain %} <button type="button" class="btn btn-outline-primary btn-sm" data-bitlocker-url="{% url 'domain_computer_bitlocker' obj.pk %}" data-computer-name="{{ obj.computer_name }}" data-bs-toggle="modal" data-bs-target="#domainBitLockerModal">获取 BitLocker 密钥</button>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="20"><div class="empty-state"><strong>暂无{{ item_name }}</strong><span>请配置域控后执行同步。</span></div></td></tr>{% endfor %}
+    </tbody>
+</table></div></div>
+{% include 'common/pagination.html' %}
+</div>
+{% endblock %}
+{% block page_scripts %}
+{% include 'common/scripts/table_workspace.html' %}
+{% include 'common/scripts/modal_workflows.html' %}
+{% endblock %}

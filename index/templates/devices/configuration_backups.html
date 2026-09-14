@@ -1,0 +1,39 @@
+{% extends 'common/base.html' %}
+{% block title %}配置备份历史{% endblock %}
+{% block content %}
+<div class="configuration-backup-workspace">
+<header class="page-heading">
+    <div class="page-heading__copy">
+        <p class="page-heading__eyebrow">设备配置</p>
+        <h1 class="page-heading__title">配置备份历史</h1>
+        <p class="page-heading__description">{{ asset }} · 最近 10 个版本</p>
+    </div>
+    <div class="page-heading__actions"><a class="btn btn-outline-secondary" href="{% url 'asset_detail' item_key asset.pk %}">返回设备详情</a></div>
+</header>
+<section class="configuration-backup-notes" aria-label="配置备份说明">
+    <div class="card surface-card configuration-backup-note configuration-backup-note--warning"><div class="card-body"><span class="status-badge status-badge--warning">敏感文件</span><h2 class="h6">仅管理员可下载原始配置</h2><p class="mb-0">备份可能包含账号、密码等敏感凭据；页面只展示版本元数据，不预览原文，也不提供恢复或上传操作。</p></div></div>
+    <div class="card surface-card configuration-backup-note"><div class="card-body"><span class="status-badge status-badge--info">备份范围</span><h2 class="h6">当前采集能力</h2><p class="mb-0">{% if item_key == 'monitors' %}安防设备目前仅支持 Network 配置节的部分 API，不能提供整机备份；既有部分配置快照不代表已生成完整备份。{% else %}网络设备每日巡检自动备份一次当前运行配置，不含证书、私钥或固件。{% endif %}</p></div></div>
+</section>
+<section class="card surface-card table-scroll-shell configuration-backup-table">
+    <div class="card-header surface-card__header"><h2 class="h5 mb-0">已保存版本</h2></div>
+    {% if backups %}
+    <p class="table-scroll-hint">可横向滚动查看文件、校验值和来源任务</p>
+    <div class="table-responsive" role="region" aria-label="配置备份版本表" tabindex="0">
+        <table class="table data-table table-hover align-middle mb-0">
+            <caption class="visually-hidden">配置备份版本、采集时间、范围、大小、校验值及来源任务</caption>
+            <thead><tr><th scope="col">备份日期 / 采集时间</th><th scope="col">文件</th><th scope="col">厂商 / 范围</th><th scope="col">大小</th><th scope="col">SHA-256</th><th scope="col">来源任务</th><th scope="col" class="table-actions-column table-actions-cell">操作</th></tr></thead>
+            <tbody>{% for backup in backups %}<tr>
+                <td>{{ backup.backup_date|date:'Y-m-d' }}<br><span class="text-secondary">{{ backup.captured_at|date:'Y-m-d H:i:s T' }}</span></td>
+                <td class="text-break">{{ backup.filename }}<br><span class="text-secondary">{{ backup.media_type }}</span></td>
+                <td>{{ backup.vendor|default:'未记录' }}<br>{{ backup.scope|default:'未记录' }}</td>
+                <td>{{ backup.byte_size|filesizeformat }}<br><span class="text-secondary">{{ backup.byte_size }} 字节</span></td>
+                <td class="configuration-backup-hash"><code title="{{ backup.sha256 }}">{{ backup.sha256 }}</code></td>
+                <td>{% if backup.task_target_id %}<a href="{% url 'task_detail' backup.task_target.task_id %}">查看来源任务</a>{% else %}<span class="text-secondary">无关联任务</span>{% endif %}</td>
+                <td class="text-end table-actions-cell"><a class="btn btn-sm btn-outline-primary" href="{% url 'configuration_backup_download' item_key asset.pk backup.pk %}">下载原文</a></td>
+            </tr>{% endfor %}</tbody>
+        </table>
+    </div>
+    {% else %}<div class="card-body"><div class="empty-state"><strong>暂无可用配置备份</strong><span>仅成功采集并保存的版本会显示在此；既有脱敏快照或部分配置节不一定形成完整备份。</span></div></div>{% endif %}
+</section>
+</div>
+{% endblock %}

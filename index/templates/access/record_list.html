@@ -1,0 +1,76 @@
+{% extends 'common/base.html' %}
+{% load extras static %}
+{% block title %}门禁记录{% endblock %}
+{% block content %}
+{% include 'access/source_modal.html' %}
+<header class="page-heading">
+<div class="page-heading__copy">
+<p class="page-heading__eyebrow">安防</p>
+<h1 class="page-heading__title">门禁记录</h1>
+<p class="page-heading__description">从已配置的门禁管理平台采集并统一检索门禁通行事件。</p>
+</div>
+{% if can_administer %}
+<div class="page-heading__actions">
+<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#accessSourceModal">平台配置</button>
+</div>
+{% endif %}
+</header>
+{% if can_administer %}
+<form method="post" action="{% url 'access_record_sync' %}" class="card surface-card access-sync-card mb-3">
+{% csrf_token %}
+<div class="card-body access-sync-card__body">
+<div class="access-sync-card__controls">
+<select id="access-source-id" class="form-select" name="source_ids" aria-label="选择采集平台" required{% if not access_sources %} disabled{% endif %}>
+<option value="">请选择已启用平台</option>
+{% for source in access_sources %}
+<option value="{{ source.pk }}">{{ source.name }}（{{ source.get_platform_display }} / {{ source.api_version }}）</option>
+{% endfor %}
+</select>
+<button class="btn btn-primary text-nowrap" type="submit"{% if not access_sources %} disabled{% endif %}>采集记录</button>
+</div>
+{% if not access_sources %}
+<p class="access-sync-card__empty mb-0">暂无已启用平台，请先通过右上角“平台配置”完成连接创建或启用配置。</p>
+{% endif %}
+</div>
+</form>
+{% endif %}
+<div data-table-workspace data-table-key="{{ table_preference_key }}">
+<div class="table-toolbar">
+{% include 'common/table_workspace.html' %}
+</div>
+<div class="card surface-card table-scroll-shell">
+<div class="table-responsive" role="region" aria-label="门禁记录数据表" tabindex="0">
+<table class="table data-table table-hover align-middle mb-0">
+{% include 'common/table_caption.html' %}
+<thead>
+<tr>
+{% include 'common/table_sort_headers.html' %}
+</tr>
+</thead>
+<tbody>
+{% for record in page_obj %}
+<tr>
+{% for field in table_definition.fields %}
+<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ record|get_attr:field.source|format_table_value:field.kind }}</td>
+{% endfor %}
+</tr>
+{% empty %}
+<tr>
+<td colspan="8">
+{% include 'common/empty_state.html' with empty_title="暂无门禁记录" empty_message="管理员配置平台并发起采集后，记录将显示在这里。" %}
+</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+</div>
+{% include 'common/pagination.html' %}
+</div>
+{% endblock %}
+{% block page_scripts %}
+{% include 'common/scripts/table_workspace.html' %}
+{% include 'common/scripts/modal_workflows.html' %}
+<script defer src="{% static 'app/js/access/source_modal.js' %}">
+</script>
+{% endblock %}

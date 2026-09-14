@@ -1,0 +1,15 @@
+{% load static %}
+<div class="modal fade" id="domainBitLockerModal" tabindex="-1" aria-labelledby="domainBitLockerTitle" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
+    <div class="modal-header"><h2 class="modal-title fs-5" id="domainBitLockerTitle">BitLocker 恢复密钥</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+    <div class="modal-body modal-body--scroll">
+      <p data-bitlocker-computer></p>
+      <p class="text-secondary">读取这台计算机在 AD 中备份的恢复密钥。按恢复界面的密钥 ID 选择对应记录；存在记录但密码不可见时，请检查绑定账号权限。</p>
+      <form data-bitlocker-form>{% csrf_token %}<button type="submit" class="btn btn-primary" data-bitlocker-submit>获取密钥</button></form>
+      <p class="mt-3" role="status" data-bitlocker-status></p>
+      <div data-bitlocker-results></div>
+    </div>
+    <div class="modal-footer modal-footer--sticky"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">关闭</button></div>
+  </div></div>
+</div>
+<script src="{% static 'app/js/domain/bitlocker.js' %}" defer></script>

@@ -1,0 +1,16 @@
+{% extends 'common/base.html' %}
+{% load extras %}
+{% block title %}巡检与分析记录{% endblock %}
+{% block content %}
+<header class="page-heading"><div class="page-heading__copy"><p class="page-heading__eyebrow">执行记录</p><h1 class="page-heading__title">巡检与分析记录</h1><p class="page-heading__description">PC 日志分析记录与网络设备、服务器、安防设备巡检统一展示。</p></div><div class="page-heading__actions"><a href="{% url 'index' %}" class="btn btn-outline-secondary">返回总览</a></div></header>
+<div data-table-workspace data-table-key="{{ table_preference_key|default:table_definition.key }}">
+<div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
+<div class="card surface-card table-scroll-shell execution-list-workspace"><p class="table-scroll-hint">可横向滚动查看完整执行记录</p><div class="table-responsive" role="region" aria-label="巡检与分析记录数据表" tabindex="0"><table class="table data-table table-hover align-middle mb-0">
+{% include 'common/table_caption.html' %}<thead><tr>
+{% include 'common/table_sort_headers.html' %}<th scope="col" class="table-actions-column table-actions-cell">操作</th></tr></thead><tbody>
+{% for record in page_obj %}<tr>{% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{% if field.key == 'status' %}{% if record.ok %}{% include 'common/status_badge.html' with status="normal" label="正常" %}{% else %}{% include 'common/status_badge.html' with status="abnormal" label="异常" %}{% endif %}{% else %}{{ record|get_item:field.source|format_table_value:field.kind }}{% endif %}</td>{% endfor %}<td class="table-actions-cell"><a href="{{ record.url }}" class="btn btn-outline-dark btn-sm">查看详情</a></td></tr>
+{% empty %}<tr><td colspan="6">{% include 'common/empty_state.html' with empty_title="暂无执行记录" empty_message="完成巡检或分析后，结果将显示在这里。" %}</td></tr>{% endfor %}
+</tbody></table></div></div>{% include 'common/pagination.html' %}
+</div>
+{% endblock %}
+{% block page_scripts %}{% include 'common/scripts/table_workspace.html' %}{% endblock %}

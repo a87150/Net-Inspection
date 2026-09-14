@@ -1,0 +1,42 @@
+{% if inspection.details.traffic %}
+{% with traffic=inspection.details.traffic %}
+<section class="card surface-card mb-4">
+<div class="card-header surface-card__header">实时接口流量</div>
+<div class="card-body">
+<p class="small text-secondary">本次巡检采样窗口 {{ traffic.sample_seconds|default:'未知' }} 秒，展示采样期间的收发速率；不是累计流量，也不是持续刷新的监控曲线。</p>
+<div class="table-responsive" role="region" aria-label="实时接口流量表" tabindex="0">
+<table class="table data-table">
+<thead>
+<tr>
+<th>接口</th>
+<th>接收 Mbps</th>
+<th>发送 Mbps</th>
+<th>端口带宽 Mbps</th>
+<th>带宽使用率 %</th>
+<th>采样状态</th>
+</tr>
+</thead>
+<tbody>
+{% for row in traffic.interfaces %}
+<tr>
+<td>{{ row.name }}</td>
+<td>{{ row.rx_mbps|default_if_none:'—' }}</td>
+<td>{{ row.tx_mbps|default_if_none:'—' }}</td>
+<td>{{ row.speed_mbps|default_if_none:'未知' }}</td>
+<td>{{ row.utilization_percent|default_if_none:'未知' }}</td>
+<td>
+{% if row.data_state == 'known' %}有效{% else %}{{ row.reason|default:'数据不足' }}{% endif %}
+</td>
+</tr>
+{% empty %}
+<tr>
+<td colspan="6">{{ traffic.message|default:'暂无有效的速率采样，请检查 SNMP 配置。' }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+</div>
+</section>
+{% endwith %}
+{% endif %}

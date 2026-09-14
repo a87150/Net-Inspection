@@ -1,0 +1,208 @@
+{% if saved %}
+<div class="alert alert-success" data-config-saved>已保存。新任务使用新配置；已入队和历史任务保留原快照。</div>
+{% endif %}
+<div class="collection-template-workspace">
+<section class="collection-template-intro" aria-label="配置说明">
+{% if api_mode %}
+<p>深信服上网行为管理 / 安全网关 AC 按所提供接口文档实现的 AC Open API，只请求 <code>/v1/status/</code> 下文档列出的只读端点。每个项目固定展示端点、请求方式和 <code>data</code> 的 JSON 字段映射；这里可调整项目适用性、阈值和告警等级。API 地址、共享密钥和 TLS 校验选项在设备的“修改配置”中填写。</p>
+{% elif kind == 'networks' %}
+<p>网络设备按厂商、设备类型匹配模板；类型模板可继承厂商基础模板。每项选择 SSH 命令或 SNMP 取值，再配置解析和报警阈值。账号和 SNMP 凭据在设备的“修改配置”中填写。日志、路由、ARP、MAC、LLDP、无线信息和配置备份使用 SSH，流量使用 SNMP。默认交换机不启用路由检查；三层交换机可单独启用。AC 检查其管理的 AP 和客户端；瘦 AP 的无线状态应从 AC 获取。</p>
+{% elif kind == 'servers' %}
+<p>服务器按 Linux / Windows 匹配模板，不配置厂商。Linux 沿用 SSH 内置命令和解析，Windows 使用 HTTP 巡检脚本。这里设置项目适用性、阈值及报警级别；连接账号和巡检令牌在设备配置中填写。</p>
+{% else %}
+<p>安防设备按厂商、录像机 / 摄像头 / 门禁类型匹配模板。按接口能力选择 API、SNMP 或 Ping；Ping 只判断连通性，不能检查录像、通道或门禁业务。门禁平台事件同步在“门禁记录”中配置。</p>
+{% endif %}
+<p class="small text-secondary mb-0">选择父模板后，未单独修改的项目继承父级规则。巡检任务中再选择设备和本次执行项目；模板修改只影响新任务。</p>
+</section>
+{% if template_mode %}
+<section class="card surface-card collection-template-library">
+<div class="card-header surface-card__header collection-template-library__header">
+<div>
+<p class="page-heading__eyebrow mb-1">配置库</p>
+<h2 class="h5 mb-0">已有模板</h2>
+</div>
+<a class="btn btn-primary btn-sm" data-modal-navigate href="{% url 'collection_templates' kind %}">新建模板</a>
+</div>
+<div class="card-body">
+{% if templates %}
+<form class="collection-template-picker" method="get" action="{% url 'collection_templates' kind %}">
+<div>
+<label class="form-label" for="collectionTemplatePicker">选择要编辑的模板</label>
+<select class="form-select" id="collectionTemplatePicker" name="edit" required>
+<option value="">请选择已有模板（共 {{ templates|length }} 个）</option>
+{% for row in templates %}
+<option value="{{ row.pk }}"{% if template and row.pk == template.pk %} selected{% endif %}>{{ row.name }} · {% if kind != 'servers' %}{{ row.vendor|default:'全部厂商' }} / {% endif %}{{ row.subtype|default:'基础模板' }}{% if row.parent_id %} ← {{ row.parent.name }}{% endif %}
+{% if not row.is_enabled %} · 已停用{% endif %}
+</option>
+{% endfor %}
+</select>
+</div>
+<button class="btn btn-outline-primary text-nowrap" type="submit">打开模板</button>
+</form>
+<p class="small text-secondary mb-0 mt-2">选择后会在当前窗口载入，不会离开设备列表。</p>
+{% else %}
+<div class="interactive-list__empty">
+<strong>尚未创建自定义模板</strong>
+<span>内置采集规则仍可使用，也可以从右上角新建。</span>
+</div>
+{% endif %}
+</div>
+</section>
+{% endif %}
+{% if template_mode and kind == 'networks' and not api_mode %}
+<section class="config-section-card collection-template-presets">
+<div>
+<h2 class="h6 mb-1">从内置命令新建</h2>
+<p class="small text-secondary mb-0">选择厂商预设后再选择设备类型；深信服上网行为管理 / 安全网关请使用 AC Open API 模板，其他厂商可填写型号对应的只读命令和解析模板。</p>
+</div>
+<div class="collection-template-presets__actions">
+<a class="btn btn-outline-primary btn-sm" data-modal-navigate href="?builtin=huawei">华为</a>
+<a class="btn btn-outline-primary btn-sm" data-modal-navigate href="?builtin=h3c">华三</a>
+<a class="btn btn-outline-primary btn-sm" data-modal-navigate href="?builtin=ruijie">锐捷</a>
+<a class="btn btn-outline-primary btn-sm" data-modal-navigate href="?builtin=cisco">思科</a>
+</div>
+</section>
+{% endif %}
+<form id="collectionSettingsForm" method="post" enctype="multipart/form-data" action="{% if template_mode %}
+{% url 'collection_templates' kind %}
+{% if template %}?edit={{ template.pk }}{% endif %}
+{% else %}
+{% url 'device_collection_settings' kind asset.pk %}
+{% endif %}" class="card surface-card card-body gap-3 collection-template-editor">
+{% csrf_token %}{{ form.version }}{{ form.non_field_errors }}
+{% if template_mode %}
+<div class="row g-3">
+<div class="col-md-4">{{ form.name.label_tag }}{{ form.name }}{{ form.name.errors }}</div>
+{% if form.vendor %}
+<div class="col-md-3">{{ form.vendor.label_tag }}{{ form.vendor }}{{ form.vendor.errors }}</div>
+{% endif %}
+<div class="col-md-3">{{ form.subtype.label_tag }}{{ form.subtype }}{{ form.subtype.errors }}</div>
+<div class="col-md-2">{{ form.is_enabled }} {{ form.is_enabled.label }}</div>
+</div>
+{% else %}
+<div data-template-parent>{{ form.template.label_tag }}{{ form.template }}{{ form.template.errors }}</div>
+{% endif %}
+{% if template_mode %}
+<div data-template-parent>{{ form.parent.label_tag }}{{ form.parent }}{{ form.parent.errors }}<div class="form-text">
+{% if kind == 'servers' %}选择服务器基础模板或相同操作系统的模板。{% else %}选择同厂商基础模板或同类型模板。{% endif %}留空不继承其他自定义模板。父模板停用后不自动匹配设备，但已有子模板仍继承其规则。</div>
+</div>
+{% endif %}
+<button type="submit" name="preview_inheritance" value="1" formnovalidate class="btn btn-outline-secondary align-self-start">查看所选父模板规则（不保存）</button>
+<section>
+<h2 class="h5">巡检项目规则</h2>
+<p class="text-secondary">
+{% if api_mode %}展开需要修改的项目，选择“单独修改此项目”，再调整适用性、阈值和告警等级。端点及 JSON 映射由 AC Open API 固定实现，不能用 SSH/SNMP 覆盖。{% elif kind == 'networks' %}展开需要修改的项目，选择“单独修改此项目”，再选 SSH 或 SNMP 并填写对应内容。{% elif kind == 'servers' %}采集方式和解析沿用操作系统对应的内置实现；展开项目可以调整适用性、报警阈值及级别。{% else %}展开项目选择适用的 API、SNMP 或 Ping 方式；只有接口支持的项目才可取得有效证据。{% endif %}其余项目保持继承。</p>
+{% for row in form.item_rows %}
+<details class="config-section-card inspection-rule-card mb-2" data-inspection-rule{% if form.preview_item == row.key %} open{% endif %}>
+<summary class="fw-semibold">{{ row.label }}</summary>
+<div class="mt-2" data-rule-mode>{{ row.mode.label_tag }}{{ row.mode }}{{ row.mode.errors }}</div>
+<p class="text-secondary mt-2">继承规则：{{ row.inherited }}</p>
+<div data-rule-editor>
+<div>{{ row.enabled.label_tag }}{{ row.enabled }}{{ row.enabled.errors }}</div>
+<div class="row g-3 mt-1">
+{% if row.method %}
+<div class="col-md-6" data-rule-method>{{ row.method.label_tag }}{{ row.method }}{{ row.method.errors }}</div>
+{% endif %}
+{% if row.threshold %}
+<div class="col-md-6">{{ row.threshold.label_tag }}{{ row.threshold }}{{ row.threshold.errors }}<div class="form-text">超过阈值时产生该项目的异常；百分比指标单位为 %，温度为 ℃。留空继承父模板，没有父级规则时使用默认值。</div>
+</div>
+{% endif %}
+<div class="col-md-6">
+<label class="form-label">异常报警级别</label>{{ row.level }}{{ row.level.errors }}</div>
+<div class="col-md-6">
+<label class="form-label">数据不足提示级别</label>{{ row.missing }}{{ row.missing.errors }}</div>
+</div>
+{% if row.api %}
+<div class="mt-3">
+<h3 class="h6">AC Open API 固定解析</h3>
+<dl class="row small mb-0">
+<dt class="col-sm-3">端点</dt>
+<dd class="col-sm-9">
+<code>{{ row.api.endpoint }}</code>
+</dd>
+<dt class="col-sm-3">请求</dt>
+<dd class="col-sm-9">{{ row.api.method }}</dd>
+<dt class="col-sm-3">JSON 字段</dt>
+<dd class="col-sm-9">
+<code>{{ row.api.fields }}</code>
+</dd>
+</dl>
+</div>
+{% endif %}
+{% if row.snmp_fields %}
+<div data-rule-protocol="snmp" hidden class="mt-3">
+<h3 class="h6">SNMP 取值与解析</h3>
+<p class="form-text">解析方式：数字值 × 倍率 + 偏移。CPU 输出百分数，内存输出字节，温度输出摄氏度；OID 留空使用内置 MIB。</p>
+{% for fields in row.snmp_fields %}
+<div class="row g-3">
+{% for field in fields %}
+<div class="col-md-4">{{ field.label_tag }}{{ field }}{{ field.errors }}</div>
+{% endfor %}
+</div>
+{% endfor %}
+</div>
+{% endif %}
+{% if kind == 'networks' and not row.snmp_fields and row.method %}
+<div data-rule-protocol="snmp" hidden class="mt-3">
+<p class="form-text">使用该项目的内置 MIB 字段与结构化解析。需替换厂商 OID 时，在下方 MIB / OID 高级配置中填写；无需设置 SSH 命令。</p>
+</div>
+{% endif %}
+{% if row.ssh %}
+<div data-rule-protocol="ssh" hidden class="mt-3">
+<h3 class="h6">SSH 命令与回显解析</h3>
+<div class="row g-3">
+<div class="col-md-6">{{ row.ssh.commands.label_tag }}{{ row.ssh.commands }}{{ row.ssh.commands.errors }}</div>
+<div class="col-md-6">{{ row.ssh.engine.label_tag }}{{ row.ssh.engine }}{{ row.ssh.engine.errors }}{{ row.ssh.flags.label_tag }}{{ row.ssh.flags }}</div>
+<div class="col-md-6">{{ row.ssh.template.label_tag }}{{ row.ssh.template }}{{ row.ssh.template.errors }}<details class="mt-2">
+<summary>空表识别（高级）</summary>{{ row.ssh.empty.label_tag }}{{ row.ssh.empty }}{{ row.ssh.empty.errors }}<p class="form-text">仅匹配设备明确返回零条记录的提示；留空时无匹配按数据不足处理。</p>
+</details>
+</div>
+<div class="col-md-6">{{ row.ssh.sample.label_tag }}{{ row.ssh.sample }}{{ row.ssh.sample.errors }}</div>
+</div>
+<button class="btn btn-outline-primary btn-sm mt-2" name="preview_item" value="{{ row.key }}" type="submit" formnovalidate>测试回显解析（不保存）</button>
+</div>
+{% elif row.method %}
+<p class="form-text mt-3">回显由对应协议的内置字段解析器处理；只执行巡检设置中选择的项目。</p>
+{% endif %}
+{% if form.preview_item == row.key %}
+<pre class="mt-2">{{ form.preview_result }}</pre>
+{% endif %}
+</div>
+</details>
+{% endfor %}
+</section>
+{% if snmp_fields %}
+<details class="config-section-card">
+<summary>安防默认协议与 SNMP 参数</summary>
+<div class="row g-3 mt-2">
+{% for field in snmp_fields %}
+<div class="col-md-6">{{ field.label_tag }}{{ field }}{{ field.errors }}<div class="form-text">{{ field.help_text }}</div>
+</div>
+{% endfor %}
+</div>
+</details>
+{% endif %}
+{% if advanced_fields %}
+<details class="config-section-card">
+<summary>MIB / OID 高级配置</summary>
+<p class="text-secondary mt-2">只接受声明式模板和 MIB 文本，不执行 Python。留空继承父模板；无需调整 OID 时可跳过。不要填写密码。</p>
+{% for field in advanced_fields %}
+<div class="mb-3">{{ field.label_tag }}{{ field }}{{ field.errors }}</div>
+{% endfor %}
+</details>
+{% endif %}
+</form>
+{% if effective_json %}
+<details class="config-section-card">
+<summary>当前生效配置（不含凭据）</summary>
+<pre>{{ effective_json }}</pre>
+</details>
+{% endif %}
+
+{% if inherited_json %}
+<details class="config-section-card">
+<summary>父模板完整规则与来源</summary>
+<pre>{{ inherited_json }}</pre>
+</details>
+{% endif %}
+</div>

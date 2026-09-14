@@ -1,0 +1,12 @@
+{% if can_administer %}
+<section data-people-task-notifications data-status-url="{% url 'people_task_status' %}" data-csrf-token="{{ csrf_token }}" aria-live="polite">
+    <div data-people-running-list></div>
+    <div class="modal fade" id="peopleTaskCompletionModal" tabindex="-1" aria-labelledby="peopleTaskCompletionLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-shell"><div class="modal-content modal-surface">
+            <div class="modal-header"><h2 class="modal-title fs-5" id="peopleTaskCompletionLabel">人员目录任务结果</h2><button type="button" class="btn-close" data-bs-dismiss="modal" data-people-completion-close aria-label="关闭"></button></div>
+            <div class="modal-body modal-body--scroll"><p class="mb-0" data-people-completion-message></p></div>
+            <div class="modal-footer modal-footer--sticky"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" data-people-completion-close>关闭</button><a class="btn btn-primary" data-people-completion-jump href="#">查看结果</a></div>
+        </div></div>
+    </div>
+</section>
+{% endif %}

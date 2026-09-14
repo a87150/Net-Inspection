@@ -1,0 +1,25 @@
+{% extends 'common/base.html' %}
+{% load extras %}
+{% block title %}PC 异常记录{% endblock %}
+{% block content %}
+<header class="page-heading">
+    <div class="page-heading__copy"><p class="page-heading__eyebrow">PC 异常</p><h1 class="page-heading__title">PC 异常记录</h1><p class="page-heading__description">聚合 PC 日志分析记录发现的异常项。</p></div>
+</header>
+<div data-table-workspace data-table-key="{{ table_definition.key }}">
+<div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
+<div class="card surface-card table-scroll-shell"><p class="table-scroll-hint">可横向滚动查看完整异常信息</p><div class="table-responsive" role="region" aria-label="PC 异常记录数据表" tabindex="0"><table class="table data-table table-hover align-middle mb-0">
+{% include 'common/table_caption.html' %}
+    <thead><tr>{% include 'common/table_sort_headers.html' %}<th scope="col" class="table-actions-column table-actions-cell">操作</th></tr></thead>
+    <tbody>
+    {% for error in page_obj %}
+    <tr>
+        {% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}{% if field.key == 'message' %} class="text-wrap detail-cell"{% endif %}>{% if field.key == 'computer_name' %}<span class="fw-semibold">{{ error.inspection.computer.computer_name|default:"未知" }}</span>{% elif field.key == 'user_name' %}{{ error.inspection.computer.user_name|default:"-" }}{% elif field.key == 'log_time' %}{{ error.inspection.log_file.modified_at|date:"Y-m-d H:i:s"|default:"-" }}{% elif field.key == 'time' %}{{ error.inspection.created_at|date:"Y-m-d H:i:s" }}{% elif field.key == 'type' %}{% include 'common/status_badge.html' with status="abnormal" label=error.error_type %}{% elif field.key == 'message' %}{{ error.error_message }}{% endif %}</td>{% endfor %}
+        <td class="text-end table-actions-cell"><a href="{% url 'computer_analysis_detail' error.inspection_id %}" class="btn btn-outline-dark btn-sm">详情</a></td>
+    </tr>
+    {% empty %}<tr><td colspan="6"><div class="empty-state"><strong>没有异常记录</strong><span>当前 PC 日志分析记录未发现需要处理的异常。</span></div></td></tr>{% endfor %}
+    </tbody>
+</table></div></div>
+{% include 'common/pagination.html' %}
+</div>
+{% endblock %}
+{% block page_scripts %}{% include 'common/scripts/table_workspace.html' %}{% endblock %}

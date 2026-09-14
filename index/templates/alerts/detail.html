@@ -1,0 +1,36 @@
+{% extends 'common/base.html' %}
+{% block title %}告警详情{% endblock %}
+{% block content %}
+<header class="page-heading">
+    <div class="page-heading__copy">
+        <p class="page-heading__eyebrow">告警中心</p>
+        <h1 class="page-heading__title">{{ event.get_event_type_display }}</h1>
+        <p class="page-heading__description">{{ event.occurred_at|date:'Y-m-d H:i:s' }} · {{ event.get_status_display }}</p>
+    </div>
+    <div class="page-heading__actions">
+        <a class="btn btn-outline-secondary" href="{% url 'alert_list' %}">返回告警记录</a>
+        <a class="btn btn-outline-primary" href="{% url 'task_detail' event.task_id %}">任务详情</a>
+        {% if event.event_type != 'summary' %}
+        <a class="btn btn-primary" href="{% url 'task_detail' event.task_id %}?filter_target_id={{ event.target_run.target_id }}">目标执行详情</a>
+        {% endif %}
+    </div>
+</header>
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card surface-card h-100">
+            <div class="card-body">
+                {% if event.event_type == 'summary' %}
+                    {% include 'alerts/summary_detail.html' %}
+                {% else %}
+                    {% include 'alerts/event_detail.html' %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card surface-card h-100">
+            <div class="card-body">{% include 'alerts/delivery_list.html' %}</div>
+        </div>
+    </div>
+</div>
+{% endblock %}

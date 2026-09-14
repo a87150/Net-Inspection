@@ -1,0 +1,115 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-cn">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}网络巡检中心{% endblock %}</title>
+    <link href="{% static 'vendor/bootstrap/css/bootstrap.min.css' %}" rel="stylesheet">
+    <link href="{% static 'app/css/tokens.css' %}" rel="stylesheet">
+    <link href="{% static 'app/css/foundation.css' %}" rel="stylesheet">
+    <link href="{% static 'app/css/operations.css' %}" rel="stylesheet">
+    <link href="{% static 'app/css/modal-workflows.css' %}" rel="stylesheet">
+    <link href="{% static 'app/css/style.css' %}" rel="stylesheet">
+    {% block page_css %}{% endblock %}
+    <script defer src="{% static 'vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+    <script defer src="{% static 'app/js/common/form_accessibility.js' %}"></script>
+    <script defer src="{% static 'app/js/common/confirm_dialog.js' %}"></script>
+</head>
+<body class="app-shell">
+    <a class="skip-link" href="#main-content">跳至主要内容</a>
+    <div class="visually-hidden" id="app-live-region" role="status" aria-live="polite" aria-atomic="true"></div>
+    <nav class="navbar navbar-expand-lg navbar-dark app-navbar app-header" aria-label="主导航">
+        <div class="container-fluid app-navbar__inner">
+            {% url 'index' as brand_url %}{% include 'common/brand.html' with brand_url=brand_url %}
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="切换主导航">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="mainNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item dropdown" data-nav-menu="people">
+                        <button class="nav-link dropdown-toggle" id="navPeopleToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navPeopleMenu">人员</button>
+                        <ul class="dropdown-menu app-navbar__dropdown-menu" id="navPeopleMenu" aria-labelledby="navPeopleToggle"><li><a class="dropdown-item" href="{% url 'asset_list' 'people' %}">人员列表</a></li><li><a class="dropdown-item" href="{% url 'people_statistics' %}">人员统计</a></li></ul>
+                    </li>
+                    <li class="nav-item dropdown" data-nav-menu="domain">
+                        <button class="nav-link dropdown-toggle" id="navDomainToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navDomainMenu">域控管理</button>
+                        <ul class="dropdown-menu app-navbar__dropdown-menu" id="navDomainMenu" aria-labelledby="navDomainToggle">{% if can_administer %}<li><a class="dropdown-item" href="{% url 'domain_controller_settings' %}">域控管理</a></li>{% endif %}<li><a class="dropdown-item" href="{% url 'domain_account_list' %}">域账号</a></li><li><a class="dropdown-item" href="{% url 'domain_computer_list' %}">域计算机</a></li><li><a class="dropdown-item" href="{% url 'domain_group_list' %}">域分组</a></li></ul>
+                    </li>
+                    <li class="nav-item dropdown" data-nav-menu="computers">
+                        <button class="nav-link dropdown-toggle" id="navComputersToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navComputersMenu">PC</button>
+                        <ul class="dropdown-menu app-navbar__dropdown-menu" id="navComputersMenu" aria-labelledby="navComputersToggle"><li><a class="dropdown-item" href="{% url 'asset_list' 'computers' %}">PC 列表</a></li><li><a class="dropdown-item" href="{% url 'computer_analysis_list' %}">日志分析记录</a></li></ul>
+                    </li>
+                    <li class="nav-item dropdown" data-nav-menu="networks">
+                        <button class="nav-link dropdown-toggle" id="navNetworksToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navNetworksMenu">网络设备</button>
+                        <ul class="dropdown-menu app-navbar__dropdown-menu" id="navNetworksMenu" aria-labelledby="navNetworksToggle"><li><a class="dropdown-item" href="{% url 'asset_list' 'networks' %}">网络设备列表</a></li><li><a class="dropdown-item" href="{% url 'record_list' 'networks' %}">巡检记录</a></li></ul>
+                    </li>
+                    <li class="nav-item dropdown" data-nav-menu="servers">
+                        <button class="nav-link dropdown-toggle" id="navServersToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navServersMenu">服务器</button>
+                        <ul class="dropdown-menu app-navbar__dropdown-menu" id="navServersMenu" aria-labelledby="navServersToggle"><li><a class="dropdown-item" href="{% url 'asset_list' 'servers' %}">服务器列表</a></li><li><a class="dropdown-item" href="{% url 'record_list' 'servers' %}">巡检记录</a></li></ul>
+                    </li>
+                    <li class="nav-item dropdown" data-nav-menu="monitors">
+                        <button class="nav-link dropdown-toggle" id="navMonitorsToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navMonitorsMenu">安防设备</button>
+                        <ul class="dropdown-menu app-navbar__dropdown-menu" id="navMonitorsMenu" aria-labelledby="navMonitorsToggle"><li><a class="dropdown-item" href="{% url 'asset_list' 'monitors' %}">安防设备列表</a></li><li><a class="dropdown-item" href="{% url 'record_list' 'monitors' %}">巡检记录</a></li>{% if can_view_private %}<li><a class="dropdown-item" href="{% url 'access_record_list' %}">门禁记录</a></li>{% endif %}</ul>
+                    </li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'task_list' %}">后台任务</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'alert_list' %}">告警记录</a></li>
+                </ul>
+                {% if can_administer %}<a class="navbar-text app-navbar__context" href="{% url 'admin:index' %}"><span class="status-dot status-dot--success" aria-hidden="true"></span>运维管理台</a>{% endif %}
+                {% if user.is_authenticated %}
+                <div class="dropdown ms-3" data-account-menu>
+                    <button class="app-account-trigger dropdown-toggle d-inline-flex align-items-center gap-2" id="accountMenuToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="accountMenu" aria-label="账号 {{ user.get_username }}，查看用户组">
+                        <span>{{ user.get_username }}</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end app-navbar__dropdown-menu" id="accountMenu" aria-labelledby="accountMenuToggle">
+                        <li><h2 class="dropdown-header">用户组</h2></li>
+                        {% if user.is_superuser %}
+                        <li><span class="dropdown-item-text app-account-role" data-account-role="superuser">超级管理员</span></li>
+                        {% elif can_administer %}
+                        <li><span class="dropdown-item-text app-account-role" data-account-role="administrator">管理员</span></li>
+                        {% else %}
+                        <li><span class="dropdown-item-text app-account-role" data-account-role="regular">普通用户</span></li>
+                        {% endif %}
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <form method="post" action="{% url 'logout' %}">
+                                {% csrf_token %}<button class="dropdown-item text-danger" type="submit">退出登录</button>
+                            </form>
+                        </li>
+                    </ul>
+                </div>
+                {% else %}
+                <a class="navbar-text ms-3" href="{% url 'login' %}">登录</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+    <main class="container-fluid app-main app-content" id="main-content" tabindex="-1">
+        {% if messages %}
+        {% for message in messages %}
+        <div data-flash-message class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="关闭"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+    <div class="modal fade" id="appConfirmModal" tabindex="-1" aria-labelledby="appConfirmTitle" aria-describedby="appConfirmText" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-shell">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h2 class="modal-title fs-5" id="appConfirmTitle">确认操作</h2>
+                    <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="关闭"></button>
+                </div>
+                <div class="modal-body"><p class="mb-0" id="appConfirmText" data-confirm-text>请确认是否继续。</p></div>
+                <div class="modal-footer modal-footer--sticky">
+                    <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">取消</button>
+                    <button class="btn btn-danger" type="button" data-confirm-submit>确认执行</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <footer class="app-footer"><span>Network Inspection Center</span><span>终端、基础设施与目录服务统一运维</span></footer>
+    {% block page_scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,18 @@
+{% extends "admin/base.html" %}
+{% load i18n static %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | 网络巡检中心{% endblock %}
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'app/css/tokens.css' %}"><link rel="stylesheet" href="{% static 'app/css/foundation.css' %}"><link rel="stylesheet" href="{% static 'app/css/operations.css' %}"><link rel="stylesheet" href="{% static 'app/css/modal-workflows.css' %}"><link rel="stylesheet" href="{% static 'app/css/style.css' %}">{% endblock %}
+{% block finalstyle %}<link rel="stylesheet" href="{% static 'app/css/admin.css' %}">{% endblock %}
+{% block bodyclass %}{{ block.super }} app-shell admin-shell{% endblock %}
+{% block branding %}{% url 'admin:index' as brand_url %}{% include 'common/brand.html' with brand_url=brand_url %}{% endblock %}
+{% block dark-mode-vars %}{% endblock %}
+{% block usertools %}{% if has_permission %}
+<ul id="user-tools" class="navbar-nav ms-auto align-items-lg-center" aria-label="管理操作">
+<li class="nav-item"><a class="nav-link" href="{% url 'index' %}">返回运维总览</a></li>
+{% if user.has_usable_password %}<li class="nav-item"><a class="nav-link" href="{% url 'admin:password_change' %}">{% translate 'Change password' %}</a></li>{% endif %}
+<li class="nav-item"><form id="logout-form" method="post" action="{% url 'admin:logout' %}">{% csrf_token %}<button class="nav-link" type="submit">退出登录</button></form></li>
+</ul>
+{% endif %}{% endblock %}
+{% block extrabody %}<script defer src="{% static 'app/js/common/form_accessibility.js' %}"></script>{% endblock %}
+{% block footer %}<span>网络巡检中心 · 企业运维管理</span>{% endblock %}

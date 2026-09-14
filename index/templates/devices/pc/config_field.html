@@ -1,0 +1,8 @@
+<div class="{{ col|default:'col-md-6' }}"{% if source %} data-source-field="{{ field.name }}"{% endif %}{% if hidden %} hidden{% endif %}{% if schedule == 'interval' %} data-schedule-interval{% elif schedule == 'daily' %} data-schedule-daily{% endif %}>
+ {% if field.field.widget.input_type == 'checkbox' %}
+ <label class="form-check mb-0" for="{{ field.id_for_label }}">{{ field }}<span class="form-check-label">{{ field.label }}</span></label>
+ {% else %}
+ <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+ {% endif %}
+ {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}{{ field.errors }}
+</div>

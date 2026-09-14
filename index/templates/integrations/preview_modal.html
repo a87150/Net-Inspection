@@ -1,0 +1,41 @@
+{% if can_administer %}
+<div class="modal fade import-preview-modal" id="peoplePreviewModal" data-auto-open="true" tabindex="-1" aria-labelledby="peoplePreviewLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
+        <div class="modal-header"><h2 class="modal-title fs-5" id="peoplePreviewLabel">{{ people_operation.get_task_type_display }}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+        <div class="modal-body modal-body--scroll d-grid gap-3">
+            {% if people_operation_error %}<div class="alert alert-danger mb-0" role="alert">{{ people_operation_error }}</div>{% endif %}
+            <p class="mb-0">{{ people_operation_source.name }} · {{ people_operation_source.source_key }}</p>
+            <div role="status">状态：{{ people_operation.get_status_display }} · {{ people_operation.completed_targets }} / {{ people_operation.total_targets }}<div class="small text-secondary">目录操作不参与设备告警处理。</div></div>
+            {% if people_operation.status == 'queued' or people_operation.status == 'running' %}
+            <p class="text-secondary mb-0">由现有 Worker 持久执行。可离开页面，之后从当前会话的最近操作继续。若一直等待，请检查 Worker 是否运行。</p>
+            <a class="btn btn-outline-primary" href="{% url 'people_operation' people_operation.pk %}">刷新进度</a>
+            {% elif people_operation.status == 'failed' %}<div class="alert alert-danger mb-0" role="alert">{{ people_operation.error_summary }}{% for message in people_operation_target.result_snapshot.validation_messages %}<div>{{ message }}</div>{% endfor %}</div>
+            {% elif people_operation.people_applied_at %}<div class="alert alert-success mb-0">该预览已确认应用。</div>
+            {% elif people_operation.task_type == 'people_test' %}
+            <div class="alert alert-success mb-0">第 1 步连接测试成功，可以继续预览数据。</div>
+            <form method="post" action="{% url 'people_preview' %}" class="d-grid">{% csrf_token %}
+                <input type="hidden" name="provider" value="{{ people_operation_source.source_type }}">
+                <button class="btn btn-primary" type="submit">第 2 步：预览数据</button>
+            </form>
+            {% endif %}
+            {% if people_preview %}
+            <div class="alert alert-info mb-0">新增 {{ people_preview.creates|length }} · 更新 {{ people_preview.updates|length }} · 不变 {{ people_preview.unchanged|length }} · 停用 {{ people_preview.deactivations|length }} · 跳过 {{ people_preview.skipped|length }}</div>
+            <p class="small mb-0">CSV/手工人员会按工号更新并纳入当前 API 来源；仅停用当前 API 来源拥有的缺失人员，其他 API 来源保持不变。预览有效期 5 分钟，配置或人员变化后需重新预览。以下每类最多显示 20 条样例，确认后应用完整预览。</p>
+            <div class="table-responsive"><table class="table data-table table-sm"><thead><tr><th>变更</th><th>工号 / 平台 ID</th><th>姓名</th><th>手机号</th><th>部门 / 原因</th><th>上级</th></tr></thead><tbody>
+                {% for row in people_preview.creates|slice:':20' %}<tr><td>新增</td><td>{{ row.employee_id }}</td><td>{{ row.name }}</td><td>{{ row.phone|default:'—' }}</td><td>{{ row.department }}</td><td>{{ row.leader|default:'—' }}</td></tr>{% endfor %}
+                {% for row in people_preview.updates|slice:':20' %}<tr><td>更新</td><td>{{ row.employee_id }}</td><td>{{ row.name }}</td><td>{{ row.phone|default:'—' }}</td><td>{{ row.department }}</td><td>{{ row.leader|default:'—' }}</td></tr>{% endfor %}
+                {% for row in people_preview.unchanged|slice:':20' %}<tr><td>不变</td><td>{{ row.employee_id }}</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>{% endfor %}
+                {% for row in people_preview.deactivations|slice:':20' %}<tr><td>停用</td><td>{{ row.employee_id }}</td><td>—</td><td>—</td><td>当前来源缺失</td><td>—</td></tr>{% endfor %}
+                {% for row in people_preview.skipped|slice:':20' %}<tr><td>跳过</td><td>{{ row.external_user_id }}</td><td>—</td><td>—</td><td>{{ row.reason }}</td><td>—</td></tr>{% endfor %}
+            </tbody></table></div>
+            <form method="post" action="{% url 'people_apply' %}" class="d-grid gap-3">{% csrf_token %}
+                <input type="hidden" name="task_id" value="{{ people_operation.pk }}"><input type="hidden" name="preview_token" value="{{ people_preview.token }}">
+                <label class="form-check"><input class="form-check-input" type="checkbox" name="confirm" value="yes" required><span class="form-check-label">我已核对新增、更新和停用，确认应用此已保存预览。</span></label>
+                <button class="btn btn-primary" type="submit">导入数据</button>
+            </form>
+            {% endif %}
+            <a class="btn btn-outline-secondary" href="{% url 'asset_list' 'people' %}?import=people&amp;provider={{ people_operation_source.source_type }}">返回 API 设置 / 重新预览</a>
+        </div>
+    </div></div>
+</div>
+{% endif %}

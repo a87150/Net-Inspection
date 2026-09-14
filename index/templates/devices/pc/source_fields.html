@@ -1,0 +1,60 @@
+{% if can_administer %}
+<input type="hidden" name="simple_source_form" value="1">
+{{ form.share_name }}{{ form.remote_root_directory }}{{ form.remote_incoming_directory }}
+{{ form.non_field_errors }}
+{% if form.share_name.errors or form.remote_root_directory.errors or form.remote_incoming_directory.errors %}
+<div class="alert alert-danger">请检查共享文件夹或 FTP 日志目录。{{ form.share_name.errors }}{{ form.remote_root_directory.errors }}{{ form.remote_incoming_directory.errors }}</div>
+{% endif %}
+<section class="inspection-config-block">
+ <div class="inspection-config-block__heading"><span class="inspection-config-block__index">01</span><div><h3 class="h6 mb-1">日志连接</h3><p class="mb-0">默认使用运行项目的 Windows 账号，只需填共享路径。没有权限时再选择手动指定账号密码；Web 和 Worker 都需要访问权限。</p></div></div>
+ <div class="row g-3">
+ {% include 'devices/pc/config_field.html' with field=form.source_type col='col-12' source=True %}
+ {% include 'devices/pc/config_field.html' with field=form.smb_auth_mode col='col-12' source=True %}
+ {% if form.source_type.value == 'ftp' %}
+ {% include 'devices/pc/config_field.html' with field=form.shared_path col='col-12' source=True hidden=True %}
+ {% include 'devices/pc/config_field.html' with field=form.host col='col-md-6' source=True %}
+ {% include 'devices/pc/config_field.html' with field=form.ftp_directory col='col-md-6' source=True %}
+ {% else %}
+ {% include 'devices/pc/config_field.html' with field=form.shared_path col='col-12' source=True %}
+ {% include 'devices/pc/config_field.html' with field=form.host col='col-md-6' source=True hidden=True %}
+ {% include 'devices/pc/config_field.html' with field=form.ftp_directory col='col-md-6' source=True hidden=True %}
+ {% endif %}
+ {% include 'devices/pc/config_field.html' with field=form.username col='col-md-6' source=True %}
+ {% include 'devices/pc/config_field.html' with field=form.password col='col-md-6' source=True %}
+ </div>
+ <p class="form-text mt-3 mb-0">保存后自动补全端口和暂存目录；未自定义归档位置时，在日志目录下使用 _processed（已处理）和 _failed（格式错误）子目录。有效日志即使分析出异常，也放到已处理目录。</p>
+</section>
+{% endif %}
+<details data-source-advanced class="inspection-config-block"{% if form.errors %} open{% endif %}>
+ <summary class="fw-semibold">高级设置（一般不用修改）</summary>
+ <div class="form-text mt-2">归档路径基准：{% if form.source_type.value == 'ftp' %}FTP{% else %}共享文件夹{% endif %}根目录 {{ form.remote_root_directory.value|default:'/' }}。</div>
+ <div class="row g-3 mt-1">
+ {% include 'devices/pc/config_field.html' with field=form.port col='col-md-4' source=True %}
+ {% include 'devices/pc/config_field.html' with field=form.domain col='col-md-8' source=True %}
+ {% include 'devices/pc/config_field.html' with field=form.ftp_passive col='col-md-6' source=True %}
+ {% include 'devices/pc/config_field.html' with field=form.ftp_use_tls col='col-md-6' source=True %}
+ {% include 'devices/pc/config_field.html' with field=form.remote_processed_directory col='col-md-6' source=True %}
+ {% include 'devices/pc/config_field.html' with field=form.remote_failed_directory col='col-md-6' source=True %}
+ {% include 'devices/pc/config_field.html' with field=form.local_staging_directory col='col-12' source=True %}
+ {% include 'devices/pc/config_field.html' with field=form.terminal_windows_path col='col-md-6' source=True %}
+ {% include 'devices/pc/config_field.html' with field=form.terminal_macos_path col='col-md-6' source=True %}
+ </div>
+ <div class="form-text mt-2">已有自定义设置会保留。归档目录相对于远程根目录；本地暂存目录在 Worker 服务器上。改终端写入路径后重新下载脚本。FTP 目录与脚本共享路径须对应同一批文件。</div>
+</details>
+<section class="inspection-config-block">
+ <div class="inspection-config-block__heading"><span class="inspection-config-block__index">02</span><div><h3 class="h6 mb-1">读取哪些日志</h3><p class="mb-0">默认读取最近 7 天，可选择日期范围；已处理和失败目录不会重复读取。</p></div></div>
+ <div class="row g-3">
+ {% include 'devices/pc/config_field.html' with field=form.file_time_mode col='col-md-4' source=True %}
+ {% include 'devices/pc/config_field.html' with field=form.recent_days col='col-md-2' source=True %}
+ {% include 'devices/pc/config_field.html' with field=form.range_start_date col='col-md-3' source=True %}
+ {% include 'devices/pc/config_field.html' with field=form.range_end_date col='col-md-3' source=True %}
+ {% include 'devices/pc/config_field.html' with field=form.recursive col='col-12' source=True %}
+ </div>
+ {% if pc_log_source %}<div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+ <button class="btn btn-outline-primary btn-sm" type="submit" form="pc-source-test-form">测试连接</button>
+ <button class="btn btn-outline-primary btn-sm" type="submit" form="pc-source-preview-form">预览日志</button>
+ <span class="small text-secondary">请先保存；按钮使用已保存的连接配置。</span></div>
+ <div class="form-text">测试会创建并清理专用测试文件，预览只列目录。{% if pc_log_source.last_tested_at %}最近测试：{{ pc_log_source.last_tested_at|date:'Y-m-d H:i' }}。{% endif %}</div>
+ {% if pc_log_source.public_last_test_error %}<div class="small text-danger mt-2">{{ pc_log_source.public_last_test_error }}</div>{% endif %}
+ {% endif %}
+</section>

@@ -1,0 +1,100 @@
+from index.access.views import (access_record_list, access_record_sync, access_source_settings, access_source_save, access_source_test)
+from index.devices.collection_profiles import collection_templates, device_collection_settings
+from index.domain.bitlocker import domain_computer_bitlocker
+from index.inspections.tasks import single_device_task_create
+from django.urls import path
+from django.contrib.auth.views import LoginView, LogoutView
+from . import views
+from index.inspections.issue_settings import issue_severity_settings
+from index.inspections.analysis_summary import analysis_problem_list
+from index.devices.pc import source as pc_source_views
+from index.devices.server.scripts import windows_server_script_download
+from index.devices.create import asset_create, asset_edit
+from index.alerts.templates import alert_template_settings
+from index.devices.backups import configuration_backup_list, configuration_backup_download
+from index.devices.pc.bulk_analysis import computer_logs_analyze_bulk
+from index.devices.pc.software_policy import pc_software_policy_template_download
+
+urlpatterns = [
+    path("access/records/", access_record_list, name="access_record_list"),
+    path("access/sources/", access_source_settings, name="access_source_settings"),
+    path("access/sources/save/", access_source_save, name="access_source_save"),
+    path("access/sources/test/", access_source_test, name="access_source_test"),
+    path("access/records/sync/", access_record_sync, name="access_record_sync"),
+    path("assets/<str:kind>/templates/", collection_templates, name="collection_templates"),
+    path("assets/<str:kind>/<uuid:pk>/collection-settings/", device_collection_settings, name="device_collection_settings"),
+    path("domain/computers/<uuid:pk>/bitlocker/", domain_computer_bitlocker, name="domain_computer_bitlocker"),
+    path('computers/analyses/tasks/<uuid:pk>/problems/', analysis_problem_list, name='analysis_problem_list'),
+    path('login/', LoginView.as_view(template_name='registration/login.html'), name='login'),
+    path('logout/', LogoutView.as_view(), name='logout'),
+    path('inspections/issue-severity/', issue_severity_settings, name='issue_severity_settings'),
+    path('servers/scripts/windows/', windows_server_script_download, name='windows_server_script_download'),
+    path('computers/source/save/', pc_source_views.pc_log_source_save, name='pc_log_source_save'),
+    path('computers/source/test/', pc_source_views.pc_log_source_test, name='pc_log_source_test'),
+    path('computers/source/preview/', pc_source_views.pc_log_source_preview, name='pc_log_source_preview'),
+    path('', views.index, name='index'),
+    path('assets/<str:kind>/', views.asset_list, name='asset_list'),
+    path('assets/<str:kind>/add/', asset_create, name='asset_create'),
+    path('assets/<str:kind>/<uuid:pk>/edit/', asset_edit, name='asset_edit'),
+    path('assets/<str:kind>/configurations.zip', views.configuration_zip, name='configuration_zip'),
+    path('assets/<str:kind>/<uuid:pk>/configuration/', views.configuration_download, name='configuration_download'),
+    path('assets/<str:kind>/<uuid:pk>/backups/', configuration_backup_list, name='configuration_backup_list'),
+    path('assets/<str:kind>/<uuid:pk>/backups/<uuid:backup_id>/download/', configuration_backup_download, name='configuration_backup_download'),
+    path('assets/<str:kind>/<uuid:pk>/', views.asset_detail, name='asset_detail'),
+    path('people/statistics/', views.people_statistics, name='people_statistics'),
+    path('people/<uuid:pk>/', views.person_detail, name='person_detail'),
+    path('item/<str:item>/', views.item_list, name='item_list'),
+    path('computers/analyses/', views.computer_analysis_list, name='computer_analysis_list'),
+    path('computers/software-policy/template/', pc_software_policy_template_download,
+         name='pc_software_policy_template_download'),
+    path('computers/logs/', views.computer_log_list, name='computer_log_list'),
+    path('computers/logs/analyze-bulk/', computer_logs_analyze_bulk, name='computer_logs_analyze_bulk'),
+    path('computers/logs/<int:pk>/', views.computer_log_detail, name='computer_log_detail'),
+    path('computers/logs/<int:pk>/analyze/', views.computer_log_analyze, name='computer_log_analyze'),
+    path('computers/analyses/<uuid:pk>/', views.computer_analysis_detail, name='computer_analysis_detail'),
+    path('computers_errors/', views.computer_error_list, name='computer_error_list'),
+    path('actions/run-infrastructure-inspection/', views.run_infrastructure_inspection, name='run_infrastructure_inspection'),
+    path('tasks/', views.task_list, name='task_list'),
+    path('assets/<str:kind>/<uuid:pk>/inspect/', single_device_task_create, name='single_device_task_create'),
+    path('tasks/manual/', views.manual_task_create, name='manual_task_create'),
+    path('tasks/<uuid:pk>/cancel/', views.task_cancel, name='task_cancel'),
+    path('tasks/profiles/inspection/', views.inspection_profile_configure, name='inspection_profile_configure'),
+    path('tasks/profiles/computer/', views.computer_analysis_profile_configure, name='computer_analysis_profile_configure'),
+    path('tasks/profiles/computer/<uuid:profile_id>/scripts/<str:platform>/', views.pc_script_download, name='pc_script_download'),
+    path('tasks/<uuid:pk>/', views.task_detail, name='task_detail'),
+    path('alerts/', views.alert_list, name='alert_list'),
+    path('alerts/template/', alert_template_settings, name='alert_template_settings'),
+    path('alerts/channels/save/', views.alert_channel_save, name='alert_channel_save'),
+    path('alerts/policies/save/', views.alert_policy_save, name='alert_policy_save'),
+    path('alerts/test-send/', views.alert_test_send, name='alert_test_send'),
+    path('alerts/<uuid:pk>/', views.alert_detail, name='alert_detail'),
+    path('data/<str:entity>/template/', views.download_inventory_template, name='download_inventory_template'),
+    path('data/<str:entity>/template/<str:file_format>/', views.download_inventory_template, name='download_inventory_template_format'),
+    path('data/<str:entity>/import/', views.import_inventory, name='import_inventory'),
+    path('integrations/people/providers/<str:provider>/save/', views.people_provider_save, name='people_provider_save'),
+    path('integrations/people/providers/<str:provider>/schedule/', views.people_schedule_save, name='people_schedule_save'),
+    path('integrations/people/test/', views.people_test, name='people_test'),
+    path('integrations/people/preview/', views.people_preview, name='people_preview'),
+    path('integrations/people/apply/', views.people_apply, name='people_apply'),
+    path('integrations/people/tasks/status/', views.people_task_status, name='people_task_status'),
+    path('integrations/people/tasks/<uuid:pk>/ack/', views.people_task_acknowledge, name='people_task_acknowledge'),
+    path('integrations/people/operations/<uuid:pk>/', views.people_operation, name='people_operation'),
+    path('tables/<str:table_key>/export/', views.table_export, name='table_export'),
+    path('tables/<str:table_key>/<str:scope>/export/', views.table_export, name='table_export_scoped'),
+    path('settings/domain-controller/', views.domain_controller_settings, name='domain_controller_settings'),
+    path('domain/accounts/', views.domain_object_list, {'object_type': 'accounts'}, name='domain_account_list'),
+    path('domain/accounts/<uuid:pk>/', views.domain_account_detail, name='domain_account_detail'),
+    path('domain/accounts/import/', views.domain_account_import, name='domain_account_import'),
+    path('domain/accounts/import/template/<str:file_format>/', views.domain_account_import_template, name='domain_account_import_template'),
+    path('domain/computers/', views.domain_object_list, {'object_type': 'computers'}, name='domain_computer_list'),
+    path('domain/computers/<uuid:pk>/', views.domain_computer_detail, name='domain_computer_detail'),
+    path('domain/groups/', views.domain_object_list, {'object_type': 'groups'}, name='domain_group_list'),
+    path('domain/groups/<uuid:pk>/', views.domain_group_detail, name='domain_group_detail'),
+    path('domain/operations/create/', views.domain_operation_create, name='domain_operation_create'),
+    path('domain/operations/<uuid:pk>/retry/', views.domain_operation_retry, name='domain_operation_retry'),
+    path('records/inspections/', views.inspection_records, name='inspection_records'),
+    path('records/errors/', views.error_records, name='error_records'),
+    path('records/<str:kind>/', views.record_list, name='record_list'),
+    path('records/<str:kind>/<uuid:pk>/', views.record_detail, name='record_detail'),
+    path('inspection/<str:category>/<uuid:pk>/', views.infrastructure_inspection_detail, name='infrastructure_inspection_detail'),
+]

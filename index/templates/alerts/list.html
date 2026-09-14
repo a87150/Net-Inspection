@@ -1,0 +1,51 @@
+{% extends 'common/base.html' %}
+{% load extras static %}
+{% block title %}告警记录{% endblock %}
+{% block content %}
+<header class="page-heading">
+    <div class="page-heading__copy">
+        <p class="page-heading__eyebrow">告警中心</p>
+        <h1 class="page-heading__title">告警记录</h1>
+        <p class="page-heading__description">任务总结、异常与恢复事件及渠道送达状态均可追溯。</p>
+    </div>
+    {% if can_administer %}
+    <div class="page-heading__actions">
+        <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#alertTemplateModal">模板配置</button>
+        <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#alertPolicyModal">默认策略</button>
+        <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#alertChannelModal">告警配置</button>
+    </div>
+    {% endif %}
+</header>
+{% if can_administer %}
+    {% include 'alerts/template_modal.html' %}
+    {% include 'alerts/channel_modal.html' %}
+    {% include 'alerts/policy_modal.html' %}
+{% endif %}
+<div data-table-workspace data-table-key="alert-events">
+    <div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
+    <div class="card surface-card table-scroll-shell">
+        <p class="table-scroll-hint">可横向滚动查看渠道送达与事件信息</p>
+        <div class="table-responsive" role="region" aria-label="告警记录数据表" tabindex="0">
+            <table class="table data-table table-hover align-middle mb-0">
+                {% include 'common/table_caption.html' %}
+                <thead>
+                    <tr>{% include 'common/table_sort_headers.html' %}<th scope="col" class="table-actions-column table-actions-cell">操作</th></tr>
+                </thead>
+                <tbody>
+                    {% for event in page_obj %}
+                        {% include 'alerts/event_row.html' %}
+                    {% empty %}
+                    <tr><td colspan="10">{% include 'common/empty_state.html' with empty_title="暂无告警记录" empty_message="异常或恢复事件产生后将显示在这里。" %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% include 'common/pagination.html' %}
+</div>
+{% endblock %}
+{% block page_scripts %}
+{% include 'common/scripts/table_workspace.html' %}
+{% include 'common/scripts/modal_workflows.html' %}
+{% if can_administer %}<script defer src="{% static 'app/js/alerts/template_modal.js' %}"></script>{% endif %}
+{% endblock %}

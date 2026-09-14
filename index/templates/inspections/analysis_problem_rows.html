@@ -1,0 +1,24 @@
+<p class="small text-secondary">任务时间：{{ task.created_at|date:'Y-m-d H:i:s' }} · {{ category }} · 共 {{ page_obj.paginator.count }} 条{% if category == '人员缺少日志' %}缺少日志的人员{% else %}受影响分析记录（同一 PC 可能有多条记录）{% endif %}</p>
+<div class="table-scroll-shell analysis-problems-table">
+  <p class="table-scroll-hint">可横向滚动查看完整问题内容</p>
+  <div class="table-responsive" role="region" aria-label="问题明细数据表" tabindex="0">
+  <table class="table data-table table-sm align-middle mb-0">
+    <thead><tr><th scope="col">{% if category == '人员缺少日志' %}人员{% else %}PC 名称{% endif %}</th><th scope="col">具体问题及等级</th><th scope="col">详情</th></tr></thead>
+    <tbody>{% for row in rows %}<tr>
+      <td class="text-break">{% if row.record.missing_log %}{{ row.record.report_enrichment.personnel_name }} · {{ row.record.report_enrichment.employee_number }}{% else %}{{ row.record.computer.computer_name }}{% endif %}</td>
+      <td>{% for finding in row.findings %}<div class="mb-2">
+        <span class="badge {% if finding.severity == 'critical' %}text-bg-danger{% elif finding.severity == 'warning' %}text-bg-warning{% else %}text-bg-info{% endif %}">{{ finding.severity_label }}</span>
+        <strong>{{ finding.title }}</strong><div class="text-break">{{ finding.description|linebreaksbr }}</div>
+      </div>{% empty %}<span class="text-secondary">历史记录暂无该类型的具体说明，请查看详情。</span>{% endfor %}</td>
+      <td class="text-nowrap">{% if row.record.pk %}<a href="{% url 'computer_analysis_detail' row.record.pk %}">分析详情</a>{% else %}无日志{% endif %}</td>
+    </tr>{% empty %}<tr><td colspan="3" class="text-secondary text-center py-4">该任务暂无此类问题。</td></tr>{% endfor %}</tbody>
+  </table>
+</div>
+</div>
+{% if page_obj.paginator.num_pages > 1 %}<nav class="d-flex align-items-center justify-content-between gap-2" aria-label="问题明细分页">
+  <span class="small text-secondary">第 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 页 · 每页 20 条记录</span>
+  <div class="d-flex gap-2">
+    {% if page_obj.has_previous %}<a class="btn btn-sm btn-outline-secondary" data-problem-page href="{% url 'analysis_problem_list' task.pk %}?category={{ category|urlencode }}&amp;page={{ page_obj.previous_page_number }}">上一页</a>{% endif %}
+    {% if page_obj.has_next %}<a class="btn btn-sm btn-outline-secondary" data-problem-page href="{% url 'analysis_problem_list' task.pk %}?category={{ category|urlencode }}&amp;page={{ page_obj.next_page_number }}">下一页</a>{% endif %}
+  </div>
+</nav>{% endif %}

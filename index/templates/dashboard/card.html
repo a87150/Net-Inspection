@@ -1,0 +1,32 @@
+<section class="card h-100 surface-card metric-card glass-card" data-dashboard-card="{{ item.key }}" data-dashboard-card-state="{% if item.error %}error{% else %}ready{% endif %}">
+    <div class="card-body p-4 d-flex flex-column">
+        <div class="metric-card__status-row d-flex justify-content-between align-items-start mb-3">
+            <h2 class="h5 mb-0">{{ item.name }}</h2>
+            {% if item.note %}<span class="badge text-bg-secondary">{{ item.note }}</span>{% elif not item.error %}<span class="metric-card__ready"><span class="status-dot status-dot--success" aria-hidden="true"></span>数据已加载</span>{% endif %}
+        </div>
+        {% if item.error %}
+        <div class="alert alert-danger metric-card__error mb-0" role="alert">
+            <strong>{{ item.name }} 统计数据加载失败</strong>
+            <span class="d-block small mt-1">{{ item.error }}</span>
+        </div>
+        {% elif item.key == 'domain' %}
+        <div class="row text-center g-2 metric-card__domain-columns" role="list" aria-label="域控对象统计">
+            <div class="col-4"><div class="metric">{{ item.account_total }}</div><div class="metric-label">域账号</div><div class="metric-card__domain-breakdown flex-column align-items-center"><span class="metric-card__domain-status"><span>启用</span><strong class="text-success">{{ item.account_normal }}</strong></span><span class="metric-card__domain-status"><span>停用</span><strong class="text-danger">{{ item.account_abnormal }}</strong></span></div></div>
+            <div class="col-4"><div class="metric">{{ item.computer_total }}</div><div class="metric-label">域计算机</div><div class="metric-card__domain-breakdown flex-column align-items-center"><span class="metric-card__domain-status"><span>启用</span><strong class="text-success">{{ item.computer_normal }}</strong></span><span class="metric-card__domain-status"><span>停用</span><strong class="text-danger">{{ item.computer_abnormal }}</strong></span></div></div>
+            <div class="col-4"><div class="metric">{{ item.group_total }}</div><div class="metric-label">域分组</div><div class="metric-card__domain-breakdown flex-column align-items-center"><span class="metric-card__domain-status"><span>安全组</span><strong>{{ item.security_group_total }}</strong></span><span class="metric-card__domain-status"><span>通讯组</span><strong>{{ item.distribution_group_total }}</strong></span></div></div>
+        </div>
+        {% else %}
+        <div class="row text-center g-2 metric-card__metrics" role="list" aria-label="{{ item.name }}状态统计">
+            <div class="col-4"><div class="metric">{{ item.total }}</div><div class="metric-label">{{ item.total_label }}</div></div>
+            <div class="col-4"><div class="metric text-success">{{ item.normal }}</div><div class="metric-label">{{ item.normal_label }}</div></div>
+            <div class="col-4"><div class="metric {% if item.abnormal %}text-danger{% endif %}">{{ item.abnormal }}</div><div class="metric-label">{{ item.abnormal_label }}</div></div>
+        </div>
+        {% endif %}
+    </div>
+    <div class="card-footer metric-card__footer metric-card__actions px-4 pb-4 d-flex gap-2 flex-wrap align-items-center justify-content-end">
+        <div class="metric-card__secondary-actions">
+            {% for action in item.secondary_actions %}<a href="{{ action.url }}" class="btn btn-outline-secondary btn-sm">{{ action.label }}</a>{% endfor %}
+        </div>
+        <a class="btn btn-primary btn-sm metric-card__primary-action" href="{{ item.primary_action.url }}">{{ item.primary_action.label }}</a>
+        {% if item.last_run_label %}<p class="metric-card__last-run text-secondary mb-0 text-end">{{ item.last_run_label }}：{{ item.last_run_at|date:'Y-m-d H:i'|default:'暂无' }}</p>{% endif %}
+    </div></section>

@@ -1,0 +1,6 @@
+{% if can_administer %}<div class="modal fade" id="collectionTemplateModal" tabindex="-1" aria-labelledby="collectionTemplateModalLabel" aria-hidden="true"{% if open_template_modal %} data-auto-open="true"{% endif %}>
+<div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
+<div class="modal-header"><h2 class="modal-title fs-5" id="collectionTemplateModalLabel">{% if asset %}巡检设置{% else %}配置模板{% endif %}</h2><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+<div class="modal-body modal-body--scroll">{% if template_modal_loaded %}{% include 'devices/collection_settings_body.html' %}{% else %}<p>正在加载配置模板…</p>{% endif %}</div>
+<div class="modal-footer modal-footer--sticky"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">关闭</button>{% if template_modal_loaded %}<button class="btn btn-primary" type="submit" form="collectionSettingsForm">保存设置</button>{% endif %}</div>
+</div></div></div>{% endif %}

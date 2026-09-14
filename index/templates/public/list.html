@@ -1,0 +1,26 @@
+{% extends 'common/base.html' %}
+{% block title %}{{ title }} · 公开列表{% endblock %}
+{% block content %}
+<section class="card surface-card p-4">
+    <h1>{{ title }}</h1>
+    <p class="text-muted">公开基础信息 · 共 {{ page_obj.paginator.count }} 条</p>
+    <form method="get" class="row g-3 mb-4">
+        <input type="hidden" name="sort" value="{{ sort }}">
+        <input type="hidden" name="order" value="{{ order }}">
+        <div class="col-sm"><label for="public-search" class="form-label">搜索名称</label><input class="form-control" id="public-search" name="q" value="{{ q }}" maxlength="255"></div>
+        <div class="col-sm"><label for="public-name" class="form-label">名称筛选</label><input class="form-control" id="public-name" name="filter_name" value="{{ filter_name }}" maxlength="255"></div>
+        <div class="col-sm"><label for="public-size" class="form-label">每页条数</label><select class="form-select" id="public-size" name="page_size">{% for size in page_sizes %}<option value="{{ size }}"{% if page_size == size %} selected{% endif %}>{{ size }}</option>{% endfor %}</select></div>
+        <div class="col-sm-auto align-self-end"><button class="btn btn-primary" type="submit">筛选</button></div>
+    </form>
+    <div class="table-responsive"><table class="table table-hover">
+        <caption>{{ title }}公开列表</caption>
+        <thead><tr>{% for column in columns %}<th scope="col"><a href="{{ column.url }}">{{ column.label }}</a></th>{% endfor %}</tr></thead>
+        <tbody>{% for row in page_obj %}<tr>{% for key, value in row.items %}<td>{% if key == 'is_active' %}{{ value|yesno:'在职,离职' }}{% else %}{{ value|default_if_none:'—' }}{% endif %}</td>{% endfor %}</tr>{% empty %}<tr><td colspan="{{ columns|length }}">暂无记录</td></tr>{% endfor %}</tbody>
+    </table></div>
+    <nav aria-label="公开列表分页" class="d-flex gap-3 align-items-center">
+        {% if previous_url %}<a href="{{ previous_url }}">上一页</a>{% endif %}
+        <span>第 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 页</span>
+        {% if next_url %}<a href="{{ next_url }}">下一页</a>{% endif %}
+    </nav>
+</section>
+{% endblock %}

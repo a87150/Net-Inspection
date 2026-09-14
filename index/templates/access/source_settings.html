@@ -1,0 +1,8 @@
+{% extends 'common/base.html' %}
+{% load static %}
+{% block title %}门禁平台配置{% endblock %}
+{% block content %}
+<header class="page-heading"><h1 class="h3">门禁平台配置</h1><a class="btn btn-outline-secondary" href="{% url 'access_record_list' %}">返回门禁记录</a></header>
+<button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#accessSourceModal">平台配置</button>
+{% include 'access/source_modal.html' with open_source_modal=True %}
+{% endblock %}

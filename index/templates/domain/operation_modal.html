@@ -1,0 +1,65 @@
+{% if can_administer %}
+{% load static %}
+{% if can_administer and can_manage_domain %}
+<section class="card surface-card mb-3" data-domain-operation-controls>
+    <div class="card-body d-flex flex-column flex-lg-row gap-3 align-items-lg-end justify-content-between">
+        <div>
+            <h2 class="h5 mb-1">批量目录操作</h2>
+            <p class="text-secondary mb-0">先勾选目标，再选择动作；提交前会显示目标数量和关键参数。</p>
+        </div>
+        <div class="d-flex flex-column flex-sm-row gap-2 align-items-sm-end">
+            <div>
+                <label class="form-label small mb-1" for="domain-operation-action">动作</label>
+                <select class="form-select" id="domain-operation-action" data-domain-operation-action>
+                    {% for action_value, action_label in domain_operation_actions %}<option value="{{ action_value }}">{{ action_label }}</option>{% endfor %}
+                </select>
+            </div>
+            {% if can_administer %}<button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#domainOperationModal">确认操作</button>{% endif %}
+        </div>
+    </div>
+</section>
+
+<div class="modal fade domain-operation-modal" id="domainOperationModal" data-auto-open="{% if request.GET.domain_modal == 'operation' %}true{% else %}false{% endif %}" tabindex="-1" aria-labelledby="domainOperationModalLabel" aria-describedby="domainOperationModalDescription" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
+        <form method="post" action="{% url 'domain_operation_create' %}" data-domain-operation-form>
+            {% csrf_token %}
+            <input type="hidden" name="object_type" value="{{ domain_object_type }}">
+            <input type="hidden" name="action" data-domain-operation-action-value>
+            <div data-domain-selected-targets></div>
+            <div class="modal-header"><h2 class="modal-title fs-5" id="domainOperationModalLabel">确认目录操作</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+            <div class="modal-body modal-body--scroll d-grid gap-3" id="domainOperationModalDescription">
+                <section class="config-section-card operation-summary-card">
+                    <div class="config-section-heading"><span class="config-section-index">01</span><div><h3>操作摘要</h3><p>核对动作、目标数量和影响范围后再提交。</p></div></div>
+                    <p>即将执行：<strong data-domain-confirm-action>—</strong></p>
+                    <p>目标数量：<strong data-domain-confirm-target-count>0</strong></p>
+                    <p class="mb-0" data-domain-confirm-scope-row hidden><span data-domain-confirm-scope-label>影响范围</span>：<strong data-domain-confirm-scope>—</strong></p>
+                </section>
+                <section class="config-section-card operation-parameter-card">
+                    <div class="config-section-heading"><span class="config-section-index">02</span><div><h3>操作参数</h3><p>仅当前动作需要的字段会显示。</p></div></div>
+                    {% if domain_object_type == 'account' %}
+                    <div class="mb-3" data-domain-parameter-for="reset_password" hidden>
+                        <label class="form-label" for="domain-operation-password">新密码</label>
+                        <input class="form-control" type="password" id="domain-operation-password" name="password" autocomplete="new-password" data-domain-password-input>
+                        <div class="form-text">密码只在 Worker 内存中短暂使用，不会写入任务快照或页面。</div>
+                    </div>
+                    <div data-domain-parameter-for="create_user" hidden>
+                        <div class="mb-3"><label class="form-label" for="domain-create-user-dn">用户 DN</label><input class="form-control" type="text" id="domain-create-user-dn" name="user_dn" autocomplete="off"></div>
+                        <div class="mb-3"><label class="form-label" for="domain-create-user-login">登录名</label><input class="form-control" type="text" id="domain-create-user-login" name="login_name" autocomplete="username"></div>
+                        <div class="mb-3"><label class="form-label" for="domain-create-user-display">显示名称</label><input class="form-control" type="text" id="domain-create-user-display" name="display_name" autocomplete="name"></div>
+                        <div class="mb-3"><label class="form-label" for="domain-create-user-password">初始密码</label><input class="form-control" type="password" id="domain-create-user-password" name="initial_password" autocomplete="new-password"><div class="form-text">密码只在 Worker 内存中短暂使用，不会写入任务快照或页面。</div></div>
+                        <div class="mb-3"><label class="form-label" for="domain-create-user-password-confirm">确认初始密码</label><input class="form-control" type="password" id="domain-create-user-password-confirm" name="initial_password_confirm"></div>
+                    </div>
+                    {% endif %}
+                    <div class="mb-3" data-domain-parameter-for="move_ou" hidden><label class="form-label" for="domain-operation-destination">目标 OU DN</label><input class="form-control" type="text" id="domain-operation-destination" name="destination_dn" autocomplete="off" data-domain-summary-input="destination_dn"></div>
+                    <div class="mb-3" data-domain-parameter-for="add_group" hidden><label class="form-label" for="domain-operation-group">安全组 DN</label><input class="form-control" type="text" id="domain-operation-group" name="group_dn" autocomplete="off" data-domain-summary-input="group_dn"></div>
+                    {% if domain_object_type == 'account' %}<div class="form-check" data-domain-parameter-for="must_change_password password_never_expires" hidden><input class="form-check-input" type="checkbox" id="domain-operation-enabled" name="enabled"><label class="form-check-label" for="domain-operation-enabled">启用该密码策略</label></div>{% endif %}
+                </section>
+                <p class="small text-secondary mb-0">提交后可在后台任务详情查看脱敏进度和失败目标。</p>
+            </div>
+            <div class="modal-footer modal-footer--sticky"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">提交操作</button></div>
+        </form>
+    </div></div>
+</div>
+<script src="{% static 'app/js/domain/operation_modal.js' %}"></script>
+{% endif %}
+{% endif %}

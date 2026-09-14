@@ -1,0 +1,35 @@
+{% load l10n static %}
+<section aria-labelledby="latest-analysis-title">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+    <div><p class="page-heading__eyebrow mb-1">最新结果</p><h2 class="h5 mb-0" id="latest-analysis-title">最新任务统计</h2></div>
+    {% if latest_task %}<div class="d-flex flex-wrap align-items-center gap-3"><span class="small text-secondary">{{ latest_task.created_at|date:'Y-m-d H:i:s' }}</span>{% include 'common/status_badge.html' with status=latest_task.status label=latest_task.get_status_display %}<a class="btn btn-outline-primary" href="{% url 'task_detail' latest_task.pk %}">查看任务详情</a></div>{% endif %}
+  </div>
+  {% if latest_task %}
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-xl-2"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">分析总数</div><div class="h3 mb-0">{{ latest_analysis_statistics.total }}</div></div></div></div>
+    <div class="col-6 col-xl-2"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">正常</div><div class="h3 mb-0 text-success">{{ latest_analysis_statistics.levels.normal }}</div></div></div></div>
+    <div class="col-6 col-xl-2"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">提示</div><div class="h3 mb-0 text-info">{{ latest_analysis_statistics.levels.info }}</div></div></div></div>
+    <div class="col-6 col-xl-2"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">警告</div><div class="h3 mb-0 text-warning">{{ latest_analysis_statistics.levels.warning }}</div></div></div></div>
+    <div class="col-6 col-xl-2"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">严重</div><div class="h3 mb-0 text-danger">{{ latest_analysis_statistics.levels.critical }}</div></div></div></div>
+    <div class="col-6 col-xl-2"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">执行失败目标</div><div class="h3 mb-0 text-danger">{{ latest_analysis_statistics.execution_failed }}</div></div></div></div>
+  </div>
+  <div class="card surface-card"><div class="card-body">
+    <h3 class="h6">问题类型分布</h3>
+    <p class="small text-secondary">等级按已生成分析记录的最高问题等级统计。执行失败目标单独计数，不与等级数量相加。类型数量为受影响记录数，同一记录可包含多种类型，占比合计可能超过 100%。人员匹配产生的“未匹配日志”占位行不计入分析总数。</p>
+    {% if latest_analysis_statistics.total %}<div class="row g-3">
+      {% for category in latest_analysis_statistics.categories %}<div class="col-12 col-md-6">
+        <button type="button" class="btn btn-link text-start text-decoration-none w-100 p-0 d-flex justify-content-between gap-2 mb-1" data-bs-toggle="modal" data-bs-target="#analysisProblemsModal" data-problem-label="{{ category.label }}" data-problem-url="{% url 'analysis_problem_list' latest_task.pk %}?category={{ category.label|urlencode }}" aria-label="查看{{ category.label }}问题明细"><span>{{ category.label }}</span><span>{{ category.count }} 条 · {{ category.percentage|floatformat:1 }}% <span aria-hidden="true">›</span></span></button>
+        <div class="progress" role="progressbar" aria-label="{{ category.label }}受影响记录占比" aria-valuenow="{{ category.percentage|unlocalize }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width: {{ category.percentage|unlocalize }}%"></div></div>
+      </div>{% endfor %}
+    </div>{% else %}<p class="text-secondary mb-0">最新任务尚无分析结果。可进入任务详情查看待处理、运行中或执行失败的目标。</p>{% endif %}
+  </div></div>
+  {% else %}<div class="card surface-card"><div class="card-body text-secondary">暂无日志分析任务，执行分析后将在这里展示最新任务统计。</div></div>{% endif %}
+</section>
+<div class="modal fade analysis-problems-modal" id="analysisProblemsModal" tabindex="-1" aria-labelledby="analysisProblemsTitle" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
+    <div class="modal-header"><h2 class="modal-title fs-5" id="analysisProblemsTitle">问题明细</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+    <div class="modal-body modal-body--scroll analysis-problems-modal__body modal-section" data-problem-body aria-live="polite"><div class="empty-state"><strong>选择问题类型查看明细</strong><span>明细将在当前窗口中加载，不会离开分析页面。</span></div></div>
+    <div class="modal-footer modal-footer--sticky"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">关闭</button></div>
+  </div></div>
+</div>
+<script defer src="{% static 'app/js/inspections/analysis_problems.js' %}"></script>

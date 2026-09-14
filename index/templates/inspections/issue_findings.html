@@ -1,0 +1,6 @@
+{% if findings %}
+{% regroup findings|dictsort:'category' by category as issue_groups %}
+<section class="mb-4" aria-label="分类问题"><p>{{ summary }}</p>
+{% for group in issue_groups %}<div class="card surface-card status-surface mb-3"><div class="card-header surface-card__header d-flex align-items-center justify-content-between gap-2"><strong>{{ group.grouper }}</strong><span class="status-badge status-badge--neutral">{{ group.list|length }} 项</span></div><ul class="list-group list-group-flush">{% for issue in group.list %}<li class="list-group-item">{% include 'inspections/severity_badge.html' with level=issue.severity %} <strong>{{ issue.问题类型 }}</strong><div class="text-secondary mt-1">{{ issue.详细问题 }}</div></li>{% endfor %}</ul></div>{% endfor %}
+</section>
+{% else %}<div class="alert alert-success">本次分析未发现问题。</div>{% endif %}

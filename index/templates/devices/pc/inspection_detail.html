@@ -1,0 +1,26 @@
+{% extends 'common/base.html' %}
+{% load custom_filters %}
+{% block title %}{{ inspection.computer.computer_name }} 巡检详情{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div><h1 class="h3 mb-1">{{ inspection.computer.computer_name }} PC 巡检详情</h1><p class="text-secondary mb-0">日志时间：{{ inspection.log_file.modified_at|date:"Y-m-d H:i:s"|default:"未知" }}</p></div>
+    <a href="{% url 'item_list' 'computers' %}" class="btn btn-outline-secondary">返回 PC 子项目</a>
+</div>
+{% if inspection.errors.all %}
+<section class="card surface-card status-surface status-surface--danger mb-4"><div class="card-header surface-card__header d-flex align-items-center justify-content-between gap-2"><strong>巡检问题</strong><span class="status-badge status-badge--danger">发现 {{ inspection.errors.count }} 项</span></div><ul class="list-group list-group-flush">
+{% for error in inspection.errors.all %}<li class="list-group-item"><strong>{{ error.error_type }}</strong><div class="text-secondary mt-1">{{ error.error_message }}</div></li>{% endfor %}
+</ul></section>
+{% else %}<div class="alert alert-success">本次巡检未发现问题。</div>{% endif %}
+<div class="card surface-card mb-4"><div class="card-body"><div class="row g-3">
+    <div class="col-md-3"><div class="metric-label">登录用户</div><div>{{ inspection.computer.user_name|default:"-" }}</div></div>
+    <div class="col-md-3"><div class="metric-label">Windows 版本</div><div>{{ inspection.details.system_info.系统主要版本名|default:"-" }}</div></div>
+    <div class="col-md-3"><div class="metric-label">开机时间</div><div>{{ inspection.details.system_info.开机时间|default:"-" }}</div></div>
+    <div class="col-md-3"><div class="metric-label">入库时间</div><div>{{ inspection.created_at|date:"Y-m-d H:i:s" }}</div></div>
+</div></div></div>
+<div class="accordion surface-accordion" id="inspectionDetails">
+{% for title, value in detail_fields %}{% if value %}
+<div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#detail-{{ forloop.counter }}">{{ title }}</button></h2>
+<div id="detail-{{ forloop.counter }}" class="accordion-collapse collapse" data-bs-parent="#inspectionDetails"><div class="accordion-body"><pre class="json-view mb-0">{{ value|pretty_json }}</pre></div></div></div>
+{% endif %}{% endfor %}
+</div>
+{% endblock %}

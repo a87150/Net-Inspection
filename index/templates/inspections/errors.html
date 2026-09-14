@@ -1,0 +1,16 @@
+{% extends 'common/base.html' %}
+{% load extras %}
+{% block title %}全部异常记录{% endblock %}
+{% block content %}
+<header class="page-heading"><div class="page-heading__copy"><p class="page-heading__eyebrow">异常中心</p><h1 class="page-heading__title">全部异常记录</h1><p class="page-heading__description">所有设备异常的统一入口。</p></div><div class="page-heading__actions"><a href="{% url 'index' %}" class="btn btn-outline-secondary">返回总览</a></div></header>
+<div data-table-workspace data-table-key="{{ table_definition.key }}">
+<div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
+<div class="card surface-card table-scroll-shell"><p class="table-scroll-hint">可横向滚动查看完整异常信息</p><div class="table-responsive" role="region" aria-label="全部异常记录数据表" tabindex="0"><table class="table data-table table-hover align-middle mb-0">
+{% include 'common/table_caption.html' %}<thead><tr>
+{% include 'common/table_sort_headers.html' %}<th scope="col" class="table-actions-column table-actions-cell">操作</th></tr></thead><tbody>
+{% for record in page_obj %}<tr>{% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{% if field.key == 'type' %}{% include 'common/status_badge.html' with status="abnormal" label=record.type %}{% else %}{{ record|get_item:field.source|format_table_value:field.kind }}{% endif %}</td>{% endfor %}<td class="table-actions-cell"><a href="{{ record.url }}" class="btn btn-outline-dark btn-sm">查看详情</a></td></tr>
+{% empty %}<tr><td colspan="6">{% include 'common/empty_state.html' with empty_title="暂无异常记录" empty_message="当前未发现需要处理的设备异常。" %}</td></tr>{% endfor %}
+</tbody></table></div></div>{% include 'common/pagination.html' %}
+</div>
+{% endblock %}
+{% block page_scripts %}{% include 'common/scripts/table_workspace.html' %}{% endblock %}

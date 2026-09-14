@@ -1,0 +1,53 @@
+{% extends 'common/base.html' %}
+{% load extras %}
+{% block title %}{{ item_name }}列表{% endblock %}
+{% block content %}
+<header class="page-heading">
+    <div class="page-heading__copy"><p class="page-heading__eyebrow">资产管理</p><h1 class="page-heading__title">{{ item_name }}列表</h1><p class="page-heading__description">资产信息与最新巡检状态</p></div>
+    <div class="page-heading__actions">
+    {% if can_administer and import_enabled %}{% if can_administer %}<button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#importModal">导入</button>{% endif %}{% endif %}
+    {% if can_administer and inspection_type %}<form method="post" action="{% url 'run_infrastructure_inspection' %}">
+        {% csrf_token %}<input type="hidden" name="asset_type" value="{{ inspection_type }}">
+        <button class="btn btn-primary" type="submit">巡检全部{{ item_name }}</button>
+    </form>{% endif %}
+    </div>
+</header>
+{% if collection_hint %}<div class="alert alert-info"><strong>采集方式：</strong>{{ collection_hint }}</div>{% endif %}
+{% if can_administer and import_enabled %}{% if can_administer %}{% include 'common/import_modal.html' %}{% endif %}{% endif %}
+<div data-table-workspace data-table-key="{{ table_definition.key }}">
+<div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
+<div class="card surface-card table-scroll-shell"><p class="table-scroll-hint">可横向滚动查看完整资产信息</p><div class="table-responsive" role="region" aria-label="{{ item_name }}数据表" tabindex="0"><table class="table data-table table-hover align-middle mb-0">
+{% include 'common/table_caption.html' %}
+    <thead><tr>
+        {% include 'common/table_sort_headers.html' %}
+        {% if can_administer and inspection_type %}<th scope="col" class="table-actions-column table-actions-cell">操作</th>{% endif %}
+    </tr></thead>
+    <tbody>
+    {% for obj in page_obj %}
+    <tr>
+        {% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{% if field.key == 'latest_status' %}{% if obj.latest_status == 'normal' %}{% include 'common/status_badge.html' with status="normal" label="正常" %}{% elif obj.latest_status == 'abnormal' and obj.latest_reachable is True %}{% include 'common/status_badge.html' with status="warning" label="在线/采集异常" %}{% elif obj.latest_status == 'abnormal' %}{% include 'common/status_badge.html' with status="abnormal" label="不可达" %}{% else %}{% include 'common/status_badge.html' with status="unknown" label="未巡检" %}{% endif %}{% else %}{{ obj|get_attr:field.source|format_table_value:field.kind }}{% endif %}</td>{% endfor %}
+        {% if can_administer and inspection_type %}
+        <td class="text-end table-actions-cell"><form method="post" action="{% url 'run_infrastructure_inspection' %}">
+            {% csrf_token %}
+            <input type="hidden" name="asset_type" value="{{ inspection_type }}">
+            <input type="hidden" name="asset_id" value="{{ obj.pk }}">
+            <button class="btn btn-outline-primary btn-sm" type="submit">立即巡检</button>
+        </form></td>
+        {% endif %}
+    </tr>
+    {% empty %}<tr><td colspan="20"><div class="empty-state"><strong>{% if item_key == 'computers' %}暂无 PC 数据{% else %}暂无资产数据{% endif %}</strong><span>{% if item_key == 'computers' %}请在终端运行 PowerShell PC 信息采集脚本并上报。{% else %}可点击右上角“导入”添加资产。{% endif %}</span></div></td></tr>{% endfor %}
+    </tbody>
+</table></div></div>
+{% include 'common/pagination.html' %}
+</div>
+{% if recent_records %}
+<section class="card surface-card mt-4"><div class="card-header surface-card__header"><h2 class="h5 mb-0">{{ item_name }}最近巡检</h2></div>
+<div class="table-responsive" role="region" aria-label="{{ item_name }}最近巡检" tabindex="0"><table class="table data-table table-hover align-middle mb-0"><thead><tr><th scope="col">设备</th><th scope="col">结果</th><th scope="col">时间</th><th scope="col"></th></tr></thead><tbody>
+{% for record in recent_records %}<tr><td>{{ record.asset }}</td><td>{% if record.ok %}{% include 'common/status_badge.html' with status="normal" label=record.summary %}{% else %}{% include 'common/status_badge.html' with status="abnormal" label=record.summary %}{% endif %}</td><td>{{ record.time|date:"Y-m-d H:i:s" }}</td><td><a href="{{ record.url }}" class="btn btn-outline-secondary btn-sm">查看详情</a></td></tr>{% endfor %}
+</tbody></table></div></section>
+{% endif %}
+{% endblock %}
+{% block page_scripts %}
+{% include 'common/scripts/table_workspace.html' %}
+{% include 'common/scripts/modal_workflows.html' %}
+{% endblock %}

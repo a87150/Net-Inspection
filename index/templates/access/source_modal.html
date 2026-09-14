@@ -1,0 +1,16 @@
+{% if can_administer %}
+<div class="modal fade" id="accessSourceModal" tabindex="-1" aria-labelledby="accessSourceModalLabel" aria-hidden="true"{% if open_source_modal %} data-auto-open="true"{% endif %}>
+ <div class="modal-dialog modal-dialog-scrollable modal-xl modal-shell"><div class="modal-content modal-surface"{% if source_saved %} data-source-saved="true"{% endif %}>
+  <div class="modal-header"><h2 class="modal-title fs-5" id="accessSourceModalLabel">门禁平台配置</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+  <div class="modal-body modal-body--scroll">
+   <p class="text-secondary">连接门禁管理平台。V6600 的事件接口需按部署实例的北向 API 文档填写；海康和大华目前仅为待接入占位。</p>
+   <div class="d-flex flex-wrap gap-2 mb-3" aria-label="已配置平台"><a class="btn btn-outline-primary btn-sm" href="{% url 'access_source_settings' %}" data-modal-navigate>新增平台</a>{% for item in sources %}<a class="btn btn-sm {% if source and item.pk == source.pk %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="{% url 'access_source_settings' %}?source={{ item.pk }}" data-modal-navigate>{{ item.name }}{% if not item.is_enabled %}（停用）{% endif %}</a>{% endfor %}</div>
+   <form id="accessSourceForm" method="post" action="{% url 'access_source_save' %}">
+    {% csrf_token %}{% if source %}<input type="hidden" name="source_id" value="{{ source.pk }}">{% endif %}
+    {{ form.non_field_errors }}<div class="row g-3">{% for field in form %}<div class="col-md-6"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}{% for error in field.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}</div>{% endfor %}</div>
+   </form>
+  </div>
+  <div class="modal-footer modal-footer--sticky"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">关闭</button><button class="btn btn-primary" type="submit" form="accessSourceForm">保存配置</button><button class="btn btn-outline-primary" type="submit" form="accessSourceForm" formaction="{% url 'access_source_test' %}">保存并测试连接</button></div>
+ </div></div>
+</div>
+{% endif %}

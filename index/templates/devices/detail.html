@@ -1,0 +1,32 @@
+{% extends 'common/base.html' %}
+{% load extras %}
+{% block title %}{{ item_name }}详情{% endblock %}
+{% block content %}
+<header class="page-heading">
+    <div class="page-heading__copy">
+        <p class="page-heading__eyebrow">基础信息</p>
+        <h1 class="page-heading__title">{{ item_name }}详情</h1>
+        <p class="page-heading__description">{{ asset }}</p>
+    </div>
+    <div class="page-heading__actions">
+        {% if can_administer and item_key == 'networks' or can_administer and item_key == 'monitors' %}<a class="btn btn-outline-primary" href="{% url 'configuration_backup_list' item_key asset.pk %}">配置备份历史</a>{% endif %}
+        {% if can_administer and item_key == 'networks' or can_administer and item_key == 'monitors' %}<a class="btn btn-outline-success" href="{% url 'configuration_download' item_key asset.pk %}">下载最近成功配置</a>{% endif %}
+        {% if history_url %}<a class="btn btn-primary" href="{{ history_url }}">{% if item_key == 'computers' %}查看日志分析记录{% else %}查看巡检记录{% endif %}</a>{% endif %}
+        {% if can_administer and manual_action_label %}<a class="btn btn-primary" href="{{ back_url }}?task_modal=run&amp;task_mode=selected&amp;task_targets={{ asset.pk }}">{{ manual_action_label }}</a>{% endif %}
+        <a class="btn btn-outline-secondary" href="{{ back_url }}">返回列表</a>
+    </div>
+</header>
+{% if can_administer and item_key == 'networks' or can_administer and item_key == 'monitors' %}<div class="alert alert-warning">配置备份历史保存设备原文，下载文件可能包含账号、密码等敏感凭据，请妥善保管。历史页仅展示版本信息，不预览原文；下载已保存版本不会连接设备。{% if item_key == 'monitors' %}安防设备目前仅支持 Network 配置节的部分 API，不能提供整机备份；整机备份需明确对应型号的备份 API 支持。{% else %}网络设备每日巡检自动备份一次当前运行配置，不含证书、私钥或固件，不是整机固件备份。{% endif %}</div>{% endif %}
+
+<section class="card surface-card">
+    <div class="card-header surface-card__header"><h2 class="h5 mb-0">基础资料</h2></div>
+    <div class="card-body"><dl class="row mb-0">
+        {% for field in detail_fields %}
+        <dt class="col-sm-4 col-lg-3 text-secondary">{{ field.label }}</dt>
+        <dd class="col-sm-8 col-lg-9">{{ field.value|format_table_value:field.kind }}</dd>
+        {% endfor %}
+    </dl></div>
+</section>
+{% if history_url %}<section class="card surface-card card-body mt-3"><h2 class="h5">最新执行结果</h2>
+{% if latest_record %}<p>{{ latest_record.created_at|date:'Y-m-d H:i:s' }} · {{ latest_record.execution_status }} · {{ latest_record.task_source }} · 异常 {{ latest_record.error_count }}</p><p>{{ latest_record.summary }}</p><p>{{ latest_record.key_metrics }}</p><a href="{{ latest_url }}">查看本次结果</a>{% else %}<p>尚无执行记录。</p>{% endif %}</section>{% endif %}
+{% endblock %}

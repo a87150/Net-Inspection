@@ -1,0 +1,53 @@
+{% extends 'common/base.html' %}
+{% load extras %}
+{% block title %}{% if record_type == 'computer_analysis' %}日志分析记录{% else %}{{ item_name }}巡检记录{% endif %}{% endblock %}
+{% block content %}
+{% if can_administer and task_project_kind == 'computers' %}{% include 'inspections/issue_settings_modal.html' %}{% endif %}
+<header class="page-heading">
+    <div class="page-heading__copy">
+        <p class="page-heading__eyebrow">{% if record_type == 'computer_analysis' %}PC 日志{% else %}设备巡检{% endif %}</p>
+        <h1 class="page-heading__title">{% if record_type == 'computer_analysis' %}日志分析记录{% else %}{{ item_name }}巡检记录{% endif %}</h1>
+        <p class="page-heading__description">{% if record_type == 'computer_analysis' %}每次日志分析独立保存，可进入详情查看动态指标和异常。{% else %}每次巡检独立保存，可进入详情查看动态指标和采集回显。{% endif %}</p>
+    </div>
+    <div class="page-heading__actions">
+        {% if can_administer and task_project_kind == 'computers' %}<a class="btn btn-outline-primary" href="{% url 'issue_severity_settings' %}?project=computers" data-modal-load="issueSeverityModal">问题等级设置</a>{% endif %}
+        {% if record_kind == 'servers' %}{% if can_administer %}<a class="btn btn-outline-primary" href="{% url 'windows_server_script_download' %}">下载 Windows 采集脚本</a>{% endif %}{% endif %}
+        {% if record_type == 'computer_analysis' %}<a class="btn btn-outline-primary" href="{% url 'computer_log_list' %}">导入日志证据 / 重新分析</a>{% endif %}
+        {% if can_administer and task_project_kind %}{% if can_administer %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#profileConfigModal">{{ task_config_label }}</button>{% endif %}{% if can_administer %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#alertPolicyModal">告警配置</button>{% endif %}{% if can_administer %}<button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#runTaskModal">{{ task_action_label }}</button>{% endif %}{% endif %}
+        <a class="btn btn-outline-secondary" href="{% if record_type == 'computer_analysis' %}{% url 'asset_list' 'computers' %}{% else %}{% url 'asset_list' record_kind %}{% endif %}">返回{% if record_type == 'computer_analysis' %}PC{% else %}设备{% endif %}列表</a>
+    </div>
+</header>
+{% if can_administer and task_project_kind %}{% if can_administer %}{% include 'inspections/profile_modal.html' %}{% endif %}{% if can_administer %}{% include 'inspections/run_modal.html' %}{% endif %}{% if can_administer %}{% include 'alerts/policy_modal.html' %}{% endif %}{% endif %}
+
+<section class="mb-4" aria-labelledby="task-overview-title">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div><p class="page-heading__eyebrow mb-1">任务概况</p><h2 class="h5 mb-0" id="task-overview-title">总体统计</h2></div>
+    </div>
+    <div class="row g-3">
+        <div class="col-6 col-xl"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">任务总数</div><div class="h3 mb-0">{{ task_metrics.task_count }}</div></div></div></div>
+        <div class="col-6 col-xl"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">完成目标</div><div class="h3 mb-0">{{ task_metrics.completed_count }}</div></div></div></div>
+        <div class="col-6 col-xl"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">正常目标</div><div class="h3 mb-0 text-success">{{ task_metrics.normal_count }}</div></div></div></div>
+        <div class="col-6 col-xl"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">异常目标</div><div class="h3 mb-0 text-danger">{{ task_metrics.abnormal_count }}</div></div></div></div>
+        <div class="col-6 col-xl"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">整体异常率</div><div class="h3 mb-0">{{ task_metrics.abnormal_rate|floatformat:1 }}%</div></div></div></div>
+        <div class="col-12 col-xl-3"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">最新任务时间</div><div class="fw-semibold mt-2">{{ task_metrics.latest_task_at|date:'Y-m-d H:i:s'|default:'暂无' }}</div></div></div></div>
+    </div>
+</section>
+
+<div class="mb-4">{% include 'inspections/taskbar.html' %}</div>
+
+{% if record_type == 'computer_analysis' %}
+{% include 'inspections/latest_analysis_statistics.html' %}
+{% else %}
+<div class="d-flex align-items-end justify-content-between mb-3">
+    <div><p class="page-heading__eyebrow mb-1">最新结果</p><h2 class="h5 mb-0">最新任务巡检记录</h2></div>
+    {% if latest_task %}<span class="small text-secondary">任务创建于 {{ latest_task.created_at|date:'Y-m-d H:i:s' }}</span>{% endif %}
+</div>
+
+{% include 'inspections/results_table.html' %}
+{% endif %}
+{% endblock %}
+{% block page_scripts %}
+{% include 'common/scripts/table_workspace.html' %}
+{% include 'common/scripts/modal_workflows.html' %}
+{% include 'common/scripts/inspection_workflows.html' %}
+{% endblock %}

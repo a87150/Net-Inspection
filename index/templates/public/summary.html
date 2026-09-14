@@ -1,0 +1,13 @@
+{% extends 'common/base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h1>{{ title }}</h1>
+<p class="text-muted">公开汇总</p>
+<section class="card surface-card p-4 mb-4" aria-label="人员汇总">
+    <h2 class="h4">人员</h2>
+    <dl class="row mb-0"><dt class="col-sm-2">总人数</dt><dd class="col-sm-2">{{ people_summary.total }}</dd><dt class="col-sm-2">在职人数</dt><dd class="col-sm-2">{{ people_summary.active }}</dd><dt class="col-sm-2">离职人数</dt><dd class="col-sm-2">{{ people_summary.inactive }}</dd></dl>
+    <a href="{% url 'people_statistics' %}">人员统计</a>
+</section>
+{% if inventories %}<div class="row g-3">{% for inventory in inventories %}<div class="col-sm-6 col-lg-4"><section class="card surface-card p-4 h-100"><h2 class="h4">{{ inventory.title }}</h2><p class="fs-3">{{ inventory.total }}</p><a href="{{ inventory.url }}">查看公开列表</a></section></div>{% endfor %}</div>{% endif %}
+{% if departments is not None %}<div class="card surface-card p-4 table-responsive"><table class="table"><caption>部门人员统计</caption><thead><tr><th scope="col">部门</th><th scope="col">总人数</th><th scope="col">在职</th><th scope="col">离职</th></tr></thead><tbody>{% for row in departments %}<tr><td>{{ row.department|default:'未填写' }}</td><td>{{ row.total }}</td><td>{{ row.active }}</td><td>{{ row.inactive }}</td></tr>{% empty %}<tr><td colspan="4">暂无记录</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+{% endblock %}

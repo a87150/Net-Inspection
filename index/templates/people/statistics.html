@@ -1,0 +1,34 @@
+{% extends 'common/base.html' %}
+{% block title %}人员统计{% endblock %}
+{% block content %}
+<header class="page-heading">
+    <div class="page-heading__copy">
+        <p class="page-heading__eyebrow">人员概况</p>
+        <h1 class="page-heading__title">人员统计</h1>
+        <p class="page-heading__description">统计日期：{{ as_of|date:'Y-m-d' }}。在职年限仅使用有效入职日期计算。</p>
+    </div>
+</header>
+
+<section aria-labelledby="people-overview-title" class="mb-4">
+    <h2 class="visually-hidden" id="people-overview-title">总体统计</h2>
+    <div class="row g-3 metric-summary-grid">
+        <div class="col-6 col-lg-3"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">人员总数</div><div class="h3 mb-0">{{ metrics.total }}</div></div></div></div>
+        <div class="col-6 col-lg-3"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">在职人数</div><div class="h3 mb-0 text-success">{{ metrics.active }}</div></div></div></div>
+        <div class="col-6 col-lg-3"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">离职人数</div><div class="h3 mb-0{% if metrics.departed %} text-danger{% endif %}">{{ metrics.departed }}</div></div></div></div>
+        <div class="col-6 col-lg-3"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">在职率</div><div class="h3 mb-0">{{ metrics.active_rate|floatformat:1 }}%</div></div></div></div>
+        <div class="col-12 col-lg-6"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">平均在职年限</div><div class="h3 mb-1">{{ metrics.average_active_tenure_years|floatformat:1 }} 年</div><div class="small text-secondary">仅统计 {{ metrics.tenure_sample_count }} 名有有效入职日期的在职人员</div></div></div></div>
+        <div class="col-6 col-lg-3"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">本年入职</div><div class="h3 mb-0">{{ metrics.hires_this_year }}</div></div></div></div>
+        <div class="col-6 col-lg-3"><div class="card surface-card h-100"><div class="card-body"><div class="metric-label">本年离职</div><div class="h3 mb-0">{{ metrics.departures_this_year }}</div></div></div></div>
+    </div>
+</section>
+
+<section class="card surface-card department-workspace" aria-labelledby="department-statistics-title">
+    <div class="card-header surface-card__header department-workspace__header"><div><p class="page-heading__eyebrow mb-1">组织分布</p><h2 class="h5 mb-0" id="department-statistics-title">部门统计</h2></div><div class="department-workspace__summary"><span>整体在职率</span><strong>{{ metrics.active_rate|floatformat:1 }}%</strong></div></div>
+    <div class="table-responsive" role="region" aria-label="部门人员统计" tabindex="0">
+        <table class="table data-table table-hover align-middle mb-0">
+            <thead><tr><th>部门</th><th>人员总数</th><th>在职</th><th>离职</th><th>在职率</th></tr></thead>
+            <tbody>{% for row in departments %}<tr><td class="fw-semibold">{{ row.department }}</td><td>{{ row.total }}</td><td class="text-success">{{ row.active }}</td><td{% if row.departed %} class="text-danger"{% endif %}>{{ row.departed }}</td><td>{{ row.active_rate|floatformat:1 }}%</td></tr>{% empty %}<tr><td colspan="5"><div class="empty-state"><strong>暂无人员数据</strong><span>导入或同步人员后将在这里生成统计。</span></div></td></tr>{% endfor %}</tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

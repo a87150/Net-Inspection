@@ -1,0 +1,17 @@
+{% if can_administer %}
+<div class="modal fade task-run-modal" id="runTaskModal" data-auto-open="{{ task_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="runTaskModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
+        <form id="manualTaskForm" method="post" action="{% if task_single_asset %}{% url 'single_device_task_create' task_project_kind task_single_asset.pk %}{% else %}{% url 'manual_task_create' %}{% endif %}">
+            {% csrf_token %}
+            <div class="modal-header"><h2 class="modal-title fs-5" id="runTaskModalLabel">{{ task_action_label }}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+            <div class="modal-body modal-body--scroll d-grid gap-3">
+                {% if task_profiles %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}"><input id="manualTaskTargetMode" type="hidden" name="target_mode" value=""><input id="manualTaskSingleTarget" type="hidden" name="single_target_id" value="{{ task_single_asset.pk|default:'' }}">
+                <section class="manual-config-runner"><div class="manual-config-runner__heading"><span class="manual-config-runner__index">执行</span><div><h3 class="h6 mb-1">选择已配置任务</h3><p class="mb-0">{% if task_single_asset %}本次只巡检 {{ task_single_asset }}，沿用所选配置的巡检项目和超时设置。{% else %}执行将完整沿用配置中的项目、设备范围、并发数与超时设置。{% endif %}</p></div></div><label class="form-label" for="task-profile">任务配置</label><select class="form-select" id="task-profile" name="profile_id">{% for profile in task_profiles %}<option value="{{ profile.pk }}"{% if profile.pk == task_default_profile.pk %} selected{% endif %}>{{ profile.name }}</option>{% endfor %}</select><div class="form-text">Worker 会为本次任务冻结所选配置快照，后续修改不会影响已入队任务。</div></section>
+                {% else %}<div class="alert alert-info mb-0">请先完成{{ task_config_label }}，再创建后台任务。</div>{% endif %}
+            </div>
+            <div class="modal-footer modal-footer--sticky"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit"{% if not task_profiles %} disabled{% endif %}>立即执行</button></div>
+        </form>
+    </div></div>
+</div>
+{% endif %}

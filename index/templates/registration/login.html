@@ -1,0 +1,18 @@
+{% extends 'common/base.html' %}
+{% block title %}登录 · 网络巡检中心{% endblock %}
+{% block content %}
+<section class="card surface-card mx-auto my-4" style="max-width: 28rem;">
+  <div class="card-body p-4">
+    <h1 class="h4 mb-3">登录</h1>
+    <p class="text-muted">登录后可查看详细信息。普通账号仅可查看和导出表格，管理操作需要管理员权限。</p>
+    <form method="post">
+      {% csrf_token %}
+      {% if form.errors %}<div class="alert alert-danger" role="alert">账号或密码不正确，或账号已停用。</div>{% endif %}
+      <div class="mb-3"><label class="form-label" for="id_username">账号</label><input class="form-control" id="id_username" name="username" autocomplete="username" required autofocus value="{{ form.username.value|default:'' }}"></div>
+      <div class="mb-3"><label class="form-label" for="id_password">密码</label><input class="form-control" id="id_password" type="password" name="password" autocomplete="current-password" required></div>
+      <input type="hidden" name="next" value="{{ next }}">
+      <button class="btn btn-primary w-100" type="submit">登录</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

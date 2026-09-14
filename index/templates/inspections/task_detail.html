@@ -1,0 +1,192 @@
+{% extends 'common/base.html' %}
+{% load extras %}
+{% block title %}任务详情{% endblock %}
+{% block content %}
+{% if task.task_type == 'domain_sync' %}
+<section class="card surface-card mb-3">
+<div class="card-body">
+<h2 class="h5">域控同步结果</h2>
+<p>同步域账号、域计算机及域分组，不参与设备告警。</p>
+{% for sync_target in page_obj %}
+{% if sync_target.result_snapshot.message %}
+<p class="text-success">{{ sync_target.result_snapshot.message }}</p>
+{% endif %}
+{% endfor %}
+{% if can_administer %}
+<a href="{% url 'domain_controller_settings' %}">返回域控管理</a>
+{% endif %}
+</div>
+</section>
+{% endif %}
+<header class="page-heading">
+<div class="page-heading__copy">
+<p class="page-heading__eyebrow">执行中心</p>
+<h1 class="page-heading__title">任务详情</h1>
+<p class="page-heading__description">{{ task.get_task_type_display }} · {{ task.get_source_display }} · {{ task.get_status_display }}</p>
+</div>
+<div class="page-heading__actions">
+{% if can_administer and task.status in task.ACTIVE_STATUSES %}
+<form method="post" action="{% url 'task_cancel' task.pk %}" data-confirm-message="确定结束这个任务吗？尚未开始的目标会被取消，正在执行的外部调用将在超时后退出。">
+{% csrf_token %}
+<button class="btn btn-outline-danger" type="submit">结束任务</button>
+</form>
+{% endif %}
+<a class="btn btn-outline-secondary" href="{% url 'task_list' %}">返回任务列表</a>
+</div>
+</header>
+{% if domain_operation %}
+<section class="card surface-card mb-4" data-domain-operation-detail>
+    <div class="card-body">
+        <div class="d-flex flex-column flex-md-row gap-3 align-items-md-center justify-content-between">
+            <div>
+<h2 class="h5 mb-1">域控操作：{{ domain_operation.get_action_display }}</h2>
+<p class="text-secondary mb-0">{{ domain_operation.get_object_type_display }} · {{ domain_operation.target_count }} 个目标 · 参数已脱敏</p>
+</div>
+            {% if can_administer and domain_retry_available %}
+<form method="post" action="{% url 'domain_operation_retry' domain_operation.pk %}" data-domain-retry>
+{% csrf_token %}
+{% if domain_retry_requires_password %}
+<label class="visually-hidden" for="domain-retry-password">新的密码</label>
+<input class="form-control form-control-sm" type="password" id="domain-retry-password" name="password" autocomplete="new-password" placeholder="输入新的密码" required>
+{% endif %}
+<button class="btn btn-outline-danger" type="submit">重试失败目标</button>
+</form>
+{% endif %}
+        </div>
+        {% if domain_manual_intervention %}
+<div class="alert alert-warning mt-3 mb-0" data-domain-manual-intervention>新增用户结果不确定，请人工检查目录对象后再处理；系统已禁止自动重试。</div>
+{% endif %}
+        {% if domain_operation.parameter_summary %}
+<dl class="row small mt-3 mb-0">
+<dt class="col-sm-3">安全参数摘要</dt>
+<dd class="col-sm-9 mb-0">
+{% for key, value in domain_operation.parameter_summary.items %}
+<span class="badge text-bg-light border me-1">{{ key }}：{{ value }}</span>
+{% endfor %}
+</dd>
+</dl>
+{% endif %}
+    </div>
+</section>
+{% endif %}
+<div class="card surface-card mb-4">
+<div class="card-body">
+<div class="row g-3">
+<div class="col-md-3">
+<div class="metric-label">总体进度</div>
+<div class="fs-4">{{ task.completed_targets }} / {{ task.total_targets }}</div>
+</div>
+<div class="col-md-3">
+<div class="metric-label">成功目标</div>
+<div>{{ task.successful_targets }}</div>
+</div>
+<div class="col-md-3">
+<div class="metric-label">失败目标</div>
+<div>{{ task.failed_targets }}</div>
+</div>
+<div class="col-md-3">
+<div class="metric-label">下发时间</div>
+<div>{{ task.created_at|date:'Y-m-d H:i:s' }}</div>
+</div>
+</div>
+{% if task.error_summary %}
+<div class="alert alert-danger mt-3 mb-0">
+<pre class="mb-0 text-wrap">{{ task.error_summary }}</pre>
+</div>
+{% endif %}
+</div>
+</div>
+{% if task.parameters_snapshot.inapplicable_target_ids %}
+<div class="alert alert-info">{{ task.parameters_snapshot.inapplicable_target_ids|length }} 台设备不适用于本次选择的巡检项目，未纳入执行与异常统计。</div>
+{% endif %}
+{% if show_result_table %}
+{% if alert_processing_page.paginator.count %}
+<section class="alert alert-warning" aria-label="告警处理诊断">
+<h2 class="h6">告警处理待重试</h2>
+{% for diagnostic in alert_processing_page %}
+<div class="small text-break">{{ diagnostic.target_id }}：{{ diagnostic.alert_processing_error }} · {{ diagnostic.alert_attempted_at|date:'Y-m-d H:i:s' }}</div>
+{% endfor %}
+<nav aria-label="告警诊断分页">
+{% if alert_processing_page.has_previous %}
+{% query_transform request alert_page=alert_processing_page.previous_page_number as previous_alert %}
+<a href="?{{ previous_alert }}">上一页</a>
+{% endif %} {{ alert_processing_page.number }} / {{ alert_processing_page.paginator.num_pages }} {% if alert_processing_page.has_next %}
+{% query_transform request alert_page=alert_processing_page.next_page_number as next_alert %}
+<a href="?{{ next_alert }}">下一页</a>
+{% endif %}
+</nav>
+</section>
+{% endif %}
+<h2 class="h5 mb-3">任务结果记录</h2>
+{% include 'inspections/results_table.html' %}
+{% if execution_page.paginator.count %}
+<details class="card p-3 mt-3">
+<summary>尚未生成结果的目标（{{ execution_page.paginator.count }}）</summary>
+<table class="table">
+<thead>
+<tr>
+<th>目标</th>
+<th>执行状态</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+{% for target in execution_page %}
+<tr>
+<td>{{ target.target_id }}</td>
+<td>{{ target.get_status_display }}</td>
+<td>{{ target.error_message|default:'等待执行或生成结果' }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+<nav aria-label="未生成结果目标分页">
+{% if execution_page.has_previous %}
+{% query_transform request execution_page=execution_page.previous_page_number as previous_execution %}
+<a href="?{{ previous_execution }}">上一页</a>
+{% endif %} {{ execution_page.number }} / {{ execution_page.paginator.num_pages }} {% if execution_page.has_next %}
+{% query_transform request execution_page=execution_page.next_page_number as next_execution %}
+<a href="?{{ next_execution }}">下一页</a>
+{% endif %}
+</nav>
+</details>
+{% endif %}
+{% else %}
+<h2 class="h5 mb-3">目标执行详情</h2>
+<div data-table-workspace data-table-key="task-targets">
+<div class="table-toolbar">
+{% include 'common/table_workspace.html' %}
+</div>
+<div class="card surface-card table-scroll-shell">
+<p class="table-scroll-hint">可横向滚动查看目标、告警与结果信息</p>
+<div class="table-responsive" role="region" aria-label="目标执行详情数据表" tabindex="0">
+<table class="table data-table table-hover align-middle mb-0">
+{% include 'common/table_caption.html' %}
+<thead>
+<tr>
+{% include 'common/table_sort_headers.html' %}
+<th scope="col">告警处理</th>
+<th scope="col">结果</th>
+</tr>
+</thead>
+<tbody>
+{% for target in page_obj %}
+{% include 'inspections/task_target_row.html' %}
+{% empty %}
+<tr>
+<td colspan="10">
+{% include 'common/empty_state.html' with empty_title="暂无目标执行详情" empty_message="任务开始处理目标后，进度会显示在这里。" %}
+</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+</div>
+{% include 'common/pagination.html' %}
+</div>
+{% endif %}
+{% endblock %}
+{% block page_scripts %}
+{% include 'common/scripts/table_workspace.html' %}
+{% endblock %}

@@ -1,0 +1,24 @@
+<tr>
+    <td>{% include 'common/status_badge.html' with status=event.event_type label=event.get_event_type_display %}</td>
+    <td>
+        {% if event.event_type == 'summary' %}
+            {{ event.summary_data.task_name|default:event.profile_type }}
+        {% else %}
+            {{ event.policy.name|default:event.profile_type }}
+        {% endif %}
+    </td>
+    <td class="text-break">
+        {% if event.event_type == 'summary' %}
+            全部 {{ event.summary_data.total|default:0 }} 个目标
+        {% else %}
+            {{ event.target_id }}
+        {% endif %}
+    </td>
+    <td>{% include 'inspections/severity_badge.html' with level=event.severity %}</td>
+    <td>{% include 'common/status_badge.html' with status=event.status label=event.get_status_display %}</td>
+    <td class="text-break">{% include 'common/text_disclosure.html' with text=event.delivery_outcomes disclosure_label="查看送达结果" %}</td>
+    <td>{{ event.occurred_at|date:'Y-m-d H:i:s' }}</td>
+    <td class="text-end table-actions-cell">
+        <a class="btn btn-outline-dark btn-sm" href="{% url 'alert_detail' event.pk %}">查看详情</a>
+    </td>
+</tr>

@@ -1,0 +1,35 @@
+{% if can_administer %}
+<div class="modal fade import-config-modal" id="importModal" data-auto-open="{{ open_import_modal|yesno:'true,false' }}" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="importModalLabel" aria-describedby="importModalDescription" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
+        <div class="modal-header"><h2 class="modal-title fs-5" id="importModalLabel">导入{{ item_name }}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+        <div class="modal-body modal-body--scroll d-grid gap-4">
+            <p class="visually-hidden" id="importModalDescription">向当前{{ item_name }}列表导入数据。</p>
+            {% if people_import_error %}<div class="alert alert-danger mb-0" role="alert">{{ people_import_error }}</div>{% endif %}
+            {% if can_administer and personnel_api_import %}
+            <ul class="nav nav-tabs" role="tablist" aria-label="人员导入方式">
+                <li class="nav-item" role="presentation"><button class="nav-link {% if people_active_tab == 'csv' %}active{% endif %}" id="people-tab-csv" data-bs-toggle="tab" data-bs-target="#people-panel-csv" type="button" role="tab" aria-controls="people-panel-csv" aria-selected="{% if people_active_tab == 'csv' %}true{% else %}false{% endif %}">文件</button></li>
+                {% for tab in people_provider_tabs %}<li class="nav-item" role="presentation"><button class="nav-link {% if tab.active %}active{% endif %}" id="people-tab-{{ tab.provider }}" data-bs-toggle="tab" data-bs-target="#people-panel-{{ tab.provider }}" type="button" role="tab" aria-controls="people-panel-{{ tab.provider }}" aria-selected="{{ tab.active|yesno:'true,false' }}">{{ tab.label }}</button></li>{% endfor %}
+            </ul>
+            <div class="tab-content">
+            {% endif %}
+            <section class="modal-section import-config-section{% if can_administer and personnel_api_import %} tab-pane fade{% if people_active_tab == 'csv' %} show active{% endif %}{% endif %}"{% if can_administer and personnel_api_import %} id="people-panel-csv" role="tabpanel" aria-labelledby="people-tab-csv"{% endif %}>
+                <h3 class="h6">从文件导入</h3>
+                <p class="text-secondary small">此入口只接受{{ item_name }}模板。请先下载模板。请删除或替换模板中的演示数据行，填写后再上传。</p>
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <a href="{% url 'download_inventory_template_format' item_key 'csv' %}" class="btn btn-outline-secondary">下载 CSV 模板</a>
+                    <a href="{% url 'download_inventory_template_format' item_key 'xlsx' %}" class="btn btn-outline-secondary">下载 Excel 模板</a>
+                </div>
+                <form method="post" enctype="multipart/form-data" action="{% url 'import_inventory' item_key %}">
+                    {% csrf_token %}<label class="form-label" for="inventoryFile-{{ item_key }}">CSV 或 Excel 文件</label>
+                    <div class="d-flex flex-column flex-md-row gap-3"><input class="form-control" id="inventoryFile-{{ item_key }}" type="file" name="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required><button class="btn btn-dark text-nowrap" type="submit">开始导入</button></div>
+                </form>
+            </section>
+            {% if can_administer and personnel_api_import %}
+                {% for tab in people_provider_tabs %}{% if can_administer %}{% include 'integrations/source_modal.html' %}{% endif %}{% endfor %}
+            </div>
+            {% if people_recent_tasks %}<section class="modal-section"><h3 class="h6">当前会话最近的目录操作</h3><div class="interactive-list" role="list">{% for operation in people_recent_tasks %}<a class="interactive-list__item" role="listitem" href="{% url 'people_operation' operation.pk %}"><span class="interactive-list__content"><strong class="interactive-list__title">{{ operation.profile_snapshot.name }}</strong><span class="interactive-list__meta"><span>{{ operation.get_task_type_display }}</span>{% include 'common/status_badge.html' with status=operation.status label=operation.get_status_display %}</span></span><span class="interactive-list__action">查看进度</span></a>{% endfor %}</div></section>{% endif %}
+            {% endif %}
+        </div>
+    </div></div>
+</div>
+{% endif %}

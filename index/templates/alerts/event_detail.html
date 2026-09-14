@@ -1,0 +1,21 @@
+<h2 class="h5">事件信息</h2>
+<dl class="row mb-0">
+    <dt class="col-sm-4">项目</dt>
+    <dd class="col-sm-8">{{ event.policy.name|default:event.profile_type }}</dd>
+    <dt class="col-sm-4">目标</dt>
+    <dd class="col-sm-8 text-break">{{ event.target_type }} / {{ event.target_id }}</dd>
+    <dt class="col-sm-4">严重级别</dt>
+    <dd class="col-sm-8">{% include 'inspections/severity_badge.html' with level=event.severity %}</dd>
+    <dt class="col-sm-4">摘要</dt>
+    <dd class="col-sm-8">{{ event.summary|default:'-' }}</dd>
+</dl>
+<h3 class="h6 mt-4">合并发现</h3>
+<ul class="mb-0">
+    {% for finding in event.findings %}
+    <li>
+        {% include 'inspections/severity_badge.html' with level=finding.severity %}
+        <strong>{{ finding.title }}</strong>
+        {% if finding.detail %}<span class="text-secondary"> · {{ finding.detail }}</span>{% endif %}
+    </li>
+    {% endfor %}
+</ul>

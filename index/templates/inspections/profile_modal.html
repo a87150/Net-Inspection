@@ -1,0 +1,215 @@
+{% if can_administer %}
+{% if task_project_kind == 'computers' %}
+{% if can_administer %}
+{% include 'devices/pc/config_modal.html' %}
+{% endif %}
+{% else %}
+<div class="modal fade inspection-config-modal" id="profileConfigModal" data-auto-open="{{ profile_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="profileConfigModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell">
+<div class="modal-content modal-surface">
+    {% if task_project_kind == 'computers' %}
+<form method="post" action="{% url 'computer_analysis_profile_configure' %}">
+{% else %}
+<form method="post" action="{% url 'inspection_profile_configure' %}">
+{% endif %}
+      {% csrf_token %}
+<input type="hidden" name="next" value="{{ request.get_full_path }}">
+{% if task_project_kind != 'computers' %}
+<input type="hidden" name="device_type" value="{{ task_device_type }}">
+{% endif %}
+      <div class="modal-header">
+<h2 class="modal-title fs-5" id="profileConfigModalLabel">{{ task_config_label }}</h2>
+<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭">
+</button>
+</div>
+      <div class="modal-body modal-body--scroll">
+        <p class="text-secondary small">配置保存后仅影响后续创建的任务；已经入队的任务继续使用各自的不可变快照。</p>
+        <div class="inspection-config-layout">
+          <section class="inspection-config-block" data-config-step="profile">
+<div class="inspection-config-block__heading">
+<span class="inspection-config-block__index">01</span>
+<div>
+<h3 class="h6 mb-1">选择配置</h3>
+<p class="mb-0">选择已有配置进行编辑，或创建新的配置。</p>
+</div>
+</div>
+{% if task_profiles %}
+<label class="form-label" for="config-profile">编辑配置</label>
+<select class="form-select" id="config-profile" name="profile_id">
+{% for profile in task_profiles %}
+<option value="{{ profile.pk }}"{% if profile.pk == task_default_profile.pk %} selected{% endif %}>{{ profile.name }}</option>
+{% endfor %}
+</select>
+{% else %}
+<p class="form-text mb-0">当前没有已保存配置，填写以下内容后将创建首个配置。</p>
+{% endif %}
+</section>
+          <section class="inspection-config-block" data-config-step="parameters">
+<div class="inspection-config-block__heading">
+<span class="inspection-config-block__index">02</span>
+<div>
+<h3 class="h6 mb-1">配置名称与巡检参数</h3>
+<p class="mb-0">设置任务标识、并发线程和单台设备超时时间。</p>
+</div>
+</div>
+<div class="row g-3">
+<div class="col-md-6">
+<label class="form-label">配置名称</label>
+<input class="form-control" name="name" value="{{ task_default_profile.name|default:'' }}" required>
+</div>
+<div class="col-md-3">
+<label class="form-label">并发数</label>
+<input class="form-control" type="number" name="concurrent_workers" min="1" max="64" value="{{ task_default_profile.concurrent_workers|default:4 }}" required>
+</div>
+{% if task_project_kind != 'computers' %}
+<div class="col-md-3">
+<label class="form-label">超时（秒）</label>
+<input class="form-control" type="number" name="timeout_seconds" min="1" max="3600" value="{{ task_default_profile.timeout_seconds|default:60 }}" required>
+</div>
+{% endif %}
+</div>
+</section>
+          {% if target_rule_form %}
+<section class="inspection-config-block inspection-config-section--targets" data-config-step="targets">
+<div class="inspection-config-block__heading">
+<span class="inspection-config-block__index">03</span>
+<div>
+<h3 class="h6 mb-1">巡检设备</h3>
+<p class="mb-0">筛选后批量选择要纳入定时任务的设备。</p>
+</div>
+</div>
+<input type="hidden" name="target_rule_mode" value="all" data-target-device-mode>
+<span class="form-label" id="target-device-picker-label">{{ target_rule_form.target_rule_ids.label }}</span>
+<div class="target-device-picker" data-target-device-picker role="group" aria-labelledby="target-device-picker-label">
+<div class="target-device-picker__toolbar">
+<input class="form-control form-control-sm" type="search" placeholder="按设备名称或 IP 筛选" aria-label="筛选指定设备" data-target-device-search>
+{% if task_project_kind != 'servers' %}
+<select class="form-select form-select-sm" aria-label="按厂商筛选设备" data-target-device-vendor>
+<option value="">全部厂商</option>
+{% for vendor in target_rule_form.target_device_vendors %}
+<option value="{{ vendor }}">{{ vendor }}</option>
+{% endfor %}
+</select>
+{% endif %}
+<select class="form-select form-select-sm" aria-label="按类型筛选设备" data-target-device-type>
+<option value="">全部类型</option>
+{% for device_type in target_rule_form.target_device_types %}
+<option value="{{ device_type }}">{{ device_type }}</option>
+{% endfor %}
+</select>
+<select class="form-select form-select-sm" aria-label="设备显示范围" data-target-device-visibility>
+<option value="all">显示全部</option>
+<option value="selected">仅看已选</option>
+</select>
+<button class="btn btn-outline-primary btn-sm" type="button" data-target-device-select-all>全选</button>
+<button class="btn btn-outline-secondary btn-sm" type="button" data-target-device-invert>反选</button>
+</div>
+<div class="target-device-picker__summary">
+<span data-target-device-count aria-live="polite">
+</span>
+<span>批量操作仅作用于当前筛选结果</span>
+</div>
+<div class="target-device-picker__choices">
+{% with selected_target_ids=target_rule_form.target_rule_ids.value|default_if_none:'' %}
+{% for option in target_rule_form.target_device_options %}
+<label class="target-device-picker__option" data-target-device-option data-target-device-label="{{ option.label }}" data-target-device-vendor="{{ option.vendor }}" data-target-device-type="{{ option.device_type }}" data-target-device-items="{{ option.items|join:',' }}">
+<input class="form-check-input" type="checkbox" name="{{ target_rule_form.target_rule_ids.html_name }}" value="{{ option.id }}"{% if option.id in selected_target_ids %} checked{% endif %}>
+<span>{{ option.label }}</span>
+<small>
+{% if task_project_kind != 'servers' %}{{ option.vendor }} · {% endif %}{{ option.device_type }}</small>
+</label>
+{% empty %}
+<span class="text-secondary small">暂无可选设备</span>
+{% endfor %}
+{% endwith %}
+</div>
+</div>{{ target_rule_form.target_rule_ids.errors }}</section>
+{% endif %}
+          <section class="inspection-config-block" data-config-step="items">
+<div class="inspection-config-block__heading">
+<span class="inspection-config-block__index">04</span>
+<div>
+<h3 class="h6 mb-1">
+{% if task_project_kind == 'computers' %}分析项目{% else %}巡检项目{% endif %}
+</h3>
+<p class="mb-0">根据所选设备显示可用项目；混合选择时显示合并项目，每台设备只执行其适用项目。未指定设备时按全部设备。</p>
+</div>
+</div>
+<fieldset data-bulk-choice-group>
+<div class="bulk-choice-group__heading">
+<legend class="visually-hidden">
+{% if task_project_kind == 'computers' %}分析项目{% else %}巡检项目{% endif %}
+</legend>
+<div class="bulk-choice-group__actions">
+<button class="btn btn-outline-primary btn-sm" type="button" data-bulk-select-all>全选</button>
+<button class="btn btn-outline-secondary btn-sm" type="button" data-bulk-invert>反选</button>
+</div>
+</div>
+<div class="row row-cols-1 row-cols-md-3 g-2">
+{% for key, label in task_item_choices %}
+<label class="col form-check">
+<input class="form-check-input" type="checkbox" data-bulk-choice name="{% if task_project_kind == 'computers' %}analysis_items{% else %}selected_items{% endif %}" value="{{ key }}"{% if key in task_default_items %} checked{% endif %}>
+<span class="form-check-label">{{ label }}</span>
+</label>
+{% endfor %}
+</div>
+</fieldset>
+</section>
+
+          <section class="inspection-config-block" data-config-step="schedule">
+<div class="inspection-config-block__heading">
+<span class="inspection-config-block__index">
+{% if task_project_kind == 'computers' %}05{% else %}05{% endif %}
+</span>
+<div>
+<h3 class="h6 mb-1">定时设置</h3>
+<p class="mb-0">保存并启用后由独立 Worker 按计划创建任务。</p>
+</div>
+</div>
+<label class="form-check mb-3">
+<input class="form-check-input" type="checkbox" name="schedule_enabled"{% if task_default_schedule and task_default_schedule.is_enabled %} checked{% endif %}>
+<span class="form-check-label">启用定时执行</span>
+</label>
+<div class="row g-3">
+<div class="col-md-3">
+<label class="form-label">执行方式</label>
+<select class="form-select" name="schedule_kind" data-schedule-kind>
+<option value="interval"{% if not task_default_schedule or task_default_schedule.kind == 'interval' %} selected{% endif %}>每隔 N 分钟/小时</option>
+<option value="daily"{% if task_default_schedule and task_default_schedule.kind == 'daily' %} selected{% endif %}>每天指定时间</option>
+</select>
+</div>
+<div class="col-md-3" data-schedule-interval>
+<label class="form-label">间隔</label>
+<input class="form-control" type="number" min="1" name="interval_value" value="{{ task_default_schedule.interval_value|default:30 }}">
+</div>
+<div class="col-md-3" data-schedule-interval>
+<label class="form-label">单位</label>
+<select class="form-select" name="interval_unit">
+<option value="minutes"{% if not task_default_schedule or task_default_schedule.interval_unit == 'minutes' %} selected{% endif %}>分钟</option>
+<option value="hours"{% if task_default_schedule and task_default_schedule.interval_unit == 'hours' %} selected{% endif %}>小时</option>
+</select>
+</div>
+<div class="col-md-3" data-schedule-daily>
+<label class="form-label">每天执行时间</label>
+<input class="form-control" type="time" name="daily_time" value="{{ task_default_schedule.daily_time|time:'H:i' }}">
+</div>
+</div>
+{% if task_default_schedule %}
+<div class="small text-secondary mt-3">当前计划：{% if task_default_schedule.is_enabled %}已启用{% else %}已停用{% endif %}；最近入队 {{ task_default_schedule.last_enqueued_at|date:'Y-m-d H:i'|default:'暂无' }}；下次执行 {{ task_default_schedule.next_run_at|date:'Y-m-d H:i'|default:'待计算' }}。{% if task_default_schedule.last_schedule_status == 'blocked' %} 上次调度：等待活动任务结束。{% elif task_default_schedule.last_schedule_status == 'error' %} 上次调度失败：{{ task_default_schedule.last_schedule_error }}{% endif %}
+</div>
+{% else %}
+<div class="small text-secondary mt-3">当前尚未保存定时计划；保存并启用后由独立 Worker 调度。</div>
+{% endif %}
+</section>
+        </div>
+      </div>
+      <div class="modal-footer modal-footer--sticky">
+<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+<button class="btn btn-primary" type="submit">保存配置</button>
+</div>
+    </form>
+  </div>
+</div>
+</div>
+{% endif %}
+{% endif %}

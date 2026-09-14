@@ -1,0 +1,27 @@
+:root {
+    --color-canvas: #f4f7fb;
+    --color-surface: #ffffff;
+    --color-surface-glass: rgba(255, 255, 255, .78);
+    --color-surface-glass-strong: rgba(255, 255, 255, .92);
+    --color-text: #172033;
+    --color-text-muted: #667085;
+    --color-border: #dfe5ee;
+    --color-border-glass: rgba(255, 255, 255, .62);
+    --color-primary: #3157d5;
+    --color-primary-hover: #2848b2;
+    --color-success: #18845f;
+    --color-warning: #b76a00;
+    --color-danger: #c43d4f;
+    --color-focus-ring: rgba(49, 87, 213, .28);
+    --color-status-info: #3157d5;
+    --color-status-neutral: #667085;
+    --color-nav: #0b172a;
+    --color-nav-muted: #aebbd0;
+    --radius-sm: .55rem;
+    --radius: .85rem;
+    --radius-lg: 1.1rem;
+    --control-height: 2.5rem;
+    --modal-backdrop: rgba(11, 23, 42, .44);
+    --shadow-surface: 0 10px 30px rgba(20, 34, 60, .07);
+    --shadow-raised: 0 16px 38px rgba(20, 34, 60, .13);
+}

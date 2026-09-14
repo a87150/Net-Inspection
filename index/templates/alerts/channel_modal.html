@@ -1,0 +1,127 @@
+{% if can_administer %}
+<div class="modal fade alert-channel-modal" id="alertChannelModal" data-auto-open="{{ alert_channel_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="alertChannelModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell">
+<div class="modal-content modal-surface">
+        {% for channel in alert_channels %}
+<form id="alert-channel-test-{{ channel.pk }}" method="post" action="{% url 'alert_test_send' %}" class="d-none">
+{% csrf_token %}
+<input type="hidden" name="next" value="{{ request.get_full_path }}">
+<input type="hidden" name="channel_id" value="{{ channel.pk }}">
+</form>
+{% endfor %}
+        <form method="post" action="{% url 'alert_channel_save' %}">
+{% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+{% if alert_edit_channel %}
+<input type="hidden" name="channel_id" value="{{ alert_edit_channel.pk }}">
+{% endif %}
+<input type="hidden" name="channel_type" value="{{ alert_channel_type }}">
+            <div class="modal-header">
+<div>
+<p class="page-heading__eyebrow mb-1">告警配置</p>
+<h2 class="modal-title fs-5" id="alertChannelModalLabel">渠道管理与{% if alert_edit_channel %}编辑{% else %}新增{% endif %}
+</h2>
+</div>
+<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭">
+</button>
+</div>
+            <div class="modal-body modal-body--scroll">
+                {% if alert_channel_errors %}
+<div class="alert alert-danger" role="alert">
+<strong>渠道未保存</strong>
+<ul class="mb-0">
+{% for error in alert_channel_errors %}
+<li>{{ error }}</li>
+{% endfor %}
+</ul>
+<p class="mb-0">请修正配置；新填写的凭据不会保留，请重新输入。</p>
+</div>
+{% endif %}
+                <section class="alert-channel-management" aria-labelledby="alert-channel-management-title">
+<div class="alert-channel-management__heading">
+<div>
+<p class="page-heading__eyebrow mb-1">投递渠道</p>
+<h3 class="h6 mb-0" id="alert-channel-management-title">渠道管理</h3>
+</div>
+<div class="alert-channel-management__actions">
+<a class="btn btn-outline-secondary btn-sm" href="?alert_modal=channel&amp;alert_channel_type=feishu">新增飞书</a>
+<a class="btn btn-outline-secondary btn-sm" href="?alert_modal=channel&amp;alert_channel_type=dingtalk">新增钉钉</a>
+<a class="btn btn-outline-secondary btn-sm" href="?alert_modal=channel&amp;alert_channel_type=email">新增邮件</a>
+</div>
+</div>
+<div class="alert-channel-management__list">
+{% for channel in alert_channels %}
+<article class="alert-channel-management__item">
+<div>
+<strong>{{ channel.name }}</strong>
+<span class="badge status-badge {% if channel.is_enabled %}text-bg-success{% else %}text-bg-secondary{% endif %}">{{ channel.get_channel_type_display }} · {% if channel.is_enabled %}已启用{% else %}已停用{% endif %}
+</span>
+</div>
+<div class="alert-channel-management__item-actions">
+<a class="btn btn-outline-secondary btn-sm" href="?alert_modal=channel&amp;alert_channel_id={{ channel.pk }}">编辑</a>
+<button class="btn btn-outline-primary btn-sm" type="submit" form="alert-channel-test-{{ channel.pk }}">测试发送</button>
+</div>
+</article>
+{% empty %}
+<div class="empty-state">
+<strong>尚未配置渠道</strong>
+<span>选择上方渠道类型即可新增投递渠道。</span>
+</div>
+{% endfor %}
+</div>
+</section>
+                <section class="alert-channel-editor" aria-labelledby="alert-channel-editor-title">
+<div class="alert-channel-editor__heading">
+<span class="alert-channel-editor__index">
+{% if alert_edit_channel %}编辑{% else %}新增{% endif %}
+</span>
+<div>
+<h3 class="h6 mb-1" id="alert-channel-editor-title">
+{% if alert_channel_type == 'email' %}邮件{% elif alert_channel_type == 'dingtalk' %}钉钉{% else %}飞书{% endif %}渠道设置</h3>
+<p class="mb-0">Webhook 与密码均为只写字段；编辑时留空即可保留已有凭据。</p>
+</div>
+</div>
+<div class="row g-3">
+<div class="col-md-8">
+<label class="form-label" for="id_name">渠道名称</label>{{ alert_channel_form.name }}</div>
+<div class="col-md-4 d-flex align-items-end">
+<label class="form-check mb-2">{{ alert_channel_form.is_enabled }}<span class="form-check-label">启用渠道</span>
+</label>
+</div>
+{% if alert_channel_type == 'email' %}
+<div class="col-md-8">
+<label class="form-label" for="id_smtp_host">SMTP 主机</label>{{ alert_channel_form.smtp_host }}</div>
+<div class="col-md-4">
+<label class="form-label" for="id_smtp_port">SMTP 端口</label>{{ alert_channel_form.smtp_port }}</div>
+<div class="col-md-6">
+<label class="form-label" for="id_from_email">发件人</label>{{ alert_channel_form.from_email }}</div>
+<div class="col-md-6">
+<label class="form-label" for="id_recipients">收件人（逗号分隔）</label>{{ alert_channel_form.recipients }}</div>
+<div class="col-md-6">
+<label class="form-label" for="id_username">SMTP 账号</label>{{ alert_channel_form.username }}</div>
+<div class="col-md-6">
+<label class="form-label" for="id_password">SMTP 密码</label>{{ alert_channel_form.password }}</div>
+<div class="col-12 d-flex flex-wrap gap-3">
+<label class="form-check">{{ alert_channel_form.use_tls }}<span class="form-check-label">使用 TLS</span>
+</label>
+<label class="form-check">{{ alert_channel_form.use_ssl }}<span class="form-check-label">使用 SSL</span>
+</label>
+</div>
+{% else %}
+<div class="col-12">
+<label class="form-label" for="id_webhook_url">{{ alert_channel_form.webhook_url.label }}</label>{{ alert_channel_form.webhook_url }}</div>
+<div class="col-12">
+<label class="form-label" for="id_secret">{{ alert_channel_form.secret.label }}</label>{{ alert_channel_form.secret }}</div>
+{% endif %}
+</div>
+</section>
+            </div>
+            <div class="modal-footer modal-footer--sticky">
+<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+<button class="btn btn-primary" type="submit">保存渠道</button>
+</div>
+        </form>
+    </div>
+</div>
+</div>
+{% endif %}
