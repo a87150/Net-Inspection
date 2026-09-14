@@ -1,0 +1,2 @@
+# Keep the Linux installer runnable after a Windows checkout.
+deploy/linux/install.sh text eol=lf

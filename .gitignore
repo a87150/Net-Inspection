@@ -26,3 +26,6 @@ PC-Windows-Collector*.zip
 docs/reviews/
 docs/superpowers/
 .superpowers/
+
+# Production installer logs, locks and generated static files.
+runtime/deployment/
