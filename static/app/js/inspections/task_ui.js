@@ -107,6 +107,37 @@ function bindBulkChoiceGroup(group) {
 if (typeof module !== 'undefined') module.exports = {applicableTargetItems, switchProfile, selectRow, clearRowTarget, filterTargetDeviceChoices, updateTargetDeviceSelection, updateCheckboxSelection};
 
 const boundTaskControls = new WeakSet();
+function bindInspectionRuleFilter(container) {
+    const search = container.querySelector('[data-rule-search]');
+    const scope = container.querySelector('[data-rule-scope]');
+    const count = container.querySelector('[data-rule-count]');
+    const rules = Array.from(container.querySelectorAll('[data-inspection-rule]'));
+    const update = () => {
+        const keyword = (search?.value || '').trim().toLocaleLowerCase();
+        let visible = 0;
+        rules.forEach(rule => {
+            const mode = rule.querySelector('[data-rule-mode] select')?.value || 'inherit';
+            const matches = (rule.dataset.ruleLabel || '').toLocaleLowerCase().includes(keyword)
+                && (!scope?.value || scope.value === 'all' || mode === scope.value);
+            rule.hidden = !matches;
+            if (matches) visible += 1;
+        });
+        if (count) count.textContent = `显示 ${visible} / ${rules.length} 项；筛选只影响显示，保存仍包含全部项目。`;
+    };
+    container.addEventListener('invalid', event => {
+        const rule = event.target.closest('[data-inspection-rule]');
+        if (!rule) return;
+        if (search) search.value = '';
+        if (scope) scope.value = 'all';
+        update();
+        rule.open = true;
+    }, true);
+    container.addEventListener('input', update);
+    container.addEventListener('change', update);
+    container.closest('form')?.addEventListener('modal-draft-restored', update);
+    update();
+}
+
 function bindTaskUI(root) {
     const once = (selector, bind) => root.querySelectorAll(selector).forEach(element => {
         if (boundTaskControls.has(element)) return;
@@ -128,6 +159,7 @@ function bindTaskUI(root) {
         });
     });
     once('[data-target-device-picker]', bindTargetDevicePicker);
+    once('[data-rule-filter]', bindInspectionRuleFilter);
     once('[data-inspection-rule]', (rule) => {
         const method=rule.querySelector('[data-rule-method] select');
         const mode=rule.querySelector('[data-rule-mode] select');

@@ -15,7 +15,7 @@ from django.views.decorators.http import require_POST
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition
 from net.models import Computer, Network_Device, People, SecurityDevice, Server
-from net.data_exchange.inventory_csv import IMPORTABLE_ENTITIES
+from net.data_exchange.inventory_csv import IMPORTABLE_ENTITIES, inventory_import_guide
 from index.alerts.views import alert_modal_context
 from index.inspections.tasks import task_modal_context
 
@@ -37,7 +37,7 @@ ASSET_PAGES = {
         'networks',
         '网络设备',
         'networks',
-        '通过 SSH 执行厂商命令。请在导入模板中填写厂商、SSH 端口、账号和密码。',
+        '默认通过 SNMP + SSH 采集；深信服 AC 使用开放 API。请按导入窗口的字段示例填写。',
     ),
     'servers': AssetPage(
         Server,
@@ -96,6 +96,7 @@ def asset_list(request, kind, *, integration_context=None, creation_form=None, e
         request.GET.get('page'),
     )
     context = {
+        'inventory_import_guide': inventory_import_guide(kind) if is_admin(request.user) else [],
         'item_key': kind,
         'item_name': page.title,
         'table_definition': table_definition,
@@ -113,7 +114,7 @@ def asset_list(request, kind, *, integration_context=None, creation_form=None, e
         'import_enabled': is_admin(request.user) and kind in IMPORTABLE_ENTITIES,
         'personnel_api_import': is_admin(request.user) and kind == 'people',
         'data_source_note': (
-            'PC 数据由 PowerShell 自动采集上报。'
+            'PC 资料由后台从共享目录或 FTP 获取采集日志后自动建立，无需导入设备清单。'
             if kind == 'computers' else ''
         ),
         'open_import_modal': (
@@ -169,6 +170,7 @@ def asset_detail(request, kind, pk):
         'latest_record': latest,
         'latest_url': latest_url,
         'asset': asset,
+        'inventory_import_guide': inventory_import_guide(kind) if is_admin(request.user) else [],
         'item_key': kind,
         'item_name': page.title,
         'detail_fields': detail_fields,

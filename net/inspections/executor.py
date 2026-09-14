@@ -461,7 +461,10 @@ def _persist_collection(target_run_id, worker_id, collection, lease_guard=None, 
                     if asset is not None:
                         from net.devices.inventory import refresh_asset_inventory
 
-                        refresh_asset_inventory(asset, collection.data)
+                        inventory_data = collection.data
+                        if isinstance(asset, Network_Device):
+                            inventory_data = {**collection.data, 'device_info': details.get('device_info', {})}
+                        refresh_asset_inventory(asset, inventory_data)
             if ((lease_guard is not None and lease_guard.is_set())
                     or not _has_live_lease(task, worker_id, timezone.now())):
                 transaction.set_rollback(True)

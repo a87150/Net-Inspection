@@ -138,3 +138,35 @@ test('manual inspection selection changes notify the configuration download cont
         {value: 'b', checked: false, type: 'change'},
     ]);
 });
+
+
+test('rule filters preserve hidden project values and reveal invalid fields', () => {
+    const search = {value: ''};
+    const scope = {value: 'all'};
+    const count = {textContent: ''};
+    const listeners = {};
+    const cpuMode = {value: 'custom'};
+    const memoryMode = {value: 'inherit'};
+    const rules = [
+        {dataset: {ruleLabel: 'CPU'}, querySelector: () => cpuMode, savedValue: 65, disabled: false},
+        {dataset: {ruleLabel: '内存'}, querySelector: () => memoryMode, savedValue: 80, disabled: false},
+    ];
+    const container = {
+        querySelector: selector => ({'[data-rule-search]': search, '[data-rule-scope]': scope, '[data-rule-count]': count}[selector]),
+        querySelectorAll: () => rules,
+        addEventListener: (event, callback) => {listeners[event] = callback;},
+        closest: () => ({addEventListener() {}}),
+    };
+    context.bindInspectionRuleFilter(container);
+    scope.value = 'custom'; listeners.change();
+    assert.deepEqual(rules.map(row => row.hidden), [false, true]);
+    search.value = 'missing'; listeners.input();
+    assert.ok(rules.every(row => row.hidden));
+    assert.deepEqual(rules.map(row => row.savedValue), [65, 80]);
+    assert.ok(rules.every(row => row.disabled === false));
+    assert.match(count.textContent, /0 \/ 2/);
+    assert.equal(typeof listeners.invalid, 'function');
+    listeners.invalid({target: {closest: () => rules[1]}});
+    assert.deepEqual(rules.map(row => row.hidden), [false, false]);
+    assert.equal(rules[1].open, true);
+});

@@ -488,7 +488,8 @@ class ConfigurationTests(TestCase):
     def test_device_selection_is_first_column_with_current_page_bulk_actions(self):
         result = self.client.get('/assets/networks/')
         html = result.content.decode()
-        header = html[html.index('<thead'):html.index('</thead>')]
+        device_table = html[html.index('<div data-table-workspace'):]
+        header = device_table[device_table.index('<thead'):device_table.index('</thead>')]
 
         self.assertContains(result, 'data-device-selection-column')
         self.assertContains(result, 'data-device-select-all')

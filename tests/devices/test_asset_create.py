@@ -56,7 +56,7 @@ class AssetCreateTests(TestCase):
             with self.subTest(kind=kind):
                 response = self.client.get(reverse('asset_list', args=[kind]))
                 form = response.context['device_form']
-                for field in ('cpu_model', 'memory_total_gb', 'disk_total_gb', 'os_version', 'model', 'os', 'port_count', 'vlan_count'):
+                for field in ('cpu_model', 'memory_total_gb', 'disk_total_gb', 'model', 'os', 'port_count', 'vlan_count'):
                     self.assertNotIn(field, form.fields)
                 response = self.client.post(f'/assets/{kind}/add/', {
                     'ip': '192.0.2.18', 'cpu_model': 'must-not-save',

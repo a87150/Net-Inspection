@@ -40,7 +40,7 @@ _ASSET_SPECS = {
     TaskTargetRun.TargetType.NETWORK_DEVICE: (
         Network_Device,
         (
-            'device_name', 'ip', 'device_type', 'model', 'vendor',
+            'device_name', 'ip', 'device_type', 'model', 'vendor', 'os_version',
             'connection_type', 'port',
             'snmp_version', 'snmp_port', 'snmp_security_level',
             'snmp_username', 'snmp_auth_protocol', 'snmp_priv_protocol',

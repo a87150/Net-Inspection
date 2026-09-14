@@ -125,6 +125,9 @@ class SimplePCLogSourceForm(PCLogSourceForm):
         for name in ('share_name', 'remote_root_directory', 'remote_incoming_directory'):
             self.fields[name].widget = forms.HiddenInput()
         self.fields['ftp_passive'].initial = True
+        from index.common.form_examples import apply_field_examples
+        from index.devices.parameter_examples import PC_SOURCE_EXAMPLES
+        apply_field_examples(self, PC_SOURCE_EXAMPLES)
 
     def clean(self):
         cleaned = super().clean()

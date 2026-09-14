@@ -69,6 +69,7 @@ class Network_Device(models.Model):
     device_type = models.CharField(max_length=255, blank=True, null=True)
     model = models.CharField(max_length=255, blank=True, null=True)
     vendor = models.CharField(max_length=255, blank=True, null=True)
+    os_version = models.CharField('系统版本（自动采集）', max_length=1024, blank=True, default='', db_default='')
     connection_type = models.CharField(
         max_length=255,
         choices=CONNECTION_TYPE_CHOICES,

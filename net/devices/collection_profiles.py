@@ -3,6 +3,7 @@ from copy import deepcopy
 import hashlib
 import json
 import math
+import re
 from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -44,6 +45,33 @@ def normalize_vendor(value):
 def normalize_subtype(kind, value):
     value = str(value or '').strip().casefold()
     return TYPE_ALIASES.get(value, value)
+
+
+def normalize_version_match(value):
+    return ' '.join(str(value or '').split()).casefold()
+
+
+def _version_template(leaf, templates, version):
+    text = normalize_version_match(version)
+    candidates = []
+    if leaf and leaf.subtype and text:
+        for row in templates:
+            keyword = normalize_version_match(row.version_match)
+            if (not row.is_enabled or not keyword or row.parent_id != leaf.pk
+                    or row.vendor != leaf.vendor or row.subtype != leaf.subtype):
+                continue
+            # A version 7.1 rule must not also match 17.1 or 7.10.
+            pattern = (r'(?<!\d)' if keyword[0].isdigit() else '') + re.escape(keyword)
+            pattern += r'(?!\d)' if keyword[-1].isdigit() else ''
+            if re.search(pattern, text):
+                candidates.append(row)
+    if candidates:
+        longest = max(len(row.version_match) for row in candidates)
+        winners = [row for row in candidates if len(row.version_match) == longest]
+        if len(winners) == 1:
+            return winners[0], {'status': 'matched', 'keyword': winners[0].version_match, 'version': version}
+        return leaf, {'status': 'ambiguous', 'version': version, 'message': '多个同等精确的系统版本模板匹配，已使用设备类型模板；请细化关键字或为设备指定模板。'}
+    return leaf, {'status': 'unmatched' if text else 'unknown', 'version': version}
 
 
 def merge(base, override):
@@ -226,14 +254,20 @@ def resolve_collection_settings(kind, asset, *, templates=None, bindings=None):
     vendor = '' if kind == 'servers' else normalize_vendor(getattr(asset,'vendor','') or getattr(asset,'manufacturer',''))
     subtype = normalize_subtype(kind, getattr(asset,'server_type','') if kind=='servers' else getattr(asset,'device_type',''))
     templates = list(templates) if templates is not None else list(DeviceCollectionTemplate.objects.filter(kind=kind))
-    rows = {(r.vendor,r.subtype):r for r in templates if r.is_enabled}
+    rows = {(r.vendor,r.subtype):r for r in templates if r.is_enabled and not r.version_match}
     binding = bindings.get(str(asset.pk)) if bindings is not None else DeviceCollectionBinding.objects.filter(kind=kind,target_id=asset.pk).select_related('template').first()
     leaf = rows.get((vendor,subtype)) or rows.get((vendor,''))
+    version_match = None
+    if kind == 'networks':
+        leaf, version_match = _version_template(leaf, templates, getattr(asset, 'os_version', '') or '')
     if binding and binding.template_id and binding.template.is_enabled:
         if binding.template.kind != kind:
             raise ValidationError('设备模板类别不匹配。')
         leaf = binding.template
+        version_match = {'status': 'explicit', 'version': getattr(asset, 'os_version', '') or ''} if kind == 'networks' else None
     result = template_settings(leaf, templates=templates)
+    if version_match is not None:
+        result['_version_match'] = version_match
     if binding:
         result = merge(result,binding.overrides)
         sources = result.setdefault('_rule_sources', {})

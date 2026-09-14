@@ -19,6 +19,15 @@
                     <a href="{% url 'download_inventory_template_format' item_key 'csv' %}" class="btn btn-outline-secondary">下载 CSV 模板</a>
                     <a href="{% url 'download_inventory_template_format' item_key 'xlsx' %}" class="btn btn-outline-secondary">下载 Excel 模板</a>
                 </div>
+                {% if inventory_import_guide %}
+                <details class="mb-3"><summary class="fw-semibold">字段填写示例</summary>
+                    <p class="form-text">以下地址、账号均为演示；CHANGE-ME 必须替换为实际凭据。保留表头，IP 必填且同一文件不能重复；同一 IP 更新已有设备，未提供的列保留原值。硬件资料由巡检自动补充。</p>
+                    <div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>字段</th><th>填写示例</th><th>说明</th></tr></thead><tbody>
+                    {% for row in inventory_import_guide %}<tr><td>{{ row.label }}</td><td><code>{{ row.example }}</code></td><td>{{ row.help }}</td></tr>{% endfor %}
+                    </tbody></table></div>
+                </details>
+                {% if item_key == "monitors" %}<p class="form-text">安防的 SNMP 凭据在导入后通过设备行“巡检设置”填写；厂商/类型共用规则在“配置模板”设置。本表不接受 SNMP 列。</p>{% endif %}
+                {% endif %}
                 <form method="post" enctype="multipart/form-data" action="{% url 'import_inventory' item_key %}">
                     {% csrf_token %}<label class="form-label" for="inventoryFile-{{ item_key }}">CSV 或 Excel 文件</label>
                     <div class="d-flex flex-column flex-md-row gap-3"><input class="form-control" id="inventoryFile-{{ item_key }}" type="file" name="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required><button class="btn btn-dark text-nowrap" type="submit">开始导入</button></div>
