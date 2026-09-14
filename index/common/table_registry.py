@@ -113,6 +113,7 @@ TABLE_DEFINITIONS = {
         'networks', '网络设备', (
             _field('device_name', '设备名称'), _field('ip', 'IP 地址'),
             _field('device_type', '设备类型', 'choice'), _field('vendor', '厂商', 'choice'),
+            _field('os_version', '系统版本', visible=False, default_filter=False),
             _field('model', '型号', default_filter=False),
             _field('connection_type', '连接方式', 'choice', default_filter=False),
             _field('port', '管理端口', 'choice', default_filter=False),
@@ -123,7 +124,7 @@ TABLE_DEFINITIONS = {
             _field('disk_total_gb', '磁盘总量', 'number', default_filter=False),
             _field('port_count', '端口总数', 'number', default_filter=False),
             _field('vlan_count', 'VLAN 数量', 'number', default_filter=False),
-        ), 'device_name', 'asc', ('device_name', 'ip', 'device_type', 'vendor', 'model'), 20,
+        ), 'device_name', 'asc', ('device_name', 'ip', 'device_type', 'vendor', 'model', 'os_version'), 20,
     ),
     'servers': TableDefinition(
         'servers', '服务器', (

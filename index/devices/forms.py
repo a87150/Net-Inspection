@@ -6,7 +6,7 @@ from net.secret_masks import MASKED_SECRET, MaskedSecretInput
 DEVICE_KINDS = {'networks', 'servers', 'monitors'}
 CONNECTION_FIELDS = {'connection_type', 'port', 'username', 'password', 'server_type', 'api_shared_secret',
                      'api_url', 'api_username', 'api_password', 'api_token', 'verify_ssl'}
-BASIC_FIELDS = {'name', 'device_name', 'ip', 'device_type', 'vendor'}
+BASIC_FIELDS = {'name', 'device_name', 'ip', 'device_type', 'vendor', 'os_version'}
 
 
 class NetworkDeviceForm(forms.ModelForm):
@@ -52,6 +52,8 @@ def device_form(kind, data=None, instance=None):
     if data is not None:
         data = data.copy()
         if instance and instance.pk:
+            if 'os_version' in fields and 'os_version' not in data:
+                data['os_version'] = instance.os_version or ''
             for name in secret_fields:
                 if data.get(name) in (None, ''):
                     data[name] = MASKED_SECRET
@@ -103,6 +105,11 @@ def device_form(kind, data=None, instance=None):
         form.fields['api_url'].label = '自定义巡检地址（通常留空）'
         form.fields['api_url'].help_text = '默认访问 http://设备IP:9180/inspection；仅改过脚本端口、路径或使用 HTTPS 时填写。'
         form.fields['api_token'].label = '巡检令牌'
+    from index.common.form_examples import apply_field_examples
+    from net.data_exchange.inventory_guidance import DEVICE_EXAMPLES
+    apply_field_examples(form, DEVICE_EXAMPLES[kind])
+    if 'os_version' in form.fields:
+        form.fields['os_version'].label = '系统版本（可选）'
     return form
 
 
@@ -122,7 +129,7 @@ def preserve_empty_secrets(form):
 def device_form_sections(form):
     if 'server_type' in form.fields:
         return [
-            {'title': '基本信息', 'fields': [form[key] for key in ('name', 'ip', 'server_type')]},
+            {'title': '基本信息', 'fields': [form[key] for key in ('name', 'ip', 'server_type', 'os_version')]},
             {'title': 'Linux SSH 连接', 'server_type': 'linux', 'fields': [form[key] for key in ('port', 'username', 'password')]},
             {'title': 'Windows 巡检脚本', 'server_type': 'windows', 'fields': [form['api_token']]},
             {'title': 'Windows 高级连接设置（可选）', 'server_type': 'windows', 'advanced': True, 'expanded': bool(form['api_url'].value()), 'fields': [form[key] for key in ('api_url', 'verify_ssl')]},

@@ -123,6 +123,8 @@ class CollectionSettingsForm(forms.Form):
                     name=f'snmp_{suffix}_{metric}';self.fields[name]=field;fields.append(self[name])
                 row['snmp_fields'].append(fields)
             self.item_rows.append(row)
+        from .parameter_examples import collection_examples
+        collection_examples(self)
         for field in self.fields.values():
             if not isinstance(field.widget,(forms.HiddenInput,forms.CheckboxSelectMultiple)):
                 field.widget.attrs['class']='form-select' if isinstance(field.widget,forms.Select) else 'form-control'
@@ -244,24 +246,37 @@ def _is_sangfor_api_template(kind, template=None, data=None):
 def collection_templates(request,kind):
     _kind(kind)
     template=get_object_or_404(DeviceCollectionTemplate,pk=request.GET['edit'],kind=kind) if request.GET.get('edit') else None
+    parent_hint = None
+    if kind == 'networks' and not template and request.GET.get('parent'):
+        try:
+            parent_hint = get_object_or_404(DeviceCollectionTemplate, pk=request.GET['parent'], kind=kind, version_match='')
+        except (ValidationError, ValueError):
+            raise Http404 from None
+        if not parent_hint.subtype:
+            raise Http404
     preset={}
     preset_vendor=request.GET.get('builtin','') if kind=='networks' and not template else ''
     if preset_vendor in {'huawei','h3c','ruijie','cisco'}:
         from net.devices.network.templates import builtin_collection_settings
         preset={'commands':builtin_collection_settings(preset_vendor)['commands']}
-    api_mode=_is_sangfor_api_template(kind, template, request.POST if request.method=='POST' else None)
+    scope = request.POST if request.method == 'POST' else {'vendor': parent_hint.vendor, 'subtype': parent_hint.subtype} if parent_hint else {}
+    api_mode=_is_sangfor_api_template(kind, template, scope)
     form=_bind_form(kind,request.POST if request.method=='POST' else None,request.FILES if request.method=='POST' else None,template.settings if template else preset,template.updated_at.isoformat() if template else '',api_mode=api_mode)
     for name,field in {
-        'parent':forms.ModelChoiceField(label='继承父模板',queryset=DeviceCollectionTemplate.objects.filter(kind=kind).exclude(pk=template.pk if template else None),required=False,initial=template.parent_id if template else None,empty_label='无父模板（使用内置默认规则）'),
+        'parent':forms.ModelChoiceField(label='继承父模板',queryset=DeviceCollectionTemplate.objects.filter(kind=kind,version_match='').exclude(pk=template.pk if template else None),required=False,initial=template.parent_id if template else parent_hint.pk if parent_hint else None,empty_label='无父模板（使用内置默认规则）'),
         'name':forms.CharField(label='模板名称',max_length=150,initial=template.name if template else ''),
-        'vendor':forms.ChoiceField(label='适用厂商',required=kind!='servers' and not (template and not template.vendor),choices=vendor_choices(kind,template.vendor if template else ''),initial=template.vendor if template else preset_vendor),
-        'subtype':forms.ChoiceField(label='适用设备类型',required=False,choices=[('', '基础模板（未限定类型）'),*SUBTYPES[kind][1:]],initial=template.subtype if template else ''),
+        'vendor':forms.ChoiceField(label='适用厂商',required=kind!='servers' and not (template and not template.vendor),choices=vendor_choices(kind,template.vendor if template else ''),initial=template.vendor if template else parent_hint.vendor if parent_hint else preset_vendor),
+        'subtype':forms.ChoiceField(label='适用设备类型',required=False,choices=[('', '基础模板（未限定类型）'),*SUBTYPES[kind][1:]],initial=template.subtype if template else parent_hint.subtype if parent_hint else ''),
         'is_enabled':forms.BooleanField(label='启用模板',required=False,initial=template.is_enabled if template else True),
     }.items():
         field.widget.attrs['class']='form-check-input' if isinstance(field.widget,forms.CheckboxInput) else 'form-select' if isinstance(field.widget,forms.Select) else 'form-control'
         form.fields[name]=field
+    if kind == 'networks':
+        form.fields['version_match'] = forms.CharField(label='版本匹配关键字', max_length=96, required=False,
+            initial=template.version_match if template else '', widget=forms.TextInput(attrs={'class': 'form-control'}),
+            help_text='留空为基础 / 类型模板；填写后为第三层版本模板，必须继承对应类型模板。例如 V200R019、7.1.070。不区分大小写，不使用正则或通配符。')
     if kind=='servers':form.fields.pop('vendor',None)
-    parent_id=request.POST.get('parent') if request.method=='POST' else (template.parent_id if template else None)
+    parent_id=request.POST.get('parent') if request.method=='POST' else (template.parent_id if template else parent_hint.pk if parent_hint else None)
     try: parent=DeviceCollectionTemplate.objects.filter(kind=kind,pk=parent_id).first() if parent_id else None
     except (ValidationError,ValueError): parent=None
     form.inherited_settings=template_settings(parent)
@@ -286,14 +301,22 @@ def collection_templates(request,kind):
                 else:row=DeviceCollectionTemplate(kind=kind)
                 for key in ('name','subtype','is_enabled'):setattr(row,key,form.cleaned_data[key])
                 row.vendor='' if kind=='servers' else form.cleaned_data['vendor']
+                row.version_match=form.cleaned_data.get('version_match', '')
                 row.parent=form.cleaned_data['parent']
                 row.settings=value;row.full_clean();row.save();template=row;saved=True
                 form.fields['version'].initial=row.updated_at.isoformat()
                 form.data=form.data.copy();form.data['version']=row.updated_at.isoformat()
         except (ValidationError,IntegrityError) as exc:
             form.add_error(None,'；'.join(exc.messages) if isinstance(exc,ValidationError) else '该适用范围已有模板，请修改原模板。')
+    from index.common.form_examples import apply_field_examples
+    from net.data_exchange.inventory_guidance import SNMP_EXAMPLES
+    apply_field_examples(form, {
+        'name': ('Linux 基础巡检' if kind == 'servers' else '门禁基础巡检' if kind == 'monitors' else '华为交换机巡检', '按用途命名模板。'),
+        'version_match': ('V200R019', '匹配设备版本中的关键字，留空不按版本细分。'),
+        **{key: SNMP_EXAMPLES[key] for key in SECRET_FIELDS},
+    })
     _describe_inheritance(form)
-    return render(request,'devices/collection_settings.html',{'inherited_json':json.dumps(form.inherited_settings,ensure_ascii=False,indent=2),'form':form,'kind':kind,'title':PROJECT_LABELS[kind]+'模板','templates':DeviceCollectionTemplate.objects.filter(kind=kind).select_related('parent').order_by('vendor','subtype'),'template':template,'saved':saved,'template_mode':True,'api_mode':api_mode,'snmp_fields':[form[k] for k in ('protocol',*SNMP_FIELDS) if k in form.fields],'advanced_fields':[form[k] for k in ('snmp_oids','mib_modules','mib_file') if k in form.fields]})
+    return render(request,'devices/collection_settings.html',{'inherited_json':json.dumps(form.inherited_settings,ensure_ascii=False,indent=2),'form':form,'kind':kind,'title':PROJECT_LABELS[kind]+'模板','templates':DeviceCollectionTemplate.objects.filter(kind=kind).select_related('parent').order_by('vendor','subtype','version_match'),'template':template,'saved':saved,'template_mode':True,'api_mode':api_mode,'snmp_fields':[form[k] for k in ('protocol',*SNMP_FIELDS) if k in form.fields],'advanced_fields':[form[k] for k in ('snmp_oids','mib_modules','mib_file') if k in form.fields]})
 
 @admin_required
 def device_collection_settings(request,kind,pk):
@@ -301,7 +324,7 @@ def device_collection_settings(request,kind,pk):
     binding=DeviceCollectionBinding.objects.filter(kind=kind,target_id=pk).first()
     api_mode=kind == 'networks' and getattr(asset, 'connection_type', '') == 'sangfor_api'
     form=_bind_form(kind,request.POST if request.method=='POST' else None,request.FILES if request.method=='POST' else None,binding.overrides if binding else {},binding.updated_at.isoformat() if binding else '',api_mode=api_mode)
-    form.fields['template']=forms.ModelChoiceField(label='继承模板',queryset=DeviceCollectionTemplate.objects.filter(kind=kind,is_enabled=True),required=False,initial=binding.template_id if binding else None,empty_label='自动按操作系统匹配' if kind=='servers' else '自动按厂商和设备类型匹配')
+    form.fields['template']=forms.ModelChoiceField(label='继承模板',queryset=DeviceCollectionTemplate.objects.filter(kind=kind,is_enabled=True),required=False,initial=binding.template_id if binding else None,empty_label='自动按操作系统匹配' if kind=='servers' else '自动按厂商、设备类型和系统版本匹配' if kind=='networks' else '自动按厂商和设备类型匹配')
     form.fields['template'].widget.attrs['class']='form-select'
     selected_id=request.POST.get('template') if request.method=='POST' else (binding.template_id if binding else None)
     try:selected=DeviceCollectionTemplate.objects.filter(kind=kind,is_enabled=True,pk=selected_id).first() if selected_id else None
@@ -340,10 +363,17 @@ def device_collection_settings(request,kind,pk):
                 for key in SECRET_FIELDS:form.data.pop(key,None)
         except (ValidationError,IntegrityError) as exc:
             form.add_error(None,'；'.join(exc.messages) if isinstance(exc,ValidationError) else '设备设置保存冲突，请刷新后重试。')
+    from index.common.form_examples import apply_field_examples
+    from net.data_exchange.inventory_guidance import SNMP_EXAMPLES
+    apply_field_examples(form, {
+        'name': ('Linux 基础巡检' if kind == 'servers' else '门禁基础巡检' if kind == 'monitors' else '华为交换机巡检', '按用途命名模板。'),
+        'version_match': ('V200R019', '匹配设备版本中的关键字，留空不按版本细分。'),
+        **{key: SNMP_EXAMPLES[key] for key in SECRET_FIELDS},
+    })
     _describe_inheritance(form)
     effective=resolve_collection_settings(kind,asset)
     effective.pop('_credentials_identity',None)
-    return render(request,'devices/collection_settings.html',{'form':form,'kind':kind,'asset':asset,'title':str(asset)+' · 巡检设置','saved':saved,'api_mode':api_mode,'effective_json':json.dumps(effective,ensure_ascii=False,indent=2),'advanced_fields':[form[k] for k in ('snmp_oids','mib_modules','mib_file') if k in form.fields],'snmp_fields':[form[k] for k in ('protocol',*SNMP_FIELDS,*SECRET_FIELDS) if k in form.fields]})
+    return render(request,'devices/collection_settings.html',{'form':form,'kind':kind,'asset':asset,'version_match_info':effective.get('_version_match',{}),'title':str(asset)+' · 巡检设置','saved':saved,'api_mode':api_mode,'effective_json':json.dumps(effective,ensure_ascii=False,indent=2),'advanced_fields':[form[k] for k in ('snmp_oids','mib_modules','mib_file') if k in form.fields],'snmp_fields':[form[k] for k in ('protocol',*SNMP_FIELDS,*SECRET_FIELDS) if k in form.fields]})
 
 
 def _describe_inheritance(form):

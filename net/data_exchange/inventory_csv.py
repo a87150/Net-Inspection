@@ -142,7 +142,7 @@ ENTITY_SPECS = {
             ('设备名称', 'device_name', _text), ('IP地址', 'ip', _ip),
             ('设备类型', 'device_type', _text), ('厂商', 'vendor', _text),
             ('连接方式', 'connection_type', _text), ('深信服 API地址', 'api_url', _text), ('深信服共享密钥', 'api_shared_secret', _text), ('校验HTTPS证书', 'verify_ssl', _boolean), ('SSH端口', 'port', _integer),
-            ('型号', 'model', _text), ('CPU 型号', 'cpu_model', _text),
+            ('系统版本', 'os_version', _text), ('型号', 'model', _text), ('CPU 型号', 'cpu_model', _text),
             ('内存总量', 'memory_total_gb', _gib), ('磁盘总量', 'disk_total_gb', _gib),
             ('端口总数', 'port_count', _non_negative_integer),
             ('VLAN 数量', 'vlan_count', _non_negative_integer),
@@ -168,34 +168,28 @@ ENTITY_SPECS = {
             'port', 'username', 'password', 'snmp_version', 'snmp_port',
             'snmp_community', 'snmp_username', 'snmp_security_level',
             'snmp_auth_protocol', 'snmp_auth_password', 'snmp_priv_protocol',
-            'snmp_priv_password', 'snmp_context_name', 'snmp_retries',
+            'snmp_priv_password', 'snmp_context_name', 'snmp_retries', 'os_version',
         ),
         'template_samples': (
             (
                 '核心交换机', '192.0.2.10', '交换机', 'H3C', 'ssh', '', '', '是', '22',
-                'readonly', 'CHANGE-ME', 'v2c', '161', '', '', 'noAuthNoPriv', '', '', '', '', '', '1',
+                'readonly', 'CHANGE-ME', 'v2c', '161', '', '', 'noAuthNoPriv', '', '', '', '', '', '1', '7.1.070',
             ),
             (
-                '接入交换机', '192.0.2.11', '交换机', 'Example', 'snmp', '', '', '是', '22',
-                '', '', 'v2c', '161', 'CHANGE-ME', '', 'noAuthNoPriv', '', '', '', '', '', '1',
+                '接入交换机', '192.0.2.11', '交换机', 'huawei', 'snmp', '', '', '是', '22',
+                '', '', 'v2c', '161', 'CHANGE-ME', '', 'noAuthNoPriv', '', '', '', '', '', '1', '',
             ),
             (
-                '汇聚交换机', '192.0.2.12', '交换机', 'Example', 'hybrid', '', '', '是', '22',
-                'readonly', 'CHANGE-ME', 'v3', '161', '', 'snmp-reader', 'authPriv', 'sha256', 'CHANGE-ME', 'aes128', 'CHANGE-ME', '', '1',
+                '汇聚交换机', '192.0.2.12', '交换机', 'cisco', 'hybrid', '', '', '是', '22',
+                'readonly', 'CHANGE-ME', 'v3', '161', '', 'snmp-reader', 'authPriv', 'sha256', 'CHANGE-ME', 'aes128', 'CHANGE-ME', '', '1', '',
             ),
             (
                 '深信服上网行为管理', '192.0.2.13', 'ac_gateway', 'sangfor', 'sangfor_api',
                 'https://192.0.2.13:443', 'CHANGE-ME', '是', '22',
-                '', '', 'v2c', '161', '', '', 'noAuthNoPriv', '', '', '', '', '', '1',
+                '', '', 'v2c', '161', '', '', 'noAuthNoPriv', '', '', '', '', '', '1', '',
             ),
         ),
-        'sample': (
-            '核心交换机', '192.0.2.10', '交换机', 'H3C', 'hybrid', '22',
-            'S5560X', 'Intel Atom', '4', '8', '48', '10', 'readonly',
-            'DEMO-ONLY-NOT-A-SECRET', 'v3', '161', '', 'snmp-reader',
-            'authPriv', 'sha256', 'DEMO-ONLY-NOT-A-SECRET', 'aes128',
-            'DEMO-ONLY-NOT-A-SECRET', 'demo-context', '1',
-        ),
+
     },
     'servers': {
         'name': '服务器',
@@ -219,16 +213,16 @@ ENTITY_SPECS = {
         'secret_fields': {'password', 'api_token'},
         'template_fields': (
             'name', 'ip', 'server_type', 'port', 'username', 'password',
-            'api_url', 'api_token', 'verify_ssl',
+            'api_url', 'api_token', 'verify_ssl', 'os_version',
         ),
         'template_samples': (
             (
                 'Linux 应用服务器', '192.0.2.20', 'Linux', '22', 'readonly',
-                'CHANGE-ME', '', '', '是',
+                'CHANGE-ME', '', '', '是', '24.04',
             ),
             (
-                'Windows 应用服务器', '192.0.2.21', 'Windows', '9180', '', '',
-                'https://192.0.2.21:9180/inspection', 'CHANGE-ME', '是',
+                'Windows 应用服务器', '192.0.2.21', 'Windows', '22', '', '',
+                'http://192.0.2.21:9180/inspection', 'CHANGE-ME', '是', '10.0.20348',
             ),
         ),
         'sample': ('应用服务器', '192.0.2.20', 'Linux', 'Ubuntu 24.04', '22', 'readonly', 'CHANGE-ME', '', '', '否', '24.04', '', '2026-01-15', 'Example', 'Rack Server', 'DEMO-SRV-001', 'x86_64', 'Xeon', '32', '8', '16', '512'),
@@ -257,7 +251,7 @@ ENTITY_SPECS = {
                 'https://192.0.2.30/api/status', 'readonly', 'CHANGE-ME', '', '是',
             ),
             (
-                '机房门禁', '192.0.2.31', '门禁', 'Example',
+                '机房门禁', '192.0.2.31', '门禁', 'generic',
                 'https://192.0.2.31/api/status', '', '', 'CHANGE-ME', '是',
             ),
         ),
@@ -283,6 +277,17 @@ def _template_columns(spec):
 
 def _template_samples(spec):
     return spec.get('template_samples') or (spec['sample'],)
+
+
+def inventory_import_guide(entity):
+    from .inventory_guidance import DEVICE_EXAMPLES
+    examples = DEVICE_EXAMPLES.get(entity, {})
+    if not examples:
+        return []
+    return [
+        {'label': label, 'example': examples[field][0], 'help': examples[field][1]}
+        for label, field, _ in _template_columns(get_spec(entity)) if field in examples
+    ]
 
 
 def export_csv(entity, template_only=False):

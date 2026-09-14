@@ -11,20 +11,28 @@ class DeviceCollectionTemplate(models.Model):
     kind = models.CharField(max_length=16, choices=KINDS)
     vendor = models.CharField(max_length=64, blank=True, default='')
     subtype = models.CharField(max_length=32, blank=True, default='')
+    version_match = models.CharField('版本匹配关键字', max_length=96, blank=True, default='', db_default='')
     parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.PROTECT, related_name="children")
     settings = models.JSONField(default=dict, blank=True)
     is_enabled = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
-        constraints = [models.UniqueConstraint(fields=['kind','vendor','subtype'], name='net_collection_template_scope')]
+        constraints = [models.UniqueConstraint(fields=['kind','vendor','subtype','version_match'], name='net_collection_template_scope_v2')]
     def clean(self):
-        from net.devices.collection_profiles import normalize_vendor, normalize_subtype, validate_settings
+        from net.devices.collection_profiles import normalize_vendor, normalize_subtype, normalize_version_match, validate_settings
+        self.version_match = normalize_version_match(self.version_match)
         self.vendor = normalize_vendor(self.vendor)
         self.subtype = normalize_subtype(self.kind, self.subtype)
+        if self.version_match and (self.kind != 'networks' or not self.vendor or not self.subtype or not self.parent_id):
+            raise ValidationError({'version_match': '版本模板仅适用于网络设备，需选择厂商、设备类型和对应的类型父模板。'})
         if self.kind == 'servers' and self.vendor:
             raise ValidationError({'vendor':'服务器模板只按操作系统分类，不配置厂商。'})
         if self.parent_id:
             parent = self.parent
+            if parent.version_match:
+                raise ValidationError({'parent': '系统版本模板是最后一层模板，不能继续作为父模板。'})
+            if self.version_match and (not parent.subtype or parent.subtype != self.subtype):
+                raise ValidationError({'parent': '系统版本模板必须继承同厂商、同设备类型的类型模板。'})
             if parent.kind != self.kind or parent.vendor != self.vendor or (parent.subtype and parent.subtype != self.subtype):
                 raise ValidationError({'parent': '父模板必须属于同一类别、厂商，且为基础模板或相同设备类型。'})
             seen = {self.pk}
@@ -37,6 +45,8 @@ class DeviceCollectionTemplate(models.Model):
             raise ValidationError('已有子模板，不能修改成不同类别或厂商。')
         if self.pk and self.subtype and self.children.exclude(subtype=self.subtype).exists():
             raise ValidationError('已有其他类型子模板，不能把基础模板改为特定设备类型。')
+        if self.version_match and self.pk and self.children.exists():
+            raise ValidationError('已有子模板，不能改为系统版本模板。')
         validate_settings(self.kind, self.settings)
     def __str__(self):
         return self.name

@@ -13,6 +13,7 @@ _SOURCE_FIELD_ALLOWLIST = {
         'memory_total_gb', 'disk_total_gb',
     ),
     Network_Device: (
+        'os_version',
         'cpu_model', 'memory_total_gb', 'disk_total_gb',
         'port_count', 'vlan_count',
     ),
@@ -136,6 +137,14 @@ def refresh_asset_inventory(asset, normalized_result) -> set[str]:
         source.update(_linux_static_inventory(normalized_result))
     if isinstance(asset, Server) and str(getattr(asset, 'server_type', '')).lower() == 'windows':
         source.update(_windows_static_inventory(normalized_result))
+    if isinstance(asset, Network_Device):
+        info = normalized_result.get('device_info')
+        if isinstance(info, dict) and info.get('status', 'success') == 'success':
+            for key in ('version', 'os_version', 'version_output', 'description'):
+                value = info.get(key)
+                if isinstance(value, str) and value.strip():
+                    source['os_version'] = ' '.join(value.split())[:1024]
+                    break
     changed_fields = set()
     for field_name in allowed_fields:
         value = _value_for_field(field_name, source.get(field_name))

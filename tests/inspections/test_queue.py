@@ -89,6 +89,8 @@ class EnqueueTaskTests(TestCase):
             'device_type': None,
             'model': None,
             'vendor': None,
+            'os_version': '',
+            'collection_settings': {'_version_match': {'status': 'unknown', 'version': ''}},
             'connection_type': 'hybrid',
             'port': 22,
             'snmp_version': 'v3',

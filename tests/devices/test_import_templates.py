@@ -17,11 +17,11 @@ EXPECTED_TEMPLATE_HEADERS = {
         '深信服共享密钥', '校验HTTPS证书', 'SSH端口',
         'SSH账号', 'SSH密码', 'SNMP 版本', 'SNMP 端口', 'SNMP Community',
         'SNMPv3 用户名', '安全级别', '认证协议', '认证密码', '加密协议', '加密密码',
-        '上下文', '重试次数',
+        '上下文', '重试次数', '系统版本',
     ],
     'servers': [
         '服务器名称', 'IP地址', '服务器类型', '管理端口', 'SSH账号', 'SSH密码',
-        'Windows API地址', 'API令牌', '校验HTTPS证书',
+        'Windows API地址', 'API令牌', '校验HTTPS证书', '系统版本',
     ],
     'monitors': [
         '设备名称', 'IP地址', '设备类型', '厂商', 'API地址', 'API账号',

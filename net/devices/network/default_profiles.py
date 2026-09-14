@@ -112,12 +112,12 @@ def create_default_network_templates():
     created=[]
     with transaction.atomic():
         for vendor,label in BRANDS.items():
-            base=DeviceCollectionTemplate.objects.filter(kind='networks',vendor=vendor,subtype='').first()
+            base=DeviceCollectionTemplate.objects.filter(kind='networks',vendor=vendor,subtype='',version_match='').first()
             if base is None:
                 base=DeviceCollectionTemplate(name=label+' 基础模板',kind='networks',vendor=vendor,settings=candidates[vendor])
                 base.full_clean();base.save();created.append(base)
             for subtype,title in TYPES.items():
-                if DeviceCollectionTemplate.objects.filter(kind='networks',vendor=vendor,subtype=subtype).exists():continue
+                if DeviceCollectionTemplate.objects.filter(kind='networks',vendor=vendor,subtype=subtype,version_match='').exists():continue
                 row=DeviceCollectionTemplate(name=label+' '+title,kind='networks',vendor=vendor,subtype=subtype,parent=base,settings=type_settings(subtype))
                 row.full_clean();row.save();created.append(row)
     return created

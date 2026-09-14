@@ -5,7 +5,7 @@
    {% csrf_token %}
    <div class="modal-header"><h2 class="modal-title fs-5" id="{% if device_modal_mode == 'edit' %}editDeviceModalLabel{% else %}addDeviceModalLabel{% endif %}">{% if device_modal_mode == 'edit' %}修改{{ item_name }}{% else %}添加{{ item_name }}{% endif %}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
    <div class="modal-body modal-body--scroll">
-    <p class="text-secondary small">填写设备名称、IP 和巡检连接参数即可。硬件与系统信息由巡检采集并自动回填。保存不会立即巡检；编辑时密码留空会保留已保存的值，校验失败后密码不会回显。</p>
+    <p class="text-secondary small">填写设备名称、IP 和巡检连接参数即可。硬件信息由巡检自动回填；系统版本如有输入框可选填，后续成功采集会更新。字段中的示例仅作格式参考。保存不会立即巡检；编辑时密码留空会保留已保存的值，校验失败后密码不会回显。</p>
     {% if device_form.non_field_errors %}<div class="alert alert-danger">{{ device_form.non_field_errors }}</div>{% endif %}
     {% for section in device_form_sections %}
     <section class="config-section-card mb-3"{% if section.snmp_group %} data-snmp-group="{{ section.snmp_group }}"{% endif %}{% if section.server_type %} data-server-fields="{{ section.server_type }}"{% endif %}{% if section.network_fields %} data-network-fields="{{ section.network_fields }}"{% endif %}>{% if section.advanced %}<details{% if section.expanded %} open{% endif %}><summary class="h6">{{ section.title }}</summary>{% else %}<h3 class="h6">{{ section.title }}</h3>{% endif %}{% if section.server_type == "windows" and not section.advanced %}<p class="small text-secondary">默认使用设备 IP 和 9180 端口。令牌与 Windows 巡检脚本一致，无需 SSH 账号密码。</p>{% endif %}<div class="row g-3">
