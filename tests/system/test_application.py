@@ -494,9 +494,10 @@ class InventoryImportExportTests(TestCase):
         server = Server.objects.get(ip='192.0.2.60')
         self.assertEqual(server.username, 'inspector')
         self.assertEqual(server.password, 'secret')
-        exported = self.client.get(
+        from tests import response_body
+        exported = response_body(self.client.get(
             reverse('table_export', args=['servers']),
-        ).content.decode('utf-8-sig')
+        )).decode('utf-8-sig')
         self.assertNotIn('secret', exported)
 
     def test_reported_computers_do_not_offer_or_accept_manual_import(self):
@@ -1814,7 +1815,7 @@ class RecordWorkspaceTests(TestCase):
         self.assertContains(inspection_response, 'href="/inspection/detail/"')
         self.assertTrue(inspection_document.find('span', **{'data-status': 'abnormal'}))
         self.assertContains(error_response, 'href="/error/detail/"')
-        self.assertContains(error_response, '<span class="badge text-bg-danger">磁盘异常</span>', html=True)
+        self.assertContains(error_response, '<span class="badge status-badge text-bg-danger" data-status="abnormal">磁盘异常</span>', html=True)
 
     def test_dedicated_computer_record_pages_have_unique_registered_workspaces(self):
         inspection = create_computer_analysis('PC-DEDICATED', user_name='测试用户')
@@ -1835,9 +1836,9 @@ class RecordWorkspaceTests(TestCase):
         ))
         detail_url = reverse('computer_analysis_detail', args=[inspection.pk])
         self.assertContains(inspection_response, f'href="{detail_url}"')
-        self.assertContains(inspection_response, '<span class="badge text-bg-warning">警告</span>', html=True)
+        self.assertContains(inspection_response, '<span class="badge status-badge text-bg-warning" data-status="warning">警告</span>', html=True)
         self.assertContains(error_response, f'href="{detail_url}"')
-        self.assertContains(error_response, f'<span class="badge text-bg-danger">{error.error_type}</span>', html=True)
+        self.assertContains(error_response, f'<span class="badge status-badge text-bg-danger" data-status="abnormal">{error.error_type}</span>', html=True)
 
     def test_dedicated_computer_record_pages_use_registered_page_size(self):
         inspections = [

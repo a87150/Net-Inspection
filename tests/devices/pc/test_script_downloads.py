@@ -1,3 +1,6 @@
+import io
+import zipfile
+from pathlib import Path
 """Authorization and configuration contracts for collector downloads."""
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -33,9 +36,16 @@ class PcScriptDownloadTests(TestCase):
             self.assertIn('no-store', response['Cache-Control'].split(', '))
             self.assertEqual(response['X-Content-Type-Options'], 'nosniff')
             self.assertIn('attachment;', response['Content-Disposition'])
-            self.assertTrue(response.content.startswith(b'\xef\xbb\xbf'))
+            self.assertEqual(response['Content-Type'], 'application/zip')
+            with zipfile.ZipFile(io.BytesIO(response.content)) as package:
+                self.assertEqual(set(package.namelist()), {'PCCollector.exe', 'Install-PCCollector.ps1', 'License.html', 'README.txt'})
+                self.assertTrue(package.read('PCCollector.exe').startswith(b'MZ'))
+                self.assertIn(b'New-ScheduledTaskTrigger', package.read('Install-PCCollector.ps1'))
+                from net.scripts.generator import generate_pc_script
+                content = generate_pc_script(self.profile, self.source, 'windows').as_bytes()
+            self.assertTrue(content.startswith(b'\xef\xbb\xbf'))
             for forbidden in (b'http', b'password', b'/api/', b'worker-secret'):
-                self.assertNotIn(forbidden, response.content)
+                self.assertNotIn(forbidden, content)
 
     def test_missing_saved_source_or_platform_path_is_actionable(self):
         self.client.force_login(self.user)

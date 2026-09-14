@@ -3,6 +3,7 @@ import uuid
 from datetime import date, time, timedelta
 
 from django.core.management.base import BaseCommand, CommandError
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
@@ -431,6 +432,8 @@ class Command(BaseCommand):
         self._seed_alerts(anchor, servers)
         self._seed_sources(anchor, people)
         self._seed_tasks(anchor, networks)
+        from net.devices.configuration_backups import list_configuration_backups
+        backup_count = sum(list_configuration_backups(device).exists() for device in networks)
 
         self.stdout.write(self.style.SUCCESS(
             '演示数据已就绪：'
@@ -439,7 +442,7 @@ class Command(BaseCommand):
             f'安防设备 {len(monitors)}、域账号 {len(domain_accounts)}、'
             f'域计算机 {len(domain_computers)}、域分组 {len(domain_groups)}、'
             '目录来源 2、计划 2（停用）、'
-            '任务 10（含域操作 2）、分析 4、告警事件 2、投递结果 3、可下载配置 3。',
+            f'任务 10（含域操作 2）、分析 4、告警事件 2、投递结果 3、可下载配置 {backup_count}。',
         ))
 
     def _preflight_fixed_uuid_ownership(self):
@@ -1093,6 +1096,11 @@ class Command(BaseCommand):
                 },
                 event_time,
             )
+            if index in (3, 5) and settings.DEVICE_BACKUP_ENCRYPTION_KEY:
+                from net.devices.configuration_backups import store_configuration_backup
+                store_configuration_backup(
+                    devices[ip], inspection.details['config_info'], captured_at=event_time,
+                )
             if error_type:
                 _upsert_error(
                     Error_Network_Device,

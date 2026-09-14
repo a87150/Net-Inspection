@@ -1,3 +1,5 @@
+from tests import response_body
+
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -55,8 +57,8 @@ class IssueSettingsTests(RemoteRuleFixture, TestCase):
         self.assertTemplateUsed(response, 'inspections/results_table.html')
         exported = self.client.get(reverse('table_export', args=['computer_inspections']), {'task': str(task.pk)})
         self.assertEqual(exported.status_code, 200)
-        self.assertIn('硬件', exported.content.decode('utf-8-sig'))
-        self.assertNotIn('系统更新', exported.content.decode('utf-8-sig'))
+        self.assertIn('硬件', response_body(exported).decode('utf-8-sig'))
+        self.assertNotIn('系统更新', response_body(exported).decode('utf-8-sig'))
         invalid = self.client.get(reverse('table_export', args=['computer_inspections']), {'task': 'invalid'})
         self.assertEqual(invalid.status_code, 404)
 
@@ -64,6 +66,8 @@ class IssueSettingsTests(RemoteRuleFixture, TestCase):
         from net.models import IssueSeverityPolicy, ComputerAnalysisProfile
         from net.inspections.queue import enqueue_task, claim_next_task
         from net.devices.pc.executor import execute_computer_target
+        from net.models import People
+        People.objects.create(employee_id='tester', name='Test User')
         policy = IssueSeverityPolicy.objects.create(overrides={'domain_trust': 'info'})
         profile = ComputerAnalysisProfile.objects.create(name='frozen-policy', analysis_items=['domain_trust'])
         self.payloads['windows']['当前与域服务器通讯情况'] = '失败'

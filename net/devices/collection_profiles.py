@@ -25,12 +25,12 @@ def vendor_choices(kind, current=''):
     return choices
 
 SUBTYPES = {
- 'networks': [('','全部类型'),('router','路由器'),('switch','交换机'),('ac','无线控制器 AC'),('ap','无线 AP'),('firewall','防火墙'),('other','其他')],
+ 'networks': [('','全部类型'),('router','路由器'),('switch','交换机'),('ac','无线控制器 AC'),('ac_gateway','上网行为管理 / 安全网关 AC'),('ap','无线 AP'),('firewall','防火墙'),('other','其他')],
  'monitors': [('','全部类型'),('nvr','录像机'),('camera','监控摄像头'),('access','门禁'),('other','其他')],
  'servers': [('','全部类型'),('linux','Linux'),('windows','Windows')],
 }
 ALIASES = {'华为':'huawei','华三':'h3c','锐捷':'ruijie','深信服':'sangfor','思科':'cisco','海康':'hikvision','海康威视':'hikvision','大华':'dahua','其它':'generic','宇视':'uniview','天地伟业':'tiandy','中控':'zkteco','中控智慧':'zkteco'}
-TYPE_ALIASES = {'路由':'router','路由器':'router','交换':'switch','交换机':'switch','无线控制器':'ac','无线ap':'ap','防火墙':'firewall','录像机':'nvr','dvr':'nvr','监控':'camera','摄像头':'camera','摄像机':'camera','门禁':'access','门禁控制器':'access'}
+TYPE_ALIASES = {'路由':'router','路由器':'router','交换':'switch','交换机':'switch','无线控制器':'ac','上网行为管理':'ac_gateway','安全网关':'ac_gateway','无线ap':'ap','防火墙':'firewall','录像机':'nvr','dvr':'nvr','监控':'camera','摄像头':'camera','摄像机':'camera','门禁':'access','门禁控制器':'access'}
 SECRET_FIELDS = ('snmp_community','snmp_auth_password','snmp_priv_password')
 SNMP_FIELDS = ('snmp_version','snmp_port','snmp_security_level','snmp_username','snmp_auth_protocol','snmp_priv_protocol','snmp_context_name','snmp_retries')
 NETWORK_KEYS = {'version','vendor','subtype','commands','parsers','snmp_oids','mib_modules','snmp_transforms'}
@@ -156,9 +156,16 @@ def decrypt_credentials(binding):
 def supported_collection_items(kind, asset, effective):
     from net.inspections.selection import NETWORK_FIELDS, NETWORK_FUNCTION_ITEMS, LINUX_FIELDS, WINDOWS_FIELDS, SECURITY_FIELDS
     if kind == 'networks':
+        is_sangfor_api = getattr(asset, 'connection_type', '') == 'sangfor_api'
         allowed = set(NETWORK_FIELDS) | {'traffic'}
-        # Function items require an explicit executable template, not just a type label.
-        allowed.update(item for item in NETWORK_FUNCTION_ITEMS if effective.get('commands',{}).get(item) and effective.get('parsers',{}).get(item))
+        if is_sangfor_api:
+            # The documented Open API is the complete capability surface.  Keep
+            # item_enabled overrides effective instead of returning early here.
+            from net.devices.network.sangfor import DEFAULT_ITEMS
+            allowed = set(DEFAULT_ITEMS)
+        else:
+            # Function items require an explicit executable template, not just a type label.
+            allowed.update(item for item in NETWORK_FUNCTION_ITEMS if effective.get('commands',{}).get(item) and effective.get('parsers',{}).get(item))
         if getattr(asset, 'connection_type', '') == 'snmp':
             allowed.discard('logs')
     elif kind == 'servers':
@@ -174,11 +181,11 @@ def supported_collection_items(kind, asset, effective):
         elif normalize_subtype(kind, getattr(asset, 'device_type', '')) == 'access':
             allowed -= {'channel_status', 'storage_status'}
     for item,method in effective.get('item_methods',{}).items():
-        if method!='auto' and method in dict(collection_method_choices(kind,item)):
+        if (kind != 'networks' or not is_sangfor_api) and method!='auto' and method in dict(collection_method_choices(kind,item)):
             allowed.add(item)
     allowed -= {item for item,enabled in effective.get('item_enabled',{}).items() if not enabled}
-    if kind == 'networks':
-        allowed.add('config_info')  # Daily backups remain independent.
+    if kind == 'networks' and getattr(asset, 'connection_type', '') != 'sangfor_api':
+        allowed.add('config_info')  # Daily backups remain independent for SSH/SNMP devices.
     return sorted(allowed)
 
 

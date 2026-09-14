@@ -133,11 +133,11 @@ class CollectionProfilesTests(TestCase):
         response=self.client.post(url,values)
         self.assertContains(response,'37')
         self.assertIn('usage_percent',response.context['form'].preview_result)
-        self.assertFalse(DeviceCollectionTemplate.objects.exists())
+        self.assertFalse(DeviceCollectionTemplate.objects.filter(name='CPU template').exists())
         values.pop('preview_item')
         response=self.client.post(url,values)
         self.assertContains(response,'已保存')
-        settings=DeviceCollectionTemplate.objects.get().settings
+        settings=DeviceCollectionTemplate.objects.get(name='CPU template').settings
         self.assertEqual(settings['commands']['cpu'],['display custom-cpu'])
         self.assertNotIn('sample_cpu',settings)
         self.assertEqual(settings['parsers']['cpu']['engine'],'regex')
@@ -224,7 +224,7 @@ class CollectionProfilesTests(TestCase):
         login_admin(self.client)
         response=self.client.post(reverse('collection_templates',args=['networks']),{'name':'基础','vendor':'huawei','is_enabled':'on','method_cpu':'snmp','snmp_oid_cpu':'1.3.6.1.4.1.999.1.0','snmp_scale_cpu':'0.01','threshold_cpu':'60','level_cpu':'critical'})
         self.assertContains(response,'已保存')
-        parent=DeviceCollectionTemplate.objects.get()
+        parent=DeviceCollectionTemplate.objects.get(name='基础', vendor='huawei')
         DeviceCollectionTemplate.objects.create(name='交换机',kind='networks',vendor='huawei',subtype='switch',parent=parent)
         profile=InspectionProfile.objects.create(name='CPU',device_type='network_device',selected_items=['cpu'])
         enqueue_task(profile,[str(self.device.pk)],TaskRun.Source.MANUAL)
@@ -258,7 +258,7 @@ class CollectionProfilesTests(TestCase):
         response=self.client.post(reverse('collection_templates',args=['networks']),{'parent':str(parent.pk),'preview_inheritance':'1','rule_mode_cpu':'inherit'})
         self.assertContains(response,'80')
         self.assertNotContains(response,'data-config-saved')
-        self.assertEqual(DeviceCollectionTemplate.objects.count(),1)
+        self.assertEqual(DeviceCollectionTemplate.objects.filter(name='base').count(),1)
         self.assertEqual(response.context['form']['threshold_cpu'].value(),None)
 
     def test_device_inspection_settings_opens_in_list_modal(self):
@@ -297,3 +297,29 @@ class CollectionProfilesTests(TestCase):
         self.assertEqual(next(section for section in sections if section.get('snmp_group')=='v2c')['fields'][0].name,'snmp_community')
         self.assertEqual(device_form('networks',instance=self.device)['connection_type'].value(),'ssh')
         self.assertTrue(next(section for section in sections if any(field.name=='snmp_port' for field in section['fields']))['advanced'])
+
+    def test_network_form_limits_connection_fields_and_preserves_inactive_values(self):
+        from index.devices.forms import device_form, device_form_sections
+        api = device_form('networks', {
+            'ip': '192.0.2.77', 'vendor': 'sangfor', 'device_type': 'ac_gateway',
+            'connection_type': 'sangfor_api', 'api_url': 'https://ac.example.invalid:443',
+            'api_shared_secret': 'secret', 'snmp_port': '70000',
+        })
+        self.assertTrue(api.is_valid(), api.errors)
+        sections = device_form_sections(api)
+        self.assertEqual(
+            {section.get('network_fields') for section in sections if section.get('network_fields')},
+            {'sangfor_api', 'standard'},
+        )
+        existing = Network_Device.objects.create(
+            ip='192.0.2.78', connection_type='ssh', username='reader', password='secret',
+            api_url='https://saved.example.invalid', api_shared_secret='saved-api-secret', verify_ssl=False,
+        )
+        standard = device_form('networks', {
+            'ip': existing.ip, 'connection_type': 'ssh', 'username': 'next-reader',
+            'api_url': 'not a URL', 'api_shared_secret': 'untrusted', 'verify_ssl': 'on',
+        }, instance=existing)
+        self.assertTrue(standard.is_valid(), standard.errors)
+        self.assertEqual(standard.cleaned_data['api_url'], existing.api_url)
+        self.assertEqual(standard.cleaned_data['api_shared_secret'], existing.api_shared_secret)
+        self.assertFalse(standard.cleaned_data['verify_ssl'])

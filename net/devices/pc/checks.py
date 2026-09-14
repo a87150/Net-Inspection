@@ -281,8 +281,9 @@ def _measurement(value, kind):
 
 
 def _reference_person_name(value):
-    """Ignore numeric disambiguation suffixes for reference checks only."""
-    return re.sub(r'\d+$', '', str(value or '').strip()).rstrip()
+    """Ignore name descriptions and numeric disambiguation suffixes."""
+    from net.devices.pc.matching import personnel_name
+    return re.sub(r'\d+$', '', personnel_name(value)).rstrip()
 
 
 def check_remote_item(item, payload, issues, rules):

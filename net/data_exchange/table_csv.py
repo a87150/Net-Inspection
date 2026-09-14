@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from datetime import date, datetime
 from urllib.parse import quote
 
-from django.http import HttpResponse
+from django.http import StreamingHttpResponse
 from django.utils import timezone
 
 
@@ -53,26 +53,29 @@ def _spreadsheet_safe(value):
     return value
 
 
+class _CsvBuffer:
+    def write(self, value):
+        return value
+
+
 def export_filtered_csv(request, definition, queryset, filename):
     from index.common.table_query import apply_table_filters
 
     records, _state = apply_table_filters(
-        request,
-        queryset,
-        definition,
-        include_legacy_status=False,
+        request, queryset, definition, include_legacy_status=False,
     )
-    response = HttpResponse(content_type='text/csv; charset=utf-8')
-    encoded_name = quote(filename)
-    response['Content-Disposition'] = (
-        f"attachment; filename*=UTF-8''{encoded_name}"
-    )
-    response.write('\ufeff')
-    writer = csv.writer(response, lineterminator='\r\n')
-    writer.writerow([field.label for field in definition.fields])
-    for record in records:
-        writer.writerow([
-            _spreadsheet_safe(_display_value(record, field))
-            for field in definition.fields
-        ])
+
+    def rows():
+        yield '\ufeff'
+        writer = csv.writer(_CsvBuffer(), lineterminator='\r\n')
+        yield writer.writerow([field.label for field in definition.fields])
+        iterator = records.iterator(chunk_size=1000) if hasattr(records, 'iterator') else iter(records)
+        for record in iterator:
+            yield writer.writerow([
+                _spreadsheet_safe(_display_value(record, field))
+                for field in definition.fields
+            ])
+
+    response = StreamingHttpResponse(rows(), content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(filename)}"
     return response

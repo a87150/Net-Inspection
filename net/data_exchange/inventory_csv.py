@@ -141,7 +141,7 @@ ENTITY_SPECS = {
         'columns': [
             ('设备名称', 'device_name', _text), ('IP地址', 'ip', _ip),
             ('设备类型', 'device_type', _text), ('厂商', 'vendor', _text),
-            ('连接方式', 'connection_type', _text), ('SSH端口', 'port', _integer),
+            ('连接方式', 'connection_type', _text), ('深信服 API地址', 'api_url', _text), ('深信服共享密钥', 'api_shared_secret', _text), ('校验HTTPS证书', 'verify_ssl', _boolean), ('SSH端口', 'port', _integer),
             ('型号', 'model', _text), ('CPU 型号', 'cpu_model', _text),
             ('内存总量', 'memory_total_gb', _gib), ('磁盘总量', 'disk_total_gb', _gib),
             ('端口总数', 'port_count', _non_negative_integer),
@@ -160,11 +160,11 @@ ENTITY_SPECS = {
             ('重试次数', 'snmp_retries', _non_negative_integer),
         ],
         'secret_fields': {
-            'password', 'snmp_community', 'snmp_auth_password',
+            'password', 'api_shared_secret', 'snmp_community', 'snmp_auth_password',
             'snmp_priv_password',
         },
         'template_fields': (
-            'device_name', 'ip', 'device_type', 'vendor', 'connection_type',
+            'device_name', 'ip', 'device_type', 'vendor', 'connection_type', 'api_url', 'api_shared_secret', 'verify_ssl',
             'port', 'username', 'password', 'snmp_version', 'snmp_port',
             'snmp_community', 'snmp_username', 'snmp_security_level',
             'snmp_auth_protocol', 'snmp_auth_password', 'snmp_priv_protocol',
@@ -172,19 +172,21 @@ ENTITY_SPECS = {
         ),
         'template_samples': (
             (
-                '核心交换机', '192.0.2.10', '交换机', 'H3C', 'ssh', '22',
-                'readonly', 'CHANGE-ME', 'v2c', '161', '', '',
-                'noAuthNoPriv', '', '', '', '', '', '1',
+                '核心交换机', '192.0.2.10', '交换机', 'H3C', 'ssh', '', '', '是', '22',
+                'readonly', 'CHANGE-ME', 'v2c', '161', '', '', 'noAuthNoPriv', '', '', '', '', '', '1',
             ),
             (
-                '接入交换机', '192.0.2.11', '交换机', 'Example', 'snmp', '22',
-                '', '', 'v2c', '161', 'CHANGE-ME', '', 'noAuthNoPriv',
-                '', '', '', '', '', '1',
+                '接入交换机', '192.0.2.11', '交换机', 'Example', 'snmp', '', '', '是', '22',
+                '', '', 'v2c', '161', 'CHANGE-ME', '', 'noAuthNoPriv', '', '', '', '', '', '1',
             ),
             (
-                '汇聚交换机', '192.0.2.12', '交换机', 'Example', 'hybrid', '22',
-                'readonly', 'CHANGE-ME', 'v3', '161', '', 'snmp-reader',
-                'authPriv', 'sha256', 'CHANGE-ME', 'aes128', 'CHANGE-ME', '', '1',
+                '汇聚交换机', '192.0.2.12', '交换机', 'Example', 'hybrid', '', '', '是', '22',
+                'readonly', 'CHANGE-ME', 'v3', '161', '', 'snmp-reader', 'authPriv', 'sha256', 'CHANGE-ME', 'aes128', 'CHANGE-ME', '', '1',
+            ),
+            (
+                '深信服上网行为管理', '192.0.2.13', 'ac_gateway', 'sangfor', 'sangfor_api',
+                'https://192.0.2.13:443', 'CHANGE-ME', '是', '22',
+                '', '', 'v2c', '161', '', '', 'noAuthNoPriv', '', '', '', '', '', '1',
             ),
         ),
         'sample': (

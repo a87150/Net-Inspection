@@ -141,7 +141,12 @@ class RemoteFullStoryTests(TransactionTestCase):
                 self.assertTrue(worker.run_once())
             self.assertEqual(ComputerAnalysis.objects.count(), 1)
             self.assertTrue(Error_Computer.objects.exists())
-            self.assertEqual(AlertEvent.objects.count(), 1)
+            analysis = ComputerAnalysis.objects.get()
+            analysis_task = analysis.task_target.task
+            self.assertEqual(AlertEvent.objects.filter(event_type='abnormal', task=analysis_task).count(), 1)
+            self.assertEqual(AlertEvent.objects.filter(event_type='summary', task=analysis_task).count(), 1)
+            self.assertFalse(AlertEvent.objects.filter(task__task_type='computer_fetch').exists())
+            self.assertFalse(AlertEvent.objects.exclude(event_type='summary').filter(deliveries__isnull=False).exists())
             self.assertTrue(all(p.startswith('processed/') for p in connector.paths))
             self.assertEqual(list(Path(folder).iterdir()), [])
 

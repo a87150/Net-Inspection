@@ -7,7 +7,7 @@ from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from net.models import IssueSeverityPolicy
-from net.inspections.issues import PROJECT_RULES, PROJECT_LABELS, METRIC_DEFAULTS
+from net.inspections.issues import PROJECT_RULES, PROJECT_LABELS, METRIC_DEFAULTS, PC_THRESHOLD_FIELDS
 from net.devices.pc.severity import LEVELS
 
 
@@ -21,6 +21,7 @@ class SeveritySettingsForm(forms.Form):
         self.rules = PROJECT_RULES[project]
         self.project = project
         self.saved_thresholds = thresholds or {}
+        self.threshold_keys = set(PC_THRESHOLD_FIELDS if project == 'computers' else METRIC_DEFAULTS.get(project, {}))
         self.rule_rows = []
         for key, (category, label) in self.rules.items():
             for prefix in ('rule', 'missing'):
@@ -30,15 +31,22 @@ class SeveritySettingsForm(forms.Form):
                     label=f'{label} {"问题等级" if prefix == "rule" else "数据不足等级"}',
                     required=False, choices=[('', '系统默认'), *LEVELS.items()],
                     initial=(overrides or {}).get(rule_key, ''), widget=forms.Select(attrs={'class': 'form-select'}))
-            threshold = None
-            if key in METRIC_DEFAULTS.get(project, {}):
-                name = f'threshold_{key}'
-                self.fields[name] = forms.FloatField(required=False, min_value=0.01,
-                    max_value=200 if key == 'temperature' else 100,
-                    initial=self.saved_thresholds.get(key, METRIC_DEFAULTS[project][key]),
-                    widget=forms.NumberInput(attrs={'class': 'form-control', 'step': 'any', 'aria-label': f'{label}阈值'}))
-                threshold = self[name]
-            self.rule_rows.append((category, label, self[f'rule_{key}'], self[f'missing_{key}'], threshold))
+            thresholds_for_row = []
+            specs = ([(name, title, maximum) for name, (rule, title, maximum) in PC_THRESHOLD_FIELDS.items() if rule == key]
+                     if project == 'computers' else [(key, '温度（℃）' if key == 'temperature' else f'{label}（%）',
+                                                      200 if key == 'temperature' else 100)]
+                     if key in METRIC_DEFAULTS.get(project, {}) else [])
+            for threshold_key, title, maximum in specs:
+                name = f'threshold_{threshold_key}'
+                is_pc = project == 'computers'
+                field_type = forms.IntegerField if is_pc else forms.FloatField
+                self.fields[name] = field_type(required=False, min_value=1 if is_pc else 0.01,
+                    max_value=maximum, label=title,
+                    initial=self.saved_thresholds.get(threshold_key, None if is_pc else METRIC_DEFAULTS[project][threshold_key]),
+                    widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '1' if is_pc else 'any',
+                                                   'placeholder': '使用分析配置' if is_pc else '系统默认'}))
+                thresholds_for_row.append(self[name])
+            self.rule_rows.append((category, label, self[f'rule_{key}'], self[f'missing_{key}'], thresholds_for_row))
 
     def clean(self):
         cleaned = super().clean()
@@ -53,7 +61,7 @@ class SeveritySettingsForm(forms.Form):
         return {key: self.cleaned_data.get(f'threshold_{key}') if f'threshold_{key}' in self.data else value
                 for key, value in self.saved_thresholds.items()
                 if f'threshold_{key}' not in self.data or self.cleaned_data.get(f'threshold_{key}') is not None} | {
-                    key: self.cleaned_data[f'threshold_{key}'] for key in METRIC_DEFAULTS.get(self.project, {})
+                    key: self.cleaned_data[f'threshold_{key}'] for key in self.threshold_keys
                     if self.cleaned_data.get(f'threshold_{key}') is not None}
 
     def overrides(self):

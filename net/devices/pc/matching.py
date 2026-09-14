@@ -3,6 +3,11 @@ from collections.abc import Mapping
 from types import SimpleNamespace
 
 
+def personnel_name(value):
+    """Ignore the description after the first ASCII hyphen, preserving source data."""
+    return str(value or '').split('-', 1)[0].strip()
+
+
 def personnel_snapshot():
     from net.models import People
     return [{**row, 'id': str(row['id'])} for row in People.objects.order_by('employee_id', 'pk').values(
@@ -15,13 +20,13 @@ def match_person(system, roster):
     if identifier:
         matches = [p for p in roster if str(p['employee_id']).casefold() == identifier.casefold()]
     else:
-        name = str(system.get('当前登录用户名') or system.get('姓名') or '').strip()
+        name = personnel_name(system.get('当前登录用户姓名') or system.get('当前登录用户名') or system.get('姓名'))
         if not name:
             # Computer names are an established employee-number convention here.
             identifier = normalize_login(system.get('计算机名'))
             matches = [p for p in roster if identifier and str(p['employee_id']).casefold() == identifier.casefold()]
         else:
-            matches = [p for p in roster if str(p.get('name') or '').strip() == name]
+            matches = [p for p in roster if personnel_name(p.get('name')) == name]
         if not identifier and not name:
             return None, 'missing'
     return (matches[0], 'matched') if len(matches) == 1 else (None, 'ambiguous' if matches else 'unmatched')

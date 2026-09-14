@@ -144,7 +144,7 @@ def task_modal_context(request, project_kind, *, allow_target_selection=False, t
         if not default_profile:
             defaults = ComputerAnalysisProfile()
             for name in ('minimum_windows_release', 'defender_update_max_days', 'defender_scan_max_days',
-                         'patch_max_days', 'uptime_max_hours', 'cpu_max_percent', 'memory_max_percent',
+                         'patch_max_days', 'uptime_max_hours', 'cpu_max_percent', 'memory_max_percent', 'disk_max_percent',
                          'cpu_temperature_max_celsius'):
                 pc_analysis_form.initial[name] = getattr(defaults, name)
         if not pc_analysis_form.initial.get('interval_value'):

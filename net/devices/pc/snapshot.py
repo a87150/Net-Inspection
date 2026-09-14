@@ -60,6 +60,8 @@ def _non_negative_integer(value: object):
 
 def _gib(value: object):
     text = _text(value).lower().replace(' ', '')
+    if re.fullmatch(r'[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?(?:tib|tb|gib|gb)?', text):
+        text = text.replace(',', '')
     if not text:
         return None
     match = re.fullmatch(r'([0-9]+(?:\.[0-9]+)?)(tib|tb|gib|gb)?', text)
@@ -84,6 +86,7 @@ def extract_computer_snapshot(
     system_info: object,
     network_info: object,
     computer_info: object,
+    disk_payload=None,
 ) -> dict[str, object]:
     system = system_info if isinstance(system_info, dict) else {}
     adapters = network_info if isinstance(network_info, list) else []
@@ -116,6 +119,9 @@ def extract_computer_snapshot(
         'memory_total_gb': _gib(_first_text(hardware, '当前内存容量', '内存总量', 'memory_total_gb')),
         'disk_total_gb': _gib(_first_text(hardware, '磁盘总量', '磁盘总容量', 'disk_total_gb')),
     }
+    if inventory['disk_total_gb'] is None and isinstance(disk_payload, dict):
+        from net.devices.pc.disk import total_gib
+        inventory['disk_total_gb'] = total_gib(disk_payload)
     snapshot.update({key: value for key, value in inventory.items() if not _is_blank(value)})
     return snapshot
 

@@ -28,14 +28,24 @@ class CollectionSettingsForm(forms.Form):
     mib_modules = forms.JSONField(label='已导入 MIB 符号映射 JSON',required=False,widget=forms.Textarea(attrs={'rows':4}))
     mib_file = forms.FileField(label='导入厂商 MIB 文件（ASN.1 文本）',required=False)
 
-    def __init__(self,*args,kind,saved=None,version='',**kwargs):
-        saved=saved or {}; initial={**saved,'version':version,
+    def __init__(self,*args,kind,saved=None,version='',api_mode=False,**kwargs):
+        saved=saved or {}; self.api_mode=api_mode; initial={**saved,'version':version,
             'item_mode':'custom' if 'selected_items' in saved else 'inherit',
             'alert_mode':'custom' if 'alert_items' in saved else 'inherit'}
         super().__init__(*args,initial=initial,**kwargs)
         self.kind=kind;self.saved=saved;self.rule_rows=[]
+        self.rule_keys=list(PROJECT_RULES[kind])
+        if self.api_mode:
+            from net.devices.network.sangfor import DEFAULT_ITEMS
+            self.rule_keys=list(DEFAULT_ITEMS)
+            for name in ('commands','parsers','snmp_oids','mib_modules','mib_file'):self.fields.pop(name,None)
+        elif kind == 'networks':
+            from net.inspections.selection import NETWORK_FIELDS, NETWORK_FUNCTION_ITEMS
+            supported = set(NETWORK_FIELDS) | set(NETWORK_FUNCTION_ITEMS) | {'traffic', 'inspection_collection'}
+            self.rule_keys = [key for key in self.rule_keys if key in supported]
         for name in ('item_mode','selected_items','alert_mode','alert_items'):self.fields.pop(name,None)
-        for key,(_,label) in PROJECT_RULES[kind].items():
+        for key in self.rule_keys:
+            _,label=PROJECT_RULES[kind][key]
             names=[]
             for prefix,rule in [('level',key),('missing','missing.'+key)]:
                 name=f'{prefix}_{key}';names.append(name)
@@ -47,9 +57,10 @@ class CollectionSettingsForm(forms.Form):
                 threshold=self[name]
             self.rule_rows.append((label,self[names[0]],self[names[1]],threshold))
         self.command_rows=[]
-        if kind=='networks':
+        if kind=='networks' and not self.api_mode:
             from net.devices.network.templates import TEMPLATE_ITEMS
-            for key, (_, label) in PROJECT_RULES[kind].items():
+            for key in self.rule_keys:
+                _,label=PROJECT_RULES[kind][key]
                 if key not in TEMPLATE_ITEMS:continue
                 parser=saved.get('parsers',{}).get(key,{})
                 definitions={
@@ -78,12 +89,13 @@ class CollectionSettingsForm(forms.Form):
                 self.fields[key]=field
         self.item_rows=[]
         command_rows={row['key']:row for row in self.command_rows}
-        for key,(_,label) in PROJECT_RULES[kind].items():
-            methods=collection_method_choices(kind,key)
+        for key in self.rule_keys:
+            _,label=PROJECT_RULES[kind][key]
+            methods=[] if self.api_mode else collection_method_choices(kind,key)
             if kind=='networks' and saved.get('item_methods',{}).get(key)!='auto':methods=[choice for choice in methods if choice[0]!='auto']
             row={'key':key,'label':label,'level':self['level_'+key],'missing':self['missing_'+key],
                 'threshold':self['threshold_'+key] if 'threshold_'+key in self.fields else None,
-                'ssh':command_rows.get(key),'snmp_fields':[]}
+                'ssh':command_rows.get(key),'snmp_fields':[], 'api': self._api_description(key) if self.api_mode else None}
             state='enabled_'+key
             self.fields[state]=forms.ChoiceField(label='项目适用性', required=False, choices=[('','继承'),('yes','适用'),('no','不适用')], initial=('yes' if saved['item_enabled'][key] else 'no') if key in saved.get('item_enabled',{}) else '')
             row['enabled']=self[state]
@@ -99,7 +111,7 @@ class CollectionSettingsForm(forms.Form):
                 name='method_'+key
                 self.fields[name]=forms.ChoiceField(label='巡检方式',choices=[('','继承父模板 / 内置方式'),*methods],required=False,initial=saved.get('item_methods',{}).get(key,''))
                 row['method']=self[name]
-            metrics={'cpu':['cpu'],'memory':['memory_total','memory_used'],'temperature':['temperature']}.get(key,[]) if kind=='networks' else []
+            metrics={'cpu':['cpu'],'memory':['memory_total','memory_used'],'temperature':['temperature']}.get(key,[]) if kind=='networks' and not self.api_mode else []
             for metric in metrics:
                 transform=saved.get('snmp_transforms',{}).get(metric,{})
                 fields=[]
@@ -115,10 +127,22 @@ class CollectionSettingsForm(forms.Form):
             if not isinstance(field.widget,(forms.HiddenInput,forms.CheckboxSelectMultiple)):
                 field.widget.attrs['class']='form-select' if isinstance(field.widget,forms.Select) else 'form-control'
 
+    def _api_description(self, key):
+        from net.devices.network.sangfor import STATUS_ENDPOINTS
+        endpoint, _converter = STATUS_ENDPOINTS[key]
+        fields = {
+            'device_info':'data → version', 'online_users':'data → count', 'sessions':'data → count',
+            'inside_libraries':'data → libraries', 'log_statistics':'data → JSON 对象',
+            'cpu':'data → usage_percent', 'memory':'data → usage_percent',
+            'disk_usage':'data → usage_percent', 'system_time':'data → value',
+            'bandwidth_usage':'data → usage_percent', 'throughput':'data → send / recv / unit',
+        }
+        return {'endpoint':'/v1/status/'+endpoint, 'fields':fields[key], 'method':'POST（_method=GET）' if key=='throughput' else 'GET'}
+
     def settings_value(self):
         d=self.cleaned_data;result={}
         result['severity_overrides']={key if prefix=='level' else 'missing.'+key:d[prefix+'_'+key] for key in PROJECT_RULES[self.kind] for prefix in ('level','missing') if d.get(prefix+'_'+key)}
-        result['thresholds']={key:d['threshold_'+key] for key in METRIC_DEFAULTS.get(self.kind,{}) if d.get('threshold_'+key) is not None}
+        result['thresholds']={key:d['threshold_'+key] for key in self.rule_keys if key in METRIC_DEFAULTS.get(self.kind,{}) and d.get('threshold_'+key) is not None}
         for key in ('commands','parsers','snmp_oids','mib_modules'):
             if d.get(key): result[key]=d[key]
         result['item_enabled']={row['key']:d['enabled_'+row['key']]=='yes' for row in self.item_rows if d.get('enabled_'+row['key'])}
@@ -202,8 +226,19 @@ def _preview_template(form, item):
     form.preview_item=item
 
 
-def _bind_form(kind,data,files,saved,version):
-    return CollectionSettingsForm(data,files,kind=kind,saved=saved,version=version)
+def _bind_form(kind,data,files,saved,version,*,api_mode=False):
+    return CollectionSettingsForm(data,files,kind=kind,saved=saved,version=version,api_mode=api_mode)
+
+
+def _is_sangfor_api_template(kind, template=None, data=None):
+    if kind != 'networks':
+        return False
+    values = data or {}
+    vendor = getattr(template, 'vendor', None) if template else values.get('vendor')
+    subtype = getattr(template, 'subtype', None) if template else values.get('subtype')
+    # The vendor-wide base is the parent of the API gateway template, so it
+    # must expose the same API-only contract as its ac_gateway child.
+    return vendor == 'sangfor' and subtype in {'', 'ac_gateway'}
 
 @admin_required
 def collection_templates(request,kind):
@@ -214,7 +249,8 @@ def collection_templates(request,kind):
     if preset_vendor in {'huawei','h3c','ruijie','cisco'}:
         from net.devices.network.templates import builtin_collection_settings
         preset={'commands':builtin_collection_settings(preset_vendor)['commands']}
-    form=_bind_form(kind,request.POST if request.method=='POST' else None,request.FILES if request.method=='POST' else None,template.settings if template else preset,template.updated_at.isoformat() if template else '')
+    api_mode=_is_sangfor_api_template(kind, template, request.POST if request.method=='POST' else None)
+    form=_bind_form(kind,request.POST if request.method=='POST' else None,request.FILES if request.method=='POST' else None,template.settings if template else preset,template.updated_at.isoformat() if template else '',api_mode=api_mode)
     for name,field in {
         'parent':forms.ModelChoiceField(label='继承父模板',queryset=DeviceCollectionTemplate.objects.filter(kind=kind).exclude(pk=template.pk if template else None),required=False,initial=template.parent_id if template else None,empty_label='无父模板（使用内置默认规则）'),
         'name':forms.CharField(label='模板名称',max_length=150,initial=template.name if template else ''),
@@ -257,13 +293,14 @@ def collection_templates(request,kind):
         except (ValidationError,IntegrityError) as exc:
             form.add_error(None,'；'.join(exc.messages) if isinstance(exc,ValidationError) else '该适用范围已有模板，请修改原模板。')
     _describe_inheritance(form)
-    return render(request,'devices/collection_settings.html',{'inherited_json':json.dumps(form.inherited_settings,ensure_ascii=False,indent=2),'form':form,'kind':kind,'title':PROJECT_LABELS[kind]+'模板','templates':DeviceCollectionTemplate.objects.filter(kind=kind).select_related('parent').order_by('vendor','subtype'),'template':template,'saved':saved,'template_mode':True,'snmp_fields':[form[k] for k in ('protocol',*SNMP_FIELDS) if k in form.fields],'advanced_fields':[form[k] for k in ('snmp_oids','mib_modules','mib_file') if k in form.fields]})
+    return render(request,'devices/collection_settings.html',{'inherited_json':json.dumps(form.inherited_settings,ensure_ascii=False,indent=2),'form':form,'kind':kind,'title':PROJECT_LABELS[kind]+'模板','templates':DeviceCollectionTemplate.objects.filter(kind=kind).select_related('parent').order_by('vendor','subtype'),'template':template,'saved':saved,'template_mode':True,'api_mode':api_mode,'snmp_fields':[form[k] for k in ('protocol',*SNMP_FIELDS) if k in form.fields],'advanced_fields':[form[k] for k in ('snmp_oids','mib_modules','mib_file') if k in form.fields]})
 
 @admin_required
 def device_collection_settings(request,kind,pk):
     _kind(kind);asset=get_object_or_404(MODELS[kind],pk=pk)
     binding=DeviceCollectionBinding.objects.filter(kind=kind,target_id=pk).first()
-    form=_bind_form(kind,request.POST if request.method=='POST' else None,request.FILES if request.method=='POST' else None,binding.overrides if binding else {},binding.updated_at.isoformat() if binding else '')
+    api_mode=kind == 'networks' and getattr(asset, 'connection_type', '') == 'sangfor_api'
+    form=_bind_form(kind,request.POST if request.method=='POST' else None,request.FILES if request.method=='POST' else None,binding.overrides if binding else {},binding.updated_at.isoformat() if binding else '',api_mode=api_mode)
     form.fields['template']=forms.ModelChoiceField(label='继承模板',queryset=DeviceCollectionTemplate.objects.filter(kind=kind,is_enabled=True),required=False,initial=binding.template_id if binding else None,empty_label='自动按操作系统匹配' if kind=='servers' else '自动按厂商和设备类型匹配')
     form.fields['template'].widget.attrs['class']='form-select'
     selected_id=request.POST.get('template') if request.method=='POST' else (binding.template_id if binding else None)
@@ -306,7 +343,7 @@ def device_collection_settings(request,kind,pk):
     _describe_inheritance(form)
     effective=resolve_collection_settings(kind,asset)
     effective.pop('_credentials_identity',None)
-    return render(request,'devices/collection_settings.html',{'form':form,'kind':kind,'asset':asset,'title':str(asset)+' · 巡检设置','saved':saved,'effective_json':json.dumps(effective,ensure_ascii=False,indent=2),'advanced_fields':[form[k] for k in ('snmp_oids','mib_modules','mib_file') if k in form.fields],'snmp_fields':[form[k] for k in ('protocol',*SNMP_FIELDS,*SECRET_FIELDS) if k in form.fields]})
+    return render(request,'devices/collection_settings.html',{'form':form,'kind':kind,'asset':asset,'title':str(asset)+' · 巡检设置','saved':saved,'api_mode':api_mode,'effective_json':json.dumps(effective,ensure_ascii=False,indent=2),'advanced_fields':[form[k] for k in ('snmp_oids','mib_modules','mib_file') if k in form.fields],'snmp_fields':[form[k] for k in ('protocol',*SNMP_FIELDS,*SECRET_FIELDS) if k in form.fields]})
 
 
 def _describe_inheritance(form):

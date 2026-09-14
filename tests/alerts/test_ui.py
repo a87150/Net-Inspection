@@ -6,6 +6,8 @@ real for disabled channels so the view cannot accidentally initiate a request.
 
 from unittest.mock import patch
 import csv
+
+from tests import response_body
 from urllib.parse import parse_qs, urlsplit
 
 from django.test import Client, TestCase
@@ -280,7 +282,7 @@ class AlertUiTests(TestCase):
             'filter_delivery_outcome': 'sent',
         })
         self.assertEqual(exported.status_code, 200)
-        self.assertIn('任务总结', exported.content.decode('utf-8-sig'))
+        self.assertIn('任务总结', response_body(exported).decode('utf-8-sig'))
 
     def test_delivery_filter_and_csv_use_channel_rows_independent_of_event_status(self):
         """Aggregate status or a non-distinct delivery join must not change event membership."""
@@ -305,7 +307,7 @@ class AlertUiTests(TestCase):
                 self.assertContains(response, f'primary disabled channel: {label}')
                 self.assertContains(response, f'secondary email channel: {label}')
                 exported = self.client.get(reverse('table_export', args=['alert_events']), params)
-                rows = list(csv.reader(StringIO(exported.content.decode('utf-8-sig'))))
+                rows = list(csv.reader(StringIO(response_body(exported).decode('utf-8-sig'))))
                 self.assertEqual(len(rows), 2)
                 outcomes = rows[1][rows[0].index('渠道结果')]
                 self.assertIn(f'primary disabled channel: {label}', outcomes)

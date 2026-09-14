@@ -1,9 +1,11 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, time, timedelta
 from threading import Barrier
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from django.db import connections
+from django.core.exceptions import ValidationError
 from django.test import TestCase, TransactionTestCase
 
 from tests.devices.pc.helpers import create_log_file
@@ -17,7 +19,7 @@ from net.models import (
     TaskRun,
 )
 from net.inspections.queue import enqueue_task
-from net.inspections.schedules import enqueue_due_schedules, next_run_at
+from net.inspections.schedules import _record_schedule_failure, enqueue_due_schedules, next_run_at
 
 
 SHANGHAI = ZoneInfo('Asia/Shanghai')
@@ -214,6 +216,70 @@ class ScheduleEnqueueTests(TestCase):
         self.assertEqual(schedule.next_run_at, self.now - timedelta(seconds=1))
         self.assertEqual(TaskRun.objects.count(), 1)
         self.assertEqual(TaskRun.objects.get().pk, existing.pk)
+
+    def test_active_task_block_is_persisted_for_operators(self):
+        schedule = self._interval_schedule()
+        enqueue_task(self.profile, [self.first_server.pk, self.second_server.pk], TaskRun.Source.MANUAL)
+
+        self.assertEqual(enqueue_due_schedules(now=self.now), [])
+
+        schedule.refresh_from_db()
+        self.assertEqual(schedule.last_schedule_status, 'blocked')
+        self.assertEqual(schedule.last_schedule_error, '等待活动任务结束。')
+        self.assertEqual(schedule.last_schedule_attempt_at, self.now)
+
+    def test_stale_failure_cannot_overwrite_a_newer_successful_attempt(self):
+        schedule = self._interval_schedule()
+        Schedule.objects.filter(pk=schedule.pk).update(
+            last_schedule_attempt_at=self.now,
+            last_schedule_status='queued',
+            last_schedule_error='',
+            last_enqueued_at=self.now,
+            next_run_at=self.now + timedelta(minutes=30),
+        )
+
+        _record_schedule_failure(schedule, self.now, ValidationError('password=secret-value'))
+
+        schedule.refresh_from_db()
+        self.assertEqual(schedule.last_schedule_status, 'queued')
+        self.assertEqual(schedule.last_schedule_error, '')
+
+    def test_failure_diagnostic_never_scans_global_configuration_secrets(self):
+        schedule = self._interval_schedule()
+
+        with patch('net.infrastructure.sanitization.configuration_secrets', side_effect=AssertionError):
+            _record_schedule_failure(schedule, self.now, ValidationError('无效目标范围'))
+
+        schedule.refresh_from_db()
+        self.assertEqual(schedule.last_schedule_status, 'error')
+
+    def test_persisted_schedule_failure_redacts_secret_shaped_validation_text(self):
+        schedule = self._interval_schedule()
+
+        _record_schedule_failure(schedule, self.now, ValidationError('password=secret-value'))
+
+        schedule.refresh_from_db()
+        self.assertEqual(schedule.last_schedule_status, 'error')
+        self.assertNotIn('secret-value', schedule.last_schedule_error)
+        self.assertIn('[REDACTED]', schedule.last_schedule_error)
+
+    def test_invalid_due_schedule_persists_a_configuration_error(self):
+        invalid_profile = InspectionProfile.objects.create(
+            name='无效持久化配置', device_type=InspectionProfile.DeviceType.SERVER,
+            selected_items=['cpu'], target_selector={'mode': 'selected', 'target_ids': ['bad-id']},
+        )
+        schedule = Schedule.objects.create(
+            inspection_profile=invalid_profile, kind=Schedule.Kind.INTERVAL,
+            interval_value=30, interval_unit=Schedule.IntervalUnit.MINUTES,
+            next_run_at=self.now - timedelta(seconds=1),
+        )
+
+        self.assertEqual(enqueue_due_schedules(now=self.now), [])
+
+        schedule.refresh_from_db()
+        self.assertEqual(schedule.last_schedule_status, 'error')
+        self.assertTrue(schedule.last_schedule_error)
+        self.assertEqual(schedule.last_schedule_attempt_at, self.now)
 
     def test_invalid_due_schedule_does_not_stop_other_due_schedules(self):
         valid_schedule = self._interval_schedule()

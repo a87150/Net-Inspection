@@ -40,6 +40,7 @@ class Network_Device(models.Model):
         ('snmp', 'SNMP'),
         ('hybrid', 'SSH + SNMP'),
         ('auto', '自动'),
+        ('sangfor_api', '深信服 AC Open API'),
     ]
     SNMP_VERSION_CHOICES = [('v2c', 'SNMPv2c'), ('v3', 'SNMPv3')]
     SNMP_SECURITY_LEVEL_CHOICES = [
@@ -103,6 +104,9 @@ class Network_Device(models.Model):
     snmp_retries = models.PositiveSmallIntegerField(
         default=1, validators=[MinValueValidator(0), MaxValueValidator(5)]
     )
+    api_url = models.URLField(max_length=500, blank=True, default='')
+    api_shared_secret = models.CharField(max_length=500, blank=True, default='')
+    verify_ssl = models.BooleanField(default=True)
     cpu_model = models.CharField(max_length=255, blank=True, null=True)
     memory_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     disk_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
@@ -111,7 +115,7 @@ class Network_Device(models.Model):
 
     @property
     def effective_connection_type(self):
-        return self.connection_type if self.connection_type in {'ssh', 'snmp', 'hybrid', 'auto'} else 'ssh'
+        return self.connection_type if self.connection_type in {'ssh', 'snmp', 'hybrid', 'auto', 'sangfor_api'} else 'ssh'
 
     @property
     def uses_snmp(self):
@@ -119,6 +123,27 @@ class Network_Device(models.Model):
 
     def clean(self):
         super().clean()
+        if self.effective_connection_type == 'sangfor_api':
+            errors = {}
+            if not self.api_url:
+                errors['api_url'] = '深信服 AC Open API 必须配置 API 地址。'
+            if not self.api_shared_secret:
+                errors['api_shared_secret'] = '深信服 AC Open API 必须配置共享密钥。'
+            if self.api_url:
+                from urllib.parse import urlsplit
+                try:
+                    address = urlsplit(self.api_url)
+                    address.port
+                    valid = (address.scheme in {'http', 'https'} and address.hostname
+                             and not address.username and not address.password
+                             and not address.query and not address.fragment)
+                except ValueError:
+                    valid = False
+                if not valid:
+                    errors['api_url'] = '请填写不含账号、密码或查询参数的 HTTP/HTTPS API 根地址，共享密钥请单独填写。'
+            if errors:
+                raise ValidationError(errors)
+            return
         if not self.uses_snmp:
             return
         if self.effective_connection_type == 'auto' and not self.snmp_community and not self.snmp_username:

@@ -38,6 +38,7 @@ ANALYSIS_ITEMS = frozenset({
     'defender',
     'patches',
     'resource',
+    'disk',
     'event_findings',
     'system',
     'uptime',
@@ -191,51 +192,72 @@ def _event_findings(payload, issues):
     return findings
 
 
+def _software_details(payload, issues, rules):
+    policy_path = rules['software_policy_path']
+    frozen = rules.get('software_policy_snapshot')
+    if 'software_policy_snapshot' in rules or policy_path:
+        try:
+            if 'software_policy_snapshot' in rules:
+                if not isinstance(frozen, dict):
+                    raise ValueError('软件策略快照无效。')
+                if 'error' in frozen:
+                    raise ValueError(sanitize(str(frozen['error'])))
+                policy = frozen.get('content')
+                if not isinstance(policy, dict):
+                    raise ValueError('软件策略快照无效。')
+            else:
+                policy = load_config_as_dict(policy_path)
+            if not policy_path and not policy:
+                return _as_list(payload.get('已安装软件列表'))
+            identity = str(
+                _as_dict(payload.get('系统信息概览')).get('当前登录用户工号') or '',
+            ).rsplit('\\', 1)[-1]
+            check_software(
+                payload,
+                identity,
+                issues,
+                policy,
+            )
+        except (OSError, configparser.Error, ValueError) as exc:
+            _issue(issues, '软件策略问题', f'软件策略文件无法读取：{exc}')
+    return _as_list(payload.get('已安装软件列表'))
+
+
 def _details_for_item(item, payload, issues, rules, collected_at, platform='windows'):
     if platform == 'macos' and item in WINDOWS_ONLY_ITEMS:
         return {'data_state': 'not_applicable', 'platform': platform}
+    if item == 'disk':
+        from net.devices.pc.disk import check_disk
+        return check_disk(payload, issues, rules['disk_max_percent'])
     if item in REMOTE_ITEMS:
-        return check_remote_item(item, payload, issues, rules)
+        result = check_remote_item(item, payload, issues, rules)
+        diagnostic_key = {'cpu_health': 'CPU温度', 'browser_extensions': '浏览器插件情况'}.get(item)
+        diagnostics = payload.get('采集诊断')
+        diagnostic = diagnostics.get(diagnostic_key) if isinstance(diagnostics, dict) else None
+        if diagnostic:
+            result['collection_diagnostic'] = diagnostic
+            result['data_state'] = 'partial'
+            issues.append({'问题类型': '采集数据不足', '详细问题': str(diagnostic), 'data_state': 'partial'})
+        return result
     state = _schema_state(item, payload)
+    diagnostics = payload.get('采集诊断')
+    item_diagnostics = diagnostics.get(ITEM_FIELDS[item][0]) if isinstance(diagnostics, dict) else None
+    if item_diagnostics:
+        state = 'partial' if state == 'known' else state
     if state != 'known':
         issues.append({
             '问题类型': MISSING_LABELS.get(item, f'{item}数据缺失或未知'),
-            '详细问题': f'所选项目 {item} 数据状态为 {state}，不能判定正常。',
+            '详细问题': f'所选项目 {item} 数据状态为 {state}，不能判定正常。' + (f' 采集诊断：{item_diagnostics}' if item_diagnostics else ''),
             'analysis_item': item, 'data_state': state,
         })
-        # Retain null/empty/malformed shapes in selected details as evidence.
-        return {key: payload.get(key) for key in ITEM_FIELDS[item]}
+        # Partial software collection still proves the presence of the rows
+        # obtained successfully. Keep its diagnostic without hiding violations.
+        if item != 'software' or state != 'partial':
+            return {key: payload.get(key) for key in ITEM_FIELDS[item]}
     if item == 'activation':
         return _activation(payload, issues, rules)
     if item == 'software':
-        policy_path = rules['software_policy_path']
-        frozen = rules.get('software_policy_snapshot')
-        if 'software_policy_snapshot' in rules or policy_path:
-            try:
-                if 'software_policy_snapshot' in rules:
-                    if not isinstance(frozen, dict):
-                        raise ValueError('软件策略快照无效。')
-                    if 'error' in frozen:
-                        raise ValueError(sanitize(str(frozen['error'])))
-                    policy = frozen.get('content')
-                    if not isinstance(policy, dict):
-                        raise ValueError('软件策略快照无效。')
-                else:
-                    policy = load_config_as_dict(policy_path)
-                if not policy_path and not policy:
-                    return _as_list(payload.get('已安装软件列表'))
-                identity = str(
-                    _as_dict(payload.get('系统信息概览')).get('当前登录用户工号') or '',
-                ).rsplit('\\', 1)[-1]
-                check_software(
-                    payload,
-                    identity,
-                    issues,
-                    policy,
-                )
-            except (OSError, configparser.Error, ValueError) as exc:
-                _issue(issues, '软件策略问题', f'软件策略文件无法读取：{exc}')
-        return _as_list(payload.get('已安装软件列表'))
+        return _software_details(payload, issues, rules)
     if item == 'processes':
         return _as_list(payload.get('当前运行进程清单'))
     if item == 'bitlocker':
@@ -295,6 +317,7 @@ def _analysis_rules(value):
         'defender_scan_max_days': supplied.get('defender_scan_max_days', 7),
         'patch_max_days': supplied.get('patch_max_days', 30),
         'uptime_max_hours': supplied.get('uptime_max_hours', 168),
+        'disk_max_percent': supplied.get('disk_max_percent', 90),
         'cpu_max_percent': supplied.get('cpu_max_percent', 90),
         'cpu_temperature_max_celsius': supplied.get('cpu_temperature_max_celsius', 85),
         'site_ip_prefixes': supplied.get('site_ip_prefixes'),
@@ -330,6 +353,7 @@ def prepare_log(
     if not platform:
         platform = 'macos' if 'macos' in str(_as_dict(payload.get('系统信息概览')).get('系统主要版本名', '')).casefold() else 'windows'
     details = {
+        'collection_diagnostics': payload.get('采集诊断') if isinstance(payload.get('采集诊断'), dict) else {},
         'platform': platform,
         'rules': {key: value for key, value in configured_rules.items()
                   if key not in {'personnel_roster', 'software_policy_snapshot'}},
@@ -339,6 +363,7 @@ def prepare_log(
         ),
     }
     if (configured_rules['matching_mode'] == 'logs'
+            and configured_rules['personnel_roster']
             and details['enrichment']['personnel_match'] != 'matched'):
         issues.append(grade_issue({
             '问题类型': '日志未匹配人员',

@@ -29,7 +29,7 @@ from net.models import People, PeopleSyncSource
 
 _PREVIEW_SALT = 'net.people.sync.preview.v1'
 _PREVIEW_MAX_AGE_SECONDS = 300
-_PREVIEW_VERSION = 2
+_PREVIEW_VERSION = 3
 _SAFE_SKIP_REASON_RE = re.compile(r'^[a-z0-9_:-]{1,64}$')
 _RECORD_FIELDS = ('employee_id', 'name', 'email', 'department', 'leader', 'external_user_id', 'phone')
 _DATE_RECORD_FIELDS = ('hire_date', 'departure_date')
@@ -264,7 +264,9 @@ def _apply_locked_preview(source, locked_people, preview) -> SyncResult:
     for person in deactivations:
         person.save(update_fields=['is_active', 'last_synced_at'])
     source.last_synced_at = now
-    source.save(update_fields=['last_synced_at', 'updated_at'])
+    # Synchronization is operational metadata, not a provider configuration change.
+    # Preview signatures separately bind last_synced_at to prevent replay, including no-op imports.
+    source.save(update_fields=['last_synced_at'])
     return SyncResult(len(creates), len(updates), len(deactivations), len(preview.unchanged))
 
 
@@ -455,6 +457,7 @@ def _source_config(source):
         'id': str(source.pk), 'source_key': source.source_key, 'source_type': source.source_type,
         'root_department_ids': list(source.root_department_ids), 'is_enabled': source.is_enabled,
         'updated_at': source.updated_at.isoformat() if source.updated_at else None,
+        'last_synced_at': source.last_synced_at.isoformat() if source.last_synced_at else None,
         'fetch_configuration_identity': directory_source_configuration_identity(source),
     }
 

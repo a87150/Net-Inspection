@@ -4,12 +4,13 @@ from collections import Counter
 
 from net.devices.network.snmp import SNMP_ITEMS, collect_network_snmp
 from net.devices.network.ssh import collect_network_ssh
+from net.devices.network.sangfor import collect_sangfor_ac
 from net.infrastructure.collection import CollectionResult
 from net.inspections.selection import NETWORK_FIELDS, NETWORK_FUNCTION_ITEMS
 
 
 SSH_ONLY_ITEMS = frozenset({'logs', 'config_info'}) | frozenset(NETWORK_FUNCTION_ITEMS)
-_DEFAULT_ITEMS = tuple(dict.fromkeys(NETWORK_FIELDS[:-1]))
+_DEFAULT_ITEMS = ('device_info', 'cpu', 'memory', 'temperature', 'interface_status', 'vlan_status', 'logs')
 
 
 def _ordered_unique(items):
@@ -112,6 +113,8 @@ def collect_network(
     ssh_collector=None,
 ):
     """Collect network items with deterministic SSH/SNMP routing."""
+    if getattr(device, 'connection_type', '') == 'sangfor_api':
+        return collect_sangfor_ac(device, timeout, selected_items=selected_items)
     requested = _ordered_unique(_DEFAULT_ITEMS if selected_items is None else selected_items)
     mode = getattr(device, 'effective_connection_type', None)
     if mode not in {'ssh', 'snmp', 'hybrid', 'auto'}:

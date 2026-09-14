@@ -61,3 +61,20 @@ $errors = [ordered]@{}
 Add-CollectionError $errors 'cpu' 'failure fixture-secret'
 if ($errors.cpu[0] -match 'fixture-secret') { throw 'Token disclosed in diagnostic' }
 Write-Output 'Windows agent field isolation, empty logs and token protection passed.'
+
+# Static hardware accompanies selected metrics; disk devices are separate from volumes.
+function Get-CimInstance {
+    param($ClassName, $Filter)
+    switch ($ClassName) {
+        'Win32_Processor' { [pscustomobject]@{Name='Fixture CPU'; NumberOfCores=4; NumberOfLogicalProcessors=8; LoadPercentage=12} }
+        'Win32_OperatingSystem' { [pscustomobject]@{TotalVisibleMemorySize=8388608; FreePhysicalMemory=4194304} }
+        'Win32_LogicalDisk' { [pscustomobject]@{DeviceID='C:'; Size=10737418240; FreeSpace=5368709120} }
+        'Win32_DiskDrive' { [pscustomobject]@{DeviceID='disk0'; Size=21474836480} }
+        default { throw 'Unexpected inventory query' }
+    }
+}
+$payload = Get-InspectionPayload -Fields @('cpu', 'memory', 'storage_status')
+if ($payload.cpu.model -ne 'Fixture CPU' -or $payload.cpu.physical_cores -ne 4 -or $payload.cpu.logical_processors -ne 8) { throw 'CPU inventory missing' }
+if ($payload.memory.total_bytes -ne 8589934592) { throw 'Memory bytes wrong' }
+if ($payload.physical_disks[0].total_bytes -ne 21474836480 -or $payload.storage_status[0].total_bytes -ne 10737418240) { throw 'Disk devices confused with volumes' }
+Write-Output 'Windows static inventory and separate disk evidence passed.'

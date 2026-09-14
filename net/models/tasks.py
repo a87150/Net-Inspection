@@ -139,6 +139,9 @@ class ComputerAnalysisProfile(models.Model):
     uptime_max_hours = models.PositiveIntegerField(
         default=168, validators=[MinValueValidator(1), MaxValueValidator(87600)],
     )
+    disk_max_percent = models.PositiveSmallIntegerField(
+        default=90, validators=[MinValueValidator(1), MaxValueValidator(100)],
+    )
     cpu_max_percent = models.PositiveSmallIntegerField(
         default=90, validators=[MinValueValidator(1), MaxValueValidator(100)],
     )
@@ -230,6 +233,9 @@ class Schedule(models.Model):
     is_enabled = models.BooleanField(default=True)
     next_run_at = models.DateTimeField(null=True, blank=True)
     last_enqueued_at = models.DateTimeField(null=True, blank=True)
+    last_schedule_attempt_at = models.DateTimeField(null=True, blank=True)
+    last_schedule_status = models.CharField(max_length=16, blank=True, default='')
+    last_schedule_error = models.CharField(max_length=500, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

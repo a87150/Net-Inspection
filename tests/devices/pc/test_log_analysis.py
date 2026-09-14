@@ -36,7 +36,10 @@ from net.inspections.worker import TaskWorker
 
 
 SHANGHAI = ZoneInfo('Asia/Shanghai')
-ANALYSIS_METADATA = {'enrichment', 'rules', 'platform', 'severity_counts', 'health_status'}
+ANALYSIS_METADATA = {
+    'collection_diagnostics', 'enrichment', 'rules', 'platform',
+    'severity_counts', 'health_status',
+}
 
 
 class ComputerRemoteImportTests(TestCase):
@@ -297,6 +300,8 @@ class ComputerAnalysisWorkerTests(TransactionTestCase):
             'Windows激活信息': {'许可证状态': '未授权'},
         }, ensure_ascii=False), encoding='utf-8')
         self.log_file = import_fixture_path(path)
+        from net.models import People
+        People.objects.create(employee_id='PC-WORKER-01', name='Worker fixture')
 
     def tearDown(self):
         self.tempdir.cleanup()

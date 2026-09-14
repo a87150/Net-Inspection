@@ -129,6 +129,7 @@ def _task_context_for_profile(profile):
                 'defender_scan_max_days': profile.defender_scan_max_days,
                 'patch_max_days': profile.patch_max_days,
                 'uptime_max_hours': profile.uptime_max_hours,
+                'disk_max_percent': profile.disk_max_percent,
                 'cpu_max_percent': profile.cpu_max_percent,
                 'cpu_temperature_max_celsius': profile.cpu_temperature_max_celsius,
                 'site_ip_prefixes': profile.site_ip_prefixes,
@@ -138,6 +139,7 @@ def _task_context_for_profile(profile):
                 'alert_policy_mode': routing['mode'],
                 'alert_routing': routing,
                 'issue_severity_overrides': issue_policy,
+                **issue_thresholds,
             },
         )
     raise ValidationError({'profile': '必须提供已保存的巡检或日志分析配置。'})
@@ -176,6 +178,11 @@ def _normalize_target_ids(target_ids, expected_target_type):
 
 def _target_snapshot(target, fields):
     snapshot = {'id': str(target.pk)}
+    # API connection metadata is immutable only for Sangfor targets.  Keeping
+    # it off conventional SSH/SNMP snapshots preserves their established schema.
+    if getattr(target, 'connection_type', '') == 'sangfor_api':
+        target.clean()  # Reject credentials embedded in an endpoint before freezing it.
+        fields = (*fields, 'api_url', 'verify_ssl')
     for field_name in fields:
         value = getattr(target, field_name)
         snapshot[field_name] = (
@@ -293,7 +300,9 @@ def enqueue_task(profile, target_ids, source, overrides=None, *, _frozen_parent=
         context=context,
     )
     # Daily raw backups are independent of optional metric selection.
-    if target_type == TaskTargetRun.TargetType.NETWORK_DEVICE:
+    if target_type == TaskTargetRun.TargetType.NETWORK_DEVICE and any(
+        snapshot.get('connection_type') != 'sangfor_api' for _target_id, snapshot in targets
+    ):
         selected_items = list(dict.fromkeys([*selected_items, 'config_info']))
         profile_snapshot = dict(profile_snapshot, selected_items=selected_items)
     if task_type == TaskRun.TaskType.INSPECTION:

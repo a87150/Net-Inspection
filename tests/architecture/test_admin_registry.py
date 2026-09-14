@@ -166,6 +166,7 @@ class AdminRegistryTests(TestCase):
             'user_filter': '(&(objectCategory=person)(objectClass=user))',
             'computer_filter': '(objectCategory=computer)',
             'group_filter': '(objectCategory=group)',
+            'inactive_days': 60,
         }, instance=config)
         self.assertTrue(bound.is_valid(), bound.errors)
         saved = bound.save()

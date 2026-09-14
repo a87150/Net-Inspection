@@ -301,9 +301,60 @@ class TaskWorker:
                 )
             domain_context = None
 
+    @staticmethod
+    def _stopped(stop_event, maintenance_stop=None):
+        return stop_event.is_set() or (maintenance_stop is not None and maintenance_stop.is_set())
+
+    def _maintenance_cycle(self, stop_event, maintenance_stop=None, *, schedule=True):
+        """Run one maintenance pass without blocking target lease heartbeats."""
+        if self._stopped(stop_event, maintenance_stop):
+            return False
+        if schedule:
+            with _database_guard():
+                reconcile_pending_analysis_handoffs(limit=self.threads * 4)
+                if self._stopped(stop_event, maintenance_stop):
+                    return False
+                enqueue_due_schedules()
+        if self._stopped(stop_event, maintenance_stop):
+            return False
+        from net.alerts.service import deliver_due_alerts, reconcile_terminal_targets
+        from net.alerts.task_summaries import reconcile_terminal_tasks
+        reconcile_terminal_targets(limit=max(1, self.threads * 8))
+        if self._stopped(stop_event, maintenance_stop):
+            return False
+        reconcile_terminal_tasks(limit=max(1, self.threads * 8))
+        if self._stopped(stop_event, maintenance_stop):
+            return False
+        return bool(deliver_due_alerts(limit=self.threads))
+
+    def _maintenance_loop(self, stop_event, maintenance_stop):
+        """Own and close one thread-local DB connection during a long task."""
+        try:
+            while not self._stopped(stop_event, maintenance_stop):
+                try:
+                    close_old_connections()
+                    self._maintenance_cycle(stop_event, maintenance_stop)
+                except OperationalError as exc:
+                    if not is_sqlite_busy(exc):
+                        logging.getLogger(__name__).error('Worker maintenance database operation failed.')
+                except Exception:
+                    logging.getLogger(__name__).error('Worker maintenance operation failed.')
+                finally:
+                    close_old_connections()
+                    connections.close_all()
+                if maintenance_stop.wait(self.poll_seconds):
+                    break
+        finally:
+            close_old_connections()
+            connections.close_all()
+
     def run_once(self, stop_event=None):
-        """Recover/schedule/claim work and progress durable alert delivery."""
+        """Claim at most one task while servicing schedules and alerts."""
         stop_event = stop_event if stop_event is not None else threading.Event()
+        maintenance_stop = threading.Event()
+        maintenance_thread = None
+        handoffs = []
+        task = None
         try:
             close_old_connections()
             if stop_event.is_set():
@@ -317,24 +368,30 @@ class TaskWorker:
                 if stop_event.is_set():
                     return False
                 task = claim_next_task(self.worker_id, self.lease_seconds)
-            if task is not None:
-                self._execute_claimed_task(task, stop_event)
-            if stop_event.is_set():
-                return task is not None
-            from net.alerts.service import deliver_due_alerts, reconcile_terminal_targets
-            from net.alerts.task_summaries import reconcile_terminal_tasks
-
-            # Reconciliation closes the commit/restart gap; transport calls are
-            # lease-claimed and occur outside the record transaction.
-            reconcile_terminal_targets(limit=max(1, self.threads * 8))
-            reconcile_terminal_tasks(limit=max(1, self.threads * 8))
-            delivered = deliver_due_alerts(limit=self.threads)
-            return task is not None or bool(delivered) or bool(handoffs)
+            if task is None:
+                return self._maintenance_cycle(stop_event, schedule=False) or bool(handoffs)
+            maintenance_thread = threading.Thread(
+                target=self._maintenance_loop,
+                args=(stop_event, maintenance_stop),
+                name=f'task-maintenance-{self.worker_id}', daemon=True,
+            )
+            maintenance_thread.start()
+            self._execute_claimed_task(task, stop_event)
+            return True
         finally:
             try:
-                close_old_connections()
+                maintenance_stop.set()
+                if maintenance_thread is not None:
+                    maintenance_thread.join()
+                if task is not None and not stop_event.is_set():
+                    # Preserve --once's final alert reconciliation without another
+                    # schedule scan or a second task claim.
+                    self._maintenance_cycle(stop_event, schedule=False)
             finally:
-                connections.close_all()
+                try:
+                    close_old_connections()
+                finally:
+                    connections.close_all()
 
     def run_forever(self, stop_event=None):
         """Poll until the optional event is set; portable to Windows and Linux."""

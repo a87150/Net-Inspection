@@ -38,8 +38,29 @@
         const security=form.querySelector('[data-snmp-security]')?.value;
         form.querySelectorAll('[data-snmp-group]').forEach(group=>{
             const kind=group.dataset.snmpGroup;
-            group.hidden=!(kind===version || (version==='v3' && ((kind==='auth' && security!=='noAuthNoPriv') || (kind==='priv' && security==='authPriv'))));
+            setGroupEnabled(group, kind===version || (version==='v3' && ((kind==='auth' && security!=='noAuthNoPriv') || (kind==='priv' && security==='authPriv'))));
         });
+    }
+
+    function updateNetworkFields(select) {
+        const form = select.closest('form');
+        if (!form) return;
+        const api = select.value === 'sangfor_api';
+        form.querySelectorAll('[data-network-fields]').forEach(group => {
+            setGroupEnabled(group, group.dataset.networkFields === (api ? 'sangfor_api' : 'standard'));
+        });
+        if (!api) updateSnmpFields(select);
+    }
+
+    function chooseSangforApi(form) {
+        const connection = form.querySelector('[data-network-connection]');
+        const vendor = form.querySelector('[data-network-vendor]');
+        const deviceType = form.querySelector('[data-network-device-type]');
+        if (!connection || connection.dataset.networkNew !== 'true' || !vendor || !deviceType) return;
+        if (vendor.value === 'sangfor' && deviceType.value === 'ac_gateway' && connection.value === 'auto') {
+            connection.value = 'sangfor_api';
+            connection.dispatchEvent(new Event('change', {bubbles: true}));
+        }
     }
 
     function bindScheduleFields(root) {
@@ -57,6 +78,18 @@
             select.closest('form')?.addEventListener('modal-draft-restored', () => updateServerFields(select));
             updateServerFields(select);
         });
+        root.querySelectorAll('[data-network-connection]').forEach(select => {
+            if (select.dataset.networkBound !== undefined) return;
+            select.dataset.networkBound = '';
+            select.addEventListener('change', () => updateNetworkFields(select));
+            select.closest('form')?.addEventListener('modal-draft-restored', () => updateNetworkFields(select));
+            updateNetworkFields(select);
+            const form = select.closest('form');
+            form?.querySelectorAll('[data-network-vendor], [data-network-device-type]').forEach(field => {
+                field.addEventListener('change', () => chooseSangforApi(form));
+            });
+            chooseSangforApi(form);
+        });
         root.querySelectorAll('[data-schedule-kind]').forEach(select => {
             if (select.dataset.scheduleBound !== undefined) return;
             select.dataset.scheduleBound = '';
@@ -66,5 +99,5 @@
         });
     }
 
-    return {updateSnmpFields, updateServerFields, bindScheduleFields, setGroupEnabled, updateScheduleFields};
+    return {updateSnmpFields, updateServerFields, updateNetworkFields, chooseSangforApi, bindScheduleFields, setGroupEnabled, updateScheduleFields};
 }));

@@ -50,6 +50,7 @@ def _snapshot_profile(task):
     profile.defender_scan_max_days = snapshot.get('defender_scan_max_days', 7)
     profile.patch_max_days = snapshot.get('patch_max_days', 30)
     profile.uptime_max_hours = snapshot.get('uptime_max_hours', 168)
+    profile.disk_max_percent = snapshot.get('disk_max_percent', 90)
     profile.cpu_max_percent = snapshot.get('cpu_max_percent', 90)
     profile.cpu_temperature_max_celsius = snapshot.get('cpu_temperature_max_celsius', 85)
     profile.site_ip_prefixes = snapshot.get('site_ip_prefixes', {})

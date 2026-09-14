@@ -8,6 +8,78 @@
 
 $ErrorActionPreference = 'Stop'
 
+function Invoke-InspectionWindowsPowerShell {
+    param([string]$ScriptPath, [System.Collections.IDictionary]$Parameters)
+    if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+        throw 'This inspection agent requires Windows.'
+    }
+    $systemDirectory = if ([Environment]::Is64BitOperatingSystem -and -not [Environment]::Is64BitProcess) { 'Sysnative' } else { 'System32' }
+    $engine = Join-Path ([Environment]::GetFolderPath('Windows')) "$systemDirectory\WindowsPowerShell\v1.0\powershell.exe"
+    if (-not (Test-Path -LiteralPath $engine)) { throw 'Windows PowerShell is not installed; enable Windows PowerShell 5.1 and retry.' }
+    $arguments = @{}
+    foreach ($name in $Parameters.Keys) {
+        if ($name -notin @('Port', 'Token', 'Install', 'Console', 'RunService')) { throw 'Unsupported agent argument.' }
+        $value = $Parameters[$name]
+        $arguments[$name] = if ($value -is [System.Management.Automation.SwitchParameter]) { [bool]$value } else { $value }
+    }
+    # Pipe the payload instead of putting the token in process arguments or temporary files.
+    # Base64 makes the pipe independent of the two shells' console encodings.
+    $payload = @{path=$ScriptPath; arguments=$arguments} | ConvertTo-Json -Depth 4 -Compress
+    $command = @'
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+try {
+    $payload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::In.ReadToEnd())) | ConvertFrom-Json
+    $parameters = @{}
+    foreach ($property in $payload.arguments.PSObject.Properties) { $parameters[$property.Name] = $property.Value }
+    $global:LASTEXITCODE = 0
+    & ([string]$payload.path) @parameters
+    exit $LASTEXITCODE
+} catch {
+    [Console]::Error.WriteLine(("{0} (script line {1})" -f $_.Exception.Message, $_.InvocationInfo.ScriptLineNumber))
+    exit 1
+}
+'@
+    $info = New-Object System.Diagnostics.ProcessStartInfo
+    $info.FileName = $engine
+    $info.Arguments = '-NoLogo -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+    # Process.Start does not apply PowerShell's native-command module-path cleanup.
+    # This agent needs Windows inbox modules only; do not inherit Core/user modules.
+    $info.EnvironmentVariables['PSModulePath'] = Join-Path ([Environment]::GetFolderPath('Windows')) 'System32\WindowsPowerShell\v1.0\Modules'
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardInput = $true
+    $info.RedirectStandardError = $true
+    $info.StandardErrorEncoding = [Text.Encoding]::UTF8
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $info
+    try {
+        if (-not $process.Start()) { throw 'Cannot start Windows PowerShell.' }
+        # Drain stderr concurrently so a verbose failure cannot fill the pipe and block the child.
+        $errorRead = $process.StandardError.ReadToEndAsync()
+        $process.StandardInput.Write([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($payload)))
+        $process.StandardInput.Close()
+        $process.WaitForExit()
+        $errorText = $errorRead.GetAwaiter().GetResult().Trim()
+        if ($process.ExitCode -ne 0) {
+            foreach ($secret in @([string]$Parameters['Token'], [string]$env:NET_INSPECTION_AGENT_TOKEN)) {
+                if ($secret) { $errorText = $errorText.Replace($secret, '[REDACTED]') }
+            }
+            if (-not $errorText) { $errorText = 'Child process returned no error details; check the agent service.log.' }
+            throw ("Windows PowerShell failed (exit {0}): {1}" -f $process.ExitCode, $errorText)
+        }
+        return $process.ExitCode
+    } finally { $process.Dispose() }
+}
+
+if ($PSVersionTable.PSEdition -ne 'Desktop') {
+    Write-Host 'Switching to Windows PowerShell for the inspection agent...'
+    $childExitCode = Invoke-InspectionWindowsPowerShell -ScriptPath $PSCommandPath -Parameters $PSBoundParameters
+    if ($childExitCode -ne 0) { throw "Windows PowerShell could not complete the operation (exit $childExitCode)." }
+    return
+}
+
 
 function Get-InspectionServiceHostSource {
     return @"
@@ -298,6 +370,7 @@ function Get-InspectionPayload {
                 caption = $os.Caption
                 version = $os.Version
                 build_number = $os.BuildNumber
+                architecture = $os.OSArchitecture
                 last_boot_time = $os.LastBootUpTime
                 uptime_seconds = [int64]((Get-Date) - $os.LastBootUpTime).TotalSeconds
             }
@@ -308,7 +381,7 @@ function Get-InspectionPayload {
             $processors = @(Get-CimInstance Win32_Processor)
             $cpuLoad = ($processors | Measure-Object -Property LoadPercentage -Average).Average
             if ($null -eq $cpuLoad) { throw 'CPU load information is unavailable' }
-            $payload.cpu = [ordered]@{usage_percent=[math]::Round([double]$cpuLoad, 2); logical_processors=($processors.NumberOfLogicalProcessors | Measure-Object -Sum).Sum}
+            $payload.cpu = [ordered]@{usage_percent=[math]::Round([double]$cpuLoad, 2); logical_processors=($processors.NumberOfLogicalProcessors | Measure-Object -Sum).Sum; physical_cores=($processors.NumberOfCores | Measure-Object -Sum).Sum; model=(@($processors.Name | Where-Object { $_ } | Select-Object -Unique) -join "; ")}
         } catch { Add-CollectionError $collectionErrors 'cpu' $_ }
     }
     if (($Fields -contains 'memory') -and $os) {
@@ -331,6 +404,15 @@ function Get-InspectionPayload {
                 }
             })
         } catch { Add-CollectionError $collectionErrors 'storage_status' $_ }
+        try {
+            # Disk devices, not logical partitions; virtual machines report their virtual disks.
+            $payload.physical_disks = @(Get-CimInstance Win32_DiskDrive | ForEach-Object {
+                [ordered]@{device=$_.DeviceID; total_bytes=$_.Size}
+            })
+        } catch {
+            # Missing inventory must not discard usable volume utilization evidence.
+            $payload.physical_disks = $null
+        }
     }
     if ($Fields -contains 'services') {
         $payload.services = @()

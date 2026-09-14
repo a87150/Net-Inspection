@@ -33,7 +33,7 @@
             <div class="col-md-3" data-schedule-interval><label class="form-label small">单位</label><select class="form-select form-select-sm" name="interval_unit"><option value="minutes"{% if not tab.schedule or tab.schedule.interval_unit == 'minutes' %} selected{% endif %}>分钟</option><option value="hours"{% if tab.schedule.interval_unit == 'hours' %} selected{% endif %}>小时</option></select></div>
             <div class="col-md-3" data-schedule-daily><label class="form-label small">执行时间</label><input class="form-control form-control-sm" type="time" name="daily_time" value="{{ tab.schedule.daily_time|time:'H:i' }}"></div>
         </div>
-        {% if tab.schedule %}<div class="small text-secondary">最近入队：{{ tab.schedule.last_enqueued_at|date:'Y-m-d H:i'|default:'暂无' }}；下次执行：{{ tab.schedule.next_run_at|date:'Y-m-d H:i'|default:'待计算' }}；最近结果：{% if tab.latest_sync_task %}{{ tab.latest_sync_task.get_status_display }}{% else %}暂无{% endif %}。</div>{% endif %}
+        {% if tab.schedule %}<div class="small text-secondary">最近入队：{{ tab.schedule.last_enqueued_at|date:'Y-m-d H:i'|default:'暂无' }}；下次执行：{{ tab.schedule.next_run_at|date:'Y-m-d H:i'|default:'待计算' }}；最近结果：{% if tab.latest_sync_task %}{{ tab.latest_sync_task.get_status_display }}{% else %}暂无{% endif %}。{% if tab.schedule.last_schedule_status == 'blocked' %} 上次调度：等待活动任务结束。{% elif tab.schedule.last_schedule_status == 'error' %} 上次调度失败：{{ tab.schedule.last_schedule_error }}{% endif %}</div>{% endif %}
         {% if tab.schedule and tab.schedule.is_enabled and not tab.selected.connection_test_current %}<div class="small text-danger">配置已变化，自动同步计划将等待重新测试。</div>{% endif %}
         <button class="btn btn-outline-dark btn-sm justify-self-start" type="submit">保存自动同步计划</button>
     </form>

@@ -1,4 +1,6 @@
 import csv
+
+from tests import response_body
 import uuid
 from datetime import timedelta
 from io import StringIO
@@ -801,8 +803,12 @@ class DeterministicDemoSeedTests(TestCase):
         )
         analysis_url = reverse('computer_analysis_detail', args=[analysis.pk])
         analysis_list = self.client.get(reverse('computer_analysis_list'))
-        self.assertContains(analysis_list, 'DEMO-PC-DEV-02')
-        self.assertContains(analysis_list, analysis_url)
+        # The project landing page shows task statistics; standalone historical
+        # analyses remain reachable in the global records list and detail page.
+        self.assertContains(analysis_list, '最新任务统计')
+        historical_list = self.client.get(reverse('inspection_records'), {'q': 'DEMO-PC-DEV-02'})
+        self.assertContains(historical_list, 'DEMO-PC-DEV-02')
+        self.assertContains(historical_list, analysis_url)
         analysis_detail = self.client.get(analysis_url)
         self.assertContains(analysis_detail, '磁盘空间不足')
         self.assertContains(analysis_detail, '系统盘剩余空间低于 10%')
@@ -834,5 +840,5 @@ class DeterministicDemoSeedTests(TestCase):
             'sort': 'employee_id',
             'order': 'asc',
         })
-        rows = list(csv.DictReader(StringIO(response.content.decode('utf-8-sig'))))
+        rows = list(csv.DictReader(StringIO(response_body(response).decode('utf-8-sig'))))
         self.assertEqual([row['工号'] for row in rows], ['DEMO-P002', 'DEMO-P004'])

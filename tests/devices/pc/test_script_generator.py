@@ -44,9 +44,22 @@ class PcScriptGeneratorTests(SimpleTestCase):
             result = generate_pc_script(self.profile, self.source, platform)
             self.assertEqual(config_of(result)['destination'], destination)
             for forbidden in ('http', 'password', '/api/', 'worker-secret', 'worker-private',
-                              'Invoke-RestMethod', 'Invoke-WebRequest', 'LDAP', '.dll', '/ato'):
+                              'Invoke-RestMethod', 'Invoke-WebRequest', 'LDAP', '/ato'):
                 self.assertNotIn(forbidden.lower(), result.content.lower())
             self.assertEqual(result.as_bytes().startswith(codecs.BOM_UTF8), platform == 'windows')
+
+    def test_windows_preview_does_not_publish_or_write_daily_marker(self):
+        script = generate_pc_script(self.profile, self.source, 'windows').content
+        functions, entry = script.split('# Collection entry point', 1)
+        with tempfile.TemporaryDirectory() as directory:
+            harness = Path(directory) / 'preview.ps1'
+            harness.write_text(functions + "\nfunction Get-PCPayload { return @{ preview = 'ok' } }\n"
+                               + "function Publish-PCDaily { throw 'Preview attempted to publish' }\n" + entry,
+                               encoding='utf-8-sig')
+            result = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-File', str(harness), '-Preview'], capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr.decode(errors='replace'))
+            self.assertEqual(json.loads(result.stdout), {'preview': 'ok'})
+            self.assertEqual(list(Path(directory).iterdir()), [harness])
 
     def test_saved_objects_and_platform_destination_are_required(self):
         for profile, source, platform in [
@@ -170,10 +183,13 @@ function Get-CimInstance {
         DeviceID='C:'; IPAddress=@('192.0.2.1'); MACAddress='02:00:00:00:00:01'
     }
 }
-function Read-Optional { param([scriptblock]$Read) return $null }
+function Read-Optional { param([scriptblock]$Read, [string]$Section) return $null }
+function Get-PCInstalledSoftware { return ,@() }
+function Get-PCCpuTemperature { return $null }
 function Get-PCUserPolicies { param([string]$LoggedInUser) return $null }
 $payload = Get-PCPayload
 if ($payload.platform -ne 'windows') { throw 'platform marker' }
+if ($payload['磁盘空间情况'][0].total_bytes -ne 1073741824 -or $payload['磁盘空间情况'][0].free_bytes -ne 536870912) { throw 'disk capacity/free evidence missing' }
 if ($payload['计算机硬件资源情况']['当前CPU占用率'] -ne '15.0%') { throw 'cpu percentage' }
 if ($null -ne $payload['Windows激活信息']) { throw 'optional unknown' }
 """, encoding='utf-8-sig')

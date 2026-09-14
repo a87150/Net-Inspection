@@ -49,6 +49,29 @@ def generate_pc_script(profile, source, platform: str) -> GeneratedScript:
         config['kms_servers'] = [target.strip() for target in targets]
     encoded = base64.b64encode(json.dumps(config, ensure_ascii=False).encode('utf-8')).decode('ascii')
     filename, template_name = PLATFORM_TEMPLATES[platform]
-    template = (TEMPLATE_DIRECTORY / template_name).read_text(encoding='utf-8')
+    template = (TEMPLATE_DIRECTORY / template_name).read_text(encoding='utf-8-sig')
     return GeneratedScript(filename, template.replace('__PC_CONFIG_BASE64__', encoded),
                            encoding='utf-8-sig' if platform == 'windows' else 'utf-8')
+
+
+def generate_pc_download(profile, source, platform):
+    """Windows includes the verified sensor library; macOS remains a shell script."""
+    script = generate_pc_script(profile, source, platform)
+    if platform != 'windows':
+        return script.filename, script.content_type, script.as_bytes()
+    import hashlib
+    import io
+    import zipfile
+    dependencies = Path(__file__).resolve().parents[2] / 'agents' / 'pc' / 'windows'
+    library = (dependencies / 'OpenHardwareMonitorLib.dll').read_bytes()
+    if hashlib.sha256(library).hexdigest() != 'ef02b0991aac678052bb79dfdfd5bfa0b42b1f34b209e35819ba606909655f58':
+        raise ValueError('硬件库校验失败，请恢复官方 OpenHardwareMonitor 0.9.6 依赖。')
+    from net.scripts.executable import package_collector, prebuilt_host
+    executable = package_collector(prebuilt_host(), script.as_bytes(), library)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr('PCCollector.exe', executable)
+        archive.writestr('Install-PCCollector.ps1', (TEMPLATE_DIRECTORY / 'Install-PCCollector.ps1').read_bytes())
+        for name in ('License.html', 'README.txt'):
+            archive.writestr(name, (dependencies / name).read_bytes())
+    return 'PC-Windows-Collector.zip', 'application/zip', buffer.getvalue()

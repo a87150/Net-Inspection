@@ -43,6 +43,17 @@ class FinalPipelineTests(TestCase):
         return {'日志时间': collected.strftime('%Y-%m-%d %H:%M:%S'),
                 '系统信息概览': {'计算机名': name}, **(extra or {})}
 
+    def complete_summary(self, task):
+        from net.alerts.task_summaries import process_task_summary
+        task.refresh_from_db()
+        if task.status not in TaskRun.TERMINAL_STATUSES:
+            finish_task(task.pk, 'final-worker')
+        event = process_task_summary(task)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.event_type, 'summary')
+        self.assertFalse(task.alert_events.exclude(event_type='summary').filter(deliveries__isnull=False).exists())
+        return event
+
     def remote_file(self, name='evidence.json'):
         self.connector.files['incoming/' + name] = json.dumps(self.payload()).encode()
 
@@ -79,11 +90,14 @@ class FinalPipelineTests(TestCase):
         self.policy.channels.set([other])
         claim_next_task('final-worker', 60)
         execute_computer_target(task.target_runs.get(), worker_id='final-worker')
-        self.assertEqual(list(AlertDelivery.objects.values_list('channel_id', flat=True)), [self.channel.pk])
+        self.assertFalse(AlertDelivery.objects.exists())
+        event = self.complete_summary(task)
+        self.assertEqual(list(event.deliveries.values_list('channel_id', flat=True)), [self.channel.pk])
 
     def test_live_disable_vetoes_new_event_and_existing_delivery(self):
         from net.alerts.service import deliver_due_alerts
-        self.run_payload({'当前与域服务器通讯情况': '失败'})
+        first, _ = self.run_payload({'当前与域服务器通讯情况': '失败'})
+        self.complete_summary(first)
         log = import_payload(self.payload({'当前与域服务器通讯情况': '失败'}, name='VETO-PC')).log_file
         task = enqueue_task(self.profile, [log.pk], 'manual')
         self.assertEqual(task.profile_snapshot['alert_routing']['channel_ids'], [str(self.channel.pk)])
@@ -91,7 +105,7 @@ class FinalPipelineTests(TestCase):
         self.channel.save()
         claim_next_task('final-worker', 60)
         execute_computer_target(task.target_runs.get(), worker_id='final-worker')
-        self.assertFalse(task.alert_events.get().deliveries.exists())
+        self.assertFalse(self.complete_summary(task).deliveries.exists())
         with patch('requests.post') as http:
             deliver_due_alerts(limit=10)
         http.assert_not_called()
@@ -229,8 +243,15 @@ class FinalPipelineTests(TestCase):
             policy.save()
             policy.channels.clear()
             self.policy.channels.clear()
+            claim_next_task('final-worker', 60)
             process_target_findings(task.target_runs.get(), [{'key': 'fixture', 'severity': 'critical', 'title': 'failure', 'detail': 'test'}])
-            self.assertEqual(list(task.alert_events.get().deliveries.values_list('channel_id', flat=True)), [self.channel.pk])
+            self.assertFalse(task.alert_events.get().deliveries.exists())
+            # This test supplies normalized evidence directly; complete its persistence boundary.
+            task.target_runs.update(status='success', finished_at=timezone.now(),
+                                    alert_processed_at=timezone.now(),
+                                    result_snapshot={'health_status': 'abnormal'})
+            event = self.complete_summary(task)
+            self.assertEqual(list(event.deliveries.values_list('channel_id', flat=True)), [self.channel.pk])
         self.channel.settings = {'webhook_url': 'https://example.invalid/rotated'}
         self.channel.save()
         seen = []

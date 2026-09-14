@@ -71,7 +71,13 @@ class SelectedItemSchemaTests(TestCase):
                 result = self.analyze(item, fields)
                 self.assertEqual(result.status, RecordStatus.SUCCESS)
                 self.assertEqual(result.exceptions, [])
-                self.assertEqual(set(result.details) - {'enrichment', 'rules', 'platform', 'severity_counts', 'health_status'}, {item})
+                self.assertEqual(
+                    set(result.details) - {
+                        'collection_diagnostics', 'enrichment', 'rules', 'platform',
+                        'severity_counts', 'health_status',
+                    },
+                    {item},
+                )
 
     def test_present_empty_collections_are_distinct_from_missing(self):
         for item, key in (

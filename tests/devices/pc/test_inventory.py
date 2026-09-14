@@ -1,4 +1,6 @@
 import csv
+
+from tests import response_body
 from datetime import date
 from decimal import Decimal
 from io import StringIO
@@ -219,13 +221,13 @@ class AssetInventoryImportExportTests(TestCase):
         response = self.client.get(reverse('table_export', args=['computers']), {
             'filter_computer_name': 'PC-FILTERED',
         })
-        rows = list(csv.DictReader(StringIO(response.content.decode('utf-8-sig'))))
+        rows = list(csv.DictReader(StringIO(response_body(response).decode('utf-8-sig'))))
 
         self.assertEqual(response.status_code, 200)
         self.assertNotIn('登录账户', rows[0])
         self.assertNotIn('login_account', rows[0])
         self.assertEqual([row['PC 名称'] for row in rows], ['PC-FILTERED'])
-        self.assertNotIn('EXAMPLE\\filtered-user', response.content.decode('utf-8-sig'))
+        self.assertNotIn('EXAMPLE\\filtered-user', response_body(response).decode('utf-8-sig'))
 
     def test_import_accepts_blank_inventory_values_and_rejects_negative_counts_atomically(self):
         import_csv('networks', SimpleUploadedFile(

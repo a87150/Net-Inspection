@@ -119,6 +119,7 @@ def collect_windows_http(server, timeout=12, selected_items=None):
         with timer:
             url = server.api_url or f'http://{server.ip}:9180/inspection'
             payload = _request(url, token=server.api_token or '', verify_ssl=server.verify_ssl, timeout=timeout, selected_items=selected_items, error_body=True)
+            physical_disks = payload.get('physical_disks') if isinstance(payload, dict) else None
             field_errors = _windows_collection_errors(payload, selected_items, server.api_token or '')
             payload = selected_fields(payload, selected_items, WINDOWS_FIELDS)
             if field_errors:
@@ -154,6 +155,9 @@ def collect_windows_http(server, timeout=12, selected_items=None):
                 diagnostics.append(item + '（' + '；'.join(field_errors[item]) + '）')
                 if valid:
                     incomplete.append(item)
+        if 'storage_status' in data and isinstance(physical_disks, list):
+            data['physical_disks'] = physical_disks
+            payload['physical_disks'] = physical_disks
         status = 'partial' if (missing or incomplete) and data else 'failed' if missing else 'success'
         message = '缺少有效采集证据：' + ', '.join(missing) if missing else ''
         if incomplete:

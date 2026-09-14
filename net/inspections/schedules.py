@@ -23,6 +23,7 @@ from net.models import (
 )
 
 from .queue import enqueue_computer_fetch_task, enqueue_task
+from net.infrastructure.sanitization import sanitize
 
 
 _ASSET_MODELS = {
@@ -190,6 +191,75 @@ def _schedule_profile(schedule):
     return profile
 
 
+def _has_active_schedule_scope(schedule):
+    """Classify duplicate rejection from the durable queue scope, never profile-wide work."""
+    try:
+        profile = _schedule_profile(schedule)
+    except ValidationError:
+        return False
+    if isinstance(profile, InspectionProfile):
+        try:
+            target_ids = _selected_target_ids(profile)
+        except (ValidationError, TypeError, ValueError):
+            return False
+        scope = TaskRun.build_scope_key(
+            task_type=TaskRun.TaskType.INSPECTION,
+            profile_id=profile.pk,
+            target_scope_snapshot={'targets': [
+                {'target_type': profile.device_type, 'target_id': target_id}
+                for target_id in target_ids
+            ]},
+        )
+        return TaskRun.objects.filter(active_scope_key=scope).exists()
+    # These scheduler-owned task types bind the Schedule onto the TaskRun, so
+    # that relation is the durable identity available without reimplementing
+    # their specialized enqueue snapshots.
+    return TaskRun.objects.filter(
+        schedule=schedule, active_scope_key__isnull=False,
+    ).exists()
+
+
+def _schedule_local_secrets(schedule):
+    """Return only credentials reachable from this schedule's own binding."""
+    try:
+        profile = _schedule_profile(schedule)
+    except ValidationError:
+        return ()
+    if isinstance(profile, PeopleSyncSource):
+        credentials = profile.credentials if isinstance(profile.credentials, Mapping) else {}
+        return tuple(value for value in credentials.values() if isinstance(value, str) and value)
+    if isinstance(profile, Domain_Controller_Config):
+        return tuple(value for value in (profile.bind_username, profile.bind_password)
+                     if isinstance(value, str) and value)
+    # Inspection and PC-analysis profile validation uses only public profile
+    # fields.  PC source credentials are delegated to the OS credential store
+    # and never appear in ValidationError messages.
+    return ()
+
+
+def _record_schedule_failure(schedule, now, exc):
+    """Persist a safe failure only while this due attempt is still current."""
+    try:
+        blocked = _has_active_schedule_scope(schedule)
+    except (ValidationError, TypeError, ValueError):
+        blocked = False
+    message = sanitize('；'.join(exc.messages), secrets=_schedule_local_secrets(schedule)).strip()[:500]
+    values = {
+        'last_schedule_attempt_at': now,
+        'last_schedule_status': 'blocked' if blocked else 'error',
+        'last_schedule_error': '等待活动任务结束。' if blocked else (message or '计划配置无效。'),
+        'updated_at': now,
+    }
+    # The transaction that raised has rolled back.  Do not use its stale model
+    # instance: another poll may already have enqueued this schedule and moved
+    # next_run_at forward.
+    Schedule.objects.filter(pk=schedule.pk).filter(
+        Q(next_run_at__isnull=True) | Q(next_run_at__lte=now),
+    ).filter(
+        Q(last_schedule_attempt_at__isnull=True) | Q(last_schedule_attempt_at__lt=now),
+    ).update(**values)
+
+
 def _enqueue_due_schedules(now):
     due_schedule_ids = list(
         Schedule.objects.filter(is_enabled=True)
@@ -231,14 +301,20 @@ def _enqueue_due_schedules(now):
                         overrides=overrides,
                     )
                 schedule.last_enqueued_at = now
+                schedule.last_schedule_attempt_at = now
+                schedule.last_schedule_status = 'queued'
+                schedule.last_schedule_error = ''
                 schedule.next_run_at = next_run_at(schedule, now)
                 schedule.save(update_fields={
-                    'last_enqueued_at', 'next_run_at', 'updated_at',
+                    'last_enqueued_at', 'last_schedule_attempt_at',
+                    'last_schedule_status', 'last_schedule_error',
+                    'next_run_at', 'updated_at',
                 })
                 tasks.append(task)
-        except ValidationError:
-            # A bad configuration or an active duplicate is retried after the
-            # configuration changes or the existing task reaches a terminal state.
+        except ValidationError as exc:
+            # A rolled-back atomic block leaves ``schedule`` stale; the helper
+            # conditionally updates only an still-due, older attempt.
+            _record_schedule_failure(schedule, now, exc)
             continue
 
     return tasks

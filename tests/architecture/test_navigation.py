@@ -117,6 +117,7 @@ class NavigationDropdownTests(TestCase):
                     'links': [
                         ('安防设备列表', '/assets/monitors/'),
                         ('巡检记录', '/records/monitors/'),
+                        ('门禁记录', '/access/records/'),
                     ],
                 },
             },

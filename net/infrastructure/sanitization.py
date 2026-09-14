@@ -81,7 +81,7 @@ def configuration_secrets():
     for model, fields in (
         (Network_Device, (
             'username', 'password', 'snmp_community',
-            'snmp_auth_password', 'snmp_priv_password',
+            'snmp_auth_password', 'snmp_priv_password', 'api_shared_secret',
         )),
         (Server, ('username', 'password', 'api_token', 'api_url')),
         (SecurityDevice, ('api_username', 'api_password', 'api_token', 'api_url')),

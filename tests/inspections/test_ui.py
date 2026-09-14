@@ -1,6 +1,8 @@
 """HTTP contracts for configuring and following Phase 2 background tasks."""
 
 import csv
+
+from tests import response_body
 from datetime import time
 from io import StringIO
 from pathlib import Path
@@ -392,11 +394,11 @@ class TaskUiTestCase(TestCase):
         excluded = self.client.get(export_url, {'filter_status': 'success'})
         self.assertEqual(exported.status_code, 200)
         self.assertEqual(excluded.status_code, 200)
-        exported_rows = list(csv.DictReader(StringIO(exported.content.decode('utf-8-sig'))))
+        exported_rows = list(csv.DictReader(StringIO(response_body(exported).decode('utf-8-sig'))))
         self.assertEqual(len(exported_rows), 1)
         self.assertEqual(exported_rows[0]['任务类型'], '设备巡检')
         self.assertEqual(exported_rows[0]['状态'], '等待')
-        self.assertEqual(list(csv.DictReader(StringIO(excluded.content.decode('utf-8-sig')))), [])
+        self.assertEqual(list(csv.DictReader(StringIO(response_body(excluded).decode('utf-8-sig')))), [])
 
     def test_task_progress_is_display_only_not_a_broken_queryset_filter(self):
         """Progress is a model property, so exposing ORM filter/sort controls would be fake."""

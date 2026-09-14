@@ -8,6 +8,6 @@
  </div>
  {% endfor %}
  </div>
- <p class="small text-secondary mt-3">上次入队：{{ domain_schedule.last_enqueued_at|date:'Y-m-d H:i'|default:'暂无' }}；下次执行：{{ domain_schedule.next_run_at|date:'Y-m-d H:i'|default:'未启用' }}。</p>
+ <p class="small text-secondary mt-3">上次入队：{{ domain_schedule.last_enqueued_at|date:'Y-m-d H:i'|default:'暂无' }}；下次执行：{{ domain_schedule.next_run_at|date:'Y-m-d H:i'|default:'未启用' }}。{% if domain_schedule.last_schedule_status == 'blocked' %} 上次调度：等待活动任务结束。{% elif domain_schedule.last_schedule_status == 'error' %} 上次调度失败：{{ domain_schedule.last_schedule_error }}{% endif %}</p>
  <button class="btn btn-primary" type="submit" form="domain-sync-schedule-form">保存定时同步设置</button>
 </section>

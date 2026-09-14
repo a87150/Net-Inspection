@@ -412,6 +412,25 @@ class PeopleSyncPreviewTests(TestCase):
         self.assertNotIn('new-fixture-secret', preview.token)
         self.assertNotIn('fixture-secret', preview.token)
 
+    def test_successful_noop_consumes_preview_without_invalidating_connection_test(self):
+        from django.utils import timezone
+        sync = _sync_module()
+        source = self.source()
+        PeopleSyncSource.objects.filter(pk=source.pk).update(last_tested_at=timezone.now())
+        source.refresh_from_db()
+        configured_at = source.updated_at
+        first = sync.preview_people_sync(source, SnapshotAdapter(source, []))
+        parallel = sync.preview_people_sync(source, SnapshotAdapter(source, []))
+        sync.apply_people_sync(source, first)
+        source.refresh_from_db()
+        self.assertEqual(source.updated_at, configured_at)
+        self.assertTrue(source.public_data()['connection_test_current'])
+        for stale in (first, parallel):
+            with self.assertRaises(sync.PeopleSyncApplyError):
+                sync.apply_people_sync(source, stale)
+        fresh = sync.preview_people_sync(source, SnapshotAdapter(source, []))
+        sync.apply_people_sync(source, fresh)
+
     def test_repeat_missing_inactive_person_is_a_noop_and_does_not_rewrite_person_timestamp(self):
         """Would fail if every complete omission re-deactivated an already inactive person."""
         sync = _sync_module()

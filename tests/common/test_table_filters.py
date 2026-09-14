@@ -1,4 +1,6 @@
 import csv
+
+from tests import response_body
 from html.parser import HTMLParser
 from io import StringIO
 from urllib.parse import parse_qs, urlsplit
@@ -386,12 +388,12 @@ class FilteredCsvExportTests(TestCase):
         })
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.content.startswith(b'\xef\xbb\xbf'))
-        rows = list(csv.DictReader(StringIO(response.content.decode('utf-8-sig'))))
+        self.assertTrue(response_body(response).startswith(b'\xef\xbb\xbf'))
+        rows = list(csv.DictReader(StringIO(response_body(response).decode('utf-8-sig'))))
         self.assertEqual(len(rows), 25)
         self.assertEqual({row['部门'] for row in rows}, {'运维部'})
         self.assertEqual(rows[0]['姓名'], "'=2+3")
-        self.assertNotIn('password', response.content.decode('utf-8-sig').lower())
+        self.assertNotIn('password', response_body(response).decode('utf-8-sig').lower())
 
     def test_target_scope_is_preserved_in_infrastructure_record_export(self):
         first = Network_Device.objects.create(
@@ -415,7 +417,7 @@ class FilteredCsvExportTests(TestCase):
             {'target': str(first.pk)},
         )
 
-        rows = list(csv.DictReader(StringIO(response.content.decode('utf-8-sig'))))
+        rows = list(csv.DictReader(StringIO(response_body(response).decode('utf-8-sig'))))
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['设备名称'], '核心交换机 (192.0.2.20)')
         self.assertEqual(rows[0]['摘要'], '核心正常')
@@ -534,7 +536,7 @@ class ComputerAnalysisOutcomeTests(TestCase):
             {'filter_status': 'warning'},
         )
         rows = list(csv.DictReader(StringIO(
-            export_response.content.decode('utf-8-sig'),
+            response_body(export_response).decode('utf-8-sig'),
         )))
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['分析结果'], '警告')

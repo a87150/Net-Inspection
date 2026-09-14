@@ -11,16 +11,79 @@ from tests.auth import login_reader
 from django.utils import timezone
 
 from index.common.table_query import apply_table_filters
-from index.common.table_registry import project_record_definition
-from index.inspections.records import _computer_analysis_records, _infrastructure_records
+from index.common.table_registry import get_table_definition, project_record_definition
+from index.inspections.records import _computer_analysis_records, _error_records, _infrastructure_records
 from net.models import (Computer, ComputerAnalysis, ComputerLogFile, Error_Computer,
-                        Network_Device, Network_Device_Inspection)
+                        Network_Device, Network_Device_Inspection, Server,
+                        Server_Inspection)
 
 
 class ResultPaginationTests(TestCase):
     def setUp(self):
         login_reader(self.client)
         self.factory = RequestFactory()
+
+    def test_global_problem_records_include_successful_business_warning(self):
+        """A successful collection with a warning is still an actionable problem."""
+        server = Server.objects.create(name='DB-01', ip='192.0.2.40', server_type='linux')
+        Server_Inspection.objects.create(
+            server=server, status='success', is_reachable=True,
+            summary='CPU 使用率过高',
+            details={'issue_findings': [
+                {'analysis_item': 'cpu', 'project': 'servers', 'severity': 'warning'},
+            ]},
+        )
+
+        response = self.client.get(reverse('error_records'))
+
+        records = response.context['page_obj'].object_list
+        self.assertEqual([(record['category'], record['type'], record['message']) for record in records], [
+            ('服务器', '业务告警', 'CPU 使用率过高'),
+        ])
+
+    def test_global_records_page_uses_union_limit_without_reading_all_rows(self):
+        computer = Computer.objects.create(computer_name='PC-PAGE')
+        log = ComputerLogFile.objects.create(source_path='page.json', modified_at=timezone.now(),
+            content_hash='p' * 64, import_status='success')
+        ComputerAnalysis.objects.bulk_create([
+            ComputerAnalysis(computer=computer, log_file=log, summary=f'row {index}')
+            for index in range(25)
+        ])
+
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(reverse('inspection_records'), {'page_size': '20'})
+            self.assertEqual(len(response.context['page_obj'].object_list), 20)
+
+        listing = [query['sql'] for query in queries if 'UNION ALL' in query['sql'] and 'LIMIT 20' in query['sql']]
+        self.assertEqual(len(listing), 1)
+
+    def test_global_problem_records_label_failed_collection_before_business_severity(self):
+        server = Server.objects.create(name='DB-PARTIAL', ip='192.0.2.41', server_type='linux')
+        Server_Inspection.objects.create(server=server, status='partial', is_reachable=True,
+            details={'issue_findings': [{'analysis_item': 'cpu', 'project': 'servers', 'severity': 'critical'}]})
+
+        rows, _ = apply_table_filters(self.factory.get('/'), _error_records(),
+            get_table_definition('error_records'))
+
+        self.assertEqual(rows[0]['type'], '采集异常')
+
+    def test_global_error_rows_keep_duplicate_pc_errors_and_dynamic_categories(self):
+        computer = Computer.objects.create(computer_name='PC-DUP')
+        log = ComputerLogFile.objects.create(source_path='dup.json', modified_at=timezone.now(),
+            content_hash='d' * 64, import_status='success')
+        analysis = ComputerAnalysis.objects.create(computer=computer, log_file=log)
+        Error_Computer.objects.bulk_create([
+            Error_Computer(inspection=analysis, error_type='disk', error_message='full'),
+            Error_Computer(inspection=analysis, error_type='disk', error_message='full'),
+        ])
+
+        rows, state = apply_table_filters(self.factory.get('/', {'filter_category': 'PC'}),
+            _error_records(), get_table_definition('error_records'))
+
+        self.assertEqual([(row['category'], row['type'], row['message']) for row in rows], [
+            ('PC', 'disk', 'full'), ('PC', 'disk', 'full'),
+        ])
+        self.assertIn(('PC', 'PC'), state['field_options']['category'])
 
     def test_network_filters_and_pages_in_sql_without_payloads(self):
         device = Network_Device.objects.create(device_name='Edge', ip='192.0.2.10')
@@ -80,7 +143,7 @@ class ResultPaginationTests(TestCase):
         ] + [Network_Device_Inspection(device=device, summary='excluded')])
         response = self.client.get(reverse('table_export_scoped', args=['inspection_records', 'networks']),
                                    {'filter_summary': 'include', 'page': 2, 'page_size': 20})
-        rows = list(csv.DictReader(StringIO(response.content.decode('utf-8-sig'))))
+        rows = list(csv.DictReader(StringIO(b''.join(response.streaming_content).decode('utf-8-sig'))))
         self.assertEqual(len(rows), 25)
         self.assertTrue(all('include' in row['摘要'] for row in rows))
 

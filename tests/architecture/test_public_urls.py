@@ -1,5 +1,7 @@
 """Public URLs must never disclose connection credentials or change collection."""
 import csv
+
+from tests import response_body
 from io import StringIO
 
 from django.test import TestCase
@@ -50,8 +52,8 @@ class PublicURLTests(TestCase):
         for kind, asset in self.assets:
             with self.subTest(kind=kind):
                 response = self.client.get(reverse('table_export', args=[kind]), {'filter_ip': asset.ip})
-                self.assert_private_absent(response.content.decode('utf-8-sig'))
-                rows = list(csv.DictReader(StringIO(response.content.decode('utf-8-sig'))))
+                self.assert_private_absent(response_body(response).decode('utf-8-sig'))
+                rows = list(csv.DictReader(StringIO(response_body(response).decode('utf-8-sig'))))
                 self.assertEqual(rows[0]['巡检 API 地址'], self.safe)
                 asset.refresh_from_db()
                 self.assertEqual(asset.api_url, self.raw)

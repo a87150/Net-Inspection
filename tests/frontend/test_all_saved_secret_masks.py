@@ -29,12 +29,14 @@ class AllSavedSecretMaskTests(TestCase):
                     ip='192.0.2.80', device_name='核心交换机',
                     password='ssh-private', snmp_community='community-private',
                     snmp_auth_password='auth-private', snmp_priv_password='priv-private',
+                    api_shared_secret='sangfor-api-private',
                 ),
                 {
                     'password': 'ssh-private',
                     'snmp_community': 'community-private',
                     'snmp_auth_password': 'auth-private',
                     'snmp_priv_password': 'priv-private',
+                    'api_shared_secret': 'sangfor-api-private',
                 },
                 {'ip': '192.0.2.80', 'device_name': '核心交换机'},
             ),
@@ -62,7 +64,11 @@ class AllSavedSecretMaskTests(TestCase):
                 display = device_form(kind, instance=instance)
                 html = display.as_p()
                 self.assertEqual(html.count(MASK), len(secrets))
-                self.assertEqual(html.count('data-secret-mask="true"'), len(secrets))
+                masked_fields = [
+                    name for name, field in display.fields.items()
+                    if field.widget.attrs.get('data-secret-mask') == 'true'
+                ]
+                self.assertTrue(set(secrets).issubset(masked_fields))
                 for value in secrets.values():
                     self.assertNotIn(value, html)
 

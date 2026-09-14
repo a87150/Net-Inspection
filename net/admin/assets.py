@@ -65,7 +65,7 @@ class SecretPreservingModelForm(forms.ModelForm):
 class NetworkDeviceAdminForm(SecretPreservingModelForm):
     secret_fields = (
         'password', 'snmp_community', 'snmp_auth_password',
-        'snmp_priv_password',
+        'snmp_priv_password', 'api_shared_secret',
     )
 
     class Meta:

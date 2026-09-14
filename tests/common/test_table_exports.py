@@ -1,4 +1,6 @@
 import csv
+
+from tests import response_body
 import re
 from html.parser import HTMLParser
 from io import StringIO
@@ -66,7 +68,7 @@ class FilteredExportContractTests(TestCase):
         login_admin(self.client)
         cases = (
             ('people', People, '工号', 'H10001', 'employee_id', 1),
-            ('networks', Network_Device, 'IP地址', '192.0.2.10', 'ip', 3),
+            ('networks', Network_Device, 'IP地址', '192.0.2.10', 'ip', 4),
             ('servers', Server, 'IP地址', '192.0.2.20', 'ip', 2),
             ('monitors', SecurityDevice, 'IP地址', '192.0.2.30', 'ip', 2),
         )
@@ -81,6 +83,10 @@ class FilteredExportContractTests(TestCase):
                 )))
                 self.assertEqual(len(csv_rows), sample_count)
                 self.assertEqual(csv_rows[0][column], sample_value)
+                if entity == 'networks':
+                    sangfor = next(row for row in csv_rows if row['连接方式'] == 'sangfor_api')
+                    self.assertEqual(sangfor['设备类型'], 'ac_gateway')
+                    self.assertEqual(sangfor['厂商'], 'sangfor')
                 if entity == 'networks':
                     hybrid = next(row for row in csv_rows if row['连接方式'] == 'hybrid')
                     self.assertEqual(hybrid['SNMP 版本'], 'v3')
@@ -121,7 +127,7 @@ class FilteredExportContractTests(TestCase):
         )
 
         response = self.client.get(reverse('table_export', args=['networks']))
-        exported = response.content.decode('utf-8-sig')
+        exported = response_body(response).decode('utf-8-sig')
         headers = next(csv.reader(StringIO(exported)))
         rows = list(csv.DictReader(StringIO(exported)))
         definition = get_table_definition('networks')
@@ -175,7 +181,7 @@ class FilteredExportContractTests(TestCase):
             'page_size': '20',
             'page': '2',
         })
-        rows = list(csv.DictReader(StringIO(response.content.decode('utf-8-sig'))))
+        rows = list(csv.DictReader(StringIO(response_body(response).decode('utf-8-sig'))))
 
         self.assertEqual(len(rows), 25)
         self.assertEqual({row['部门'] for row in rows}, {'运维部'})

@@ -8,7 +8,7 @@ from zipfile import ZipFile
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from net.data_exchange.configuration import build_configuration_zip, latest_configuration
 from net.models.domain import DomainOperationSecret
@@ -20,6 +20,7 @@ from net.models import (AlertDelivery, AlertEvent, ComputerAnalysis,
                         TaskTargetRun)
 
 
+@override_settings(DEVICE_BACKUP_ENCRYPTION_KEY='ZGVtby1maXh0dXJlLWtleS1ub3QtcmVhbC0wMDAwMDA=')
 class FinalDemoTests(TestCase):
     def test_domain_operation_history_is_terminal_non_sensitive_and_idempotent(self):
         self.seed()
@@ -128,20 +129,28 @@ class FinalDemoTests(TestCase):
     def test_saved_native_configs_and_explicit_unsupported_outcomes(self):
         self.seed()
         for model, ip, status, content in (
-            (Network_Device, '192.0.2.11', 'unsupported', b''),
+            (Network_Device, '192.0.2.11', 'missing', b''),
             (Network_Device, '192.0.2.12', 'success', b'return'),
             (Network_Device, '192.0.2.13', 'success', b'end'),
-            (SecurityDevice, '203.0.113.31', 'unsupported', b''),
-            (SecurityDevice, '203.0.113.32', 'success', b'table.Network.'),
+            (SecurityDevice, '203.0.113.31', 'missing', b''),
+            (SecurityDevice, '203.0.113.32', 'missing', b''),
             (SecurityDevice, '203.0.113.33', 'missing', b''),
         ):
             with self.subTest(ip=ip):
                 result = latest_configuration(model.objects.get(ip=ip))
                 self.assertEqual(result.status, status)
                 self.assertIn(content, result.content)
+        from net.models import DeviceConfigurationBackup
+        self.assertEqual(DeviceConfigurationBackup.objects.count(), 2)
+        self.assertFalse(DeviceConfigurationBackup.objects.filter(device_type='monitor').exists())
+        for backup in DeviceConfigurationBackup.objects.all():
+            self.assertNotIn(b'hostname', bytes(backup.ciphertext))
+            self.assertNotIn(b'sysname', bytes(backup.ciphertext))
+        self.seed()
+        self.assertEqual(DeviceConfigurationBackup.objects.count(), 2)
         with ZipFile(BytesIO(build_configuration_zip(Network_Device.objects.all()))) as archive:
             self.assertEqual(len(archive.namelist()), 3)
-            self.assertIn(b'unsupported', archive.read('manifest.csv'))
+            self.assertIn(b'missing', archive.read('manifest.csv'))
 
     def test_reset_preserves_unrelated_source_people_and_schedule(self):
         self.seed()

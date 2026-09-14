@@ -198,6 +198,25 @@ class PeopleScheduledWorkerTests(TransactionTestCase):
         response = self.client.get(f'/tasks/{self.task.pk}/')
         self.assertContains(response, '新增 1 · 更新 0 · 未变化 0 · 停用 0 · 跳过 1')
 
+    def test_successful_sync_keeps_connection_test_valid_for_next_schedule(self):
+        configured_at = self.source.updated_at
+        tested_at = self.source.last_tested_at
+        people = [DirectoryPerson(employee_id='E001', name='员工一', external_user_id='u-1')]
+        self._run(people)
+        self.source.refresh_from_db()
+        self.assertEqual(self.source.updated_at, configured_at)
+        self.assertEqual(self.source.last_tested_at, tested_at)
+        self.assertIsNotNone(self.source.last_synced_at)
+        self.assertTrue(self.source.public_data()['connection_test_current'])
+        Schedule.objects.filter(pk=self.schedule.pk).update(next_run_at=timezone.now())
+        self.task = enqueue_due_schedules()[0]
+        target = self._run(people)
+        self.assertEqual(self.task.status, TaskRun.Status.SUCCESS)
+        self.assertEqual(target.result_snapshot['counts']['unchanged'], 1)
+        self.assertEqual(People.objects.filter(employee_id='E001').count(), 1)
+        self.source.refresh_from_db()
+        self.assertTrue(self.source.public_data()['connection_test_current'])
+
     def test_validation_failure_writes_no_personnel_changes(self):
         before = list(People.objects.values_list('employee_id', 'name', 'is_active'))
         target = self._run([

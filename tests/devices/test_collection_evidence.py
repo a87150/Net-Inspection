@@ -125,7 +125,12 @@ class FinalEvidenceTests(TestCase):
         claim_next_task('evidence', 60)
         with patch('requests.get', side_effect=requests.HTTPError('offline')):
             execute_target(task.target_runs.get(), worker_id='evidence')
-        event = task.alert_events.get()
+        from net.inspections.queue import finish_task
+        from net.alerts.task_summaries import process_task_summary
+        finish_task(task.pk, 'evidence')
+        event = process_task_summary(task)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.event_type, 'summary')
         AlertEvent.objects.filter(pk=event.pk).update(status='sending')
         channel = AlertChannel.objects.create(name='expired', channel_type='feishu')
         AlertDelivery.objects.create(event=event, channel=channel, status='sending', attempt_count=3,

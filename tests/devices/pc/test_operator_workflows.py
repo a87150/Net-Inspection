@@ -1,3 +1,5 @@
+from tests import response_body
+
 import json
 from datetime import datetime, time, timezone as dt_timezone
 from unittest.mock import patch
@@ -102,7 +104,7 @@ class FinalOperatorTests(TestCase):
         page = self.client.get('/records/servers/', query)
         self.assertEqual([row['summary'] for row in page.context['page_obj']], ['local-next-day'])
         csv = self.client.get('/tables/inspection_records/servers/export/', query)
-        self.assertIn('local-next-day', csv.content.decode())
+        self.assertIn('local-next-day', response_body(csv).decode())
 
     def test_log_detail_enqueues_only_and_failure_is_read_only(self):
         Computer.objects.create(computer_name='LOG-UI')
@@ -141,7 +143,7 @@ class FinalOperatorTests(TestCase):
         self.assertContains(listing, '部分成功')
         self.assertContains(listing, 'CPU 12%')
         csv = self.client.get('/tables/inspection_records/servers/export/')
-        self.assertIn('CPU 12%', csv.content.decode())
+        self.assertIn('CPU 12%', response_body(csv).decode())
 
     def test_analysis_list_renders_shared_summary_columns(self):
         login_reader(self.client)
@@ -159,4 +161,4 @@ class FinalOperatorTests(TestCase):
         page = self.client.get(analysis_task_url(analysis))
         self.assertContains(page, 'CPU 23%')
         self.assertContains(page, '<td data-column-key="execution_status">成功</td>', html=True)
-        self.assertContains(page, '<td data-column-key="status"><span class="badge text-bg-info">提示</span></td>', html=True)
+        self.assertContains(page, '<td data-column-key="status"><span class="badge status-badge text-bg-info" data-status="info">提示</span></td>', html=True)

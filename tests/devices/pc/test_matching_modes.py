@@ -1,3 +1,5 @@
+from tests import response_body
+
 from types import SimpleNamespace
 from django.test import TestCase
 from net.models import People, ComputerAnalysisProfile
@@ -69,7 +71,7 @@ class MatchingModeTests(TestCase):
         self.assertContains(response, '未匹配日志')
         exported = self.client.get(reverse('table_export', args=['computer_inspections']))
         self.assertEqual(exported.status_code, 200)
-        self.assertIn('M2', exported.content.decode('utf-8-sig'))
+        self.assertIn('M2', response_body(exported).decode('utf-8-sig'))
         from index.common.table_query import apply_table_filters
         from index.common.table_registry import get_table_definition
         from index.inspections.records import _computer_analysis_records

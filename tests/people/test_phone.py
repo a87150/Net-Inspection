@@ -1,4 +1,6 @@
 import csv
+
+from tests import response_body
 from io import BytesIO, StringIO
 
 from django.contrib.auth import get_user_model
@@ -75,7 +77,7 @@ class PhoneWorkflowTests(TestCase):
             request = RequestFactory().get('/', params)
             request.user = reader
             response = export_filtered_csv(request, definition, People.objects.all(), 'people.csv')
-            rows = list(csv.DictReader(StringIO(response.content.decode('utf-8-sig'))))
+            rows = list(csv.DictReader(StringIO(response_body(response).decode('utf-8-sig'))))
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]['手机号'], "'+86 00123")
 

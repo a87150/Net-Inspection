@@ -1,4 +1,6 @@
 import csv
+
+from tests import response_body
 import hashlib
 from io import StringIO
 
@@ -135,7 +137,7 @@ class ProjectRecordWorkspaceTests(TestCase):
         export = self.client.get(reverse(
             'table_export_scoped', args=['inspection_records', 'networks'],
         ))
-        rows = list(csv.DictReader(StringIO(export.content.decode('utf-8-sig'))))
+        rows = list(csv.DictReader(StringIO(response_body(export).decode('utf-8-sig'))))
         self.assertEqual([row['摘要'] for row in rows], [latest_record.summary])
 
     def test_pc_page_excludes_scan_tasks_and_only_lists_latest_analysis_results(self):

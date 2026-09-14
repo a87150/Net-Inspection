@@ -1,4 +1,6 @@
 import csv
+
+from tests import response_body
 from io import StringIO
 
 from django.core.paginator import Paginator
@@ -97,7 +99,7 @@ class PeopleResultPaginationTests(TestCase):
     def test_csv_exports_all_merged_pages(self):
         response = self.client.get(reverse('table_export', args=['computer_inspections']),
             {'task': str(self.task.pk), 'sort': 'employee_number', 'order': 'asc', 'page': 2, 'page_size': 20})
-        result = list(csv.DictReader(StringIO(response.content.decode('utf-8-sig'))))
+        result = list(csv.DictReader(StringIO(response_body(response).decode('utf-8-sig'))))
         self.assertEqual(len(result), 66)
         self.assertEqual([r['工号'] for r in result], ['E001'] * 44 + [f'E{i:03}' for i in range(2, 24)])
 

@@ -10,3 +10,19 @@ demo-runtime/
 .task6-artifacts/
 .worktrees/
 runtime/software-policies/
+
+# Local credentials, databases, generated client packages and internal work notes.
+.env.*
+!.env.example
+*.sqlite3
+*.sqlite3-*
+*.sqlite
+*.pem
+*.key
+*.pfx
+*.p12
+PCCollector.exe
+PC-Windows-Collector*.zip
+docs/reviews/
+docs/superpowers/
+.superpowers/

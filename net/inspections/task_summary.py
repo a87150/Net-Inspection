@@ -141,7 +141,10 @@ def summarize_task(task) -> dict:
         for target in task.target_runs.all():
             counts[_target_outcome(task, target)] += 1
     else:
-        counts.update(_summary_counts([task.pk]).get(task.pk, {}))
+        # The loaded task already identifies whether historical personnel scoping is needed.
+        people_ids = ([task.pk] if task.task_type == 'computer_analysis'
+                      and task.profile_snapshot.get('matching_mode') == 'people' else [])
+        counts.update(_summary_counts([task.pk], people_task_ids=people_ids).get(task.pk, {}))
     materialized_count = sum(counts.values())
     missing_count = max(task.total_targets - materialized_count, 0)
     surplus_count = max(materialized_count - task.total_targets, 0)

@@ -18,10 +18,11 @@
 <section class="inspection-config-block"><div class="inspection-config-block__heading"><span class="inspection-config-block__index">04</span><div><h3 class="h6 mb-1">选择配置与执行参数</h3><p class="mb-0">选择已有分析配置，并设置名称及下载、分析的并发上限。</p></div></div><div class="row g-3">{% if task_profiles %}<div class="col-md-4"><label class="form-label" for="pc-profile-switch">编辑配置</label><select id="pc-profile-switch" class="form-select" data-pc-profile-switch>{% for profile in task_profiles %}<option value="{{ profile.pk }}"{% if profile.pk == task_default_profile.pk %} selected{% endif %}>{{ profile.name }}</option>{% endfor %}</select></div>{% endif %}
  {% include 'devices/pc/config_field.html' with field=pc_analysis_form.matching_mode col='col-md-6' %} {% include 'devices/pc/config_field.html' with field=pc_analysis_form.name col='col-md-5'   %}{% include 'devices/pc/config_field.html' with field=pc_analysis_form.concurrent_workers col='col-md-3'   %}</div>
  {% if pc_log_source and task_default_profile %}{% if request.user.is_staff or request.user.is_superuser %}
- <div class="d-flex flex-wrap gap-2 mt-3"><a class="btn btn-outline-secondary btn-sm" href="{% url 'pc_script_download' task_default_profile.pk 'windows' %}">下载 Windows 采集脚本</a><a class="btn btn-outline-secondary btn-sm" href="{% url 'pc_script_download' task_default_profile.pk 'macos' %}">下载 macOS 采集脚本</a></div>
+ <div class="d-flex flex-wrap gap-2 mt-3"><a class="btn btn-outline-secondary btn-sm" href="{% url 'pc_script_download' task_default_profile.pk 'windows' %}">下载 Windows 采集包</a><a class="btn btn-outline-secondary btn-sm" href="{% url 'pc_script_download' task_default_profile.pk 'macos' %}">下载 macOS 采集脚本</a></div>
  {% endif %}{% endif %}</section>
 <section class="inspection-config-block"><div class="inspection-config-block__heading"><span class="inspection-config-block__index">05</span><div><h3 class="h6 mb-1">分析规则与阈值</h3><p class="mb-0">硬件阈值、软件策略及人员站点映射，均使用当前分析配置。</p></div></div><div class="row g-3">{% include 'devices/pc/config_field.html' with field=pc_analysis_form.cpu_max_percent col='col-md-3'   %}
 {% include 'devices/pc/config_field.html' with field=pc_analysis_form.memory_max_percent col='col-md-3'   %}
+{% include 'devices/pc/config_field.html' with field=pc_analysis_form.disk_max_percent col='col-md-3' %}
 {% include 'devices/pc/config_field.html' with field=pc_analysis_form.cpu_temperature_max_celsius col='col-md-3'   %}
 {% include 'devices/pc/config_field.html' with field=pc_analysis_form.uptime_max_hours col='col-md-3'   %}
 {% include 'devices/pc/config_field.html' with field=pc_analysis_form.minimum_windows_release col='col-md-3'   %}
@@ -43,7 +44,7 @@
  {% include 'devices/pc/config_field.html' with field=pc_analysis_form.interval_value col='col-md-3'  schedule='interval' %}
  <div class="col-md-3" data-schedule-interval><label class="form-label" for="pc-interval-unit">单位</label><select id="pc-interval-unit" class="form-select" name="interval_unit"><option value="minutes"{% if pc_analysis_form.interval_unit.value != 'hours' %} selected{% endif %}>分钟</option><option value="hours"{% if pc_analysis_form.interval_unit.value == 'hours' %} selected{% endif %}>小时</option></select></div>
  {% include 'devices/pc/config_field.html' with field=pc_analysis_form.daily_time col='col-md-3'  schedule='daily' %}</div>
- {% if task_default_schedule %}<div class="small text-secondary mt-3">当前计划：{% if task_default_schedule.is_enabled %}已启用{% else %}已停用{% endif %}；最近入队 {{ task_default_schedule.last_enqueued_at|date:'Y-m-d H:i'|default:'暂无' }}；下次执行 {{ task_default_schedule.next_run_at|date:'Y-m-d H:i'|default:'待计算' }}。</div>{% endif %}</section>
+ {% if task_default_schedule %}<div class="small text-secondary mt-3">当前计划：{% if task_default_schedule.is_enabled %}已启用{% else %}已停用{% endif %}；最近入队 {{ task_default_schedule.last_enqueued_at|date:'Y-m-d H:i'|default:'暂无' }}；下次执行 {{ task_default_schedule.next_run_at|date:'Y-m-d H:i'|default:'待计算' }}。{% if task_default_schedule.last_schedule_status == 'blocked' %} 上次调度：等待活动任务结束。{% elif task_default_schedule.last_schedule_status == 'error' %} 上次调度失败：{{ task_default_schedule.last_schedule_error }}{% endif %}</div>{% endif %}</section>
    </form>
    </div>
   </div>

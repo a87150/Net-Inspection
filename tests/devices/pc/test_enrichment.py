@@ -6,19 +6,19 @@ from tests.devices.pc.test_remote_rules import RemoteRuleFixture
 
 class EnrichmentTests(TestCase):
     def setUp(self):
-        self.pc = Computer.objects.create(computer_name='H051281')
-        self.person = People.objects.create(employee_id='H051281', name='Test Person',
+        self.pc = Computer.objects.create(computer_name='TEST051281')
+        self.person = People.objects.create(employee_id='TEST051281', name='Test Person',
                                             department='Engineering')
-        Domain_Account.objects.create(login_name='h051281', account_name='Test Person',
+        Domain_Account.objects.create(login_name='test051281', account_name='Test Person',
                                       ou='OU=Users,OU=Site')
-        Domain_Computer.objects.create(computer_name='h051281', ou='OU=Computers,OU=Site')
-        self.payload = {'系统信息概览': {'当前登录用户工号': 'EXAMPLE\\h051281'},
+        Domain_Computer.objects.create(computer_name='test051281', ou='OU=Computers,OU=Site')
+        self.payload = {'系统信息概览': {'当前登录用户工号': 'EXAMPLE\\test051281'},
                         '网络信息': [{'IP地址': '192.0.2.10'}]}
 
     def test_matches_synchronized_models_by_normalized_identifier(self):
         from net.devices.pc.enrichment import build_pc_enrichment
         result = build_pc_enrichment(self.pc, self.payload)
-        self.assertEqual(result['employee_number'], 'H051281')
+        self.assertEqual(result['employee_number'], 'TEST051281')
         self.assertEqual(result['personnel_name'], 'Test Person')
         self.assertEqual(result['department'], 'Engineering')
         self.assertEqual(result['user_ou'], 'OU=Users,OU=Site')
@@ -33,8 +33,8 @@ class EnrichmentTests(TestCase):
 
     def test_upn_and_missing_identity(self):
         from net.devices.pc.enrichment import build_pc_enrichment
-        self.payload['系统信息概览']['当前登录用户工号'] = 'H051281@example.test'
-        self.assertEqual(build_pc_enrichment(self.pc, self.payload)['employee_number'], 'H051281')
+        self.payload['系统信息概览']['当前登录用户工号'] = 'TEST051281@example.test'
+        self.assertEqual(build_pc_enrichment(self.pc, self.payload)['employee_number'], 'TEST051281')
         self.payload['系统信息概览'] = {}
         result = build_pc_enrichment(self.pc, self.payload)
         self.assertEqual(result['personnel_match'], 'missing')
@@ -45,12 +45,12 @@ class EnrichmentTests(TestCase):
         from net.devices.pc.enrichment import build_pc_enrichment
         with patch('socket.socket', side_effect=AssertionError('Live network access is forbidden')):
             result = build_pc_enrichment(self.pc, self.payload)
-        self.assertEqual(result['employee_number'], 'H051281')
+        self.assertEqual(result['employee_number'], 'TEST051281')
         self.assertEqual(result['computer_ou'], 'OU=Computers,OU=Site')
 
     def test_ambiguous_account_does_not_select_arbitrary_ou(self):
         from net.devices.pc.enrichment import build_pc_enrichment
-        Domain_Account.objects.create(login_name='h051281@example.test', account_name='Other', ou='OU=Other')
+        Domain_Account.objects.create(login_name='test051281@example.test', account_name='Other', ou='OU=Other')
         result = build_pc_enrichment(self.pc, self.payload)
         self.assertEqual(result['domain_account_match'], 'ambiguous')
         self.assertEqual(result['user_ou'], '')

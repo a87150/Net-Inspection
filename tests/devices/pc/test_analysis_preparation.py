@@ -30,6 +30,8 @@ class AnalysisPreparationTests(TransactionTestCase):
         )
         self.profile = ComputerAnalysisProfile.objects.create(
             name='preparation', analysis_items=['activation'])
+        from net.models import People
+        People.objects.create(employee_id='PREP-PC', name='Preparation fixture')
         self.task = enqueue_task(self.profile, [self.log.pk], 'manual')
         claim_next_task('prep-worker', 60)
         self.target = self.task.target_runs.get()

@@ -69,6 +69,7 @@ def _computer_defaults(payload, modified_at):
         system_info,
         payload.get('网络信息'),
         payload.get('计算机硬件资源情况'),
+        disk_payload=payload,
     )
     return computer_name, collected_at, {
         'is_active': True,

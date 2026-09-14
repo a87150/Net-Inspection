@@ -101,6 +101,11 @@ def collect_payload(config):
     memory_usage = clamp_percent((used_pages * page_size / memory_bytes) * 100) if memory_bytes and vm_counts else None
     memory_gb = memory_bytes / (1024 ** 3)
 
+    disk_volumes = []
+    for line in observed['DF_OUTPUT'].splitlines()[1:]:
+        columns = line.split()
+        if len(columns) >= 4 and columns[0].startswith('/dev/') and columns[1].isdigit() and columns[3].isdigit():
+            disk_volumes.append({'device': columns[0], 'total_bytes': int(columns[1]) * 1024, 'free_bytes': int(columns[3]) * 1024})
     disk_summary = '; '.join(observed['DF_OUTPUT'].splitlines()[1:])
     disk_match = re.search(r'Disk Size:\s*[^\n]*\(([\d,]+) Bytes\)', observed['DISKUTIL_OUTPUT'])
     disk_bytes = int(disk_match.group(1).replace(',', '')) if disk_match else 0
@@ -144,6 +149,7 @@ def collect_payload(config):
             '系统版本类型': 'macOS',
         },
         '网络信息': network_rows,
+        '磁盘空间情况': disk_volumes,
         '计算机硬件资源情况': {
             'CPU型号': sysctl.get('machdep.cpu.brand_string', ''),
             'CPU物理核心数': physical,

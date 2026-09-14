@@ -60,6 +60,54 @@ def _linux_static_inventory(result):
             values['memory_total_gb'] = total / _GIB
     return values
 
+def _windows_static_inventory(result):
+    values = {}
+    system = result.get('system_info')
+    if isinstance(system, dict):
+        for source, target in (('caption', 'os_version'), ('build_number', 'os_build'), ('architecture', 'architecture')):
+            value = system.get(source)
+            if isinstance(value, str) and value.strip():
+                values[target] = value.strip()
+    cpu = result.get('cpu')
+    if isinstance(cpu, dict):
+        if isinstance(cpu.get('model'), str) and cpu['model'].strip():
+            values['cpu_model'] = cpu['model'].strip()
+        for source, target in (('physical_cores', 'cpu_physical_core_count'), ('logical_processors', 'cpu_logical_processor_count')):
+            value = cpu.get(source)
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and 0 < value < 1000000 and int(value) == value:
+                values[target] = int(value)
+    memory = result.get('memory')
+    if isinstance(memory, dict):
+        total = _positive_bytes(memory.get('total_bytes'))
+        if total is not None:
+            values['memory_total_gb'] = (total / _GIB).quantize(Decimal('.01'))
+    disks = result.get('physical_disks')
+    if isinstance(disks, list) and disks:
+        seen, total = set(), Decimal(0)
+        for disk in disks:
+            if not isinstance(disk, dict):
+                break
+            device = disk.get('device')
+            size = _positive_bytes(disk.get('total_bytes'))
+            if not isinstance(device, str) or not device.strip() or device.casefold() in seen or size is None:
+                break
+            seen.add(device.casefold())
+            total += size
+        else:
+            values['disk_total_gb'] = (total / _GIB).quantize(Decimal('.01'))
+    return values
+
+
+def _positive_bytes(value):
+    if isinstance(value, bool):
+        return None
+    try:
+        number = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+    return number if number.is_finite() and 0 < number < 10 ** 18 and number == number.to_integral_value() else None
+
+
 def _value_for_field(field_name, value):
     if value is None or (isinstance(value, str) and not value.strip()):
         return None
@@ -86,6 +134,8 @@ def refresh_asset_inventory(asset, normalized_result) -> set[str]:
     source = dict(normalized_result)
     if isinstance(asset, Server) and str(getattr(asset, 'server_type', '')).lower() == 'linux':
         source.update(_linux_static_inventory(normalized_result))
+    if isinstance(asset, Server) and str(getattr(asset, 'server_type', '')).lower() == 'windows':
+        source.update(_windows_static_inventory(normalized_result))
     changed_fields = set()
     for field_name in allowed_fields:
         value = _value_for_field(field_name, source.get(field_name))

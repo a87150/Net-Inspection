@@ -35,6 +35,15 @@ class ObservedStop(threading.Event):
         return stopped
 
 
+def _wait_for(predicate, timeout):
+    deadline = __import__('time').monotonic() + timeout
+    while __import__('time').monotonic() < deadline:
+        if predicate():
+            return True
+        threading.Event().wait(0.01)
+    return predicate()
+
+
 class WorkerLifecycleTests(TransactionTestCase):
     def make_task(self, count=2, concurrency=1):
         profile = InspectionProfile.objects.create(
@@ -43,6 +52,65 @@ class WorkerLifecycleTests(TransactionTestCase):
         assets = [Server.objects.create(ip=f'192.0.2.{230 + number}', username='reader', password='password')
                   for number in range(count)]
         return enqueue_task(profile, [asset.pk for asset in assets], 'manual')
+
+    def test_maintenance_failure_still_closes_main_thread_connections(self):
+        worker = TaskWorker(threads=1)
+        real_close = connections.close_all
+        close_calls = []
+
+        def close_connections():
+            close_calls.append(True)
+            return real_close()
+
+        with patch('net.inspections.worker.recover_expired_tasks'), \
+                patch('net.inspections.worker.reconcile_pending_analysis_handoffs', return_value=[]), \
+                patch('net.inspections.worker.enqueue_due_schedules'), \
+                patch('net.inspections.worker.claim_next_task', return_value=None), \
+                patch.object(worker, '_maintenance_cycle', side_effect=RuntimeError('maintenance failure')), \
+                patch.object(connections, 'close_all', side_effect=close_connections):
+            with self.assertRaises(RuntimeError):
+                worker.run_once()
+
+        self.assertTrue(close_calls)
+
+    def test_maintenance_can_block_on_delivery_without_stopping_task_lease_heartbeats(self):
+        task = self.make_task(count=1)
+        claimed = claim_next_task('maintenance-heartbeat', 1)
+        entered, release = threading.Event(), threading.Event()
+        stop, maintenance_stop = threading.Event(), threading.Event()
+        renewals = []
+        worker = TaskWorker(worker_id='maintenance-heartbeat', threads=1, lease_seconds=1, poll_seconds=0.01)
+
+        def blocking_target(*_args, **_kwargs):
+            entered.set()
+            release.wait(3)
+
+        def blocking_delivery(**_kwargs):
+            entered.set()
+            release.wait(3)
+            return []
+
+        with patch('net.inspections.worker.execute_target', side_effect=blocking_target), \
+                patch('net.inspections.worker.reconcile_pending_analysis_handoffs', return_value=[]), \
+                patch('net.inspections.worker.enqueue_due_schedules', return_value=[]), \
+                patch('net.alerts.service.reconcile_terminal_targets'), \
+                patch('net.alerts.task_summaries.reconcile_terminal_tasks'), \
+                patch('net.alerts.service.deliver_due_alerts', side_effect=blocking_delivery), \
+                patch('net.inspections.worker.renew_lease', side_effect=lambda *_args: renewals.append(1) or True):
+            maintainer = threading.Thread(target=worker._maintenance_loop, args=(stop, maintenance_stop))
+            runner = threading.Thread(target=worker._execute_claimed_task, args=(claimed, stop))
+            maintainer.start()
+            runner.start()
+            self.assertTrue(entered.wait(2))
+            # The delivery remains blocked; the target wait loop must still renew.
+            self.assertTrue(_wait_for(lambda: bool(renewals), timeout=2))
+            release.set()
+            maintenance_stop.set()
+            runner.join(4)
+            maintainer.join(4)
+        self.assertFalse(runner.is_alive())
+        self.assertFalse(maintainer.is_alive())
+        self.assertTrue(renewals)
 
     def test_each_target_thread_closes_its_connection_on_success_and_exception(self):
         task = self.make_task()

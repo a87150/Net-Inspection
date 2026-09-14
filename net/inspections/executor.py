@@ -108,7 +108,7 @@ def _asset_context(target):
     if target_type == TaskTargetRun.TargetType.NETWORK_DEVICE:
         model, secret_fields = Network_Device, (
             'username', 'password', 'snmp_community',
-            'snmp_auth_password', 'snmp_priv_password',
+            'snmp_auth_password', 'snmp_priv_password', 'api_shared_secret',
         )
     elif target_type == TaskTargetRun.TargetType.SERVER:
         model, secret_fields = Server, ('username', 'password', 'api_token')
@@ -119,7 +119,7 @@ def _asset_context(target):
 
     connection_fields = {
         TaskTargetRun.TargetType.NETWORK_DEVICE: (
-            'ip', 'port', 'vendor', 'connection_type', 'snmp_version', 'snmp_port',
+            'ip', 'port', 'vendor', 'connection_type', 'api_url', 'verify_ssl', 'snmp_version', 'snmp_port',
             'snmp_security_level', 'snmp_username', 'snmp_auth_protocol',
             'snmp_priv_protocol', 'snmp_context_name', 'snmp_retries',
         ),
@@ -152,7 +152,12 @@ def _device_task(target, task):
     result = copy(task)
     result.profile_snapshot = deepcopy(task.profile_snapshot)
     if 'selected_items' in effective:
-        result.selected_items_snapshot = [item for item in task.selected_items_snapshot if item in effective['selected_items'] or (item == 'config_info' and target.target_type == TaskTargetRun.TargetType.NETWORK_DEVICE)]
+        needs_backup = (target.target_type == TaskTargetRun.TargetType.NETWORK_DEVICE
+                        and target.target_snapshot.get('connection_type') != 'sangfor_api')
+        result.selected_items_snapshot = [
+            item for item in task.selected_items_snapshot
+            if item in effective['selected_items'] or (item == 'config_info' and needs_backup)
+        ]
     for key, source in [('issue_severity_overrides','severity_overrides'),('issue_thresholds','thresholds')]:
         result.profile_snapshot[key] = {**result.profile_snapshot.get(key,{}), **effective.get(source,{})}
     if 'alert_items' in effective:
@@ -287,6 +292,10 @@ def _record_spec(target):
 
 def _selected_raw(target, task, raw):
     if target.target_type == TaskTargetRun.TargetType.NETWORK_DEVICE:
+        if target.target_snapshot.get('connection_type') == 'sangfor_api':
+            from net.devices.network.sangfor import STATUS_ENDPOINTS
+            allowed = {'api:' + STATUS_ENDPOINTS[item][0] for item in task.selected_items_snapshot if item in STATUS_ENDPOINTS}
+            return {key: value for key, value in raw.items() if key in allowed} if isinstance(raw, dict) else {}
         aliases = {item: tuple(command for commands in NETWORK_COMMANDS.values()
                                for key, command in zip(NETWORK_FIELDS, commands) if key == item)
                    for item in NETWORK_FIELDS}
@@ -313,6 +322,8 @@ def _selected_raw(target, task, raw):
         aliases = SECURITY_FIELDS
     elif target.target_snapshot.get('server_type') == 'windows':
         result = selected_fields(raw, task.selected_items_snapshot, WINDOWS_FIELDS)
+        if 'storage_status' in task.selected_items_snapshot and isinstance(raw, dict) and 'physical_disks' in raw:
+            result['physical_disks'] = raw['physical_disks']
         if isinstance(raw, dict) and isinstance(raw.get('collection_errors'), dict):
             errors = {key: value for key, value in raw['collection_errors'].items() if key in task.selected_items_snapshot}
             if errors:
@@ -321,6 +332,59 @@ def _selected_raw(target, task, raw):
     else:
         aliases = LINUX_FIELDS
     return selected_fields(raw, task.selected_items_snapshot, aliases)
+
+
+def _collection_report(target, task, collection, secrets):
+    """Prepare selected, sanitized evidence and business findings without DB I/O."""
+    status = _record_status(collection)
+    if 'config_info' in task.selected_items_snapshot and 'config_info' not in collection.data:
+        failed_config = {'status': 'failed', 'message': '配置采集未完成；请检查连接配置并重新执行。'}
+        collection.data['config_info'] = failed_config
+        collection.raw['config_info'] = failed_config
+        if status == RecordStatus.SUCCESS:
+            status = RecordStatus.PARTIAL if len(collection.data) > 1 else RecordStatus.FAILED
+    scrub = sanitize_configuration if 'config_info' in task.selected_items_snapshot else sanitize
+    scrub_items = sanitize_configuration_items if 'config_info' in task.selected_items_snapshot else sanitize
+    details = scrub_items(_selected_details(task, collection), secrets=secrets)
+    from net.devices.pc.severity import grade_issue
+    if task.profile_snapshot.get('issue_project'):
+        from net.inspections.device_issues import evaluate_device_issues
+        findings, normal_items = evaluate_device_issues(
+            task.profile_snapshot['issue_project'], task.selected_items_snapshot, details,
+            reachable=bool(collection.reachable), status=status,
+            overrides=task.profile_snapshot.get('issue_severity_overrides', {}),
+            thresholds=task.profile_snapshot.get('issue_thresholds', {}), message=collection.message,
+            server_type=target.target_snapshot.get('server_type') if target.target_type == TaskTargetRun.TargetType.SERVER else None)
+        enabled_alerts = task.profile_snapshot.get('device_alert_items')
+        if enabled_alerts is not None:
+            findings = [finding for finding in findings if finding.get('analysis_item') in enabled_alerts]
+            normal_items = [item for item in normal_items if item in enabled_alerts]
+        details['issue_findings'] = scrub_items(findings, secrets=secrets)
+        details['normal_issue_items'] = normal_items
+    elif status != RecordStatus.SUCCESS:
+        issue = {'analysis_item': 'inspection_collection', '问题类型': '设备采集问题',
+                 '详细问题': collection.message or '巡检未完整成功', 'severity': 'critical'}
+        if status == RecordStatus.PARTIAL:
+            issue['data_state'] = 'partial'
+        details['issue_findings'] = [grade_issue(issue, overrides=task.profile_snapshot.get('issue_severity_overrides', {}))]
+        details['issue_findings'] = scrub_items(details['issue_findings'], secrets=secrets)
+    raw_output = scrub_items(
+        _selected_raw(target, task, collection.raw),
+        secrets=secrets,
+    )
+    message = scrub(
+        collection.message
+        or (
+            '巡检成功'
+            if status == RecordStatus.SUCCESS
+            else '巡检未完整成功'
+        ),
+        secrets=secrets,
+    )[:4096]
+    if details.get('issue_findings'):
+        message = (message + '；' + '、'.join(f"{issue['category']}（{issue['severity_label']}）"
+                   for issue in details['issue_findings']))[:4096]
+    return status, details, raw_output, message
 
 
 def _persist_collection(target_run_id, worker_id, collection, lease_guard=None, secrets=()):
@@ -345,59 +409,12 @@ def _persist_collection(target_run_id, worker_id, collection, lease_guard=None, 
 
             task = _device_task(target, task)
             _persist_configuration_backup(target, collection, now)
-            status = _record_status(collection)
             if 'config_info' in task.selected_items_snapshot and not secrets:
                 # Also cover worker-level failure persistence, which did not
                 # pass through execute_target's live credential resolution.
                 secrets = configuration_secrets()
-            if 'config_info' in task.selected_items_snapshot and 'config_info' not in collection.data:
-                failed_config = {'status': 'failed', 'message': '配置采集未完成；请检查连接配置并重新执行。'}
-                collection.data['config_info'] = failed_config
-                collection.raw['config_info'] = failed_config
-                if status == RecordStatus.SUCCESS:
-                    status = RecordStatus.PARTIAL if len(collection.data) > 1 else RecordStatus.FAILED
-            scrub = sanitize_configuration if 'config_info' in task.selected_items_snapshot else sanitize
-            scrub_items = sanitize_configuration_items if 'config_info' in task.selected_items_snapshot else sanitize
-            details = scrub_items(_selected_details(task, collection), secrets=secrets)
-            from net.devices.pc.severity import grade_issue
-            if task.profile_snapshot.get('issue_project'):
-                from net.inspections.device_issues import evaluate_device_issues
-                findings, normal_items = evaluate_device_issues(
-                    task.profile_snapshot['issue_project'], task.selected_items_snapshot, details,
-                    reachable=bool(collection.reachable), status=status,
-                    overrides=task.profile_snapshot.get('issue_severity_overrides', {}),
-                    thresholds=task.profile_snapshot.get('issue_thresholds', {}), message=collection.message,
-                    server_type=target.target_snapshot.get('server_type') if target.target_type == TaskTargetRun.TargetType.SERVER else None)
-                enabled_alerts = task.profile_snapshot.get('device_alert_items')
-                if enabled_alerts is not None:
-                    findings = [finding for finding in findings if finding.get('analysis_item') in enabled_alerts]
-                    normal_items = [item for item in normal_items if item in enabled_alerts]
-                details['issue_findings'] = scrub_items(findings, secrets=secrets)
-                details['normal_issue_items'] = normal_items
-            elif status != RecordStatus.SUCCESS:
-                issue = {'analysis_item': 'inspection_collection', '问题类型': '设备采集问题',
-                         '详细问题': collection.message or '巡检未完整成功', 'severity': 'critical'}
-                if status == RecordStatus.PARTIAL:
-                    issue['data_state'] = 'partial'
-                details['issue_findings'] = [grade_issue(issue, overrides=task.profile_snapshot.get('issue_severity_overrides', {}))]
-                details['issue_findings'] = scrub_items(details['issue_findings'], secrets=secrets)
-            raw_output = scrub_items(
-                _selected_raw(target, task, collection.raw),
-                secrets=secrets,
-            )
-            message = scrub(
-                collection.message
-                or (
-                    '巡检成功'
-                    if status == RecordStatus.SUCCESS
-                    else '巡检未完整成功'
-                ),
-                secrets=secrets,
-            )[:4096]
+            status, details, raw_output, message = _collection_report(target, task, collection, secrets)
             record_model, error_model, result_type, asset_field = _record_spec(target)
-            if details.get('issue_findings'):
-                message = (message + '；' + '、'.join(f"{issue['category']}（{issue['severity_label']}）"
-                           for issue in details['issue_findings']))[:4096]
             record = record_model.objects.create(
                 **{asset_field: target.target_id},
                 task_target=target,
@@ -473,9 +490,9 @@ def execute_target(target_run, *, worker_id, lease_guard=None):
         asset = _asset_context(started)
         secrets = tuple(getattr(asset, field, '') for field in (
             'username', 'password', 'snmp_community', 'snmp_auth_password',
-            'snmp_priv_password', 'api_username', 'api_password', 'api_token',
+            'snmp_priv_password', 'api_username', 'api_password', 'api_token', 'api_shared_secret',
         ))
-        if 'config_info' in started.task.selected_items_snapshot:
+        if 'config_info' in _device_task(started, started.task).selected_items_snapshot:
             secrets += configuration_secrets()
         collection = _collect(started, started.task, asset)
     except Exception as exc:  # Collector boundaries must never terminate sibling work.

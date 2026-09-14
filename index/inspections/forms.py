@@ -30,6 +30,7 @@ _ANALYSIS_LABELS = {
     'processes': '运行进程', 'bitlocker': 'BitLocker',
     'defender': 'Defender 信息', 'patches': '系统更新',
     'resource': '资源使用情况',
+    'disk': '磁盘空间',
     'event_findings': '事件发现', 'system': '系统版本',
     'uptime': '连续开机时间',
     'browser_extensions': '浏览器扩展', 'identity_match': '账号与电脑名匹配',
@@ -41,14 +42,17 @@ _ANALYSIS_LABELS = {
 def inspection_item_choices(device_type):
     """Return only collector keys that this project type can execute."""
     if device_type == InspectionProfile.DeviceType.NETWORK_DEVICE:
-        keys = set(NETWORK_FIELDS) | set(NETWORK_FUNCTION_ITEMS) | {'traffic'}
+        from net.devices.network.sangfor import DEFAULT_ITEMS
+        keys = set(NETWORK_FIELDS) | set(NETWORK_FUNCTION_ITEMS) | set(DEFAULT_ITEMS) | {'traffic'}
     elif device_type == InspectionProfile.DeviceType.SERVER:
         keys = set(LINUX_FIELDS) | set(WINDOWS_FIELDS)
     elif device_type == InspectionProfile.DeviceType.MONITOR:
         keys = set(SECURITY_FIELDS)
     else:
         keys = set()
-    return tuple((key, _INSPECTION_LABELS.get(key, key)) for key in sorted(keys))
+    from net.inspections.issues import PROJECT_RULES
+    api_labels = {key: value[1] for key, value in PROJECT_RULES['networks'].items()}
+    return tuple((key, _INSPECTION_LABELS.get(key, api_labels.get(key, key))) for key in sorted(keys))
 
 
 def analysis_item_choices():
@@ -249,6 +253,7 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
     uptime_max_hours = forms.IntegerField(
         required=False, min_value=1, max_value=87600, label='最长连续开机时间（小时）',
     )
+    disk_max_percent = forms.IntegerField(required=False, min_value=1, max_value=100, label='磁盘使用率报警阈值（%）')
     cpu_max_percent = forms.IntegerField(
         required=False, min_value=1, max_value=100, label='CPU 报警阈值（%）',
     )
@@ -284,6 +289,7 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
                 'defender_scan_max_days': instance.defender_scan_max_days,
                 'patch_max_days': instance.patch_max_days,
                 'uptime_max_hours': instance.uptime_max_hours,
+                'disk_max_percent': instance.disk_max_percent,
                 'cpu_max_percent': instance.cpu_max_percent,
                 'memory_max_percent': instance.memory_max_percent,
                 'cpu_temperature_max_celsius': instance.cpu_temperature_max_celsius,
@@ -332,6 +338,7 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
             'defender_scan_max_days': self._configured_value('defender_scan_max_days', 7),
             'patch_max_days': self._configured_value('patch_max_days', 30),
             'uptime_max_hours': self._configured_value('uptime_max_hours', 168),
+            'disk_max_percent': self._configured_value('disk_max_percent', 90),
             'cpu_max_percent': self._configured_value('cpu_max_percent', 90),
             'memory_max_percent': self._configured_value('memory_max_percent', 90),
             'cpu_temperature_max_celsius': self._configured_value('cpu_temperature_max_celsius', 85) or 85,

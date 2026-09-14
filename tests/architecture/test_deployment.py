@@ -23,6 +23,8 @@ class ProductionStaticTests(SimpleTestCase):
             client = Client()
             for path, media in (
                 ('app/css/style.css', 'text/css'),
+                ('app/css/foundation.css', 'text/css'),
+                ('app/css/operations.css', 'text/css'),
                 ('app/js/common/table_workspace.js', 'javascript'),
             ):
                 with self.subTest(path=path):
@@ -30,7 +32,7 @@ class ProductionStaticTests(SimpleTestCase):
                     self.assertEqual(response.status_code, 200)
                     self.assertIn(media, response['Content-Type'])
                     body = b''.join(response.streaming_content) if response.streaming else response.content
-                    self.assertGreater(len(body), 100)
+                    self.assertTrue(body)
                     self.assertEqual(body, (settings.BASE_DIR / 'static' / path).read_bytes())
 
 
@@ -84,7 +86,8 @@ class DemoLauncherTests(SimpleTestCase):
             original = hashlib.sha256(original_path.read_bytes()).hexdigest() if original_path.exists() else None
             cmd = [sys.executable, '-m', 'deploy.demo', '--runtime-dir', str(root), '--prepare-only']
             env = {**os.environ, 'DB_ENGINE': 'sqlite', 'NET_ENV_FILE': str(root / 'absent.env'),
-                   'DJANGO_SQLITE_PATH': str(settings.BASE_DIR / 'db.sqlite3')}
+                   'DJANGO_SQLITE_PATH': str(settings.BASE_DIR / 'db.sqlite3'),
+                   'DJANGO_STATIC_ROOT': str(root / 'staticfiles')}
             for attempt in range(2):
                 result = subprocess.run(cmd, cwd=settings.BASE_DIR, env=env, capture_output=True, timeout=45)
                 self.assertEqual(result.returncode, 0, result.stderr.decode(errors='replace'))

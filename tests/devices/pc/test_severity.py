@@ -34,6 +34,8 @@ class SeverityTests(RemoteRuleFixture, TestCase):
         from net.inspections.queue import enqueue_task, claim_next_task, finish_task
         from net.devices.pc.executor import execute_computer_target
         from net.inspections.task_summary import summarize_task
+        from net.models import People
+        People.objects.create(employee_id='tester', name='Test User')
         profile = ComputerAnalysisProfile.objects.create(name='severity pipeline', analysis_items=['domain_trust'])
         self.payloads['windows']['当前与域服务器通讯情况'] = '失败'
         log = self.analyze(['domain_trust']).log_file
