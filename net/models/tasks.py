@@ -126,6 +126,10 @@ class ComputerAnalysisProfile(models.Model):
         validators=[validate_string_list],
     )
     software_policy_path = models.TextField(blank=True)
+    software_policy_mode = models.CharField(
+        '软件分析模式', max_length=16, default='whitelist', db_default='whitelist',
+        choices=(('whitelist', '白名单模式'), ('blacklist', '黑名单模式')),
+    )
     minimum_windows_release = models.CharField(max_length=16, blank=True, default='23H2')
     defender_update_max_days = models.PositiveSmallIntegerField(
         default=7, validators=[MinValueValidator(1), MaxValueValidator(3650)],

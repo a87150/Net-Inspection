@@ -123,6 +123,7 @@ def _task_context_for_profile(profile):
                 'analysis_items': list(profile.analysis_items),
                 'matching_mode': profile.matching_mode,
                 'software_policy_path': profile.software_policy_path,
+                'software_policy_mode': profile.software_policy_mode,
                 'software_policy_snapshot': software_policy_snapshot(profile.software_policy_path),
                 'minimum_windows_release': profile.minimum_windows_release,
                 'defender_update_max_days': profile.defender_update_max_days,
@@ -346,8 +347,12 @@ def enqueue_task(profile, target_ids, source, overrides=None, *, _frozen_parent=
     if task_type == TaskRun.TaskType.COMPUTER_ANALYSIS:
         from net.devices.pc.matching import personnel_snapshot
         # Legacy parents without a roster remain frozen to an empty roster.
-        roster = (_frozen_parent.parameters_snapshot.get('personnel_roster', [])
-                  if _frozen_parent is not None else personnel_snapshot())
+        if _frozen_parent is not None:
+            roster = _frozen_parent.parameters_snapshot.get('personnel_roster', [])
+        elif profile_snapshot.get('matching_mode') == 'people':
+            roster = personnel_snapshot(active_only=True)
+        else:
+            roster = personnel_snapshot()
         task_kwargs['parameters_snapshot'] = _json_object_copy(
             {**parameters, 'personnel_roster': roster}, 'parameters')
     task = TaskRun(**task_kwargs)
@@ -441,7 +446,16 @@ def enqueue_computer_fetch_task(profile, source, overrides=None):
     log_source.full_clean()
     profile_snapshot['log_source'] = source_snapshot(log_source)
     from net.devices.pc.matching import personnel_snapshot
-    parameters = _json_object_copy({**parameters, 'personnel_roster': personnel_snapshot()}, 'parameters')
+    roster = (personnel_snapshot(active_only=True) if profile_snapshot.get('matching_mode') == 'people'
+              else personnel_snapshot())
+    parameters = _json_object_copy({**parameters, 'personnel_roster': roster}, 'parameters')
+    reused_ids = []
+    if source == TaskRun.Source.MANUAL:
+        from net.devices.pc.analysis_scope import stored_log_ids
+        scope_now = timezone.now()
+        reused_ids = stored_log_ids(log_source, now=scope_now)
+        parameters.update(analysis_scope='source_window', reused_log_count=len(reused_ids),
+                          log_window_at=scope_now.isoformat())
     target_scope_snapshot = {
         'targets': [{
             'target_type': TaskTargetRun.TargetType.COMPUTER_SOURCE,
@@ -487,8 +501,15 @@ def enqueue_computer_fetch_task(profile, source, overrides=None):
             current_source = PCLogSourceConfig.objects.select_for_update().get(pk=1)
             if source_snapshot(current_source) != profile_snapshot['log_source']:
                 raise ValidationError('日志来源刚刚发生变化，请重新创建任务。')
+            if source == TaskRun.Source.MANUAL and TaskTargetRun.objects.filter(
+                task__analysis_profile=profile, target_type=TaskTargetRun.TargetType.COMPUTER_SOURCE,
+                analysis_handoff_task__status__in=TaskRun.ACTIVE_STATUSES,
+            ).exists():
+                raise ValidationError('当前配置的分析阶段尚未结束，请查看原任务，勿重复提交。')
             task.save()
             target.save()
+            if reused_ids:
+                target.fetched_logs.add(*reused_ids)
     except IntegrityError as exc:
         if TaskRun.objects.filter(active_scope_key=task.scope_key).exists():
             raise ValidationError({'profile': '当前配置已有活动获取任务。'}) from exc

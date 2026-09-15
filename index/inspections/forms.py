@@ -225,7 +225,7 @@ class InspectionProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
 class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
     matching_mode = forms.ChoiceField(required=False, initial='logs', label='人员匹配方式', choices=(
         ('logs', '不按人员匹配（日志为主）'), ('people', '按人员匹配（人员为主）')),
-        help_text='人员为主：保留无日志人员；日志为主：保留未匹配人员的日志。工号优先，其次唯一姓名。')
+        help_text='人员为主：只匹配在职人员，保留在职无日志人员；日志为主：保留未匹配人员的日志。工号优先，其次唯一姓名。')
     profile_id = forms.UUIDField(required=False, widget=forms.HiddenInput)
     name = forms.CharField(max_length=255, label='配置名称')
     analysis_items = forms.MultipleChoiceField(
@@ -233,6 +233,11 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
         widget=forms.CheckboxSelectMultiple,
         error_messages={'invalid_choice': '不支持的分析项目。'},
         label='分析项目',
+    )
+    software_policy_mode = forms.ChoiceField(
+        required=False, initial='whitelist', label='软件分析模式',
+        choices=ComputerAnalysisProfile._meta.get_field('software_policy_mode').choices,
+        help_text='白名单：仅允许普通白名单和工号特例中的软件；黑名单：仅对黑名单命中的软件报问题。策略文件无需修改。',
     )
     software_policy_file = forms.FileField(
         required=False,
@@ -285,6 +290,7 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
             self.initial.update({
                 'profile_id': instance.pk,
                 'matching_mode': getattr(instance, 'matching_mode', 'logs'),
+                'software_policy_mode': instance.software_policy_mode,
                 'name': instance.name,
                 'analysis_items': instance.analysis_items,
                 'minimum_windows_release': instance.minimum_windows_release,
@@ -339,6 +345,7 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
             'name': cleaned['name'],
             'analysis_items': cleaned['analysis_items'],
             'matching_mode': self._configured_value('matching_mode', 'logs') or 'logs',
+            'software_policy_mode': self._configured_value('software_policy_mode', 'whitelist') or 'whitelist',
             'minimum_windows_release': self._configured_value('minimum_windows_release', '23H2'),
             'defender_update_max_days': self._configured_value('defender_update_max_days', 7),
             'defender_scan_max_days': self._configured_value('defender_scan_max_days', 7),

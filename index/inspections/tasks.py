@@ -629,6 +629,14 @@ def task_detail(request, pk):
         'domain_retry_requires_password': domain_retry_requires_password,
         'domain_manual_intervention': domain_manual_intervention,
     }
+    if task.task_type == TaskRun.TaskType.COMPUTER_FETCH:
+        fetch_target = task.target_runs.select_related('analysis_handoff_task').first()
+        child = fetch_target.analysis_handoff_task if fetch_target else None
+        if child is None and fetch_target and fetch_target.result_type == 'computer_analysis_task':
+            child = TaskRun.objects.filter(pk=fetch_target.result_id, analysis_profile_id=task.analysis_profile_id).first()
+        context['pc_analysis_task'] = child
+        context['pc_fetch_result'] = fetch_target.result_snapshot if fetch_target else {}
+        context['pc_reused_count'] = task.parameters_snapshot.get('reused_log_count', 0)
     from .task_results import task_result_context
     context.update(task_result_context(request, task))
     if context.get('show_result_table'):

@@ -72,3 +72,18 @@ class PrimaryScopeTests(TestCase):
         self.assertTrue(any(issue['问题类型'] == '日志未匹配人员' for issue in orphan.exceptions))
         metrics = build_project_task_metrics(type(task).objects.filter(pk=task.pk))
         self.assertEqual((metrics['normal_count'], metrics['abnormal_count']), (1, 1))
+
+    def test_departed_people_are_excluded_only_from_new_people_tasks(self):
+        People.objects.create(employee_id='LEFT', name='Departed', is_active=False)
+        People.objects.create(employee_id='ORPHAN', name='Departed with log', is_active=False)
+        task = self.run_mode('people')
+        self.assertEqual(ComputerAnalysis.objects.count(), 1)
+        self.assertNotIn('LEFT', [p['employee_id'] for p in task.parameters_snapshot['personnel_roster']])
+        self.assertEqual(latest_analysis_statistics(task)['total'], 2)
+        People.objects.filter(employee_id='A2').update(is_active=False)
+        self.assertEqual(latest_analysis_statistics(task)['total'], 2)
+
+    def test_logs_mode_keeps_departed_people_in_frozen_context(self):
+        People.objects.create(employee_id='LEFT', name='Departed', is_active=False)
+        task = self.run_mode('logs')
+        self.assertIn('LEFT', [p['employee_id'] for p in task.parameters_snapshot['personnel_roster']])

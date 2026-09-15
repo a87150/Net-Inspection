@@ -4,7 +4,7 @@
  <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
   <div class="modal-header"><h2 class="modal-title fs-5" id="profileConfigModalLabel">PC 日志来源与分析配置</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
   <div class="modal-body modal-body--scroll">
-   <p class="text-secondary small">终端每天写入汇总目录，由后台获取、分析并归档。配置修改只影响后续任务。</p>
+   <p class="text-secondary small">终端每天写入汇总目录。手动执行会先获取新日志，再按当前来源和日期范围分析有效日志（含已入库日志），无需再单独启动分析。配置修改只影响后续任务。</p>
    <div class="inspection-config-layout">
    {% if request.user.is_staff or request.user.is_superuser %}
     <form id="pc-source-config-form" class="inspection-config-layout" method="post" action="{% url 'pc_log_source_save' %}" data-pc-source-form>
@@ -29,6 +29,7 @@
 {% include 'devices/pc/config_field.html' with field=pc_analysis_form.defender_update_max_days col='col-md-3'   %}
 {% include 'devices/pc/config_field.html' with field=pc_analysis_form.defender_scan_max_days col='col-md-3'   %}
 {% include 'devices/pc/config_field.html' with field=pc_analysis_form.patch_max_days col='col-md-3'   %}
+{% include 'devices/pc/config_field.html' with field=pc_analysis_form.software_policy_mode col='col-md-6' %}
 <div class="col-12"><div class="software-policy-upload">
  <div class="software-policy-upload__summary"><div><span class="form-label d-block mb-1">软件策略文件</span><p class="small text-secondary mb-0">下载演示模板后按实际环境填写并上传；未重新上传时继续使用当前配置。</p></div><span class="status-badge {% if task_default_profile.software_policy_path %}status-badge--success{% else %}status-badge--neutral{% endif %}">{% if task_default_profile.software_policy_path %}✓ 已配置{% else %}— 未配置{% endif %}</span></div>
  <div class="software-policy-upload__actions"><a class="btn btn-outline-primary" href="{% url 'pc_software_policy_template_download' %}">下载演示策略模板</a><div class="software-policy-upload__field"><label class="form-label" for="{{ pc_analysis_form.software_policy_file.id_for_label }}">{{ pc_analysis_form.software_policy_file.label }}</label>{{ pc_analysis_form.software_policy_file }}{{ pc_analysis_form.software_policy_file.errors }}{% if pc_analysis_form.software_policy_file.help_text %}<div class="form-text">{{ pc_analysis_form.software_policy_file.help_text }}</div>{% endif %}</div></div>

@@ -8,9 +8,10 @@ def personnel_name(value):
     return str(value or '').split('-', 1)[0].strip()
 
 
-def personnel_snapshot():
+def personnel_snapshot(*, active_only=False):
     from net.models import People
-    return [{**row, 'id': str(row['id'])} for row in People.objects.order_by('employee_id', 'pk').values(
+    people = People.objects.filter(is_active=True) if active_only else People.objects.all()
+    return [{**row, 'id': str(row['id'])} for row in people.order_by('employee_id', 'pk').values(
         'id', 'employee_id', 'name', 'department', 'is_active')]
 
 

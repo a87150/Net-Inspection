@@ -170,3 +170,26 @@ test('rule filters preserve hidden project values and reveal invalid fields', ()
     assert.deepEqual(rules.map(row => row.hidden), [false, false]);
     assert.equal(rules[1].open, true);
 });
+
+
+test('alert inheritance displays default channels without submitting override choices', () => {
+    const events = {};
+    const mode = {value: 'inherit'};
+    const editor = {hidden: false, disabled: false};
+    const inherited = {hidden: true};
+    const form = {
+        querySelector(selector) {
+            return selector.includes('mode') ? mode : selector.includes('override') ? editor : inherited;
+        },
+        addEventListener(event, fn) { events[event] = fn; },
+    };
+    ui.bindAlertPolicy(form);
+    assert.equal(editor.hidden, true);
+    assert.equal(editor.disabled, true);
+    assert.equal(inherited.hidden, false);
+    mode.value = 'override'; events.change();
+    assert.equal(editor.disabled, false);
+    assert.equal(inherited.hidden, true);
+    mode.value = 'inherit'; events['modal-draft-restored']();
+    assert.equal(editor.disabled, true);
+});

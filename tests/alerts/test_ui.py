@@ -61,6 +61,14 @@ class AlertUiTests(TestCase):
         )
         self.default_policy.channels.add(self.primary, self.secondary)
 
+    def test_unsaved_project_policy_displays_default_source_and_channels(self):
+        response = self.client.get(reverse('asset_list', args=['servers']))
+        self.assertEqual(response.context['alert_effective_source_name'], self.default_policy.name)
+        self.assertContains(response, 'data-alert-inherited-channels')
+        self.assertContains(response, 'data-alert-override-channels')
+        self.assertEqual({c.pk for c in response.context['alert_inherited_channels']},
+                         {self.primary.pk, self.secondary.pk})
+
     def target(self):
         task = enqueue_task(self.profile, [self.server.pk], TaskRun.Source.MANUAL)
         target = task.target_runs.get()
@@ -93,6 +101,7 @@ class AlertUiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '告警配置')
+        self.assertContains(response, 'app/js/inspections/task_ui.js')
         self.assertContains(response, 'primary disabled channel')
         self.assertContains(response, 'name="channels"')
         content = response.content.decode()

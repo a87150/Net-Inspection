@@ -2,7 +2,7 @@
 <div class="modal fade alert-policy-modal" id="alertPolicyModal" data-auto-open="{{ alert_policy_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="alertPolicyModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell">
 <div class="modal-content modal-surface">
-        <form method="post" action="{% url 'alert_policy_save' %}">
+        <form method="post" action="{% url 'alert_policy_save' %}" data-alert-policy-form>
 {% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
 <input type="hidden" name="scope" value="{{ alert_policy_scope }}">
@@ -32,7 +32,7 @@
 </div>
 {% endif %}
                     {% if alert_policy_scope != 'default' %}
-<p class="text-secondary small mb-3">当前有效渠道来源：{{ alert_effective_source_name }}。继承模式与发送服务使用同一个默认策略来源。</p>
+<p class="text-secondary small mb-3">保存后对新入队任务生效；已入队任务及其分析子任务沿用入队时的渠道，不自动补发历史通知。</p>
 <fieldset class="mb-0">
 <legend class="fs-6">策略模式</legend>
 <label class="form-check mb-2">
@@ -48,7 +48,13 @@
 <input type="hidden" name="mode" value="override">
 {% endif %}
                 </div>
-                <fieldset class="modal-section alert-policy-modal__section" data-bulk-choice-group>
+                {% if alert_policy_scope != 'default' %}
+                <section class="modal-section" data-alert-inherited-channels{% if alert_policy_mode != 'inherit' %} hidden{% endif %}>
+                    <h3 class="fs-6">继承来源：{{ alert_default_source_name }}</h3>
+                    <ul class="mb-0">{% for channel in alert_inherited_channels %}<li>{{ channel.name }} · {{ channel.get_channel_type_display }}{% if not channel.is_enabled %}（已停用，不发送）{% endif %}</li>{% empty %}<li>默认策略尚未选择渠道，请先在告警记录页面配置默认策略。</li>{% endfor %}</ul>
+                </section>
+                {% endif %}
+                <fieldset class="modal-section alert-policy-modal__section" data-alert-override-channels data-bulk-choice-group{% if alert_policy_scope != 'default' and alert_policy_mode == 'inherit' %} hidden disabled{% endif %}>
 <div class="bulk-choice-group__heading">
 <legend class="fs-6">渠道（可多选）</legend>
 <div class="bulk-choice-group__actions">

@@ -126,9 +126,7 @@ def alert_modal_context(request, *, profile=None):
     mode = policy.mode if policy else (
         AlertPolicy.Mode.OVERRIDE if scope == 'default' else AlertPolicy.Mode.INHERIT
     )
-    effective_source = policy
-    if policy is not None and policy.mode == AlertPolicy.Mode.INHERIT:
-        effective_source = default_policy
+    effective_source = default_policy if mode == AlertPolicy.Mode.INHERIT else policy
     channel_form = _channel_form(channel_type, instance=channel)
     if failure.get('modal') == 'channel':
         channel_form.initial.update(failure['values'])
@@ -145,6 +143,8 @@ def alert_modal_context(request, *, profile=None):
         'alert_policy_scope': scope,
         'alert_policy_profile_id': profile_id,
         'alert_policy_channel_ids': selected_channels,
+        'alert_inherited_channels': list(default_policy.channels.order_by('name', 'pk')) if default_policy else [],
+        'alert_default_source_name': default_policy.name if default_policy else '尚未配置默认策略',
         'alert_effective_source_name': (
             effective_source.name if effective_source is not None else '尚未配置默认策略'
         ),
