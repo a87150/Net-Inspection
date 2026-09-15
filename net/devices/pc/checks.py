@@ -48,7 +48,9 @@ def add_issue(issues, issue_type, detail):
     issues.append({'问题类型': issue_type, '详细问题': detail})
 
 
-def check_software(data, identity, current_issues, config):
+def check_software(data, identity, current_issues, config, *, mode='legacy'):
+    if mode not in {'whitelist', 'blacklist', 'legacy'}:
+        raise ValueError('软件分析模式无效。')
     whitelist = [
         item.lower()
         for values in config.get('WHITELIST', {}).values()
@@ -64,8 +66,10 @@ def check_software(data, identity, current_issues, config):
         lowered_name = name.lower()
         if not name:
             continue
-        if any(keyword in lowered_name for keyword in blacklist):
+        if mode != 'whitelist' and any(keyword in lowered_name for keyword in blacklist):
             problem_softwares.append(name)
+            continue
+        if mode == 'blacklist':
             continue
         if any(keyword in lowered_name for keyword in whitelist):
             continue

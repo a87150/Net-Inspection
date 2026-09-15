@@ -9,6 +9,9 @@
     <div class="page-heading__copy"><p class="page-heading__eyebrow">日志分析记录</p><h1 class="page-heading__title">{{ analysis.computer.computer_name }} 分析详情</h1><p class="page-heading__description">日志时间：{{ analysis.log_file.modified_at|date:'Y-m-d H:i:s'|default:'未知' }}</p></div>
     <div class="page-heading__actions"><a href="{% url 'computer_analysis_list' %}" class="btn btn-outline-secondary">返回日志分析记录</a></div>
 </header>
+{% if 'software' in analysis.analysis_items %}
+<p class="text-secondary">本次软件分析模式：{% if analysis.details.rules.software_policy_mode == 'blacklist' %}黑名单模式{% elif analysis.details.rules.software_policy_mode == 'whitelist' %}白名单模式{% else %}旧版组合规则（黑名单优先，再检查白名单）{% endif %}。</p>
+{% endif %}
 {% if analysis.details.enrichment %}
 {% with enrichment=analysis.details.enrichment %}
 <section class="card surface-card mb-4" aria-label="人员与目录快照">

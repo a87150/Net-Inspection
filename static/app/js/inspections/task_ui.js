@@ -1,3 +1,16 @@
+function bindAlertPolicy(form) {
+    const update = () => {
+        const inherit = form.querySelector('[name="mode"]:checked')?.value === 'inherit';
+        const editor = form.querySelector('[data-alert-override-channels]');
+        const inherited = form.querySelector('[data-alert-inherited-channels]');
+        if (editor) { editor.hidden = inherit; editor.disabled = inherit; }
+        if (inherited) inherited.hidden = !inherit;
+    };
+    form.addEventListener('change', update);
+    form.addEventListener('modal-draft-restored', update);
+    update();
+}
+
 function switchProfile(select, location, doc, transport = typeof window !== 'undefined' ? window.AppModalTransport : null) {
     const url = new URL(location.href);
     const single = select.closest('.modal').querySelector?.('[name="single_target_id"]')?.value;
@@ -104,7 +117,7 @@ function bindBulkChoiceGroup(group) {
     group.querySelector('[data-bulk-invert]').addEventListener('click', () => updateCheckboxSelection(inputs(), 'invert'));
 }
 
-if (typeof module !== 'undefined') module.exports = {applicableTargetItems, switchProfile, selectRow, clearRowTarget, filterTargetDeviceChoices, updateTargetDeviceSelection, updateCheckboxSelection};
+if (typeof module !== 'undefined') module.exports = {bindAlertPolicy,applicableTargetItems, switchProfile, selectRow, clearRowTarget, filterTargetDeviceChoices, updateTargetDeviceSelection, updateCheckboxSelection};
 
 const boundTaskControls = new WeakSet();
 function bindInspectionRuleFilter(container) {
@@ -160,6 +173,7 @@ function bindTaskUI(root) {
     });
     once('[data-target-device-picker]', bindTargetDevicePicker);
     once('[data-rule-filter]', bindInspectionRuleFilter);
+    once('[data-alert-policy-form]', bindAlertPolicy);
     once('[data-inspection-rule]', (rule) => {
         const method=rule.querySelector('[data-rule-method] select');
         const mode=rule.querySelector('[data-rule-mode] select');

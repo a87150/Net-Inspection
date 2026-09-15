@@ -147,3 +147,19 @@ class TaskSummaryTests(TestCase):
         self.assertEqual(event.summary_data['abnormal'], 1)
         self.assertEqual(event.summary_data['normal'], 1)
         self.assertIn('CPU超限', event.summary_data['issues'])
+
+    def test_default_changes_affect_new_tasks_only_and_generate_inherited_delivery(self):
+        from net.alerts.task_summaries import process_task_summary
+        policy = AlertPolicy.objects.get(is_default=True)
+        policy.channels.clear()
+        old = self.task(('success',))
+        policy.channels.add(self.channel)
+        # The live project has no policy row, so it inherits automatically.
+        new = self.task(('success',))
+        self.assertEqual(old.profile_snapshot['alert_routing']['channel_ids'], [])
+        self.assertEqual(new.profile_snapshot['alert_routing']['channel_ids'], [str(self.channel.pk)])
+        for task in (old, new):
+            for target in task.target_runs.all():
+                process_persisted_target(target)
+        self.assertFalse(process_task_summary(old).deliveries.exists())
+        self.assertEqual(list(process_task_summary(new).deliveries.values_list('channel_id', flat=True)), [self.channel.pk])

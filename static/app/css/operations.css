@@ -548,6 +548,39 @@ body.app-shell {
     font-weight: 750;
 }
 
+.alert-channel-toggle {
+    display: flex;
+    width: 100%;
+    min-height: var(--control-height);
+    align-items: center;
+    gap: .6rem;
+    padding: .6rem .75rem;
+    border: 1px solid rgba(142, 162, 196, .2);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, .42);
+    cursor: pointer;
+}
+
+.alert-channel-toggle:hover {
+    border-color: rgba(49, 87, 213, .35);
+    background: rgba(255, 255, 255, .72);
+}
+
+.alert-channel-toggle .form-check-input {
+    float: none;
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+.alert-channel-toggle .form-check-label {
+    line-height: 1.25;
+}
+
+.alert-channel-editor .col-12 > .alert-channel-toggle {
+    width: auto;
+    min-width: 8.5rem;
+}
+
 .alert-channel-editor input:not([type='checkbox']),
 .alert-channel-editor select,
 .alert-channel-editor textarea {

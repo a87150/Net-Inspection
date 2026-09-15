@@ -45,6 +45,7 @@ def _snapshot_profile(task):
     profile.analysis_items = list(snapshot.get('analysis_items') or [])
     profile.matching_mode = snapshot.get('matching_mode', 'logs')
     profile.software_policy_path = str(snapshot.get('software_policy_path') or '')
+    profile.software_policy_mode = snapshot.get('software_policy_mode', 'whitelist')
     profile.minimum_windows_release = str(snapshot.get('minimum_windows_release') or '')
     profile.defender_update_max_days = snapshot.get('defender_update_max_days', 7)
     profile.defender_scan_max_days = snapshot.get('defender_scan_max_days', 7)
@@ -185,12 +186,15 @@ def _persist_scan_atomic(target_run_id, worker_id, summary, lease_guard):
             message = _scan_message(summary)
             target.status = _scan_status(summary, log_ids)
             target.finished_at = now
+            target.analysis_handoff_task = child_task
             target.result_type = 'computer_analysis_task' if child_task is not None else ''
             target.result_id = str(child_task.pk) if child_task is not None else ''
             target.result_snapshot = {
                 'result_type': 'computer_fetch',
                 'analysis_task_id': str(child_task.pk) if child_task is not None else '',
                 'imported': summary.imported,
+                'reused': task.parameters_snapshot.get('reused_log_count', 0),
+                'analysis_log_count': len(log_ids),
                 'discovered': summary.discovered,
                 'downloaded': summary.downloaded,
                 'duplicate': summary.duplicate,
@@ -202,7 +206,7 @@ def _persist_scan_atomic(target_run_id, worker_id, summary, lease_guard):
             target.error_message = '' if target.status == TaskRun.Status.SUCCESS else message
             save_target(target, {
                 'status', 'finished_at', 'result_type', 'result_id',
-                'result_snapshot', 'error_message',
+                'result_snapshot', 'error_message', 'analysis_handoff_task',
             })
             return ExecutionOutcome(
                 str(target.pk), target.status, result_type=target.result_type,
@@ -224,7 +228,12 @@ def execute_computer_fetch_target(target_run, *, worker_id, lease_guard=None, ma
         return ExecutionOutcome(target_run_id, started.status, stale=True)
     try:
         source = source_from_snapshot(started.task.profile_snapshot.get('log_source'))
-        summary = fetch_remote_logs(source, task_target=started, max_download_workers=max_download_workers)
+        options = {}
+        if started.task.parameters_snapshot.get('analysis_scope') == 'source_window':
+            from django.utils.dateparse import parse_datetime
+            options['now'] = parse_datetime(started.task.parameters_snapshot['log_window_at'])
+        summary = fetch_remote_logs(source, task_target=started,
+                                    max_download_workers=max_download_workers, **options)
     except LogLeaseLost:
         return ExecutionOutcome(target_run_id, started.status, stale=True)
     except (ValidationError, PCLogConnectionError, OSError, ValueError, TypeError) as exc:

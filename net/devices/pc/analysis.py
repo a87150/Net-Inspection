@@ -217,6 +217,7 @@ def _software_details(payload, issues, rules):
                 identity,
                 issues,
                 policy,
+                mode=rules['software_policy_mode'],
             )
         except (OSError, configparser.Error, ValueError) as exc:
             _issue(issues, '软件策略问题', f'软件策略文件无法读取：{exc}')
@@ -312,6 +313,8 @@ def _analysis_rules(value):
            if 'software_policy_snapshot' in supplied else {}),
         'configured': value is not None,
         'software_policy_path': str(supplied.get('software_policy_path') or ''),
+        # Tasks queued before modes existed retain the original combined rules.
+        'software_policy_mode': supplied.get('software_policy_mode', 'legacy'),
         'minimum_windows_release': str(supplied.get('minimum_windows_release') or ''),
         'defender_update_max_days': supplied.get('defender_update_max_days', 7),
         'defender_scan_max_days': supplied.get('defender_scan_max_days', 7),

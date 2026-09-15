@@ -62,14 +62,17 @@ def excluded(source, path):
                if directory)
 
 
+def file_date_range(source, *, now=None):
+    today = timezone.localdate(now or timezone.now())
+    if source.file_time_mode == 'date_range':
+        return source.range_start_date, source.range_end_date
+    return today - timedelta(days=(source.recent_days or 7) - 1), today
+
+
 def select_entries(source, rows, *, now=None):
     now = now or timezone.now()
     incoming = normalize_path(source.remote_incoming_directory)
-    today = timezone.localdate(now)
-    if source.file_time_mode == 'date_range':
-        start, end = source.range_start_date, source.range_end_date
-    else:
-        start, end = today - timedelta(days=(source.recent_days or 7) - 1), today
+    start, end = file_date_range(source, now=now)
     result = []
     for row in rows:
         path = normalize_path(row.path)

@@ -85,7 +85,9 @@
 <div class="col-md-8">
 <label class="form-label" for="id_name">渠道名称</label>{{ alert_channel_form.name }}</div>
 <div class="col-md-4 d-flex align-items-end">
-<label class="form-check mb-2">{{ alert_channel_form.is_enabled }}<span class="form-check-label">启用渠道</span>
+<label class="alert-channel-toggle" for="{{ alert_channel_form.is_enabled.id_for_label }}">
+<input class="form-check-input" type="checkbox" name="{{ alert_channel_form.is_enabled.html_name }}" id="{{ alert_channel_form.is_enabled.id_for_label }}"{% if alert_channel_form.is_enabled.value %} checked{% endif %}>
+<span class="form-check-label">启用渠道</span>
 </label>
 </div>
 {% if alert_channel_type == 'email' %}
@@ -102,9 +104,13 @@
 <div class="col-md-6">
 <label class="form-label" for="id_password">SMTP 密码</label>{{ alert_channel_form.password }}</div>
 <div class="col-12 d-flex flex-wrap gap-3">
-<label class="form-check">{{ alert_channel_form.use_tls }}<span class="form-check-label">使用 TLS</span>
+<label class="alert-channel-toggle" for="{{ alert_channel_form.use_tls.id_for_label }}">
+<input class="form-check-input" type="checkbox" name="{{ alert_channel_form.use_tls.html_name }}" id="{{ alert_channel_form.use_tls.id_for_label }}"{% if alert_channel_form.use_tls.value %} checked{% endif %}>
+<span class="form-check-label">使用 TLS</span>
 </label>
-<label class="form-check">{{ alert_channel_form.use_ssl }}<span class="form-check-label">使用 SSL</span>
+<label class="alert-channel-toggle" for="{{ alert_channel_form.use_ssl.id_for_label }}">
+<input class="form-check-input" type="checkbox" name="{{ alert_channel_form.use_ssl.html_name }}" id="{{ alert_channel_form.use_ssl.id_for_label }}"{% if alert_channel_form.use_ssl.value %} checked{% endif %}>
+<span class="form-check-label">使用 SSL</span>
 </label>
 </div>
 {% else %}
