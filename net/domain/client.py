@@ -3,7 +3,7 @@ import ssl
 
 import ldap3
 from django.core.exceptions import ValidationError
-from ldap3 import BASE, MODIFY_ADD, MODIFY_REPLACE
+from ldap3 import BASE, MODIFY_ADD, MODIFY_DELETE, MODIFY_REPLACE
 from ldap3.core.exceptions import (
     LDAPAssertionFailedResult, LDAPException, LDAPInvalidDnError,
     LDAPUnavailableCriticalExtensionResult,
@@ -81,6 +81,7 @@ class DomainClient:
             authentication=authentication,
             auto_bind=True,
             receive_timeout=20,
+            auto_range=True,
         )
 
     def execute(
@@ -90,7 +91,7 @@ class DomainClient:
         parameters = validate_domain_action(object_type, action, parameters)
         target_dn = parameters['user_dn'] if action == 'create_user' else target_dn
         target_dn = validate_dn_within_base(target_dn, self.config.base_dn)
-        for parameter_name in ('destination_dn', 'group_dn'):
+        for parameter_name in ('destination_dn', 'group_dn', 'source_group_dn'):
             if parameter_name in parameters:
                 parameters[parameter_name] = validate_dn_within_base(
                     parameters[parameter_name], self.config.base_dn,
@@ -208,12 +209,46 @@ class DomainClient:
                 'distinguished_name': f'{relative_dn},{parameters["destination_dn"]}',
                 'ou': parameters['destination_dn'],
             })
-        if action == 'add_group':
-            operation = MODIFY_ADD
-            return self._modify(
-                connection, parameters['group_dn'],
-                {'member': [(operation, [target_dn])]},
-            )
+        if action == 'move_group':
+            from .memberships import dn_key
+            if dn_key(parameters['group_dn']) == dn_key(parameters['source_group_dn']):
+                return DomainActionResult(False, '目标分组不能是当前分组。')
+            error = self._check_removable_group(connection, target_dn, parameters['source_group_dn'])
+            if error is not None:
+                return error
+            try:
+                added = self._execute(connection, 'add_group', target_dn,
+                                      {'group_dn': parameters['group_dn']}, None)
+            except Exception:
+                return DomainActionResult(False, '加入目标分组的结果未确认，未执行原组移除；请核实后重试。', stage='destination_add_uncertain')
+            if not added.success:
+                return DomainActionResult(False, '加入目标分组失败，未执行原组移除：' + added.error_message,
+                                          stage='destination_add_failed')
+            try:
+                removed = self._execute(connection, 'remove_group', target_dn,
+                                        {'group_dn': parameters['source_group_dn']}, None)
+            except Exception:
+                removed = DomainActionResult(False, '移出结果未确认，请核实后重试。')
+            if not removed.success:
+                return DomainActionResult(False, '已加入目标分组，原组移除未完成：' + removed.error_message,
+                                          stage='destination_added_source_pending')
+            return DomainActionResult(True, stage='completed')
+        if action in {'add_group', 'remove_group'}:
+            group_dn = parameters['group_dn']
+            if action == 'remove_group':
+                error = self._check_removable_group(connection, target_dn, group_dn)
+                if error is not None:
+                    return error
+            operation = MODIFY_ADD if action == 'add_group' else MODIFY_DELETE
+            result = self._modify(connection, group_dn, {'member': [(operation, [target_dn])]})
+            code = (connection.result or {}).get('result')
+            if not result.success and code == (20 if action == 'add_group' else 16):
+                # A retry may encounter a write that already completed before lease recovery.
+                expected = action == 'add_group'
+                present = connection.compare(group_dn, 'member', target_dn)
+                if (connection.result or {}).get('result') == (6 if expected else 5) and bool(present) == expected:
+                    return DomainActionResult(True)
+            return result
         if action == 'reset_password':
             return self._modify(
                 connection, target_dn,
@@ -227,6 +262,25 @@ class DomainClient:
         if action in {'enable', 'disable', 'password_never_expires'}:
             return self._modify_uac(connection, target_dn, action, parameters.get('enabled'))
         raise ValidationError('不支持此类目录对象的操作。')
+
+    def _check_removable_group(self, connection, target_dn, group_dn):
+        from .memberships import sid
+        from .sync import _entry_attributes
+        values = []
+        for dn, attributes in ((target_dn, ['objectSid', 'primaryGroupID']), (group_dn, ['objectSid'])):
+            if not connection.search(dn, '(objectClass=*)', BASE, attributes=attributes):
+                return DomainActionResult(False, '无法核对对象和分组状态，请重新同步后重试。')
+            entries = [entry for entry in connection.response if entry.get('type') == 'searchResEntry']
+            if len(entries) != 1:
+                return DomainActionResult(False, '无法核对对象和分组状态，请重新同步后重试。')
+            values.append(_entry_attributes(entries[0]))
+        object_sid, group_sid = sid(values[0].get('objectSid')), sid(values[1].get('objectSid'))
+        primary_id = values[0].get('primaryGroupID')
+        if not object_sid or not group_sid or primary_id is None:
+            return DomainActionResult(False, '无法读取主组信息，未执行移出操作。')
+        if object_sid.rsplit('-', 1)[0] + '-' + str(primary_id) == group_sid:
+            return DomainActionResult(False, '不能直接移出 AD 主组。')
+        return None
 
     @staticmethod
     def _unicode_password(password):

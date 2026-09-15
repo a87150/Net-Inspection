@@ -10,7 +10,7 @@ from django.urls import reverse
 
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition
-from index.domain.forms import DomainControllerConfigForm
+from index.domain.forms import DomainControllerConfigForm, DomainOperationForm
 from index.domain.connection_form import DomainInactivityForm
 from net.models import (
     Domain_Account,
@@ -176,7 +176,7 @@ def domain_controller_settings(request):
     return _render_domain_settings(request, config, form)
 
 
-def domain_object_list(request, object_type):
+def domain_object_list(request, object_type, *, operation_form=None):
     page = _domain_page(object_type)
     table_definition = get_table_definition(page.table_key)
     objects, table_state = apply_table_filters(
@@ -203,6 +203,7 @@ def domain_object_list(request, object_type):
         'domain_object_type': {
             'accounts': 'account', 'computers': 'computer', 'groups': 'group',
         }[object_type],
+        'domain_operation_form': (operation_form if operation_form is not None else DomainOperationForm()) if is_admin(request.user) and object_type != 'groups' else None,
         'domain_operation_actions': DOMAIN_OPERATION_ACTIONS.get(
             {'accounts': 'account', 'computers': 'computer'}.get(object_type),
             (),

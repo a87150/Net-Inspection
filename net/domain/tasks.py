@@ -225,6 +225,8 @@ def _enqueue_domain_operation_once(
             )
             if lock_row is None:
                 raise ValidationError({'configuration': '未配置域控连接，无法安全创建域控操作任务。'})
+            if TaskRun.objects.filter(task_type='domain_sync', status__in=TaskRun.ACTIVE_STATUSES).exists():
+                raise ValidationError('域控同步正在执行，请等待同步完成再修改目录。')
             if creating_user:
                 target_id, user_dn, target_snapshot = _create_user_target(
                     validated_parameters, lock_row.base_dn,
@@ -248,6 +250,9 @@ def _enqueue_domain_operation_once(
                 target_count = 1
             else:
                 target_type, name_field, rows = _target_rows(object_type, target_ids)
+                if action in {'remove_group', 'move_group'}:
+                    from .memberships import validate_directory_selection
+                    validate_directory_selection(action, validated_parameters, lock_row, rows, object_type)
                 _reject_active_domain_target_overlap(target_type, rows)
                 target_scope_snapshot = {
                     'targets': [

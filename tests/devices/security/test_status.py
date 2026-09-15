@@ -31,6 +31,10 @@ def response(body):
 
 class SecurityStatusTests(TestCase):
     def setUp(self):
+        # Auto collection now falls back to ICMP; never contact a real host in tests.
+        ping_patch = patch('net.devices.security.collector.ping_host', return_value=(False, 'No reply'))
+        self.ping = ping_patch.start()
+        self.addCleanup(ping_patch.stop)
         self.device = SecurityDevice.objects.create(ip='192.0.2.245', vendor='hikvision', api_url='http://192.0.2.245/status')
 
     def assert_status_roundtrip(self, body, expected, *, expected_abnormal=False):
@@ -158,3 +162,59 @@ class SecurityStatusTests(TestCase):
                          [('missing.status_data', 'info')])
         self.assertEqual(record.details['normal_issue_items'], ['inspection_collection', 'storage_status'])
         self.assertTrue(Error_Monitor.objects.filter(inspection=record).exists())
+
+
+    def test_worker_persists_snmp_then_api_evidence(self):
+        from net.infrastructure.collection import CollectionResult
+        calls = []
+        def snmp(*args, **kwargs):
+            calls.append('snmp')
+            return CollectionResult(True, 'success', data={'device_info': {'name': 'Test NVR'}})
+        def api(*args, **kwargs):
+            calls.append('api')
+            return response({'storage': [{'status': 'normal'}]})
+        profile = InspectionProfile.objects.create(
+            name='fallback', device_type='monitor', selected_items=['device_info', 'storage_status'])
+        with patch('net.devices.security.collector._has_snmp_credentials', return_value=True), patch(
+            'net.devices.security.collector.collect_network_snmp', side_effect=snmp), patch(
+            'net.infrastructure.http_collectors.requests.get', side_effect=api):
+            enqueue_task(profile, [self.device.pk], 'manual')
+            task = claim_next_task('fallback-worker', 30)
+            target = task.target_runs.get()
+            outcome = execute_target(target, worker_id='fallback-worker')
+            finish_task(task.pk, 'fallback-worker')
+        self.assertEqual(calls, ['snmp', 'api'])
+        self.ping.assert_not_called()
+        record = self.device.inspections.get()
+        task.refresh_from_db()
+        self.assertEqual(outcome.status, 'success')
+        self.assertEqual(task.status, 'success')
+        self.assertEqual(record.details['device_info'], {'name': 'Test NVR'})
+        self.assertEqual(record.details['storage_status'], [{'status': 'normal'}])
+        self.assertNotIn('status_data', record.details)
+
+    def test_worker_retains_partial_status_after_ping_fallback(self):
+        from net.infrastructure.collection import CollectionResult
+        self.ping.return_value = (True, 'Reply')
+        profile = InspectionProfile.objects.create(
+            name='fallback', device_type='monitor', selected_items=['status_data', 'storage_status'])
+        with patch('net.devices.security.collector._has_snmp_credentials', return_value=True), patch(
+            'net.devices.security.collector.collect_network_snmp', return_value=CollectionResult(False, 'failed', 'SNMP timeout')), patch(
+            'net.infrastructure.http_collectors.requests.get', return_value=response({'unknown': 1})):
+            enqueue_task(profile, [self.device.pk], 'manual')
+            task = claim_next_task('fallback-worker', 30)
+            target = task.target_runs.get()
+            outcome = execute_target(target, worker_id='fallback-worker')
+            finish_task(task.pk, 'fallback-worker')
+        self.ping.assert_called_once()
+        record = self.device.inspections.get()
+        target.refresh_from_db()
+        task.refresh_from_db()
+        self.assertEqual(outcome.status, 'partial')
+        self.assertEqual(task.status, 'partial')
+        self.assertEqual(target.status, 'partial')
+        self.assertEqual(record.status, 'partial')
+        self.assertEqual(record.details['status_data'], {'online': True, 'source': 'ping'})
+        self.assertNotIn('storage_status', record.details)
+        self.assertIn('SNMP timeout', record.summary)
+        self.assertIn('Ping', record.summary)

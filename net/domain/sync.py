@@ -1,8 +1,10 @@
 import uuid
+import re
 from datetime import datetime, timedelta, timezone as datetime_timezone
 
 from django.db import transaction
 from django.utils import timezone
+from ldap3 import BASE
 from ldap3.core.exceptions import LDAPInvalidDnError
 from ldap3.utils.dn import parse_dn
 
@@ -152,31 +154,77 @@ def sync_domain(config):
     return apply_domain_snapshot(fetch_domain_snapshot(config))
 
 
+def _check_search_result(connection):
+    result = getattr(connection, 'result', None)
+    if isinstance(result, dict) and result.get('result', 0) != 0:
+        raise RuntimeError('目录查询未完整成功，未发布同步结果。')
+
+
+def _complete_group_members(connection, attrs):
+    ranges = [key for key in attrs if key.casefold().startswith('member;range=')]
+    if not ranges:
+        return attrs
+    dn = _distinguished_name(attrs.get('distinguishedName'))
+    if not dn:
+        raise RuntimeError('分组成员分页缺少目录名称。')
+    members, expected, current = [], 0, attrs
+    while True:
+        keys = [key for key in current if key.casefold().startswith('member;range=')]
+        if len(keys) != 1:
+            raise RuntimeError('分组成员分页不完整，未发布同步结果。')
+        key = keys[0]
+        match = re.fullmatch(r'member;range=(\d+)-(\d+|\*)', key, re.I)
+        if not match or int(match[1]) != expected:
+            raise RuntimeError('分组成员分页次序无效。')
+        values = current[key] or []
+        if isinstance(values, str):
+            values = [values]
+        members.extend(values)
+        if match[2] == '*':
+            break
+        end = int(match[2])
+        if end < expected or len(values) != end - expected + 1:
+            raise RuntimeError('分组成员分页内容不完整。')
+        expected = end + 1
+        if not connection.search(dn, '(objectClass=*)', BASE, attributes=[f'member;range={expected}-*']):
+            raise RuntimeError('读取后续分组成员失败。')
+        _check_search_result(connection)
+        entries = [entry for entry in connection.response if entry.get('type') == 'searchResEntry']
+        if len(entries) != 1:
+            raise RuntimeError('读取后续分组成员失败。')
+        current = _entry_attributes(entries[0])
+    return {**{key: value for key, value in attrs.items() if key not in ranges}, 'member': members}
+
+
 def fetch_domain_snapshot(config):
     connection = _connect(config)
     try:
         user_entries = connection.extend.standard.paged_search(
             search_base=config.base_dn,
             search_filter=config.user_filter,
-            attributes=['displayName', 'sAMAccountName', 'userAccountControl', 'mail', 'distinguishedName', 'objectGUID', 'lastLogonTimestamp', 'userWorkstations'],
+            attributes=['displayName', 'sAMAccountName', 'userAccountControl', 'mail', 'distinguishedName', 'objectGUID', 'lastLogonTimestamp', 'userWorkstations', 'objectSid', 'primaryGroupID'],
             paged_size=500,
             generator=True,
         )
         users = [_entry_attributes(entry) for entry in user_entries if entry.get('type') == 'searchResEntry']
+        _check_search_result(connection)
         computer_entries = connection.extend.standard.paged_search(
             search_base=config.base_dn,
             search_filter=config.computer_filter,
-            attributes=['name', 'operatingSystem', 'userAccountControl', 'distinguishedName', 'objectGUID', 'lastLogonTimestamp'],
+            attributes=['name', 'operatingSystem', 'userAccountControl', 'distinguishedName', 'objectGUID', 'lastLogonTimestamp', 'objectSid', 'primaryGroupID'],
             paged_size=500,
             generator=True,
         )
         computers = [_entry_attributes(entry) for entry in computer_entries if entry.get('type') == 'searchResEntry']
+        _check_search_result(connection)
+        # Explicit range reads detect incomplete large-group responses before publication.
+        connection.auto_range = False
         group_entries = connection.extend.standard.paged_search(
             search_base=config.base_dn,
             search_filter=config.group_filter,
             attributes=[
                 'name', 'sAMAccountName', 'description', 'distinguishedName',
-                'objectGUID', 'groupType', 'member',
+                'objectGUID', 'groupType', 'member', 'objectSid',
             ],
             paged_size=500,
             generator=True,
@@ -186,14 +234,22 @@ def fetch_domain_snapshot(config):
             for entry in group_entries
             if entry.get('type') == 'searchResEntry'
         ]
+        _check_search_result(connection)
+        groups = [_complete_group_members(connection, attrs) for attrs in groups]
+        ou_entries = connection.extend.standard.paged_search(
+            search_base=config.base_dn, search_filter='(objectClass=organizationalUnit)',
+            attributes=['name', 'distinguishedName', 'objectGUID'], paged_size=500, generator=True,
+        )
+        ous = [_entry_attributes(entry) for entry in ou_entries if entry.get('type') == 'searchResEntry']
+        _check_search_result(connection)
     finally:
         connection.unbind()
 
-    return users, computers, groups
+    return users, computers, groups, ous
 
 
 def apply_domain_snapshot(snapshot):
-    users, computers, groups = snapshot
+    users, computers, groups = snapshot[:3]
     seen_accounts = set()
     seen_computers = set()
     reported_accounts = set()
@@ -272,6 +328,7 @@ def apply_domain_snapshot(snapshot):
                 'group_scope': scope,
                 'group_category': category,
                 'member_count': _member_count(attrs.get('member')),
+                'is_available': True,
             }
             if object_guid is not None:
                 defaults['object_guid'] = object_guid
@@ -283,6 +340,11 @@ def apply_domain_snapshot(snapshot):
                 defaults,
             )
             reported_groups.add(distinguished_name)
+
+        from net.domain.memberships import publish_memberships, publish_ous
+        publish_memberships(users, computers, groups)
+        if len(snapshot) > 3:
+            publish_ous(snapshot[3])
 
         if seen_accounts:
             Domain_Account.objects.exclude(login_name__in=seen_accounts).update(is_active=False)

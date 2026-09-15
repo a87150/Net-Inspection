@@ -1,5 +1,6 @@
 import xml.etree.ElementTree as ET
 from ipaddress import ip_address
+from time import monotonic
 from urllib.parse import unquote_plus, urlsplit, urlunsplit
 
 import requests
@@ -177,8 +178,11 @@ def collect_security_api(device, timeout=12, selected_items=None):
         # Independent item results: failure of a status read must not discard a
         # successful native configuration section (or vice versa).
         others = [item for item in selected_items if item != 'config_info']
-        result = collect_security_api(device, timeout, others) if others else CollectionResult(True, 'success')
-        config = collect_native_configuration(device, timeout)
+        deadline = monotonic() + max(0, float(timeout))
+        result = collect_security_api(device, timeout / 2, others) if others else CollectionResult(True, 'success')
+        remaining = deadline - monotonic()
+        config = (collect_native_configuration(device, remaining) if remaining > 0 else
+                  {'status': 'failed', 'message': 'API 采集时限已到，未读取原生配置。'})
         result.reachable = result.reachable or config['status'] == 'success'
         result.data['config_info'] = config
         result.raw['config_info'] = config

@@ -164,16 +164,18 @@ TABLE_DEFINITIONS = {
         'domain_accounts', '域账户', (
             _field('account_name', '账户名称'), _field('login_name', '登录名'),
             _field('is_active', '是否启用', 'boolean'), _field('ou', '组织单位'),
+            _field('group_names', '所属分组'),
             _field('allowed_workstations', '允许登录域计算机', default_filter=False),
             _field('last_login_date', '最后登录日期', 'date', default_filter=False),
-        ), 'login_name', 'asc', ('account_name', 'login_name', 'ou', 'allowed_workstations'), 20,
+        ), 'login_name', 'asc', ('account_name', 'login_name', 'ou', 'allowed_workstations', 'group_names'), 20,
     ),
     'domain_computers': TableDefinition(
         'domain_computers', '域计算机', (
             _field('computer_name', '域计算机名'), _field('os', '操作系统'),
             _field('is_active', '是否启用', 'boolean'), _field('ou', '组织单位'),
+            _field('group_names', '所属分组'),
             _field('last_login_date', '最后登录日期', 'date', default_filter=False),
-        ), 'computer_name', 'asc', ('computer_name', 'os', 'ou'), 20,
+        ), 'computer_name', 'asc', ('computer_name', 'os', 'ou', 'group_names'), 20,
     ),
     'domain_groups': TableDefinition(
         'domain_groups', '域分组', (

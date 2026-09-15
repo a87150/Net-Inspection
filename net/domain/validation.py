@@ -12,6 +12,8 @@ _ACTION_PARAMETERS = {
         'create_user': frozenset({'user_dn', 'login_name', 'display_name'}),
         'move_ou': frozenset({'destination_dn'}),
         'add_group': frozenset({'group_dn'}),
+        'remove_group': frozenset({'group_dn'}),
+        'move_group': frozenset({'source_group_dn', 'group_dn'}),
         'reset_password': frozenset(),
         'must_change_password': frozenset({'enabled'}),
         'password_never_expires': frozenset({'enabled'}),
@@ -22,6 +24,8 @@ _ACTION_PARAMETERS = {
     'computer': {
         'move_ou': frozenset({'destination_dn'}),
         'add_group': frozenset({'group_dn'}),
+        'remove_group': frozenset({'group_dn'}),
+        'move_group': frozenset({'source_group_dn', 'group_dn'}),
         'enable': frozenset(),
         'disable': frozenset(),
     },
@@ -84,7 +88,7 @@ def validate_domain_action(object_type, action, parameters):
 
     if set(normalized) != required_parameters:
         raise ValidationError('操作参数不符合该动作要求。')
-    for key in ('user_dn', 'destination_dn', 'group_dn'):
+    for key in ('user_dn', 'destination_dn', 'group_dn', 'source_group_dn'):
         if key in normalized:
             normalized[key] = validate_dn(normalized[key])
     if 'enabled' in normalized and type(normalized['enabled']) is not bool:

@@ -6,7 +6,7 @@ from .devices import Computer, Network_Device, SecurityDevice, Server
 from .configuration_backups import DeviceConfigurationBackup
 from .domain import (
     Domain_Account, Domain_Computer, Domain_Group, Domain_Controller_Config,
-    DomainOperation,
+    DomainOperation, DomainOU, DomainMembership,
 )
 from .integrations import PeopleSyncSource
 from .people import People
@@ -23,7 +23,7 @@ from .tasks import ComputerAnalysisProfile, InspectionProfile, Schedule, TaskRun
 __all__ = [
     "AccessRecordSource", "AccessRecord",
     "DeviceCollectionTemplate", "DeviceCollectionBinding",
-    'AlertNotificationTemplate',
+    'AlertNotificationTemplate', 'DomainOU', 'DomainMembership',
     'DeviceConfigurationBackup',
     'IssueSeverityPolicy',
     'People', 'Domain_Account', 'Domain_Computer', 'Domain_Group', 'Computer', 'Network_Device',

@@ -1,8 +1,10 @@
 """Protocol selection and evidence conversion for security devices."""
 
 from collections.abc import Mapping
+from copy import copy
+from time import monotonic
 
-from net.devices.network.collector import _has_snmp_credentials
+from net.devices.network.collector import _has_snmp_credentials, _item_completed, _merge_network_results
 from net.devices.network.snmp import collect_network_snmp
 from net.devices.security.api import collect_security_api
 from net.infrastructure.collection import CollectionResult
@@ -54,7 +56,7 @@ def _snmp_selection(requested):
 def _convert_snmp(result, requested):
     source = result.data if isinstance(result.data, dict) else {}
     data = {}
-    if 'device_info' in requested and 'device_info' in source:
+    if 'device_info' in requested and source.get('device_info') and _item_completed(source['device_info']):
         data['device_info'] = source['device_info']
     if 'status_data' in requested:
         status = {'source': 'snmp'}
@@ -86,49 +88,113 @@ def _ping_result(device, timeout, requested):
                             f'{diagnostic}；ICMP 不可达可能被设备或网络策略拦截，不能据此判定断电。')
 
 
+def _security_item_completed(item, value):
+    # A vendor's health status (e.g. storage status=failed) is valid evidence.
+    # Only the configuration capture uses status to signal collection failure.
+    return value is not None and value != {} and (
+        item != 'config_info' or _item_completed(value))
+
+
+def _missing_items(requested, results):
+    completed = {item for _, result in results for item, value in (result.data or {}).items()
+                 if _security_item_completed(item, value)}
+    return [item for item in requested if item not in completed]
+
+
+def _collect_auto(device, timeout, selected_items, settings, api_collector):
+    _prepare_snmp(device, settings)
+    has_snmp = _has_snmp_credentials(device)
+    has_api = bool(getattr(device, 'api_url', ''))
+    requested = _requested(selected_items, ping=not has_snmp and not has_api)
+    if not requested:
+        return CollectionResult(False, 'success', '未选择采集项目。')
+    results = []
+    deadline = monotonic() + max(0, float(timeout))
+    snmp_items = [item for item in requested if item in {'device_info', 'status_data'}]
+    stages = []
+    if has_snmp and snmp_items:
+        stages.append('snmp')
+    if has_api:
+        stages.append('api')
+    stages.append('ping')
+    for index, protocol in enumerate(stages):
+        missing = _missing_items(requested, results)
+        if not missing:
+            break
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            results.append((protocol, CollectionResult(False, 'failed', '安防采集总时限已到，未继续回退。')))
+            break
+        # Reserve time for the later fallback stages instead of multiplying the task timeout.
+        budget = remaining / (len(stages) - index)
+        try:
+            if protocol == 'snmp':
+                result = _convert_snmp(collect_network_snmp(device, budget,
+                    selected_items=_snmp_selection(snmp_items), total_timeout=budget), snmp_items)
+            elif protocol == 'api':
+                result = api_collector(device, budget, selected_items=missing)
+            else:
+                result = _ping_result(device, budget, missing)
+        except Exception:
+            result = CollectionResult(False, 'failed', f'{protocol.upper()} 采集异常，继续检查其他可用方式。')
+        if result.message:
+            result = CollectionResult(result.reachable, result.status,
+                f'{protocol.upper()}：{result.message}', result.data, result.raw, result.duration_ms)
+        results.append((protocol, result))
+    if len(results) == 1 and results[0][0] == 'api' and not _missing_items(requested, results):
+        return results[0][1]
+    merged = _merge_network_results(requested, results, item_completed=_security_item_completed)
+    if len(results) > 1 and any(protocol == 'ping' for protocol, _ in results):
+        # ICMP proves reachability, not the health of failed SNMP/API inspection items.
+        if any(protocol == 'ping' and result.reachable for protocol, result in results):
+            merged.status = 'partial'
+        merged.message = '；'.join(part for part in (
+            merged.message, '已回退到 Ping 在线检查，未获取到的业务指标仍属缺失。') if part)
+    return merged
+
+
 def collect_security(device, timeout=12, selected_items=None, *, api_collector=None):
-    """Use API, SNMP, or ICMP without manufacturing unsupported evidence."""
+    """Auto: SNMP first, API fills missing items, ICMP is the final fallback."""
     settings = _settings(device)
     if settings.get('item_methods'):
-        from copy import copy
-        from net.devices.network.collector import _merge_network_results
-        requested=_requested(selected_items)
-        groups={}
+        requested = _requested(selected_items)
+        groups = {}
         for item in requested:
-            method=settings['item_methods'].get(item,'auto')
-            protocol=settings.get('protocol','auto') if method=='auto' else method
-            groups.setdefault(protocol,[]).append(item)
-        results=[]
-        for protocol,items in groups.items():
-            context=copy(device)
-            context.collection_settings={**settings,'item_methods':{},'protocol':protocol}
-            results.append((protocol,collect_security(context,timeout,selected_items=items,api_collector=api_collector)))
-        return _merge_network_results(requested,results)
+            method = settings['item_methods'].get(item, 'auto')
+            protocol = settings.get('protocol', 'auto') if method == 'auto' else method
+            groups.setdefault(protocol, []).append(item)
+        results = []
+        deadline = monotonic() + max(0, float(timeout))
+        ordered = sorted(groups, key=lambda value: {'snmp': 0, 'auto': 1, 'api': 2, 'ping': 3}.get(value, 1))
+        for index, protocol in enumerate(ordered):
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                results.append((protocol, CollectionResult(False, 'failed', '安防采集总时限已到。')))
+                break
+            context = copy(device)
+            context.collection_settings = {**settings, 'item_methods': {}, 'protocol': protocol}
+            result = collect_security(context, remaining / (len(ordered) - index),
+                                      selected_items=groups[protocol], api_collector=api_collector)
+            results.append((protocol, result))
+        merged = _merge_network_results(requested, results, item_completed=_security_item_completed)
+        if merged.status == 'success' and any(result.status != 'success' for _, result in results):
+            merged.status = 'partial'
+        return merged
     mode = settings.get('protocol', 'auto')
     mode = mode if mode in {'auto', 'api', 'snmp', 'ping'} else 'auto'
-    api_result = None
-    if mode == 'api' or (mode == 'auto' and getattr(device, 'api_url', '')):
-        api_result = (api_collector or collect_security_api)(device, timeout, selected_items=selected_items)
-        if mode == 'api' or api_result.status == 'success' or api_result.reachable:
-            return api_result
-    if mode in {'auto', 'snmp'}:
+    if mode == 'auto':
+        return _collect_auto(device, timeout, selected_items, settings,
+                             api_collector or collect_security_api)
+    if mode == 'api':
+        return (api_collector or collect_security_api)(device, timeout, selected_items=selected_items)
+    if mode == 'snmp':
         _prepare_snmp(device, settings)
-        if _has_snmp_credentials(device):
-            requested = _requested(selected_items)
-            result = _convert_snmp(
-                collect_network_snmp(device, timeout, selected_items=_snmp_selection(requested)), requested
-            )
-            if api_result is not None:
-                result.status = 'partial' if result.reachable else 'failed'
-                result.message = '；'.join(part for part in (api_result.message, result.message) if part)
-            return result
-        if mode == 'snmp':
+        if not _has_snmp_credentials(device):
             return CollectionResult(False, 'failed', '未配置安防设备 SNMP 凭据')
-    result = _ping_result(device, timeout, _requested(selected_items, ping=True))
-    if api_result is not None:
-        result.status = 'partial' if result.reachable else 'failed'
-        result.message = '；'.join(part for part in (api_result.message, result.message) if part)
-    return result
+        requested = _requested(selected_items)
+        return _convert_snmp(collect_network_snmp(device, timeout,
+                             selected_items=_snmp_selection(requested)), requested)
+    return _ping_result(device, timeout, _requested(selected_items, ping=True))
 
 
 __all__ = ['collect_security']
