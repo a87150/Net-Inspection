@@ -80,3 +80,24 @@ class FrontendConsistencyTests(SimpleTestCase):
         self.assertIn('aria-live="polite"', source)
         self.assertIn('id="appConfirmModal"', source)
         self.assertIn('app/js/common/confirm_dialog.js', source)
+
+    def test_alert_channel_boolean_options_use_aligned_toggle_component(self):
+        project_root = Path(__file__).resolve().parents[2]
+        source = (
+            project_root / 'index' / 'templates' / 'alerts' / 'channel_modal.html'
+        ).read_text(encoding='utf-8')
+        css = (project_root / 'static' / 'app' / 'css' / 'operations.css').read_text(
+            encoding='utf-8'
+        )
+
+        self.assertEqual(source.count('class="alert-channel-toggle"'), 3)
+        for field in ('is_enabled', 'use_tls', 'use_ssl'):
+            with self.subTest(field=field):
+                self.assertNotIn(f'{{{{ alert_channel_form.{field} }}}}', source)
+                self.assertIn(
+                    f'class="form-check-input" type="checkbox" '
+                    f'name="{{{{ alert_channel_form.{field}.html_name }}}}"',
+                    source,
+                )
+        self.assertIn('.alert-channel-toggle .form-check-input', css)
+        self.assertIn('align-items: center;', css)
