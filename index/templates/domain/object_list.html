@@ -1,7 +1,28 @@
 {% extends 'common/base.html' %}
-{% load extras %}
+{% load extras static %}
 {% block title %}{{ item_name }}列表{% endblock %}
 {% block content %}
+{% if domain_object_type == 'group' and can_administer %}
+<div class="modal fade domain-members-modal" id="domainGroupMembersModal" tabindex="-1" aria-labelledby="domainGroupMembersLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell">
+        <div class="modal-content modal-surface">
+            <div class="modal-header domain-members-header">
+                <div>
+                    <p class="page-heading__eyebrow mb-1">域分组成员</p>
+                    <h2 class="modal-title fs-5" id="domainGroupMembersLabel">成员管理</h2>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body modal-body--scroll">
+                <div class="modal-loading-state" role="status">
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                    <span>正在加载成员列表…</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% if domain_object_type == 'computer' and can_manage_domain %}{% include 'domain/bitlocker_modal.html' %}{% endif %}
 <header class="page-heading">
     <div class="page-heading__copy"><p class="page-heading__eyebrow">域控对象</p><h1 class="page-heading__title">{{ item_name }}列表</h1></div>
@@ -39,7 +60,7 @@
     </tr></thead>
     <tbody>
     {% for obj in page_obj %}
-    <tr>{% if can_administer and can_manage_domain %}<td class="text-center"><input class="form-check-input" type="checkbox" value="{{ obj.pk }}" data-domain-target-checkbox aria-label="选择{{ obj }}"></td>{% endif %}{% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ obj|get_attr:field.source|format_table_value:field.kind }}</td>{% endfor %}<td class="text-end table-actions-cell"><a class="btn btn-outline-dark btn-sm" href="{% url detail_route obj.pk %}">查看详情</a>{% if domain_object_type == 'computer' and can_manage_domain %} <button type="button" class="btn btn-outline-primary btn-sm" data-bitlocker-url="{% url 'domain_computer_bitlocker' obj.pk %}" data-computer-name="{{ obj.computer_name }}" data-bs-toggle="modal" data-bs-target="#domainBitLockerModal">获取 BitLocker 密钥</button>{% endif %}</td></tr>
+    <tr>{% if can_administer and can_manage_domain %}<td class="text-center"><input class="form-check-input" type="checkbox" value="{{ obj.pk }}" data-domain-target-checkbox aria-label="选择{{ obj }}"></td>{% endif %}{% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ obj|get_attr:field.source|format_table_value:field.kind }}</td>{% endfor %}<td class="text-end table-actions-cell"><a class="btn btn-outline-dark btn-sm" href="{% url detail_route obj.pk %}">查看详情</a>{% if domain_object_type == 'group' and can_administer %} <a class="btn btn-outline-primary btn-sm" href="{% url 'domain_group_members' obj.pk %}" data-modal-load="domainGroupMembersModal">成员管理</a>{% endif %}{% if domain_object_type == 'computer' and can_manage_domain %} <button type="button" class="btn btn-outline-primary btn-sm" data-bitlocker-url="{% url 'domain_computer_bitlocker' obj.pk %}" data-computer-name="{{ obj.computer_name }}" data-bs-toggle="modal" data-bs-target="#domainBitLockerModal">获取 BitLocker 密钥</button>{% endif %}</td></tr>
     {% empty %}<tr><td colspan="20"><div class="empty-state"><strong>暂无{{ item_name }}</strong><span>请配置域控后执行同步。</span></div></td></tr>{% endfor %}
     </tbody>
 </table></div></div>
@@ -49,4 +70,5 @@
 {% block page_scripts %}
 {% include 'common/scripts/table_workspace.html' %}
 {% include 'common/scripts/modal_workflows.html' %}
+{% if domain_object_type == 'group' and can_administer %}<script defer src="{% static 'app/js/domain/group_members.js' %}"></script>{% endif %}
 {% endblock %}

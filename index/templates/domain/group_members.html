@@ -1,0 +1,207 @@
+{% extends 'common/base.html' %}
+{% load static %}
+{% block title %}成员管理{% endblock %}
+{% block content %}
+<a class="btn btn-link domain-members-back" href="{% url 'domain_group_list' %}">← 返回域分组列表</a>
+<div class="modal fade domain-members-modal" id="domainGroupMembersModal" data-auto-open="true" tabindex="-1" aria-labelledby="domainGroupMembersLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell">
+        <div class="modal-content modal-surface">
+            <div class="modal-header domain-members-header">
+                <div class="domain-members-header__copy">
+                    <p class="page-heading__eyebrow mb-1">域分组成员</p>
+                    <h2 class="modal-title fs-5" id="domainGroupMembersLabel">{{ group.group_name }}</h2>
+                    <div class="domain-members-header__meta" aria-label="分组摘要">
+                        <span>{{ group.get_group_category_display }}</span>
+                        <span>{{ group.get_group_scope_display }}</span>
+                        <span>目录成员 {{ group.member_count }}</span>
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body modal-body--scroll domain-members-workspace">
+                <section class="domain-members-overview" aria-label="分组信息">
+                    <div>
+                        <strong>成员关系管理</strong>
+                        <p>添加只追加所选对象；移除只解除分组关系，不会删除域账户或域计算机。</p>
+                    </div>
+                    <div class="domain-members-path">
+                        <span>目录路径</span>
+                        <code title="{{ group.distinguished_name }}">{{ group.distinguished_name }}</code>
+                    </div>
+                </section>
+
+                {% if not group.is_available %}
+                <div class="alert alert-warning mb-0" role="alert">
+                    <strong>当前分组不可操作</strong>
+                    <span>该分组不在最近一次同步范围内，请重新同步域控后再核实。</span>
+                </div>
+                {% endif %}
+
+                {% if operation_tasks %}
+                <section class="domain-members-tasks" aria-label="已创建任务">
+                    {% for task in operation_tasks %}
+                    <a href="{% url 'task_detail' task.pk %}">
+                        <span>
+                            {% if task.profile_snapshot.object_type == 'account' %}账户{% else %}计算机{% endif %}
+                            {% if task.profile_snapshot.action == 'add_group' %}添加{% else %}移出{% endif %}任务
+                        </span>
+                        {% include 'common/status_badge.html' with status=task.status label=task.get_status_display %}
+                        <strong>查看进度</strong>
+                    </a>
+                    {% endfor %}
+                </section>
+                {% endif %}
+
+                <section class="domain-members-controls" aria-label="成员筛选">
+                    <nav class="domain-members-mode" role="tablist" aria-label="成员管理模式">
+                        <a data-modal-navigate role="tab" aria-selected="{% if member_mode == 'members' %}true{% else %}false{% endif %}"{% if member_mode == 'members' %} aria-current="page"{% endif %} class="{% if member_mode == 'members' %}is-active{% endif %}" href="{% url 'domain_group_members' group.pk %}">
+                            现有成员
+                        </a>
+                        <a data-modal-navigate role="tab" aria-selected="{% if member_mode == 'add' %}true{% else %}false{% endif %}"{% if member_mode == 'add' %} aria-current="page"{% endif %} class="{% if member_mode == 'add' %}is-active{% endif %}" href="{% url 'domain_group_members' group.pk %}?mode=add&amp;object_type={{ candidate_type }}">
+                            添加成员
+                        </a>
+                    </nav>
+
+                    <form method="get" action="{% url 'domain_group_members' group.pk %}" class="domain-members-filter">
+                        <input type="hidden" name="mode" value="{{ member_mode }}">
+                        {% if member_mode == 'add' %}
+                        <div class="domain-members-filter__field">
+                            <label for="group-candidate-type">对象类型</label>
+                            <select id="group-candidate-type" name="object_type" class="form-select">
+                                <option value="account"{% if candidate_type == 'account' %} selected{% endif %}>域账户</option>
+                                <option value="computer"{% if candidate_type == 'computer' %} selected{% endif %}>域计算机</option>
+                            </select>
+                        </div>
+                        {% endif %}
+                        <div class="domain-members-filter__field domain-members-filter__search">
+                            <label for="group-member-search">搜索成员</label>
+                            <input id="group-member-search" name="q" type="search" class="form-control" value="{{ member_query }}" placeholder="账号、显示名称或计算机名">
+                        </div>
+                        <div class="domain-members-filter__actions">
+                            <button class="btn btn-primary" type="submit">查询</button>
+                            {% if member_query %}
+                            <a data-modal-navigate class="btn btn-outline-secondary" href="{% url 'domain_group_members' group.pk %}?mode={{ member_mode }}&amp;object_type={{ candidate_type }}">重置</a>
+                            {% endif %}
+                            <a data-modal-navigate class="btn btn-outline-secondary" href="{% url 'domain_group_members' group.pk %}?mode={{ member_mode }}&amp;object_type={{ candidate_type }}&amp;q={{ member_query|urlencode }}&amp;page={{ page_obj.number }}">刷新</a>
+                        </div>
+                    </form>
+                    <p class="domain-members-filter__hint">
+                        {% if member_mode == 'add' %}
+                        仅显示当前域内尚未加入此组的对象。
+                        {% else %}
+                        主组成员会显示但不可直接移除。
+                        {% endif %}
+                        每批最多选择 500 个；翻页或重新查询后需重新勾选。
+                    </p>
+                </section>
+
+                <form id="domain-group-member-action" method="post" action="{{ request.get_full_path }}" data-member-action-form>
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="{% if member_mode == 'add' %}add_group{% else %}remove_group{% endif %}">
+                    {% if member_mode == 'add' %}<input type="hidden" name="object_type" value="{{ candidate_type }}">{% endif %}
+
+                    <div class="domain-members-selection">
+                        <div class="domain-members-selection__actions" role="group" aria-label="批量选择本页成员">
+                            <button type="button" class="btn btn-outline-primary btn-sm" data-member-select="all">全选本页</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-member-select="invert">反选本页</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-member-select="none">清空选择</button>
+                        </div>
+                        <span class="domain-members-selection__count" data-member-selection-summary aria-live="polite">正在统计可选成员…</span>
+                    </div>
+
+                    <div class="card surface-card table-scroll-shell domain-members-table-card">
+                        <p class="table-scroll-hint">可横向滚动查看完整目录位置</p>
+                        <div class="table-responsive" role="region" aria-label="{% if member_mode == 'add' %}可添加成员{% else %}现有成员{% endif %}列表" tabindex="0">
+                            <table class="table data-table table-hover align-middle mb-0 domain-members-table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col" class="domain-members-table__select"><span class="visually-hidden">选择</span></th>
+                                        <th scope="col">类型</th>
+                                        <th scope="col">成员</th>
+                                        <th scope="col">{% if member_mode == 'add' %}目录位置{% else %}关系{% endif %}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for member in page_obj %}
+                                    <tr>
+                                        {% if member_mode == 'add' %}
+                                        <td class="domain-members-table__select">
+                                            {% if group.is_available %}
+                                            <input type="checkbox" class="form-check-input" name="target_ids" value="{{ member.pk }}" aria-label="选择成员 {{ member }}"{% if member.pk|stringformat:'s' in selected_members %} checked{% endif %}>
+                                            {% endif %}
+                                        </td>
+                                        <td><span class="badge status-badge text-bg-info">{% if candidate_type == 'account' %}域账户{% else %}域计算机{% endif %}</span></td>
+                                        <td>
+                                            <div class="domain-member-identity">
+                                                <strong>{% if candidate_type == 'account' %}{{ member.account_name }}{% else %}{{ member.computer_name }}{% endif %}</strong>
+                                                <span>{% if candidate_type == 'account' %}{{ member.login_name }}{% else %}计算机对象{% endif %}</span>
+                                            </div>
+                                        </td>
+                                        <td><span class="domain-member-path" title="{{ member.distinguished_name }}">{{ member.distinguished_name }}</span></td>
+                                        {% else %}
+                                        <td class="domain-members-table__select">
+                                            {% if not member.is_primary and group.is_available %}
+                                            <input type="checkbox" class="form-check-input" name="membership_ids" value="{{ member.pk }}" aria-label="选择成员 {{ member.account|default:member.computer }}"{% if member.pk|stringformat:'s' in selected_members %} checked{% endif %}>
+                                            {% else %}
+                                            <span class="domain-members-locked" title="主组成员不可直接移除">锁定</span>
+                                            {% endif %}
+                                        </td>
+                                        <td><span class="badge status-badge {% if member.account_id %}text-bg-info{% else %}text-bg-secondary{% endif %}">{% if member.account_id %}域账户{% else %}域计算机{% endif %}</span></td>
+                                        <td>
+                                            <div class="domain-member-identity">
+                                                <strong>{% if member.account_id %}{{ member.account.account_name }}{% else %}{{ member.computer.computer_name }}{% endif %}</strong>
+                                                <span>{% if member.account_id %}{{ member.account.login_name }}{% else %}计算机对象{% endif %}</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="badge status-badge {% if member.is_primary %}text-bg-warning{% else %}text-bg-success{% endif %}">{% if member.is_primary %}主组 · 不可移除{% else %}直接成员{% endif %}</span>
+                                        </td>
+                                        {% endif %}
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="4">
+                                            <div class="empty-state">
+                                                <strong>没有符合条件的{% if member_mode == 'add' %}可添加对象{% else %}已同步成员{% endif %}</strong>
+                                                <span>请调整搜索条件，或重新同步域控后再查看。</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </form>
+
+                <nav class="domain-members-pagination" aria-label="成员分页">
+                    <span>共 {{ page_obj.paginator.count }} 个{% if member_mode == 'add' %}可添加对象{% else %}成员{% endif %}</span>
+                    <span>第 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 页</span>
+                    <div>
+                        {% if page_obj.has_previous %}
+                        <a class="btn btn-outline-secondary btn-sm" data-modal-navigate href="?mode={{ member_mode }}&amp;object_type={{ candidate_type }}&amp;q={{ member_query|urlencode }}&amp;page={{ page_obj.previous_page_number }}">上一页</a>
+                        {% endif %}
+                        {% if page_obj.has_next %}
+                        <a class="btn btn-outline-secondary btn-sm" data-modal-navigate href="?mode={{ member_mode }}&amp;object_type={{ candidate_type }}&amp;q={{ member_query|urlencode }}&amp;page={{ page_obj.next_page_number }}">下一页</a>
+                        {% endif %}
+                    </div>
+                </nav>
+            </div>
+            <div class="modal-footer modal-footer--sticky domain-members-footer">
+                <div class="domain-members-footer__summary">
+                    <strong data-member-selection-summary aria-live="polite">正在统计可选成员…</strong>
+                    <span>{% if member_mode == 'add' %}所选对象将加入当前分组{% else %}仅解除所选对象与当前分组的关系{% endif %}</span>
+                </div>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="submit" form="domain-group-member-action" class="btn {% if member_mode == 'add' %}btn-primary{% else %}btn-danger{% endif %}" data-member-submit disabled{% if not group.is_available %} data-member-locked{% endif %}>
+                    {% if member_mode == 'add' %}添加选中成员{% else %}移除选中成员{% endif %}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block page_scripts %}
+{% include 'common/scripts/modal_workflows.html' %}
+<script defer src="{% static 'app/js/domain/group_members.js' %}"></script>
+{% endblock %}
