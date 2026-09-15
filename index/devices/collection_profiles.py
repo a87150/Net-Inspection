@@ -80,7 +80,7 @@ class CollectionSettingsForm(forms.Form):
         if kind=='servers':
             for key in ('snmp_oids','mib_modules','mib_file'):self.fields.pop(key)
         if kind=='monitors':
-            self.fields['protocol']=forms.ChoiceField(label='采集方式',choices=[('','继承 / 自动'),('auto','自动 API / SNMP / Ping'),('api','API'),('snmp','SNMP'),('ping','仅 Ping 在线检查')],required=False,initial=saved.get('protocol',''))
+            self.fields['protocol']=forms.ChoiceField(label='采集方式',choices=[('','继承 / 自动'),('auto','自动：SNMP → 厂商 API → Ping'),('api','API'),('snmp','SNMP'),('ping','仅 Ping 在线检查')],required=False,initial=saved.get('protocol',''))
             choices={'snmp_version':Network_Device.SNMP_VERSION_CHOICES,'snmp_security_level':Network_Device.SNMP_SECURITY_LEVEL_CHOICES,'snmp_auth_protocol':[('','未设置'),*Network_Device.SNMP_AUTH_PROTOCOL_CHOICES],'snmp_priv_protocol':[('','未设置'),*Network_Device.SNMP_PRIV_PROTOCOL_CHOICES]}
             for key in SNMP_FIELDS:
                 field=Network_Device._meta.get_field(key).formfield(required=False)

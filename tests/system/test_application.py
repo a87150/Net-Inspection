@@ -578,14 +578,14 @@ class ImportModalTests(TestCase):
             'div', id='importModal', **{'data-auto-open': 'false'},
         ))
 
-    def test_computers_explain_powershell_source_without_import_modal(self):
+    def test_computers_explain_backend_log_source_without_import_modal(self):
         response = self.client.get(reverse('item_list', args=['computers']))
         document = response.content.decode(response.charset)
 
         self.assertFalse(response.context['import_enabled'])
-        self.assertEqual(response.context['data_source_note'], 'PC 数据由 PowerShell 自动采集上报。')
+        self.assertEqual(response.context['data_source_note'], 'PC 资料由后台从共享目录或 FTP 获取采集日志后自动建立，无需导入设备清单。')
         self.assertNotIn('id="importModal"', document)
-        self.assertContains(response, 'PC 数据由 PowerShell 自动采集上报。')
+        self.assertContains(response, 'PC 资料由后台从共享目录或 FTP 获取采集日志后自动建立，无需导入设备清单。')
         self.assertContains(response, '导出筛选结果')
 
     def test_domain_child_pages_offer_filtered_export_and_only_accounts_allow_import(self):
@@ -712,6 +712,7 @@ class DomainControllerSettingsTests(TestCase):
                 'lastLogonTimestamp': ['0'],
             }}]),
             iter([]),
+            iter([]),  # organizational units, including empty OUs
         ]
         config = Domain_Controller_Config(
             host='dc.example.com', base_dn='DC=example,DC=com',

@@ -786,14 +786,19 @@ _ERROR_MESSAGES = {
 }
 
 
-def collect_network_snmp(device, timeout=12, selected_items=None, session_factory=PySnmpSession):
+def collect_network_snmp(device, timeout=12, selected_items=None, session_factory=PySnmpSession, *, total_timeout=None):
     """Collect selected read-only SNMP items through one asyncio boundary."""
     timer = Timer()
     selection = _ITEM_ORDER if selected_items is None else selected_items
     requested = {item for item in selection if item in SNMP_ITEMS}
     try:
         with timer:
-            snapshot = asyncio.run(_collect_snapshot(device, timeout, selected_items, session_factory))
+            async def collect():
+                pending = _collect_snapshot(device, timeout, selected_items, session_factory)
+                if total_timeout is None:
+                    return await pending
+                return await asyncio.wait_for(pending, timeout=max(0.01, float(total_timeout)))
+            snapshot = asyncio.run(collect())
         data, raw, completed = parse_snmp_snapshot(snapshot, selected_items, device.vendor)
         missing = requested - completed
         status = "partial" if missing and completed else "failed" if missing else "success"

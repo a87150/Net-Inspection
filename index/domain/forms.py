@@ -56,8 +56,8 @@ class DomainOperationForm(forms.Form):
         required=False,
         widget=forms.MultipleHiddenInput,
     )
-    destination_dn = forms.CharField(required=False, max_length=500)
-    group_dn = forms.CharField(required=False, max_length=500)
+    destination_dn = forms.ChoiceField(required=False)
+    group_dn = forms.ChoiceField(required=False)
     enabled = forms.BooleanField(required=False)
     password = forms.CharField(
         required=False,
@@ -83,6 +83,12 @@ class DomainOperationForm(forms.Form):
 
     def __init__(self, *args, target_choices=(), **kwargs):
         super().__init__(*args, **kwargs)
+        from net.models import Domain_Controller_Config, DomainOU, Domain_Group
+        from net.domain.memberships import directory_choices
+        config = Domain_Controller_Config.objects.filter(pk=1).first()
+        base_dn = config.base_dn if config else ''
+        self.fields['destination_dn'].choices = [('', '请选择 OU')] + directory_choices(DomainOU, base_dn)
+        self.fields['group_dn'].choices = [('', '请选择安全组')] + directory_choices(Domain_Group, base_dn, security_only=True)
         self.fields['target_ids'].choices = [
             (str(value), str(value)) for value in target_choices
         ]
@@ -95,6 +101,11 @@ class DomainOperationForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
+        parameter = {'move_ou': 'destination_dn', 'add_group': 'group_dn'}.get(cleaned.get('action'))
+        if parameter and not cleaned.get(parameter):
+            self.add_error(parameter, '请先同步目录并选择目标。')
+        if cleaned.get('action') == 'remove_group':
+            self.add_error('action', '请从分组成员窗口执行移出。')
         if cleaned.get('action') != 'create_user':
             if not cleaned.get('target_ids'):
                 self.add_error('target_ids', '请选择至少一个目标。')

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 
 from django.core.exceptions import ValidationError
@@ -163,6 +163,41 @@ def _update_local_mirror(target, context, details):
             return 'stale_waiting_for_sync'
         local.is_active = context.action == DomainOperation.Action.ENABLE
         update_fields.append('is_active')
+    elif context.action == 'move_group':
+        if not _same_dn(local.distinguished_name, snapshot.get('distinguished_name')):
+            return 'stale_waiting_for_sync'
+        from net.models import Domain_Group
+        # Stable lock order avoids crossed moves deadlocking on the two groups.
+        list(Domain_Group.objects.select_for_update().filter(distinguished_name__in=[
+            context.parameters['group_dn'], context.parameters['source_group_dn']]).order_by('pk'))
+        added = _update_local_mirror(target, replace(context, action='add_group',
+            parameters={'group_dn': context.parameters['group_dn']}), {})
+        if details.get('stage') == 'destination_added_source_pending':
+            return added
+        removed = _update_local_mirror(target, replace(context, action='remove_group',
+            parameters={'group_dn': context.parameters['source_group_dn']}), {})
+        return 'updated' if added == removed == 'updated' else 'update_failed_waiting_for_sync'
+    elif context.action in {'add_group', 'remove_group'}:
+        if not _same_dn(local.distinguished_name, snapshot.get('distinguished_name')):
+            return 'stale_waiting_for_sync'
+        from net.models import Domain_Group, DomainMembership
+        from .memberships import refresh_group_names
+        group = Domain_Group.objects.select_for_update().filter(distinguished_name=context.parameters['group_dn']).first()
+        if group is None:
+            return 'missing_waiting_for_sync'
+        field = 'account' if model is Domain_Account else 'computer'
+        lookup = {'group': group, field: local}
+        if context.action == 'add_group':
+            _, created = DomainMembership.objects.get_or_create(**lookup)
+            if created:
+                group.member_count += 1
+        else:
+            removed, _ = DomainMembership.objects.filter(**lookup, is_primary=False).delete()
+            if removed:
+                group.member_count = max(0, group.member_count - 1)
+        group.save(update_fields=['member_count'])
+        refresh_group_names([(model, [local])])
+        return 'updated'
     if update_fields:
         local.save(update_fields=update_fields)
         return 'updated'
@@ -210,12 +245,13 @@ def _persist_domain_outcome(
                 'action': context.action if context is not None else '',
                 'success': bool(success),
             }
-            if result_stage in {'user_created_password_pending', 'manual_intervention_required', 'completed'}:
+            if result_stage in {'user_created_password_pending', 'manual_intervention_required', 'completed',
+                                'destination_add_failed', 'destination_add_uncertain', 'destination_added_source_pending'}:
                 target.result_snapshot['stage'] = result_stage
             if safe_details:
                 target.result_snapshot.update(safe_details)
-            if success:
-                mirror_status = _safe_update_local_mirror(target, context, safe_details)
+            if success or (context is not None and context.action == 'move_group' and result_stage == 'destination_added_source_pending'):
+                mirror_status = _safe_update_local_mirror(target, context, {**safe_details, 'stage': result_stage})
                 if mirror_status:
                     target.result_snapshot['mirror_status'] = mirror_status
             target.error_message = '' if success else _redacted_error(error_message, context)

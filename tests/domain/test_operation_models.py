@@ -36,7 +36,7 @@ class DomainOperationModelTests(SimpleTestCase):
         self.assertEqual(
             {value for value, _label in operation.Action.choices},
             {
-                'create_user', 'move_ou', 'add_group',
+                'create_user', 'move_ou', 'add_group', 'remove_group', 'move_group',
                 'reset_password', 'must_change_password',
                 'password_never_expires', 'unlock', 'enable', 'disable',
             },
@@ -443,6 +443,7 @@ class DomainOperationPersistenceTests(TestCase):
                 },
             }]),
             iter([]),
+            iter([]),  # organizational units, including empty OUs
         ]
         config = SimpleNamespace(
             base_dn='DC=example,DC=test',
@@ -488,6 +489,7 @@ class DomainOperationPersistenceTests(TestCase):
                 'distinguishedName': 'not-a-dn', 'lastLogonTimestamp': 0,
             }}]),
             iter([]),
+            iter([]),  # organizational units, including empty OUs
         ]
         config = SimpleNamespace(
             base_dn='DC=example,DC=test', user_filter='(objectCategory=user)',
@@ -535,6 +537,7 @@ class DomainOperationPersistenceTests(TestCase):
                 'lastLogonTimestamp': 0,
             }}]),
             iter([]),
+            iter([]),  # organizational units, including empty OUs
         ]
         config = SimpleNamespace(
             base_dn='DC=example,DC=test', user_filter='(objectCategory=user)',

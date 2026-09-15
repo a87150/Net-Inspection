@@ -67,10 +67,9 @@ class DomainActionValidationTests(SimpleTestCase):
         with self.assertRaises(ValidationError):
             validate_domain_action('computer', 'password_never_expires', {'enabled': True})
         for object_type in ('account', 'computer'):
-            with self.assertRaises(ValidationError):
-                validate_domain_action(object_type, 'remove_group', {
-                    'group_dn': 'CN=Operators,OU=Groups,DC=example,DC=test',
-                })
+            validate_domain_action(object_type, 'remove_group', {
+                'group_dn': 'CN=Operators,OU=Groups,DC=example,DC=test',
+            })
 
     def test_action_requires_only_its_exact_non_sensitive_parameters(self):
         """Dropping parameter validation would allow an LDAP action without its destination."""

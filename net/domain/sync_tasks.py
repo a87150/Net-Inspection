@@ -16,6 +16,8 @@ def enqueue_domain_sync(*, schedule=None, available_at=None):
             raise ValidationError('请先保存完整的域控连接设置。')
         if schedule is not None and (schedule.domain_config_id != config.pk or not schedule.is_enabled):
             raise ValidationError('域控同步计划无效或已停用。')
+        if TaskRun.objects.filter(task_type='domain_operation', status__in=TaskRun.ACTIVE_STATUSES).exists():
+            raise ValidationError('有域控修改任务尚未结束，请完成后再同步。')
         if TaskRun.objects.filter(task_type='domain_sync', status__in=TaskRun.ACTIVE_STATUSES).exists():
             raise ValidationError('已有域控同步任务正在排队或执行，请勿重复提交。')
         task = TaskRun(task_type='domain_sync',
@@ -57,6 +59,9 @@ def _publish(started, worker_id, snapshot=None, error='', lease_guard=None):
                     counts = apply_domain_snapshot(snapshot)
                 result = dict(zip(('accounts', 'computers', 'groups'), counts))
                 result['message'] = '同步完成：{} 个账号，{} 台计算机，{} 个分组。'.format(*counts)
+                if len(snapshot) > 3:
+                    result['ous'] = len(snapshot[3])
+                    result['message'] += f' {len(snapshot[3])} 个 OU。'
             except Exception:
                 error = '域控同步数据保存失败，本次变更已回滚。'
         target.status = 'failed' if error else 'success'

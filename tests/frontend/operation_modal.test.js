@@ -35,8 +35,8 @@ function fixture(initialAction = 'move_ou') {
     const destination = eventTarget({dataset: {domainSummaryInput: 'destination_dn'}});
     const group = eventTarget({dataset: {domainSummaryInput: 'group_dn'}});
     const parameterFields = [
-        eventTarget({dataset: {domainParameterFor: 'move_ou'}}),
-        eventTarget({dataset: {domainParameterFor: 'add_group'}}),
+        eventTarget({dataset: {domainParameterFor: 'move_ou'}, querySelectorAll: () => [destination]}),
+        eventTarget({dataset: {domainParameterFor: 'add_group'}, querySelectorAll: () => [group]}),
     ];
     const formMap = new Map([
         ['[data-domain-operation-action-value]', actionValue],
@@ -120,4 +120,18 @@ test('group DN input and change refresh add group scope without submit', () => {
     view.group.value = 'CN=Auditors,OU=Groups,DC=example,DC=test';
     view.group.dispatch('change');
     assert.equal(view.scopeText.textContent, 'CN=Auditors,OU=Groups,DC=example,DC=test');
+});
+
+
+test('switching actions disables the other directory selector without losing its choice', () => {
+    const view = fixture('move_ou');
+    view.destination.value = 'OU=Empty,DC=example,DC=test';
+    modal.bindDomainOperationModal(view.doc);
+    assert.equal(view.destination.disabled, false);
+    assert.equal(view.group.disabled, true);
+    view.actionSelect.value = 'add_group';
+    view.actionSelect.dispatch('change');
+    assert.equal(view.destination.disabled, true);
+    assert.equal(view.group.disabled, false);
+    assert.equal(view.destination.value, 'OU=Empty,DC=example,DC=test');
 });

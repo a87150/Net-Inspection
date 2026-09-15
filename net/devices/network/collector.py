@@ -48,10 +48,11 @@ def _network_item_plan(mode, selected_items):
     return snmp_items, ssh_items, mode == 'auto'
 
 
-def _merge_network_results(requested, results):
+def _merge_network_results(requested, results, *, item_completed=None):
     """Merge protocol evidence and derive status only from requested data."""
     requested = _ordered_unique(requested)
     requested_set = set(requested)
+    is_completed = item_completed or (lambda item, value: _item_completed(value))
     data = {}
     raw = {}
     raw_counts = Counter(
@@ -73,9 +74,9 @@ def _merge_network_results(requested, results):
             for item, value in result.data.items():
                 if item not in requested_set:
                     continue
-                value_completed = _item_completed(value)
+                value_completed = is_completed(item, value)
                 if item not in data or (
-                    value_completed and not _item_completed(data[item])
+                    value_completed and not is_completed(item, data[item])
                 ):
                     data[item] = value
                 if value_completed:

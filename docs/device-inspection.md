@@ -127,7 +127,7 @@ Windows 巡检会将已选项目中有效的 CPU 型号、物理核数/逻辑处
 - `snmp_oids` 可覆盖 `cpu`、`memory_total`、`memory_used`、`temperature`，以及 `sys_name`、`sys_descr`、`hr_processor_load` 等标准字段。CPU 为百分数，内存标量为字节，温度标量为摄氏度。可填写数字 OID 或 `MODULE::symbol`；标量须包含实际实例后缀。
 - MIB 文件导入仅提取静态 ASN.1 OID 声明，不执行代码，不自动联网下载依赖。跨模块符号无法解析时，可在 `mib_modules` 中补充 `{"name":"MODULE","symbols":{"symbol":"1.3.6.1.4.1.999.1.0"}}` 映射。上传 MIB 不代表自动知道每个型号的指标语义，仍需选择正确 OID。
 
-安防设备在单设备设置中配置 API / SNMP / Ping，SNMP 密码独立加密保存。自动模式优先 API；API 已响应但字段不完整时保留证据与缺项。未配置 API 和 SNMP 时默认仅检查 Ping 在线；在线不等于通道、存储或业务正常，ICMP 不可达也不能单凭此判断断电。
+安防设备在单设备设置中配置 API / SNMP / Ping，SNMP 密码独立加密保存。自动模式优先 SNMP，已取得的有效项目保留，再由厂商 API 仅补采缺失项目；仍缺数据时最后回退 Ping 在线检查。SNMP/API 失败原因保留在任务摘要，Ping 通不代表业务指标正常，回退后存在采集缺失时显示部分成功。自动回退按剩余时限分配各阶段，SNMP 设置阶段总超时。明确指定 API、SNMP 或仅 Ping 的设备/项目配置不改变协议。未配置 API 和 SNMP 时默认仅检查 Ping 在线；在线不等于通道、存储或业务正常，ICMP 不可达也不能单凭此判断断电。
 
 ## 门禁平台记录
 

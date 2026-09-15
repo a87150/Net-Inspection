@@ -67,6 +67,7 @@ class DomainGroupSyncTests(TestCase):
                     'CN=Bob,OU=Users,DC=example,DC=com',
                 ],
             }}]),
+            iter([]),  # organizational units, including empty OUs
         ]
         config = Domain_Controller_Config(
             host='dc.example.com', base_dn='DC=example,DC=com',

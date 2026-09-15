@@ -54,6 +54,7 @@ class Domain_Account(models.Model):
     is_active = models.BooleanField(default=True)
     ou = models.CharField(max_length=255, blank=True, null=True)
     allowed_workstations = models.TextField(blank=True, null=True)
+    group_names = models.TextField('所属分组', blank=True, default='', db_default='')
     last_login_date = models.DateField(null=True, blank=True)
 
     def __str__(self):
@@ -68,6 +69,7 @@ class Domain_Computer(models.Model):
     is_active = models.BooleanField(default=True)
     ou = models.CharField(max_length=255, blank=True, null=True)
     os = models.CharField(max_length=255, blank=True, null=True)
+    group_names = models.TextField('所属分组', blank=True, default='', db_default='')
     last_login_date = models.DateField(null=True, blank=True)
 
     def __str__(self):
@@ -97,9 +99,34 @@ class Domain_Group(models.Model):
         max_length=16, choices=Category.choices, default=Category.SECURITY,
     )
     member_count = models.PositiveIntegerField(default=0)
+    is_available = models.BooleanField(default=True, db_default=True)
 
     def __str__(self):
         return self.group_name
+
+
+class DomainOU(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    object_guid = models.UUIDField(null=True, blank=True, unique=True)
+    distinguished_name = models.CharField(max_length=1024, db_index=True)
+    name = models.CharField(max_length=255)
+    is_available = models.BooleanField(default=True)
+
+
+class DomainMembership(models.Model):
+    group = models.ForeignKey(Domain_Group, on_delete=models.CASCADE, related_name='memberships')
+    account = models.ForeignKey(Domain_Account, null=True, blank=True, on_delete=models.CASCADE, related_name='memberships')
+    computer = models.ForeignKey(Domain_Computer, null=True, blank=True, on_delete=models.CASCADE, related_name='memberships')
+    is_primary = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['group', 'account'], name='domain_group_account_unique'),
+            models.UniqueConstraint(fields=['group', 'computer'], name='domain_group_computer_unique'),
+            models.CheckConstraint(condition=(models.Q(account__isnull=False, computer__isnull=True) |
+                                               models.Q(account__isnull=True, computer__isnull=False)),
+                                   name='domain_membership_one_target'),
+        ]
 
 
 class Domain_Controller_Config(models.Model):
@@ -136,6 +163,8 @@ class DomainOperation(models.Model):
         CREATE_USER = 'create_user', '添加用户'
         MOVE_OU = 'move_ou', '移动到 OU'
         ADD_GROUP = 'add_group', '加入安全组'
+        REMOVE_GROUP = 'remove_group', '移出分组'
+        MOVE_GROUP = 'move_group', '移动分组成员'
         RESET_PASSWORD = 'reset_password', '重置密码'
         MUST_CHANGE_PASSWORD = 'must_change_password', '下次登录修改密码'
         PASSWORD_NEVER_EXPIRES = 'password_never_expires', '密码永不过期'

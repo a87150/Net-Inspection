@@ -53,6 +53,9 @@ def domain_operation_create(request):
             return redirect('task_detail', pk=operation.task_id)
     else:
         messages.error(request, '域控操作参数无效，未创建任务。')
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        from .views import domain_object_list
+        return domain_object_list(request, 'accounts' if object_type == 'account' else 'computers', operation_form=form)
     return redirect(f'{reverse(_list_route(object_type))}?domain_modal=operation')
 
 

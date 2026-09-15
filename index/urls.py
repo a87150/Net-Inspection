@@ -1,3 +1,4 @@
+from index.domain.memberships import domain_group_members
 from index.access.views import (access_record_list, access_record_sync, access_source_settings, access_source_save, access_source_test)
 from index.devices.collection_profiles import collection_templates, device_collection_settings
 from index.domain.bitlocker import domain_computer_bitlocker
@@ -16,6 +17,7 @@ from index.devices.pc.bulk_analysis import computer_logs_analyze_bulk
 from index.devices.pc.software_policy import pc_software_policy_template_download
 
 urlpatterns = [
+    path('domain/groups/<uuid:pk>/members/', domain_group_members, name='domain_group_members'),
     path("access/records/", access_record_list, name="access_record_list"),
     path("access/sources/", access_source_settings, name="access_source_settings"),
     path("access/sources/save/", access_source_save, name="access_source_save"),

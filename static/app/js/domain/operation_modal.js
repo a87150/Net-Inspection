@@ -5,6 +5,7 @@ function refreshDomainOperationSummary(doc, actionSelect, form) {
     form.querySelector('[data-domain-confirm-action]').textContent = option ? option.textContent : action;
     form.querySelectorAll('[data-domain-parameter-for]').forEach((field) => {
         field.hidden = !field.dataset.domainParameterFor.split(' ').includes(action);
+        field.querySelectorAll?.('input, select').forEach((input) => { input.disabled = field.hidden; });
     });
     const selected = doc.querySelectorAll('[data-domain-target-checkbox]:checked');
     form.querySelector('[data-domain-confirm-target-count]').textContent = String(
