@@ -6,6 +6,14 @@ from django.utils import timezone
 
 register = template.Library()
 
+DELIVERY_STATUS_ORDER = {
+    'pending': 0,
+    'sending': 1,
+    'sent': 2,
+    'retry': 3,
+    'failed': 4,
+}
+
 
 @register.filter
 def get_attr(obj, attr_name):
@@ -40,6 +48,30 @@ def format_table_field(value, field):
     if formatted != '-' and field.key in {'memory_total_gb', 'disk_total_gb'}:
         return f'{formatted} GB'
     return formatted
+
+
+@register.filter
+def group_delivery_outcomes(deliveries):
+    """Group channel names by delivery status for compact table rendering."""
+    grouped = {}
+    for delivery in deliveries:
+        group = grouped.setdefault(delivery.status, {
+            'status': delivery.status,
+            'status_label': delivery.get_status_display(),
+            'channel_names': [],
+        })
+        group['channel_names'].append(delivery.channel.name)
+    results = []
+    for group in sorted(
+        grouped.values(),
+        key=lambda item: (DELIVERY_STATUS_ORDER.get(item['status'], 99), item['status']),
+    ):
+        channel_names = '、'.join(sorted(group['channel_names'], key=str.casefold))
+        results.append({
+            'status': group['status'],
+            'label': f"{channel_names}：{group['status_label']}",
+        })
+    return results
 
 
 @register.simple_tag
