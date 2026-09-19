@@ -119,74 +119,85 @@ class DynamicRecord(models.Model):
         abstract = True
 
 
+PC_LOG_SECTIONS = {'系统信息概览': 'system_info', '网络信息': 'network_info', '计算机硬件资源情况': 'hardware_info', '日志文件元数据': 'log_metadata', 'Windows激活信息': 'windows_activation', 'KMS服务器连通情况': 'kms_connectivity', '当前与域服务器通讯情况': 'domain_communication', '已安装软件列表': 'installed_software', '当前运行进程清单': 'running_processes', 'BitLocker状态': 'bitlocker', 'WindowsDefender状态': 'defender', '系统更新历史': 'system_updates', '已应用策略': 'applied_policies', '浏览器插件情况': 'browser_extensions', '计算机和用户匹配情况': 'identity_match', '事件发现': 'event_findings', '采集诊断': 'collection_diagnostics'}
+
+
 class ComputerLogFile(models.Model):
     class Platform(models.TextChoices):
         WINDOWS = 'windows', 'Windows'
         MACOS = 'macos', 'macOS'
 
-    class SourceProtocol(models.TextChoices):
-        SMB = 'smb', 'SMB'
-        FTP = 'ftp', 'FTP'
-        FTPS = 'ftps', 'FTPS'
-
     computer = models.ForeignKey(
         Computer,
-        null=True,
-        blank=True,
         on_delete=models.PROTECT,
         related_name='log_files',
     )
-    collected_date = models.DateField(null=True, blank=True)
-    platform = models.CharField(max_length=20, choices=Platform.choices, blank=True)
-    source_protocol = models.CharField(max_length=8, choices=SourceProtocol.choices, blank=True)
-    remote_source_path = models.TextField(blank=True)
-    source_path = models.TextField()
-    modified_at = models.DateTimeField()
+    collected_date = models.DateField()
+    collected_at = models.DateTimeField(db_index=True)
+    platform = models.CharField(max_length=20, choices=Platform.choices)
     content_hash = models.CharField(max_length=64, unique=True)
     file_size = models.PositiveBigIntegerField(default=0)
-    import_status = models.CharField(max_length=20)
-    daily_import_marker = models.GeneratedField(
-        expression=models.Case(
-            models.When(import_status='imported', then=models.Value(1)),
-            default=models.Value(None),
-        ),
-        output_field=models.PositiveSmallIntegerField(),
-        db_persist=True,
-    )
-    archived_path = models.TextField(blank=True)
-    parse_error = models.TextField(blank=True)
-    payload = models.JSONField(null=True, blank=True)
+    retained = models.BooleanField(default=True, db_index=True)
+    present_sections = models.JSONField(default=list, blank=True)
+    extra_fields = models.JSONField(default=dict, blank=True)
+    system_info = models.JSONField(null=True, blank=True)
+    network_info = models.JSONField(null=True, blank=True)
+    hardware_info = models.JSONField(null=True, blank=True)
+    log_metadata = models.JSONField(null=True, blank=True)
+    windows_activation = models.JSONField(null=True, blank=True)
+    kms_connectivity = models.JSONField(null=True, blank=True)
+    domain_communication = models.JSONField(null=True, blank=True)
+    installed_software = models.JSONField(null=True, blank=True)
+    running_processes = models.JSONField(null=True, blank=True)
+    bitlocker = models.JSONField(null=True, blank=True)
+    defender = models.JSONField(null=True, blank=True)
+    system_updates = models.JSONField(null=True, blank=True)
+    applied_policies = models.JSONField(null=True, blank=True)
+    browser_extensions = models.JSONField(null=True, blank=True)
+    identity_match = models.JSONField(null=True, blank=True)
+    event_findings = models.JSONField(null=True, blank=True)
+    collection_diagnostics = models.JSONField(null=True, blank=True)
+
+    @property
+    def payload(self):
+        from django.utils import timezone
+        value = dict(self.extra_fields or {})
+        for key in self.present_sections or []:
+            if key in PC_LOG_SECTIONS:
+                value[key] = getattr(self, PC_LOG_SECTIONS[key])
+        if self.platform:
+            value['platform'] = self.platform
+        if self.collected_at:
+            stamp = self.collected_at
+            if timezone.is_aware(stamp):
+                stamp = timezone.localtime(stamp)
+            value['日志时间'] = stamp.strftime('%Y-%m-%d %H:%M:%S')
+        return value
+
+    @property
+    def analyses(self):
+        return ComputerAnalysis.objects.filter(log_id=self.pk)
+
+    @payload.setter
+    def payload(self, value):
+        from django.utils import timezone
+        from net.devices.pc.checks import parse_local_datetime
+        value = value if isinstance(value, dict) else {}
+        self.present_sections = [key for key in PC_LOG_SECTIONS if key in value]
+        self.extra_fields = {key: item for key, item in value.items()
+                             if key not in PC_LOG_SECTIONS and key not in ('platform', '日志时间')}
+        for key, field in PC_LOG_SECTIONS.items():
+            setattr(self, field, value.get(key))
+        if 'platform' in value:
+            self.platform = value['platform']
+        parsed = parse_local_datetime(value.get('日志时间'))
+        if parsed:
+            self.collected_at = timezone.make_aware(parsed) if timezone.is_naive(parsed) else parsed
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        constraints = [
-            models.CheckConstraint(
-                condition=(
-                    ~models.Q(import_status='imported')
-                    | (
-                        models.Q(computer__isnull=False)
-                        & models.Q(collected_date__isnull=False)
-                    )
-                ),
-                name='net_pc_import_identity_ck',
-            ),
-            models.UniqueConstraint(
-                fields=('computer', 'collected_date', 'daily_import_marker'),
-                name='net_pc_imported_log_daily_uniq',
-            ),
-        ]
-
-
-class ComputerLogArchive(models.Model):
-    """Durable intent for each source copy, including duplicate evidence files."""
-
-    id = models.CharField(primary_key=True, max_length=64)
-    log_file = models.ForeignKey(ComputerLogFile, on_delete=models.PROTECT, related_name='archives')
-    source_path = models.TextField()
-    destination_path = models.TextField()
-    identity = models.JSONField()
-    status = models.CharField(max_length=20, default='pending', db_index=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+        indexes = [models.Index(fields=['computer', 'collected_at', 'id'], name='net_pc_latest_log_idx')]
 
 
 class ComputerAnalysis(DynamicRecord):
@@ -223,11 +234,34 @@ class ComputerAnalysis(DynamicRecord):
         on_delete=models.CASCADE,
         related_name='analyses',
     )
-    log_file = models.ForeignKey(
-        ComputerLogFile,
-        on_delete=models.CASCADE,
-        related_name='analyses',
-    )
+    log_id = models.PositiveBigIntegerField(null=True, blank=True, db_index=True, db_column='log_file_id')
+
+    @property
+    def log_file_id(self):
+        return self.log_id
+
+    @log_file_id.setter
+    def log_file_id(self, value):
+        self.log_id = value
+
+    @property
+    def log_file(self):
+        if not hasattr(self, '_source_log'):
+            self._source_log = ComputerLogFile.objects.filter(pk=self.log_id).first() if self.log_id else None
+        return self._source_log
+
+    @log_file.setter
+    def log_file(self, value):
+        self.log_id = value.pk if value is not None else None
+        self._source_log = value
+        if value is not None:
+            self.source_collected_at = value.collected_at
+            self.analysis_date = value.collected_date
+
+    analysis_profile = models.ForeignKey('net.ComputerAnalysisProfile', null=True, blank=True, on_delete=models.PROTECT)
+    analysis_date = models.DateField(null=True, blank=True, db_index=True)
+    source_collected_at = models.DateTimeField(null=True, blank=True)
+    retention_managed = models.BooleanField(default=False)
     analysis_items = models.JSONField(default=list, blank=True)
     exceptions = models.JSONField(default=list, blank=True)
 

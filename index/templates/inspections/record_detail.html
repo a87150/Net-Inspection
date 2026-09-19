@@ -4,9 +4,9 @@
 {% block content %}
 {% if analysis %}<p>{{ analysis.execution_status }} · {{ analysis.task_source }} · 异常 {{ analysis.error_count }} · {{ analysis.key_metrics }}</p>{% elif inspection %}<p>{{ inspection.execution_status }} · {{ inspection.task_source }} · 异常 {{ inspection.error_count }} · {{ inspection.key_metrics }}</p>{% endif %}
 {% if record_type == 'computer_analysis' %}
-<a class="btn btn-outline-primary mb-3" href="{% url 'computer_log_detail' analysis.log_file_id %}">日志证据 / 重新分析</a>
+{% if analysis.log_file %}<a class="btn btn-outline-primary mb-3" href="{% url 'computer_log_detail' analysis.log_file_id %}">查看日志详情</a>{% else %}<p class="alert alert-secondary">原始日志已按保留策略替换，分析记录仍可查看。</p>{% endif %}
 <header class="page-heading">
-    <div class="page-heading__copy"><p class="page-heading__eyebrow">日志分析记录</p><h1 class="page-heading__title">{{ analysis.computer.computer_name }} 分析详情</h1><p class="page-heading__description">日志时间：{{ analysis.log_file.modified_at|date:'Y-m-d H:i:s'|default:'未知' }}</p></div>
+    <div class="page-heading__copy"><p class="page-heading__eyebrow">日志分析记录</p><h1 class="page-heading__title">{{ analysis.computer.computer_name }} 分析详情</h1><p class="page-heading__description">日志时间：{{ analysis.source_collected_at|date:'Y-m-d H:i:s'|default:'未知' }}</p></div>
     <div class="page-heading__actions"><a href="{% url 'computer_analysis_list' %}" class="btn btn-outline-secondary">返回日志分析记录</a></div>
 </header>
 {% if 'software' in analysis.analysis_items %}

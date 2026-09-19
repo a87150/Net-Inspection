@@ -2,30 +2,6 @@
 {% load extras %}
 {% block title %}任务详情{% endblock %}
 {% block content %}
-{% if task.task_type == 'computer_fetch' %}
-<section class="card surface-card mb-3" aria-label="PC 获取与分析流程">
-<div class="card-body">
-<h2 class="h5">PC 获取与分析流程</h2>
-<p>获取阶段：{{ task.get_status_display }}。{% if pc_fetch_result %}本次导入 {{ pc_fetch_result.imported|default:0 }} 份，复用已有日志 {{ pc_reused_count }} 份。{% endif %}</p>
-{% if pc_analysis_task %}
-<p>分析阶段：{{ pc_analysis_task.get_status_display }} · {{ pc_analysis_task.completed_targets }} / {{ pc_analysis_task.total_targets }} 个日志目标。获取结束不代表分析完成。</p>
-<a class="btn btn-primary" href="{% url 'task_detail' pc_analysis_task.pk %}">查看分析进度与结果</a>
-{% if can_administer and pc_analysis_task.status in pc_analysis_task.ACTIVE_STATUSES %}
-<form class="d-inline" method="post" action="{% url 'task_cancel' pc_analysis_task.pk %}" data-confirm-message="结束尚未完成的分析？已完成结果保留。">{% csrf_token %}<button class="btn btn-outline-danger" type="submit">结束分析阶段</button></form>
-{% endif %}
-{% elif task.status in task.ACTIVE_STATUSES %}
-<p class="mb-0">分析阶段等待获取结束；无需再次点击手动分析。刷新本页查看进度。</p>
-{% elif task.status == 'cancelled' %}
-<p class="mb-0">流程已取消，未创建分析任务。</p>
-{% elif task.status == 'failed' %}
-<p class="mb-0">获取阶段失败；请查看目标错误及分析交接恢复状态。</p>
-{% else %}
-<p class="mb-0">本次来源和日期范围内没有可分析的有效日志，未执行规则分析。请检查终端上传、日志来源和日期范围。</p>
-{% endif %}
-</div>
-</section>
-{% endif %}
-
 {% if task.task_type == 'domain_sync' %}
 <section class="card surface-card mb-3">
 <div class="card-body">
@@ -97,7 +73,7 @@
 <div class="card-body">
 <div class="row g-3">
 <div class="col-md-3">
-<div class="metric-label">{% if task.task_type == 'computer_fetch' %}获取阶段进度{% else %}总体进度{% endif %}</div>
+<div class="metric-label">总体进度</div>
 <div class="fs-4">{{ task.completed_targets }} / {{ task.total_targets }}</div>
 </div>
 <div class="col-md-3">

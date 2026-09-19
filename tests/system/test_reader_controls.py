@@ -12,7 +12,7 @@ from index.alerts.views import alert_modal_context
 from index.inspections.tasks import task_modal_context
 from index.people.integrations import people_modal_context
 from index.common.access import access_context
-from net.models import ComputerAnalysisProfile, Domain_Controller_Config, PCLogSourceConfig, People, Server, TaskRun
+from net.models import ComputerAnalysisProfile, Domain_Controller_Config, PCUploadConfig, People, Server, TaskRun
 
 
 class Forms(HTMLParser):
@@ -36,10 +36,7 @@ class ReaderControlsTests(TestCase):
         cls.person = People.objects.create(name='Readable Person', employee_id='UI-001')
         cls.server = Server.objects.create(name='Readable Server', ip='192.0.2.15', server_type='linux')
         cls.canary = 'reader-secret-config-91da.invalid'
-        cls.source = PCLogSourceConfig.objects.create(
-            host=cls.canary, username='secret-user-91da', source_type='ftp', port=21,
-            remote_incoming_directory='incoming', local_staging_directory='stage',
-            file_time_mode='recent_days')
+        PCUploadConfig.objects.create(pk=1, endpoint_url=f'https://{cls.canary}/api/pc/logs/')
         cls.profile = ComputerAnalysisProfile.objects.create(name='secret-profile-91da', analysis_items=['resource'])
         cls.task = TaskRun.objects.create(task_type='computer_analysis', source='manual', analysis_profile=cls.profile)
 
@@ -185,15 +182,3 @@ class ReaderControlsTests(TestCase):
         self.assertIn('<th>手机号</th>', html)
         self.assertIn(phone, html)
         self.assertIn('0012345', html)
-
-    def test_source_validation_page_guards_form_inside_template_block(self):
-        from django import forms
-        form = forms.Form()
-        form.fields['host'] = forms.CharField(initial=self.canary)
-        for user in (self.reader, self.staff):
-            request = RequestFactory().get('/')
-            request.user = user
-            html = render_to_string('devices/pc/source_form_errors.html',
-                                    {**access_context(request), 'form': form}, request=request)
-            self.assertEqual(self.canary in html, user == self.staff)
-            self.assertEqual('data-pc-source-form' in html, user == self.staff)

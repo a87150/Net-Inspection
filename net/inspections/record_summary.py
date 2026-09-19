@@ -49,6 +49,8 @@ def key_metrics(details):
         value = details.get(key)
         if isinstance(value, list):
             parts.append(f'{label} {len(value)} 项')
+        elif isinstance(value, dict) and isinstance(value.get('count'), int):
+            parts.append(f'{label} {value["count"]} 项')
     resource = details.get('resource')
     if isinstance(resource, dict):
         for key, label in (('当前CPU占用率', 'CPU'), ('当前内存使用率', '内存')):

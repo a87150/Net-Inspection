@@ -22,7 +22,7 @@
 </header>
 {% if collection_hint %}<div class="alert alert-info"><strong>采集方式：</strong>{{ collection_hint }}</div>{% endif %}
 {% if data_source_note %}<div class="alert alert-info">{{ data_source_note }}</div>{% endif %}
-{% if can_administer and item_key == 'computers' and not pc_log_source %}<div class="alert alert-warning">请先保存日志来源，再下载 PC 采集脚本。<a href="{% url 'computer_analysis_list' %}?task_modal=profile">前往分析配置</a></div>{% endif %}
+{% if can_administer and item_key == 'computers' and not pc_upload_config %}<div class="alert alert-warning">请先保存 PC 采集 API 配置，再下载采集包。<a href="{% url 'computer_analysis_list' %}?task_modal=profile">前往分析配置</a></div>{% endif %}
 {% if can_administer and import_enabled %}{% if can_administer %}{% include 'common/import_modal.html' %}{% endif %}{% endif %}
 {% if can_administer and device_form %}{% if can_administer %}{% include 'devices/add_modal.html' %}{% include 'devices/collection_template_modal.html' %}{% endif %}{% endif %}
 {% if can_administer and people_operation %}{% if can_administer %}{% include 'integrations/preview_modal.html' %}{% endif %}{% endif %}

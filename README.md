@@ -1,8 +1,8 @@
-# 网络巡检中心（net）
+# 网络巡检中心（net） 0.9.1
 
 基于 Django 的内网资产管理、设备巡检与 PC 日志分析系统。通过网页配置、手动任务和定时任务，完成数据采集、规则分析、历史查询及异常/恢复通知。
 
-PC 日志由终端写入共享汇总目录，再由后台通过 SMB 或 FTP/FTPS 获取；不使用终端直传 Web API。Windows 服务器 HTTP 巡检是另一套独立功能。
+PC 日志由 Windows/macOS 采集器每两小时本地覆盖 `latest.json`，再以 Bearer Token 直传 Web API。Windows 服务器 HTTP 巡检是另一套独立功能。
 
 ## 文档导航
 
@@ -39,7 +39,7 @@ sudo bash deploy/linux/install.sh
 
 已有 `.env` 和数据原样复用，不写演示数据、不安装数据库实例、不自动修改防火墙。升级前备份，更新代码后重跑同一脚本；失败时服务保持停止，修复后再运行。旧部署需先按原方式停机，避免多套进程。
 
-迁移机器时还要恢复数据库、原密钥、软件策略和日志归档，不能只复制代码。Windows 共享目录默认使用运行账号权限；SYSTEM 与当前登录用户的网络身份不同。账号授权、自定义目录、HTTPS、日志和脚本参数见[完整部署步骤](deploy/README.md)。
+迁移机器时还要恢复数据库、原密钥和软件策略，不能只复制代码。Web/Worker 运行账号、HTTPS、日志和脚本参数见[完整部署步骤](deploy/README.md)。
 
 ### 本地演示
 
@@ -92,7 +92,7 @@ Linux 将解释器换成 `python3.12` / `./.venv/bin/python`。已有虚拟环�
 | 功能 | 操作入口与流程 |
 | --- | --- |
 | 人员台账 | 人员列表 → CSV/XLSX 导入，或飞书/钉钉 → 保存 → 测试 → 预览 → 导入 |
-| PC 获取与分析 | 日志分析记录 → 分别保存来源、分析/计划 → 测试、预览 → 部署终端采集包；手动执行获取并分析当前来源日期范围内的新旧日志，定时执行增量分析 |
+| PC 获取与分析 | 日志分析记录 → 保存终端 API 与分析/计划 → 下载并部署采集包；手动和定时任务从数据库为每台 PC 冻结最新日志后分析 |
 | 设备资料 | 网络/服务器/安防列表 → 添加、导入或单行“修改配置”；硬件资料由有效采集结果补充 |
 | 巡检方法与报警 | 设备列表 → 配置模板，按项目设采集方式、命令/OID、解析、阈值和等级；单行“巡检设置”覆盖差异 |
 | 单台巡检 | 设备行 → 手动巡检；只创建该设备目标，切换配置不改变目标 |
@@ -132,8 +132,7 @@ flowchart LR
     Browser[浏览器] --> Web[Django Web：权限与入队]
     Web <--> DB[(数据库：资产 / 配置 / 队列 / 历史)]
     Worker[独立 Worker：调度与执行] <--> DB
-    PC[PC 采集器] --> Share[共享目录 / FTP]
-    Share --> Worker
+    PC[PC 采集器] -->|Bearer Token API| Web
     Worker --> Devices[网络 / Linux / Windows / 安防]
     Worker --> Platforms[人员平台 / AD / 门禁]
     Worker --> Alerts[飞书 / 钉钉 / 邮件]
@@ -151,9 +150,9 @@ Web 负责页面、后端授权、校验和短事务；Worker 在数据库领取
 | Netmiko、Paramiko、PySNMP | 网络设备 SSH、Linux SSH、SNMP 只读采集 |
 | TextFSM、ntc_templates | 命令回显解析及部分默认模板 |
 | ldap3、PyCryptodome | AD 查询/操作及 NTLM 所需算法 |
-| requests、aiohttp、dnspython、smbprotocol | HTTP、DNS、SMB 连接；FTP/FTPS 使用标准库 |
+| requests、aiohttp、dnspython | HTTP、DNS；PC 采集器使用 HTTPS/HTTP API 上报 |
 | Bootstrap、原生 JavaScript/CSS | 服务端页面与弹窗，无需 npm 构建；Node 仅用于前端测试 |
-| PowerShell、OpenHardwareMonitorLib | Windows 采集；温度受硬件与权限限制，许可证随包提供 |
+| PowerShell、LibreHardwareMonitorLib、PawnIO | Windows 采集；温度依赖 CPU 传感器、权限及驱动，许可证随包提供 |
 
 准确版本与兼容约束以 [requirements.txt](requirements.txt) 和 [requirements.lock.txt](requirements.lock.txt) 为准，安装使用锁文件，避免只升级某个协议库造成冲突。
 
@@ -183,9 +182,9 @@ Worker 同时承担到期计划检查、任务领取、租约续期和告警处�
 | 飞书自动同步等待重新测试 | 保存后测试连接，查来源启用、计划、调度原因；旧版本升级后重新测试，不直接改测试时间 |
 | 登录失败或数据不见 | 核对命令与服务是否指向同一个库，特别是根目录 SQLite、演示 SQLite 和 MariaDB |
 | 关掉窗口仍能访问 | 浏览器关闭不停止服务；按计划任务/systemd/原启动器停止 Web 和 Worker |
-| PC 没新日志 | 查终端共享写权限、每日标记、交互用户、文件日期范围；手动分析不会远程催采 |
+| PC 没新日志 | 查终端任务、本地 latest.json、collector.log、终端到 endpoint_url 的连通性及令牌；手动分析不会远程催采 |
 | PC 软件/温度缺失 | 查“采集诊断”；不完整软件清单不判必装缺失，温度不可用不以主板/GPU 数值替代 |
-| PC 入库后仍未移动 | 查传输记录归档状态与重命名权限，保留恢复记录，勿重复导入或删源文件 |
+| PC API 上报失败 | 查 is_enabled、Bearer 令牌、Content-Type: application/json、16 MiB 限制和时间；重置令牌后重新下载部署采集包 |\n| PC 原始日志不可用 | 日志按独立策略清理；分析结果与普通 log_id 标识保留，详情只能按需读取尚未清理的原始日志 |
 | 服务器 HTTP 500 / 服务数据不足 | 更新目标服务器 HTTP 脚本，查 `%ProgramData%\NetworkInspectionAgent` 日志和令牌；管理员身份不保证每个服务可读 |
 | 网络 Ping 通但部分失败 | 按项目查 SNMP 视图/OID、SSH 命令/解析；在模板窗口用实际回显预览 |
 | 深信服吞吐量 401 | 查 Worker 出口白名单、开放接口和共享密钥，确保 Worker 已更新；吞吐量使用 POST JSON 签名 |

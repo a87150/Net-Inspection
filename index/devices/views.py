@@ -114,7 +114,7 @@ def asset_list(request, kind, *, integration_context=None, creation_form=None, e
         'import_enabled': is_admin(request.user) and kind in IMPORTABLE_ENTITIES,
         'personnel_api_import': is_admin(request.user) and kind == 'people',
         'data_source_note': (
-            'PC 资料由后台从共享目录或 FTP 获取采集日志后自动建立，无需导入设备清单。'
+            'PC 资料由终端采集器通过 API 上报日志后自动建立，无需导入设备清单。'
             if kind == 'computers' else ''
         ),
         'open_import_modal': (

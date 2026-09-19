@@ -237,7 +237,7 @@ TABLE_DEFINITIONS = {
               _field('user_ou', '用户 OU', source='details__enrichment__user_ou', visible=False, default_filter=False),
               _field('computer_ou', '计算机 OU', source='details__enrichment__computer_ou', visible=False, default_filter=False),
               _field('site', '站点', source='details__enrichment__site', default_filter=False),
-            _field('log_time', '日志时间', 'datetime', source='log_file__modified_at', default_filter=False),
+            _field('log_time', '日志时间', 'datetime', source='source_collected_at', default_filter=False),
             _field('created_at', '入库时间', 'datetime', default_filter=False),
             _field(
                 'status', '分析结果', 'choice', source='result_level',
@@ -249,7 +249,7 @@ TABLE_DEFINITIONS = {
         'computer_errors', 'PC 异常记录', (
             _field('computer_name', 'PC 名称', source='inspection__computer__computer_name'),
             _field('user_name', '登录用户', source='inspection__computer__user_name', default_filter=False),
-            _field('log_time', '日志时间', 'datetime', source='inspection__log_file__modified_at', default_filter=False),
+            _field('log_time', '日志时间', 'datetime', source='inspection__source_collected_at', default_filter=False),
             _field('time', '异常时间', 'datetime', source='inspection__created_at', default_filter=False),
             _field('type', '问题类型', 'choice', source='error_type'),
             _field('message', '详细问题', source='error_message', sortable=False, default_filter=False),
@@ -259,14 +259,9 @@ TABLE_DEFINITIONS = {
           'computer_logs', 'PC 日志文件', (
               _field('computer_name', 'PC 名称', source='computer__computer_name'),
               _field('platform', '平台', 'choice', default_filter=False),
-              _field('source_protocol', '获取协议', 'choice', default_filter=False),
-              _field('collected_date', '日志日期', 'date', default_filter=False),
-              _field('remote_source_path', '远程源路径'),
-            _field('source_path', '源文件路径'),
-            _field('modified_at', '文件时间', 'datetime', default_filter=False),
-            _field('import_status', '导入状态', 'choice'),
-            _field('content_hash', '内容哈希', visible=False, default_filter=False),
-        ), 'modified_at', 'desc', ('source_path', 'content_hash'), 20,
+              _field('collected_at', '采集时间', 'datetime', default_filter=False),
+              _field('content_hash', '内容哈希', default_filter=False),
+        ), 'collected_at', 'desc', ('content_hash',), 20,
     ),
     'access_records': TableDefinition(
         'access_records', '门禁记录', (
@@ -284,7 +279,6 @@ TABLE_DEFINITIONS = {
             _field('task_type', '任务类型', 'choice', choices=(
                 ('inspection', '设备巡检'),
                 ('computer_analysis', 'PC 日志分析'),
-                  ('computer_fetch', 'PC 日志获取'),
                 ('people_sync', '人员自动同步'),
                 ('domain_operation', '域控操作'),
                 ('domain_sync', '域控同步'),
@@ -308,7 +302,6 @@ TABLE_DEFINITIONS = {
             _field('target_type', '目标类型', 'choice', choices=(
                 ('network_device', '网络设备'), ('server', '服务器'),
                 ('monitor', '安防设备'), ('computer_log', 'PC 日志'),
-                ('computer_fetch', 'PC 日志获取'),
                 ('domain_account', '域账号'), ('domain_computer', '域计算机'),
                 ('people_source', '人员 API 平台'),
             )),

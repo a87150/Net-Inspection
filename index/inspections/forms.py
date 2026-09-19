@@ -228,6 +228,7 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
         help_text='人员为主：只匹配在职人员，保留在职无日志人员；日志为主：保留未匹配人员的日志。工号优先，其次唯一姓名。')
     profile_id = forms.UUIDField(required=False, widget=forms.HiddenInput)
     name = forms.CharField(max_length=255, label='配置名称')
+    analysis_retention = forms.ChoiceField(required=False, label='分析记录保留策略', choices=(('daily_latest', '每天仅保留每台 PC 最新记录（往日保留）'), ('all', '保留全部版本')))
     analysis_items = forms.MultipleChoiceField(
         choices=analysis_item_choices(),
         widget=forms.CheckboxSelectMultiple,
@@ -272,7 +273,7 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
         required=False, min_value=1, max_value=150, label='CPU 温度阈值（℃）',
     )
     site_ip_prefixes = forms.JSONField(required=False, label='IP 网段与站点映射',
-                                      help_text='JSON 对象，例如 {"10.10.0.0/16": "长沙"}。')
+                                      help_text='JSON 对象，例如 {"198.51.100.0/24": "示例站点"}。')
     kms_servers_text = forms.CharField(
         required=False, widget=forms.Textarea, label='KMS 服务器',
     )
@@ -292,6 +293,7 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
                 'matching_mode': getattr(instance, 'matching_mode', 'logs'),
                 'software_policy_mode': instance.software_policy_mode,
                 'name': instance.name,
+                'analysis_retention': getattr(instance, 'analysis_retention', 'daily_latest'),
                 'analysis_items': instance.analysis_items,
                 'minimum_windows_release': instance.minimum_windows_release,
                 'defender_update_max_days': instance.defender_update_max_days,
@@ -334,15 +336,16 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
         cleaned = super().clean()
         self._clean_schedule()
         if cleaned.get('schedule_enabled'):
-            from net.models import PCLogSourceConfig
-            if PCLogSourceConfig.load() is None:
-                self.add_error('schedule_enabled', '请先保存日志来源，再启用定时执行。')
+            from net.models import PCUploadConfig
+            if PCUploadConfig.load() is None:
+                self.add_error('schedule_enabled', '请先保存 PC 采集 API 配置，再启用定时执行。')
         return cleaned
 
     def profile_values(self):
         cleaned = self.cleaned_data
         return {
             'name': cleaned['name'],
+            'analysis_retention': cleaned.get('analysis_retention') or getattr(self.instance, 'analysis_retention', 'daily_latest'),
             'analysis_items': cleaned['analysis_items'],
             'matching_mode': self._configured_value('matching_mode', 'logs') or 'logs',
             'software_policy_mode': self._configured_value('software_policy_mode', 'whitelist') or 'whitelist',
@@ -372,7 +375,6 @@ class ManualTaskForm(forms.Form):
             ('all', '全部资产'),
             ('selected', '已选资产'),
             ('filtered', '当前筛选结果'),
-            ('fetch', '获取并分析远程日志'),
         ),
     )
     selected_items = forms.MultipleChoiceField(
@@ -400,10 +402,6 @@ class ManualTaskForm(forms.Form):
 
     def clean_target_mode(self):
         mode = self.cleaned_data['target_mode']
-        if isinstance(self.profile, InspectionProfile) and mode == 'fetch':
-            raise ValidationError('设备巡检不支持扫描模式。')
-        if isinstance(self.profile, ComputerAnalysisProfile) and mode not in {
-            'all', 'selected', 'filtered', 'fetch',
-        }:
+        if isinstance(self.profile, ComputerAnalysisProfile) and mode not in {'all', 'selected', 'filtered'}:
             raise ValidationError('计算机分析目标范围无效。')
         return mode

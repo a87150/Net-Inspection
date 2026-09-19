@@ -8,7 +8,7 @@ from django.contrib.auth.views import LoginView, LogoutView
 from . import views
 from index.inspections.issue_settings import issue_severity_settings
 from index.inspections.analysis_summary import analysis_problem_list
-from index.devices.pc import source as pc_source_views
+from index.devices.pc import upload_config as pc_upload_views
 from index.devices.server.scripts import windows_server_script_download
 from index.devices.create import asset_create, asset_edit
 from index.alerts.templates import alert_template_settings
@@ -31,9 +31,8 @@ urlpatterns = [
     path('logout/', LogoutView.as_view(), name='logout'),
     path('inspections/issue-severity/', issue_severity_settings, name='issue_severity_settings'),
     path('servers/scripts/windows/', windows_server_script_download, name='windows_server_script_download'),
-    path('computers/source/save/', pc_source_views.pc_log_source_save, name='pc_log_source_save'),
-    path('computers/source/test/', pc_source_views.pc_log_source_test, name='pc_log_source_test'),
-    path('computers/source/preview/', pc_source_views.pc_log_source_preview, name='pc_log_source_preview'),
+    path('computers/upload-config/save/', pc_upload_views.pc_upload_config_save, name='pc_upload_config_save'),
+    path('computers/upload-config/reset-token/', pc_upload_views.pc_upload_config_reset_token, name='pc_upload_config_reset_token'),
     path('', views.index, name='index'),
     path('assets/<str:kind>/', views.asset_list, name='asset_list'),
     path('assets/<str:kind>/add/', asset_create, name='asset_create'),
@@ -52,7 +51,6 @@ urlpatterns = [
     path('computers/logs/', views.computer_log_list, name='computer_log_list'),
     path('computers/logs/analyze-bulk/', computer_logs_analyze_bulk, name='computer_logs_analyze_bulk'),
     path('computers/logs/<int:pk>/', views.computer_log_detail, name='computer_log_detail'),
-    path('computers/logs/<int:pk>/analyze/', views.computer_log_analyze, name='computer_log_analyze'),
     path('computers/analyses/<uuid:pk>/', views.computer_analysis_detail, name='computer_analysis_detail'),
     path('computers_errors/', views.computer_error_list, name='computer_error_list'),
     path('actions/run-infrastructure-inspection/', views.run_infrastructure_inspection, name='run_infrastructure_inspection'),

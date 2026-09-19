@@ -53,6 +53,8 @@ def _table_source(request, table_key, scope):
         if scope:
             raise Http404('该表不支持分组导出')
         queryset = MODEL_TABLES[table_key].objects.all()
+        if table_key == 'computer_logs':
+            queryset = queryset.filter(retained=True)
         if table_key == 'alert_events':
             queryset = queryset.prefetch_related('deliveries__channel')
         return queryset
@@ -69,9 +71,7 @@ def _table_source(request, table_key, scope):
     if table_key == 'computer_errors':
         if scope:
             raise Http404('该表不支持分组导出')
-        return Error_Computer.objects.select_related(
-            'inspection__computer', 'inspection__log_file',
-        )
+        return Error_Computer.objects.select_related('inspection__computer')
     if table_key == 'inspection_records':
         if scope:
             if scope not in RECORD_PAGES:

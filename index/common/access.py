@@ -56,6 +56,9 @@ class AccessMiddleware(MiddlewareMixin):
             # Django's admin site independently enforces staff/model permissions.
             return None
         name = match.url_name
+        if name == 'pc_log_upload':
+            # Endpoint enforces a write-only bearer token, independently of sessions.
+            return None
         if name in AUTH_VIEWS:
             return None
         if is_admin(request.user):

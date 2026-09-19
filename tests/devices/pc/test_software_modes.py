@@ -89,29 +89,3 @@ class SoftwareModeConfiguration(TestCase):
         self.assertEqual(issues[0]['详细问题'], 'Game')
         response = self.client.get(reverse('computer_analysis_detail', args=[result.pk]))
         self.assertContains(response, '本次软件分析模式：黑名单模式')
-
-    def test_fetch_child_keeps_mode_and_active_roster_after_configuration_changes(self):
-        from tempfile import TemporaryDirectory
-        from unittest.mock import patch
-        from tests.devices.pc.test_source_models import valid_smb_source
-        from tests.devices.pc.helpers import import_payload
-        from net.inspections.queue import enqueue_computer_fetch_task
-        from net.devices.pc.executor import _enqueue_scanned_analyses
-        from net.models import People
-        active = People.objects.create(employee_id='E1', is_active=True)
-        People.objects.create(employee_id='E2', is_active=False)
-        self.profile.matching_mode = 'people'
-        self.profile.software_policy_mode = 'blacklist'; self.profile.save()
-        with TemporaryDirectory() as folder:
-            valid_smb_source(local_staging_directory=folder)
-            with patch('net.inspections.queue.software_policy_snapshot', return_value={'content': POLICY}):
-                parent = enqueue_computer_fetch_task(self.profile, 'manual')
-            self.assertEqual([p['id'] for p in parent.parameters_snapshot['personnel_roster']], [str(active.pk)])
-            self.profile.software_policy_mode = 'whitelist'; self.profile.save()
-            People.objects.filter(pk=active.pk).update(is_active=False)
-            log = import_payload({'日志时间': '2026-09-15 12:00:00',
-                '系统信息概览': {'计算机名': 'FROZEN-PC', '当前登录用户工号': 'E1'},
-                '已安装软件列表': [{'软件名': 'Game'}]}).log_file
-            child = _enqueue_scanned_analyses(parent, [log.pk])
-            self.assertEqual(child.profile_snapshot['software_policy_mode'], 'blacklist')
-            self.assertEqual(child.parameters_snapshot['personnel_roster'], parent.parameters_snapshot['personnel_roster'])

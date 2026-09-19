@@ -1,4 +1,4 @@
-"""Filesystem-backed contracts for Phase 2 computer log analysis."""
+"""API-ingested computer log analysis contracts."""
 
 import json
 import os
@@ -42,20 +42,19 @@ ANALYSIS_METADATA = {
 }
 
 
-class ComputerRemoteImportTests(TestCase):
-    def test_remote_import_persists_metadata_and_static_snapshot(self):
+class ComputerApiIngestionTests(TestCase):
+    def test_api_ingestion_persists_metadata_and_static_snapshot(self):
         from tests.system.test_application import valid_payload
         from tests.devices.pc.helpers import import_payload
         outcome = import_payload(valid_payload('REMOTE-STATIC'))
         log = outcome.log_file
-        self.assertEqual(outcome.status, 'imported')
-        self.assertEqual(log.source_protocol, 'smb')
+        self.assertEqual(outcome.status, 'created')
         self.assertEqual(log.computer.login_account, 'H000001')
         self.assertEqual(log.computer.ip_addresses, '192.0.2.10')
         self.assertEqual(log.computer.os_build, '10.0.26100.4770')
         self.assertEqual(log.collected_date, timezone.localdate(log.computer.last_report_at))
 
-    def test_older_remote_evidence_does_not_replace_latest_static_snapshot(self):
+    def test_older_api_evidence_does_not_replace_latest_static_snapshot(self):
         from tests.system.test_application import valid_payload
         from tests.devices.pc.helpers import import_payload
         newer = valid_payload('REMOTE-ORDER')
@@ -63,8 +62,9 @@ class ComputerRemoteImportTests(TestCase):
         import_payload(newer)
         older = valid_payload('REMOTE-ORDER', timezone.localtime() - timedelta(days=1))
         older['系统信息概览']['当前登录用户工号'] = 'OLDER'
-        import_payload(older)
+        outcome = import_payload(older)
         self.assertEqual(Computer.objects.get(computer_name='REMOTE-ORDER').login_account, 'NEWER')
+        self.assertEqual(outcome.status, 'created')
         self.assertEqual(ComputerLogFile.objects.count(), 2)
 
 
@@ -183,8 +183,9 @@ class ComputerLogAnalysisTests(TestCase):
         policy = self.root / 'software-policy.ini'
         policy.write_text('[BLACKLIST]\nkeywords = Forbidden Tool\n', encoding='utf-8')
         log_file, _path = self._import_payload()
-        log_file.modified_at = datetime(2026, 9, 1, 12, tzinfo=SHANGHAI)
-        log_file.payload.update({
+        log_file.collected_at = datetime(2026, 9, 1, 12, tzinfo=SHANGHAI)
+        payload = log_file.payload
+        payload.update({
             '系统信息概览': {
                 '计算机名': 'PC-ANALYSIS-01',
                 '系统主要版本名': '22H2',
@@ -206,7 +207,8 @@ class ComputerLogAnalysisTests(TestCase):
             },
             '已安装软件列表': [{'软件名': 'Forbidden Tool Pro'}],
         })
-        log_file.save(update_fields=['modified_at', 'payload'])
+        log_file.payload = payload
+        log_file.save()
 
         analysis = analyze_log(
             log_file,
@@ -227,7 +229,7 @@ class ComputerLogAnalysisTests(TestCase):
         self.assertEqual(analysis.status, RecordStatus.SUCCESS)
         self.assertEqual(analysis.details['health_status'], 'abnormal')
         self.assertEqual(set(analysis.details) - ANALYSIS_METADATA, set(analysis.analysis_items))
-        self.assertTrue(all(issue['severity'] == 'warning' for issue in analysis.exceptions))
+        self.assertTrue(all(issue['severity'] == 'warning' for issue in analysis.exceptions), analysis.exceptions)
         self.assertEqual(analysis.details['severity_counts'],
                          {'info': 0, 'warning': len(analysis.exceptions), 'critical': 0})
         self.assertCountEqual(
@@ -267,9 +269,11 @@ class ComputerLogAnalysisTests(TestCase):
         policy = self.root / 'software-policy.ini'
         policy.write_text('[SPECIAL_WHITELIST]\nAdminTool = H1\n', encoding='utf-8')
         log_file, _path = self._import_payload()
-        log_file.payload['系统信息概览']['当前登录用户工号'] = 'DOMAIN\\H1'
-        log_file.payload['已安装软件列表'] = [{'软件名': 'AdminTool'}]
-        log_file.save(update_fields=['payload'])
+        payload = log_file.payload
+        payload['系统信息概览']['当前登录用户工号'] = 'DOMAIN\\H1'
+        payload['已安装软件列表'] = [{'软件名': 'AdminTool'}]
+        log_file.payload = payload
+        log_file.save()
 
         analysis = analyze_log(
             log_file,
@@ -362,7 +366,7 @@ class ComputerAnalysisWorkerTests(TransactionTestCase):
         }
         payload['KMS服务器连通情况'] = '正常通讯'
         self.log_file.payload = payload
-        self.log_file.save(update_fields=['payload'])
+        self.log_file.save()
         task = enqueue_task(self.profile, [self.log_file.pk], TaskRun.Source.MANUAL)
         self.profile.kms_servers = ['kms-current.example.test']
         self.profile.save(update_fields=['kms_servers'])
@@ -454,68 +458,3 @@ class ConcurrentComputerLogImportTests(TransactionTestCase):
         self.assertEqual(first, second)
         self.assertEqual(ComputerLogFile.objects.count(), 1)
         self.assertEqual(Computer.objects.filter(computer_name='PC-CONCURRENT-01').count(), 1)
-
-
-class ScheduledComputerFetchTests(TransactionTestCase):
-    def setUp(self):
-        from tests.devices.pc.test_source_models import valid_smb_source
-        from tests.devices.pc.connector_fakes import MemoryConnector
-        self.tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tempdir.cleanup)
-        self.source = valid_smb_source(local_staging_directory=self.tempdir.name)
-        self.now = timezone.now() - timedelta(seconds=1)
-        self.profile = ComputerAnalysisProfile.objects.create(
-            name='计划远程获取配置', analysis_items=['activation'], concurrent_workers=1)
-        self.schedule = Schedule.objects.create(
-            analysis_profile=self.profile, kind=Schedule.Kind.INTERVAL,
-            interval_value=1, interval_unit=Schedule.IntervalUnit.HOURS, next_run_at=self.now)
-        self.connector = MemoryConnector({'incoming/scheduled.json': json.dumps({
-            '日志时间': '2026-09-07 09:00:00',
-            '系统信息概览': {'计算机名': 'PC-SCHEDULED-01'},
-            'Windows激活信息': {'许可证状态': '已授权'},
-        }).encode()})
-        self.connector.modified_at = self.now
-        connector_patch = patch('net.devices.pc.remote_ingestion.build_connector', return_value=self.connector)
-        connector_patch.start()
-        self.addCleanup(connector_patch.stop)
-
-    def test_scheduler_only_queues_fetch_then_worker_imports_and_analyzes(self):
-        tasks = enqueue_due_schedules(now=self.now)
-        self.assertEqual(len(tasks), 1)
-        self.assertEqual(self.connector.downloads, [])
-        fetch = tasks[0]
-        self.assertEqual(fetch.task_type, 'computer_fetch')
-        self.assertEqual(fetch.target_runs.get().target_type, 'computer_source')
-        worker = TaskWorker(worker_id='scheduled-computer-worker', threads=1, lease_seconds=30)
-        with patch('net.inspections.worker.enqueue_due_schedules', return_value=[]):
-            self.assertTrue(worker.run_once())
-        log = ComputerLogFile.objects.get()
-        self.assertNotIn('incoming/scheduled.json', self.connector.files)
-        self.assertTrue(all(path.startswith('processed/') for path in self.connector.paths))
-        self.assertEqual(fetch.target_runs.get().fetched_logs.get().pk, log.pk)
-        fetch.refresh_from_db()
-        self.assertEqual(fetch.status, 'success')
-        child = TaskRun.objects.exclude(pk=fetch.pk).get(schedule=self.schedule)
-        self.assertEqual(child.task_type, 'computer_analysis')
-        self.assertEqual(child.status, 'queued')
-        self.assertEqual(child.target_runs.get().target_id, str(log.pk))
-        with patch('net.inspections.worker.enqueue_due_schedules', return_value=[]):
-            self.assertTrue(worker.run_once())
-        child.refresh_from_db()
-        self.assertEqual(child.status, 'success')
-        self.assertEqual(ComputerAnalysis.objects.get().log_file_id, log.pk)
-
-    def test_malformed_remote_evidence_is_archived_without_analysis_child(self):
-        self.connector.files['incoming/scheduled.json'] = b'{broken scheduled JSON'
-        tasks = enqueue_due_schedules(now=self.now)
-        self.assertEqual(len(tasks), 1)
-        self.assertEqual(self.connector.downloads, [])
-        with patch('net.inspections.worker.enqueue_due_schedules', return_value=[]):
-            self.assertTrue(TaskWorker(worker_id='malformed-fetch-worker', threads=1, lease_seconds=30).run_once())
-        log = ComputerLogFile.objects.get()
-        self.assertEqual(log.import_status, 'failed')
-        self.assertIn('JSON 解析失败', log.parse_error)
-        self.assertTrue(all(path.startswith('failed/') for path in self.connector.paths))
-        self.assertFalse(TaskRun.objects.filter(task_type='computer_analysis').exists())
-        self.schedule.refresh_from_db()
-        self.assertEqual(self.schedule.next_run_at, self.now + timedelta(hours=1))

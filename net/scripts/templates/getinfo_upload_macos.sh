@@ -1,5 +1,5 @@
 #!/bin/sh
-# Run repeatedly with the same local account. Configure an already mounted share.
+# Run repeatedly with the same local account; saves latest.json then posts to the configured API.
 # PC_CONFIG: __PC_CONFIG_BASE64__
 set -eu
 if ! PYTHON3=$(command -v python3 2>/dev/null); then
@@ -15,45 +15,45 @@ from pathlib import Path
 import re
 import socket
 import subprocess
-import uuid
+import tempfile
+import time
+import urllib.error
+import urllib.request
 
 
-def publish_daily(destination, state, computer, collect):
-    destination, state = Path(destination), Path(state)
-    state.mkdir(parents=True, exist_ok=True)
-    safe = re.sub(r'[^a-zA-Z0-9._-]', '_', computer)
-    day = dt.datetime.now().strftime('%Y%m%d')
-    marker = state / f'{safe}-{day}.done'
-    # OS locks are automatically released on process termination.
-    with (state / f'{safe}.lock').open('a+b') as lock:
-        if os.name == 'nt':  # Allows local-only verification on Windows.
+def publish_latest(endpoint, token, state, collect):
+    state = Path(state); state.mkdir(parents=True, exist_ok=True)
+    with (state / 'latest.lock').open('a+b') as lock:
+        if os.name == 'nt':
             import msvcrt
-            lock.seek(0)
-            lock.write(b'0')
-            lock.flush()
-            lock.seek(0)
+            lock.seek(0); lock.write(b'0'); lock.flush(); lock.seek(0)
             msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
         else:
             import fcntl
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        if marker.exists():
-            return
-        if not destination.is_dir():
-            raise OSError('Shared folder is unavailable')
-        final = destination / f'{safe}-{day}.json'
-        if not final.exists():
-            partial = destination / f'{safe}-{day}.{uuid.uuid4().hex}.uploading'
+        raw = json.dumps(collect(), ensure_ascii=False).encode('utf-8')
+        if len(raw) > 16 * 1024 * 1024: raise OSError('PC_LOG_TOO_LARGE: Collected JSON exceeds the 16 MiB upload limit.')
+        final = state / 'latest.json'
+        descriptor, partial = tempfile.mkstemp(prefix='latest.', suffix='.tmp', dir=state)
+        try:
+            with os.fdopen(descriptor, 'wb') as output:
+                output.write(raw); output.flush(); os.fsync(output.fileno())
+            os.replace(partial, final)
+        finally:
+            if os.path.exists(partial): os.unlink(partial)
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl): return None
+        opener = urllib.request.build_opener(NoRedirect())
+        for attempt in range(1, 4):
+            request = urllib.request.Request(endpoint, data=raw, method='POST', headers={'Content-Type':'application/json; charset=utf-8','Authorization':'Bearer ' + token})
             try:
-                payload = collect()
-                with partial.open('x', encoding='utf-8') as output:
-                    json.dump(payload, output, ensure_ascii=False)
-                    output.flush()
-                    os.fsync(output.fileno())
-                partial.rename(final)
-            finally:
-                partial.unlink(missing_ok=True)
-        marker.write_text(day, encoding='ascii')
-
+                with opener.open(request, timeout=10) as response:
+                    if not 200 <= response.status < 300: raise OSError('unexpected API response')
+                print('PC_UPLOAD_COMPLETE: latest.json was saved locally and accepted by the monitoring API.')
+                return
+            except (OSError, urllib.error.URLError, urllib.error.HTTPError):
+                if attempt == 3: raise OSError('PC_UPLOAD_FAILED: Monitoring API upload failed after 3 attempts; latest.json was retained locally.')
+                time.sleep(attempt)
 
 def read_command(*args):
     try:
@@ -106,7 +106,7 @@ def collect_payload(config):
         columns = line.split()
         if len(columns) >= 4 and columns[0].startswith('/dev/') and columns[1].isdigit() and columns[3].isdigit():
             disk_volumes.append({'device': columns[0], 'total_bytes': int(columns[1]) * 1024, 'free_bytes': int(columns[3]) * 1024})
-    disk_summary = '; '.join(observed['DF_OUTPUT'].splitlines()[1:])
+    disk_summary = '; '.join(f"{row['device']} {row['total_bytes']} B ({row['free_bytes']} B free)" for row in disk_volumes)
     disk_match = re.search(r'Disk Size:\s*[^\n]*\(([\d,]+) Bytes\)', observed['DISKUTIL_OUTPUT'])
     disk_bytes = int(disk_match.group(1).replace(',', '')) if disk_match else 0
     if not disk_bytes:
@@ -149,7 +149,6 @@ def collect_payload(config):
             '系统版本类型': 'macOS',
         },
         '网络信息': network_rows,
-        '磁盘空间情况': disk_volumes,
         '计算机硬件资源情况': {
             'CPU型号': sysctl.get('machdep.cpu.brand_string', ''),
             'CPU物理核心数': physical,
@@ -159,9 +158,6 @@ def collect_payload(config):
             '当前内存使用率': f'{memory_usage:.1f}%' if memory_usage is not None else None,
             '磁盘总量': f'{disk_total_gb:.2f}GB',
             '磁盘摘要': disk_summary,
-            'cpu_physical_core_count': physical,
-            'cpu_logical_processor_count': logical,
-            'disk_summary': disk_summary,
         },
         '日志文件元数据': metadata,
     }
@@ -169,12 +165,6 @@ def collect_payload(config):
 
 if __name__ == '__main__':
     config = json.loads(base64.b64decode('__PC_CONFIG_BASE64__'))
-    PC_LOG_DESTINATION = Path(config['destination'])
-    # Refuse a plain directory left behind after the volume is unmounted.
-    mount = next((parent for parent in (PC_LOG_DESTINATION, *PC_LOG_DESTINATION.parents)
-                  if parent.parent == Path('/Volumes')), None)
-    if mount is None or not os.path.ismount(mount):
-        raise OSError('Configured share must be mounted under /Volumes')
     state = Path.home() / 'Library' / 'Application Support' / 'PCDailyCollector'
-    publish_daily(PC_LOG_DESTINATION, state, socket.gethostname(), lambda: collect_payload(config))
+    publish_latest(config['endpoint_url'], config['token'], state, lambda: collect_payload(config))
 PC_COLLECTOR

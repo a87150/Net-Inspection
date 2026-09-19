@@ -22,7 +22,8 @@ from net.models import (
     TaskRun,
 )
 
-from .queue import enqueue_computer_fetch_task, enqueue_task
+from .queue import enqueue_task
+from net.devices.pc.analysis_scope import enqueue_latest_analysis
 from net.infrastructure.sanitization import sanitize
 
 
@@ -99,7 +100,7 @@ def _selected_target_ids(profile):
         return [
             str(primary_key)
             for primary_key in ComputerLogFile.objects.filter(
-                import_status='imported',
+                retained=True,
             ).order_by('pk').values_list(
                 'pk', flat=True,
             )
@@ -290,7 +291,7 @@ def _enqueue_due_schedules(now):
                     from net.people.tasks import enqueue_people_sync_task
                     task = enqueue_people_sync_task(schedule, available_at=now)
                 elif isinstance(profile, ComputerAnalysisProfile):
-                    task = enqueue_computer_fetch_task(
+                    task = enqueue_latest_analysis(
                         profile, TaskRun.Source.SCHEDULED, overrides=overrides,
                     )
                 else:

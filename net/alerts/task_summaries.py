@@ -7,7 +7,7 @@ from net.models import AlertChannel, AlertDelivery, AlertEvent, AlertPolicy, Tas
 from net.infrastructure.sanitization import sanitize
 
 
-TASK_TYPES = ('inspection', 'computer_analysis', 'computer_fetch')
+TASK_TYPES = ('inspection', 'computer_analysis')
 
 
 def _scope(task):
@@ -93,10 +93,6 @@ def process_task_summary(task_run):
                 if task.target_runs.exclude(status__in=TaskRun.TERMINAL_STATUSES).exists():
                     return None
                 if task.target_runs.filter(alert_processed_at__isnull=True).exists():
-                    return None
-                if task.task_type == 'computer_fetch' and task.target_runs.filter(
-                        result_type='computer_analysis_task').exists():
-                    TaskRun.objects.filter(pk=task.pk).update(alert_summary_processed_at=now, alert_summary_error='')
                     return None
                 profile_type, profile_id = _scope(task)
                 routing = task.profile_snapshot.get('alert_routing')

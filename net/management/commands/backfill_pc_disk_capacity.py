@@ -11,13 +11,17 @@ class Command(BaseCommand):
         parser.add_argument('--apply', action='store_true')
 
     def handle(self, *args, **options):
-        latest = ComputerLogFile.objects.filter(computer_id=OuterRef('pk'), import_status='imported').order_by('-collected_date', '-modified_at', '-pk')
+        latest = ComputerLogFile.objects.filter(computer_id=OuterRef('pk'), retained=True).order_by('-collected_at', '-pk')
         rows = Computer.objects.filter(disk_total_gb__isnull=True).annotate(latest_log=Subquery(latest.values('pk')[:1])).values_list('pk', 'latest_log')
         found = updated = 0
         for pk, log_id in rows.iterator(chunk_size=100):
             if log_id is None:
                 continue
-            payload = ComputerLogFile.objects.filter(pk=log_id).values_list('payload', flat=True).first()
+            log = ComputerLogFile.objects.only(
+                'hardware_info', 'bitlocker', 'extra_fields', 'present_sections',
+                'platform', 'collected_at',
+            ).filter(pk=log_id).first()
+            payload = log.payload if log is not None else None
             if not isinstance(payload, dict):
                 continue
             value = extract_computer_snapshot({}, [], payload.get('计算机硬件资源情况'), disk_payload=payload).get('disk_total_gb')

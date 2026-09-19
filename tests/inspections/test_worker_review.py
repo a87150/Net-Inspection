@@ -63,7 +63,6 @@ class WorkerLifecycleTests(TransactionTestCase):
             return real_close()
 
         with patch('net.inspections.worker.recover_expired_tasks'), \
-                patch('net.inspections.worker.reconcile_pending_analysis_handoffs', return_value=[]), \
                 patch('net.inspections.worker.enqueue_due_schedules'), \
                 patch('net.inspections.worker.claim_next_task', return_value=None), \
                 patch.object(worker, '_maintenance_cycle', side_effect=RuntimeError('maintenance failure')), \
@@ -91,7 +90,6 @@ class WorkerLifecycleTests(TransactionTestCase):
             return []
 
         with patch('net.inspections.worker.execute_target', side_effect=blocking_target), \
-                patch('net.inspections.worker.reconcile_pending_analysis_handoffs', return_value=[]), \
                 patch('net.inspections.worker.enqueue_due_schedules', return_value=[]), \
                 patch('net.alerts.service.reconcile_terminal_targets'), \
                 patch('net.alerts.task_summaries.reconcile_terminal_tasks'), \

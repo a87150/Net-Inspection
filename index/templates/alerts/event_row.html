@@ -1,3 +1,4 @@
+{% load extras %}
 <tr>
     <td>{% include 'common/status_badge.html' with status=event.event_type label=event.get_event_type_display %}</td>
     <td>
@@ -16,7 +17,15 @@
     </td>
     <td>{% include 'inspections/severity_badge.html' with level=event.severity %}</td>
     <td>{% include 'common/status_badge.html' with status=event.status label=event.get_status_display %}</td>
-    <td class="text-break">{% include 'common/text_disclosure.html' with text=event.delivery_outcomes disclosure_label="查看送达结果" %}</td>
+    <td class="text-break">
+        <div class="alert-delivery-summary" aria-label="渠道送达结果">
+            {% for group in event.deliveries.all|group_delivery_outcomes %}
+                {% include 'common/status_badge.html' with status=group.status label=group.label %}
+            {% empty %}
+                <span class="text-secondary">暂无渠道结果</span>
+            {% endfor %}
+        </div>
+    </td>
     <td>{{ event.occurred_at|date:'Y-m-d H:i:s' }}</td>
     <td class="text-end table-actions-cell">
         <a class="btn btn-outline-dark btn-sm" href="{% url 'alert_detail' event.pk %}">查看详情</a>

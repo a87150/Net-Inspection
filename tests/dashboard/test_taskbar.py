@@ -138,8 +138,7 @@ class HomeTaskbarTests(TestCase):
 
         self.assertNotContains(response, '人员目录同步预览')
 
-    def test_task_summary_separates_analysis_health_from_scan_completion(self):
-        """Counting a successful scan as normal would overstate PC analysis health."""
+    def test_task_summary_reports_analysis_health(self):
         profile = ComputerAnalysisProfile.objects.create(
             name='首页分析配置',
             analysis_items=['activation'],
@@ -182,22 +181,6 @@ class HomeTaskbarTests(TestCase):
             target_id='3',
             status=TaskRun.Status.CANCELLED,
         )
-        scan_task = TaskRun.objects.create(
-            task_type=TaskRun.TaskType.COMPUTER_FETCH,
-            source=TaskRun.Source.MANUAL,
-            analysis_profile=profile,
-            total_targets=1,
-            target_scope_snapshot={
-                'targets': [{'target_type': 'computer_source', 'target_id': 'scan'}],
-            },
-        )
-        TaskTargetRun.objects.create(
-            task=scan_task,
-            target_type=TaskTargetRun.TargetType.COMPUTER_SOURCE,
-            target_id='scan',
-            status=TaskRun.Status.SUCCESS,
-        )
-
         with self.assertNumQueries(2):
             summaries = {
                 summary['task'].pk: summary
@@ -205,7 +188,6 @@ class HomeTaskbarTests(TestCase):
             }
 
         analysis = summaries[analysis_task.pk]
-        scan = summaries[scan_task.pk]
         self.assertEqual(
             {
                 key: analysis[key]
@@ -213,9 +195,6 @@ class HomeTaskbarTests(TestCase):
             },
             {'total': 4, 'normal': 1, 'abnormal': 1, 'pending': 1, 'cancelled': 1},
         )
-        self.assertEqual(scan['fetch_success'], 1)
-        self.assertEqual(scan['normal'], 0)
-        self.assertEqual(scan['abnormal'], 0)
 
     def test_task_summary_marks_unmaterialized_targets_as_pending(self):
         """Using loaded rows as the total would silently lose queued task targets."""

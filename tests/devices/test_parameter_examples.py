@@ -6,7 +6,6 @@ from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 from tests.auth import login_admin, login_reader
 from index.devices.forms import device_form, device_form_sections
-from index.devices.pc.simple_source_form import SimplePCLogSourceForm
 from net.data_exchange.inventory_csv import export_csv, export_xlsx_template, import_file
 from net.models import Network_Device, Server
 
@@ -66,12 +65,6 @@ class DeviceParameterExamplesTests(TestCase):
                 for row in rows[1:]:
                     values = dict(zip(rows[0], row))
                     self.assertEqual(model.objects.get(ip=values['IP地址']).os_version or '', values['系统版本'])
-
-    def test_pc_source_fields_have_examples(self):
-        form = SimplePCLogSourceForm()
-        for name in ('host', 'username', 'password', 'domain', 'recent_days', 'local_staging_directory', 'shared_path', 'ftp_directory'):
-            with self.subTest(field=name):
-                self.assertIn('示例', form.fields[name].help_text)
 
     def test_reader_cannot_change_optional_version(self):
         obj = Server.objects.create(ip='192.0.2.83', os_version='original')

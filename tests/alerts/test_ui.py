@@ -251,6 +251,12 @@ class AlertUiTests(TestCase):
 
     def test_alert_list_detail_and_filtered_export_show_one_event_with_delivery_outcome(self):
         """Joining delivery rows without distinct events would duplicate alert records."""
+        tertiary = AlertChannel.objects.create(
+            name='tertiary dingtalk channel',
+            channel_type=AlertChannel.ChannelType.DINGTALK,
+            is_enabled=False,
+            settings={},
+        )
         AlertChannel.objects.filter(pk__in=[self.primary.pk, self.secondary.pk]).update(
             is_enabled=True,
         )
@@ -266,6 +272,12 @@ class AlertUiTests(TestCase):
         AlertDelivery.objects.filter(event=event, channel=self.secondary).update(
             status=AlertDelivery.Status.FAILED,
         )
+        AlertDelivery.objects.create(
+            event=event,
+            channel=tertiary,
+            status=AlertDelivery.Status.SENT,
+            delivered_at=now,
+        )
         AlertEvent.objects.filter(pk=event.pk).update(status=AlertEvent.Status.PARTIAL)
 
         listing = self.client.get(reverse('alert_list'), {
@@ -276,6 +288,12 @@ class AlertUiTests(TestCase):
         self.assertContains(listing, '任务总结')
         self.assertEqual(list(listing.context['page_obj'].object_list), [event])
         self.assertContains(listing, '导出筛选结果')
+        self.assertContains(
+            listing,
+            'primary disabled channel、tertiary dingtalk channel：发送成功',
+        )
+        self.assertContains(listing, 'secondary email channel：发送失败')
+        self.assertNotContains(listing, '查看送达结果')
 
         detail = self.client.get(reverse('alert_detail', args=[event.pk]))
         self.assertEqual(detail.status_code, 200)
@@ -313,8 +331,10 @@ class AlertUiTests(TestCase):
                 params = {'filter_delivery_outcome': outcome, 'page_size': 20}
                 response = self.client.get(reverse('alert_list'), params)
                 self.assertEqual(list(response.context['page_obj'].object_list), [event])
-                self.assertContains(response, f'primary disabled channel: {label}')
-                self.assertContains(response, f'secondary email channel: {label}')
+                self.assertContains(
+                    response,
+                    f'primary disabled channel、secondary email channel：{label}',
+                )
                 exported = self.client.get(reverse('table_export', args=['alert_events']), params)
                 rows = list(csv.reader(StringIO(response_body(exported).decode('utf-8-sig'))))
                 self.assertEqual(len(rows), 2)

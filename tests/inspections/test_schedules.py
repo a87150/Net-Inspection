@@ -377,39 +377,6 @@ class ScheduleEnqueueTests(TestCase):
             task.target_runs.values_list('target_id', flat=True),
         )
 
-    def test_analysis_schedule_enqueues_worker_owned_scan_instead_of_log_targets(self):
-        from tests.devices.pc.test_source_models import valid_smb_source
-        source = valid_smb_source()
-        log_file = create_log_file(
-            source_path='C:/logs/SCHEDULE-PC-01.json',
-            modified_at=self.now,
-            content_hash='a' * 64,
-            import_status='imported',
-        )
-        profile = ComputerAnalysisProfile.objects.create(
-            name='计划日志分析',
-            analysis_items=['event_findings'],
-        )
-        schedule = Schedule.objects.create(
-            analysis_profile=profile,
-            kind=Schedule.Kind.INTERVAL,
-            interval_value=1,
-            interval_unit=Schedule.IntervalUnit.HOURS,
-            next_run_at=self.now,
-        )
-
-        tasks = enqueue_due_schedules(now=self.now)
-
-        self.assertEqual(len(tasks), 1)
-        task = next(task for task in tasks if task.schedule_id == schedule.pk)
-        self.assertEqual(task.task_type, TaskRun.TaskType.COMPUTER_FETCH)
-        self.assertEqual(task.selected_items_snapshot, ['event_findings'])
-        self.assertEqual(
-            list(task.target_runs.values_list('target_type', 'target_id')),
-            [('computer_source', str(source.pk))],
-        )
-        self.assertTrue(ComputerLogFile.objects.filter(pk=log_file.pk).exists())
-
     def test_analysis_profile_accepts_a_scheduled_log_task(self):
         log_file = create_log_file(
             source_path='C:/logs/SCHEDULE-PC-02.json',

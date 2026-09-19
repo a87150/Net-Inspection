@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from tests.auth import login_reader
+from tests.devices.pc.helpers import create_log_file
 from django.utils import timezone
 
 from index.common.table_options import build_field_option_context, build_field_options
@@ -466,13 +467,13 @@ class ComputerAnalysisOutcomeTests(TestCase):
     def setUp(self):
         login_reader(self.client)
         computer = Computer.objects.create(computer_name='PC-OUTCOME')
-        abnormal_log = ComputerLogFile.objects.create(
+        abnormal_log = create_log_file(
             source_path='abnormal.json',
             modified_at=timezone.now(),
             content_hash='a' * 64,
             import_status='success',
         )
-        normal_log = ComputerLogFile.objects.create(
+        normal_log = create_log_file(
             source_path='normal.json',
             modified_at=timezone.now(),
             content_hash='b' * 64,

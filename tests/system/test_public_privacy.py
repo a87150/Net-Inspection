@@ -1,3 +1,4 @@
+from tests.devices.pc.helpers import create_log_file
 """Guest disclosure contracts; all fixtures live in Django's isolated test DB."""
 from importlib import import_module
 
@@ -28,7 +29,7 @@ class PublicPrivacyTests(TestCase):
                               api_token='SECRET-TOKEN', os='SECRET-SERVER-OS')
         SecurityDevice.objects.create(device_name='Public Camera', ip='192.0.2.4',
                                       api_password='SECRET-CAMERA')
-        ComputerLogFile.objects.create(computer=computer, source_path='SECRET-PATH',
+        create_log_file(computer=computer, source_path='SECRET-PATH',
                                        modified_at=timezone.now(), collected_date=timezone.localdate(),
                                        content_hash='guest-fixture',
                                        import_status='imported', payload={'raw': 'SECRET-RAWLOG'})

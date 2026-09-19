@@ -1421,6 +1421,8 @@ code {
 .table-text-disclosure { min-width: 10rem; max-width: 28rem; }
 .table-text-disclosure > summary { color: var(--color-primary); cursor: pointer; font-weight: 700; }
 .table-text-disclosure__content { margin-top: .45rem; max-height: 12rem; overflow: auto; color: var(--color-text-muted); white-space: pre-wrap; word-break: break-word; }
+.alert-delivery-summary { display: grid; justify-items: start; gap: .35rem; min-width: 10rem; }
+.alert-delivery-summary .status-badge { max-width: 100%; line-height: 1.4; text-align: left; white-space: normal; }
 @media (max-width: 767.98px) {
     .table-actions-column, .table-actions-cell { position: static; min-width: 8.5rem; box-shadow: none; }
     .table-row-actions { justify-content: flex-start; }

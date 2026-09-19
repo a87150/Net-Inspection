@@ -35,7 +35,6 @@ from net.models import (
     AlertPolicy,
     InspectionProfile,
     ComputerAnalysisProfile,
-    PCLogSourceConfig,
     PeopleSyncSource,
     Schedule,
     TaskRun,
@@ -98,11 +97,8 @@ CURRENT_ERROR_IDENTITIES = (
     (Error_Monitor, 'monitor-error', (3, 4)),
 )
 CURRENT_LOG_IDENTITIES = tuple(
-    (
-        f'demo://powershell/{computer_name}-{index}.json',
-        _demo_hash(f'computer-log-{index}'),
-    )
-    for computer_name, index in (
+    _demo_hash(f'computer-log-{index}')
+    for _computer_name, index in (
         ('DEMO-PC-OPS-01', 1),
         ('DEMO-PC-DEV-02', 2),
         ('DEMO-PC-DEV-02', 3),
@@ -110,15 +106,12 @@ CURRENT_LOG_IDENTITIES = tuple(
     )
 )
 LEGACY_LOG_IDENTITIES = (
-    (
-        'demo://DEMO-PC-01.json',
-        '03ce1696b1f9d7cf58632e13a534acba94ae49da32689ebf03cc5b93583baafc',
-    ),
-    (
-        'demo://DEMO-PC-02.json',
-        'a3b4fbf4c1fb082e7aca3f54099c27e92a4e7b31df6b76a00a5d872e4fb6cc8a',
-    ),
+    '03ce1696b1f9d7cf58632e13a534acba94ae49da32689ebf03cc5b93583baafc',
+    'a3b4fbf4c1fb082e7aca3f54099c27e92a4e7b31df6b76a00a5d872e4fb6cc8a',
 )
+CURRENT_LOG_COMPUTERS = dict(zip(CURRENT_LOG_IDENTITIES, (
+    'DEMO-PC-OPS-01', 'DEMO-PC-DEV-02', 'DEMO-PC-DEV-02', 'DEMO-PC-OFFLINE',
+)))
 LEGACY_COMPUTER_SPECS = (
     {
         'computer_name': 'DEMO-PC-01',
@@ -134,7 +127,6 @@ LEGACY_COMPUTER_SPECS = (
 LEGACY_ANALYSIS_SPECS = (
     {
         'computer_name': 'DEMO-PC-01',
-        'source_path': 'demo://DEMO-PC-01.json',
         'content_hash': '03ce1696b1f9d7cf58632e13a534acba94ae49da32689ebf03cc5b93583baafc',
         'status': 'success',
         'summary': '分析正常',
@@ -147,7 +139,6 @@ LEGACY_ANALYSIS_SPECS = (
     },
     {
         'computer_name': 'DEMO-PC-02',
-        'source_path': 'demo://DEMO-PC-02.json',
         'content_hash': 'a3b4fbf4c1fb082e7aca3f54099c27e92a4e7b31df6b76a00a5d872e4fb6cc8a',
         'status': 'failed',
         'summary': 'CPU 使用率过高',
@@ -242,23 +233,15 @@ FIXED_ASSET_OWNERS = (
 FIXED_RECORD_OWNERS = (
     (ComputerAnalysis, 'computer-analysis-1', {
         'computer__computer_name': 'DEMO-PC-OPS-01',
-        'log_file__source_path': 'demo://powershell/DEMO-PC-OPS-01-1.json',
-        'log_file__content_hash': _demo_hash('computer-log-1'),
     }),
     (ComputerAnalysis, 'computer-analysis-2', {
         'computer__computer_name': 'DEMO-PC-DEV-02',
-        'log_file__source_path': 'demo://powershell/DEMO-PC-DEV-02-2.json',
-        'log_file__content_hash': _demo_hash('computer-log-2'),
     }),
     (ComputerAnalysis, 'computer-analysis-3', {
         'computer__computer_name': 'DEMO-PC-DEV-02',
-        'log_file__source_path': 'demo://powershell/DEMO-PC-DEV-02-3.json',
-        'log_file__content_hash': _demo_hash('computer-log-3'),
     }),
     (ComputerAnalysis, 'computer-analysis-4', {
         'computer__computer_name': 'DEMO-PC-OFFLINE',
-        'log_file__source_path': 'demo://powershell/DEMO-PC-OFFLINE-4.json',
-        'log_file__content_hash': _demo_hash('computer-log-4'),
     }),
     *((Network_Device_Inspection, f'network-inspection-{index}', {'device__ip': ip})
       for index, ip in enumerate(('192.0.2.11', '192.0.2.11', '192.0.2.12', '192.0.2.13', '192.0.2.13'), 1)),
@@ -341,29 +324,21 @@ def _assert_fixed_uuid_owner(model, identity, owner_lookup):
     return existing
 
 
-def _assert_current_log_owner(source_path, content_hash):
+def _assert_current_log_owner(content_hash):
     hash_owner = ComputerLogFile.objects.filter(content_hash=content_hash).first()
-    path_conflict = ComputerLogFile.objects.filter(
-        source_path=source_path,
-    ).exclude(content_hash=content_hash).exists()
-    if (
-        hash_owner is not None
-        and hash_owner.source_path != source_path
-    ) or path_conflict:
+    expected_computer = CURRENT_LOG_COMPUTERS.get(content_hash)
+    if (hash_owner is not None and expected_computer
+            and getattr(hash_owner.computer, 'computer_name', None) != expected_computer):
         raise CommandError(
-            f'演示日志身份冲突：保留路径 {source_path} '
-            f'与保留摘要 {content_hash} 未指向同一条日志。',
+            f'演示日志身份冲突：保留摘要 {content_hash} 已属于其他计算机。',
         )
     return hash_owner
 
 
-def _upsert_log(source_path, content_hash, defaults):
-    instance = _assert_current_log_owner(source_path, content_hash)
+def _upsert_log(content_hash, defaults):
+    instance = _assert_current_log_owner(content_hash)
     if instance is None:
-        instance = ComputerLogFile(
-            source_path=source_path,
-            content_hash=content_hash,
-        )
+        instance = ComputerLogFile(content_hash=content_hash)
     for field, value in defaults.items():
         setattr(instance, field, value)
     instance.save()
@@ -384,9 +359,11 @@ def _upsert_asset(model, lookup, defaults, identity):
 def _upsert_record(model, identity, defaults, created_at):
     owner_lookup = {
         field: defaults[field]
-        for field in ('computer', 'log_file', 'device', 'server', 'monitor')
+        for field in ('computer', 'device', 'server', 'monitor')
         if field in defaults
     }
+    if model is ComputerAnalysis and defaults.get('log_file') is not None:
+        owner_lookup['log_id'] = defaults['log_file'].pk
     _assert_fixed_uuid_owner(model, identity, owner_lookup)
     instance, _ = model.objects.update_or_create(
         pk=_demo_uuid(identity), defaults=defaults,
@@ -446,8 +423,8 @@ class Command(BaseCommand):
         ))
 
     def _preflight_fixed_uuid_ownership(self):
-        for source_path, content_hash in CURRENT_LOG_IDENTITIES:
-            _assert_current_log_owner(source_path, content_hash)
+        for content_hash in CURRENT_LOG_IDENTITIES:
+            _assert_current_log_owner(content_hash)
         for model, identity, owner_lookup in (
             *FIXED_ASSET_OWNERS,
             *FIXED_RECORD_OWNERS,
@@ -476,12 +453,11 @@ class Command(BaseCommand):
         self._delete_legacy_infrastructure_rows()
         self._delete_legacy_computer_rows()
 
-        for source_path, content_hash in (
+        for content_hash in (
             *CURRENT_LOG_IDENTITIES,
             *LEGACY_LOG_IDENTITIES,
         ):
             log_file = ComputerLogFile.objects.filter(
-                source_path=source_path,
                 content_hash=content_hash,
             ).first()
             if log_file is not None and not log_file.analyses.exists():
@@ -489,7 +465,8 @@ class Command(BaseCommand):
 
         for spec in LEGACY_COMPUTER_SPECS:
             computer = Computer.objects.filter(**spec).first()
-            if computer is not None and not computer.analyses.exists():
+            if (computer is not None and not computer.analyses.exists()
+                    and not computer.log_files.exists()):
                 computer.delete()
 
     def _delete_demo_task_rows(self):
@@ -531,15 +508,6 @@ class Command(BaseCommand):
                     People.objects.filter(pk=person.pk).update(sync_source=source)
 
     def _seed_tasks(self, anchor, networks):
-        from django.conf import settings
-        PCLogSourceConfig.objects.get_or_create(pk=1, defaults={
-            'source_type': 'smb', 'host': 'files.example.invalid', 'port': 445,
-            'username': 'demo-reader', 'share_name': 'logs',
-            'remote_incoming_directory': 'incoming', 'file_time_mode': 'recent_days',
-            'local_staging_directory': str(settings.BASE_DIR / 'runtime' / 'pc-staging'),
-            'terminal_windows_path': r'\\files.example.invalid\logs\incoming',
-            'terminal_macos_path': '/Volumes/Logs/incoming',
-        })
         profiles = {}
         for suffix, name, device_type, items in (
             ('network', '演示网络巡检', 'network_device', ['device_info', 'config_info']),
@@ -746,10 +714,12 @@ class Command(BaseCommand):
 
     def _delete_legacy_computer_rows(self):
         for spec in LEGACY_ANALYSIS_SPECS:
+            log_ids = ComputerLogFile.objects.filter(
+                content_hash=spec['content_hash'],
+            ).values('pk')
             analyses = ComputerAnalysis.objects.filter(
                 computer__computer_name=spec['computer_name'],
-                log_file__source_path=spec['source_path'],
-                log_file__content_hash=spec['content_hash'],
+                log_id__in=log_ids,
                 status=spec['status'],
                 started_at__isnull=True,
                 finished_at__isnull=True,
@@ -929,18 +899,12 @@ class Command(BaseCommand):
             computer = computers[computer_name]
             event_time = anchor - timedelta(minutes=minutes_ago)
             log_file = _upsert_log(
-                f'demo://powershell/{computer_name}-{index}.json',
                 _demo_hash(f'computer-log-{index}'),
                 {
-                    'modified_at': event_time - timedelta(minutes=1),
                     'computer': computer,
                     'collected_date': timezone.localdate(event_time - timedelta(days=index)),
+                    'collected_at': event_time - timedelta(days=index),
                     'platform': 'windows',
-                    'source_protocol': 'smb',
-                    'remote_source_path': f'incoming/{computer_name}-{index}.json',
-                    'import_status': 'imported',
-                    'archived_path': f'demo://archive/{computer_name}-{index}.json',
-                    'parse_error': '',
                     'payload': {
                         '日志时间': (event_time - timedelta(days=index)).isoformat(),
                         '系统信息概览': {

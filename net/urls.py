@@ -18,7 +18,10 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import path, include
 
+from net.devices.pc.upload_api import pc_log_upload
+
 urlpatterns = [
+    path('api/pc/logs/', pc_log_upload, name='pc_log_upload'),
     path(
         'admin/password_reset/',
         auth_views.PasswordResetView.as_view(template_name='registration/password_reset_form.html'),

@@ -14,7 +14,6 @@ def _outcome_expression(prefix='', task_prefix='task__'):
         When(match(status='cancelled'), then=Value('cancelled')),
         When(match(status__in=('failed', 'partial')), then=Value('abnormal')),
         When(match(status='success'), then=Case(
-            When(**{task_prefix + 'task_type': 'computer_fetch'}, then=Value('fetch_success')),
             When(match(result_snapshot__health_status='normal'), then=Value('normal')),
             When(match(result_snapshot__health_status='abnormal'), then=Value('abnormal')),
             When(match(result_snapshot__status='success'), then=Value('normal')),
@@ -60,7 +59,6 @@ def _prepare_summaries(tasks):
 
 HOME_TASK_TYPES = (
     TaskRun.TaskType.INSPECTION,
-    TaskRun.TaskType.COMPUTER_FETCH,
     TaskRun.TaskType.COMPUTER_ANALYSIS,
 )
 
@@ -110,8 +108,6 @@ def _target_outcome(task, target):
     if target.status in {TaskRun.Status.FAILED, TaskRun.Status.PARTIAL}:
         return 'abnormal'
     if target.status == TaskRun.Status.SUCCESS:
-        if task.task_type == TaskRun.TaskType.COMPUTER_FETCH:
-            return 'fetch_success'
         if isinstance(target.result_snapshot, dict):
             health = target.result_snapshot.get('health_status')
             if health in {'normal', 'abnormal'}:

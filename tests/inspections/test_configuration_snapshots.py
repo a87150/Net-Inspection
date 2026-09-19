@@ -58,31 +58,6 @@ class ConfigurationSnapshotTests(TestCase):
         self.assertEqual(self.client.post(url, {'updated_at': token, 'rule_cpu': 'info'}).status_code, 400)
         self.assertEqual(IssueSeverityPolicy.objects.get(project='servers').overrides, {'cpu': 'critical'})
 
-    def test_fetch_and_children_keep_personnel_and_software_frozen(self):
-        from net.models import ComputerAnalysisProfile
-        from tests.devices.pc.helpers import create_log_file
-        from tests.devices.pc.test_source_models import valid_smb_source
-        with TemporaryDirectory() as folder:
-            valid_smb_source(local_staging_directory=folder)
-            profile = ComputerAnalysisProfile.objects.create(name='family', analysis_items=['software'], software_policy_path='rules.ini')
-            roster = [{'id': '1', 'employee_id': 'E1', 'name': 'Original'}]
-            with patch('net.devices.pc.matching.personnel_snapshot', return_value=roster) as people, patch('pathlib.Path.read_bytes', return_value=b'[WHITELIST]\nApps=One\n') as read:
-                parent = queue.enqueue_computer_fetch_task(profile, 'manual')
-            people.assert_called_once_with()
-            read.assert_called_once_with()
-            parent.refresh_from_db()
-            self.assertEqual(parent.parameters_snapshot['personnel_roster'], roster)
-            with patch('net.devices.pc.matching.personnel_snapshot', side_effect=AssertionError('live personnel')), patch('pathlib.Path.read_bytes', side_effect=AssertionError('live policy')):
-                for index in range(2):
-                    from django.utils import timezone
-                    log = create_log_file(source_path=f'family-{index}.json', modified_at=timezone.now(),
-                                          content_hash=hashlib.sha256(str(index).encode()).hexdigest())
-                    child = queue.enqueue_task(profile, [log.pk], 'manual',
-                        overrides={'parameters': {'personnel_roster': [{'name': 'replacement'}]}}, _frozen_parent=parent)
-                    child.refresh_from_db()
-                    self.assertEqual(child.parameters_snapshot['personnel_roster'], roster)
-                    self.assertEqual(child.profile_snapshot, parent.profile_snapshot)
-
     def test_policy_pair_uses_one_row_read(self):
         IssueSeverityPolicy.objects.create(project='servers', overrides={'cpu': 'critical'}, thresholds={'cpu': 75})
         with self.assertNumQueries(1):

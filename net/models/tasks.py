@@ -115,6 +115,8 @@ class InspectionProfile(models.Model):
 
 
 class ComputerAnalysisProfile(models.Model):
+    from .pc_upload import RETENTION_CHOICES
+    analysis_retention = models.CharField(max_length=20, choices=RETENTION_CHOICES, default='daily_latest')
     matching_mode = models.CharField(max_length=16, default='logs', choices=(
         ('logs', '不按人员匹配（日志为主）'), ('people', '按人员匹配（人员为主）')))
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -333,7 +335,6 @@ class TaskRun(models.Model):
         DOMAIN_SYNC = 'domain_sync', '域控同步'
         INSPECTION = 'inspection', '设备巡检'
         COMPUTER_ANALYSIS = 'computer_analysis', '计算机日志分析'
-        COMPUTER_FETCH = 'computer_fetch', 'PC 日志获取'
         PEOPLE_TEST = 'people_test', '人员目录连接测试'
         PEOPLE_PREVIEW = 'people_preview', '人员目录同步预览'
         PEOPLE_SYNC = 'people_sync', '人员自动同步'
@@ -380,9 +381,6 @@ class TaskRun(models.Model):
 
     @classmethod
     def build_scope_key(cls, *, task_type, profile_id, target_scope_snapshot):
-        if task_type == cls.TaskType.COMPUTER_FETCH:
-            # All analysis profiles share the same singleton remote inbox.
-            profile_id = 'pc-log-source'
         canonical = {
             'profile_id': str(profile_id),
             'targets': _normalize_target_identities(target_scope_snapshot),
@@ -500,7 +498,7 @@ class TaskRun(models.Model):
                     | models.Q(task_type='inspection', people_source__isnull=True,
                                inspection_profile__isnull=False, analysis_profile__isnull=True,
                                people_applied_at__isnull=True)
-                    | models.Q(task_type__in=('computer_analysis', 'computer_fetch'),
+                    | models.Q(task_type='computer_analysis',
                                people_source__isnull=True, inspection_profile__isnull=True,
                                analysis_profile__isnull=False,
                                people_applied_at__isnull=True)
@@ -691,10 +689,7 @@ class TaskRun(models.Model):
                 errors['inspection_profile'] = '设备巡检任务必须关联巡检配置。'
             if has_analysis:
                 errors['analysis_profile'] = '设备巡检任务不能关联分析配置。'
-        elif self.task_type in {
-            self.TaskType.COMPUTER_ANALYSIS,
-            self.TaskType.COMPUTER_FETCH,
-        }:
+        elif self.task_type == self.TaskType.COMPUTER_ANALYSIS:
             if not has_analysis:
                 errors['analysis_profile'] = '计算机日志任务必须关联分析配置。'
             if has_inspection:
@@ -713,10 +708,8 @@ class TaskRun(models.Model):
                 and schedule.inspection_profile_id != self.inspection_profile_id
             ):
                 errors['schedule'] = '定时任务必须使用计划关联的巡检配置。'
-            if self.task_type in {
-                self.TaskType.COMPUTER_ANALYSIS,
-                self.TaskType.COMPUTER_FETCH,
-            } and schedule.analysis_profile_id != self.analysis_profile_id:
+            if (self.task_type == self.TaskType.COMPUTER_ANALYSIS
+                    and schedule.analysis_profile_id != self.analysis_profile_id):
                 errors['schedule'] = '定时任务必须使用计划关联的分析配置。'
             if (
                 self.task_type == self.TaskType.PEOPLE_SYNC
@@ -833,14 +826,12 @@ class TaskRun(models.Model):
 
 
 class TaskTargetRun(models.Model):
-    fetched_logs = models.ManyToManyField('net.ComputerLogFile', blank=True, related_name='intended_scans')
     class TargetType(models.TextChoices):
         DOMAIN_CONFIG = 'domain_config', '域控目录'
         NETWORK_DEVICE = 'network_device', '网络设备'
         SERVER = 'server', '服务器'
         MONITOR = 'monitor', '安防设备'
         COMPUTER_LOG = 'computer_log', '计算机日志'
-        COMPUTER_SOURCE = 'computer_source', 'PC 日志来源'
         PEOPLE_SOURCE = 'people_source', '人员目录来源'
         DOMAIN_ACCOUNT = 'domain_account', '域账号'
         DOMAIN_COMPUTER = 'domain_computer', '域计算机'
@@ -881,11 +872,6 @@ class TaskTargetRun(models.Model):
     finished_at = models.DateTimeField(null=True, blank=True)
     result_type = models.CharField(max_length=64, blank=True)
     result_id = models.CharField(max_length=64, blank=True)
-    # Recovery linkage is distinct from the immutable original execution result.
-    analysis_handoff_task = models.ForeignKey(
-        'net.TaskRun', null=True, blank=True, on_delete=models.PROTECT,
-        related_name='recovered_fetch_targets', editable=False,
-    )
     result_snapshot = models.JSONField(
         default=dict,
         blank=True,
@@ -949,8 +935,6 @@ class TaskTargetRun(models.Model):
                     errors['target_id'] = '目标必须是任务绑定的人员目录来源。'
             elif task.task_type == TaskRun.TaskType.COMPUTER_ANALYSIS:
                 expected_target_type = self.TargetType.COMPUTER_LOG
-            elif task.task_type == TaskRun.TaskType.COMPUTER_FETCH:
-                expected_target_type = self.TargetType.COMPUTER_SOURCE
             elif task.task_type == TaskRun.TaskType.INSPECTION:
                 profile_snapshot = task.profile_snapshot
                 scope_snapshot = task.target_scope_snapshot

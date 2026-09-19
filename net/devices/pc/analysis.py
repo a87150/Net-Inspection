@@ -338,6 +338,23 @@ class PreparedAnalysis:
     errors: tuple
 
 
+def _compact_item(item, value):
+    """Keep evaluated conclusions and metrics, never copy source lists/evidence."""
+    if isinstance(value, list):
+        return {'data_state': 'known', 'count': len(value)}
+    if not isinstance(value, dict):
+        return {'data_state': 'known' if value is not None else 'unknown'}
+    if item == 'resource':
+        return {key: value[key] for key in ('当前CPU占用率', '当前内存使用率') if key in value}
+    if item in REMOTE_ITEMS:
+        return {key: entry for key, entry in value.items() if key != 'evidence'}
+    if item == 'disk':
+        return {key: entry for key, entry in value.items() if key != 'volumes'} | {
+            'volume_count': len(value.get('volumes') or [])}
+    state = value.get('data_state', 'known')
+    return {'data_state': state}
+
+
 def prepare_log(
     log_file, analysis_items, *, rules=None, task_target=None, started_at=None,
 ) -> PreparedAnalysis:
@@ -347,7 +364,7 @@ def prepare_log(
     selected_items = _items(analysis_items)
     configured_rules = _analysis_rules(rules)
     payload = log_file.payload
-    if log_file.import_status != 'imported' or not isinstance(payload, dict):
+    if not isinstance(payload, dict):
         raise ValidationError({'log_file': '日志导入失败，不能执行分析。'})
     computer = _computer_for_payload(payload)
     now = timezone.now()
@@ -381,9 +398,10 @@ def prepare_log(
         }
     for item in selected_items:
         item_issues = []
-        details[item] = _details_for_item(
-            item, payload, item_issues, configured_rules, log_file.modified_at, platform,
+        item_result = _details_for_item(
+            item, payload, item_issues, configured_rules, log_file.collected_at, platform,
         )
+        details[item] = _compact_item(item, item_result)
         issues.extend(grade_issue({**issue, 'analysis_item': item},
                       overrides=configured_rules['issue_severity_overrides']) for issue in item_issues)
     status = RecordStatus.SUCCESS
@@ -395,7 +413,11 @@ def prepare_log(
     return PreparedAnalysis(
         fields=dict(
             computer=computer,
-            log_file=log_file,
+            log_id=log_file.pk,
+            analysis_profile_id=task_target.task.analysis_profile_id if task_target else None,
+            analysis_date=timezone.localdate(now),
+            source_collected_at=log_file.collected_at,
+            retention_managed=bool(task_target),
             task_target=task_target,
             status=status,
             started_at=started_at or now,
@@ -415,7 +437,16 @@ def prepare_log(
 def persist_analysis(prepared):
     """Commit a prepared result and its findings in one short transaction."""
     with transaction.atomic():
+        # The PC lock serializes result retention; no analysis/network runs here.
+        Computer.objects.select_for_update().get(pk=prepared.fields['computer'].pk)
         analysis = ComputerAnalysis.objects.create(**prepared.fields)
+        target = prepared.fields.get('task_target')
+        mode = target.task.profile_snapshot.get('analysis_retention', 'all') if target else 'all'
+        if mode == 'daily_latest' and analysis.analysis_profile_id:
+            from .retention import remove_analysis_results
+            remove_analysis_results(ComputerAnalysis.objects.filter(computer=analysis.computer,
+                analysis_profile_id=analysis.analysis_profile_id, analysis_date=analysis.analysis_date,
+                retention_managed=True).exclude(pk=analysis.pk))
         Error_Computer.objects.bulk_create([
             Error_Computer(
                 inspection=analysis,
