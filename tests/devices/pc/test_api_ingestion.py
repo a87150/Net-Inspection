@@ -14,7 +14,7 @@ class APIIngestionTests(TestCase):
         self.config.save()
 
     def raw(self, time='2026-09-16 10:00:00', name='PC-TEST'):
-        return json.dumps({'platform':'windows','日志时间':time,'系统信息概览':{'计算机名':name},'已安装软件列表':[],'计算机硬件资源情况':{'CPU型号':'CPU TEST'}}, ensure_ascii=False).encode()
+        return json.dumps({'platform':'windows','日志时间':time,'系统信息概览':{'计算机名':name},'已安装软件列表':[],'计算机硬件资源情况':{'CPU型号':'CPU TEST'},'日志文件元数据':[],'计算机和用户匹配情况':'旧客户端结果'}, ensure_ascii=False).encode()
 
     def test_authenticated_upload_and_duplicate(self):
         self.assertEqual(self.client.post('/api/pc/logs/', self.raw(), content_type='application/json').status_code,401)
@@ -26,6 +26,8 @@ class APIIngestionTests(TestCase):
         self.assertEqual(log.system_info['计算机名'],'PC-TEST')
         self.assertEqual(log.payload['已安装软件列表'],[])
         self.assertNotIn('network_info',log.payload)
+        self.assertNotIn('日志文件元数据', log.payload)
+        self.assertNotIn('计算机和用户匹配情况', log.payload)
 
     def test_daily_latest_out_of_order_and_past_days(self):
         ingest_log(self.raw('2026-09-15 09:00:00'))

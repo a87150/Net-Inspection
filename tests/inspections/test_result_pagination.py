@@ -1,4 +1,4 @@
-from tests.devices.pc.helpers import create_log_file
+from tests.devices.pc.helpers import add_analysis_issue, create_log_file
 import csv
 from io import StringIO
 
@@ -14,7 +14,7 @@ from django.utils import timezone
 from index.common.table_query import apply_table_filters
 from index.common.table_registry import get_table_definition, project_record_definition
 from index.inspections.records import _computer_analysis_records, _error_records, _infrastructure_records
-from net.models import (Computer, ComputerAnalysis, ComputerLogFile, Error_Computer,
+from net.models import (Computer, ComputerAnalysis, ComputerLogFile,
                         Network_Device, Network_Device_Inspection, Server,
                         Server_Inspection)
 
@@ -68,22 +68,20 @@ class ResultPaginationTests(TestCase):
 
         self.assertEqual(rows[0]['type'], '采集异常')
 
-    def test_global_error_rows_keep_duplicate_pc_errors_and_dynamic_categories(self):
+    def test_global_error_rows_use_one_canonical_pc_analysis(self):
         computer = Computer.objects.create(computer_name='PC-DUP')
         log = create_log_file(source_path='dup.json', modified_at=timezone.now(),
             content_hash='d' * 64, import_status='success')
-        analysis = ComputerAnalysis.objects.create(computer=computer, log_file=log)
-        Error_Computer.objects.bulk_create([
-            Error_Computer(inspection=analysis, error_type='disk', error_message='full'),
-            Error_Computer(inspection=analysis, error_type='disk', error_message='full'),
-        ])
+        analysis = ComputerAnalysis.objects.create(computer=computer, log_file=log, summary='disk full')
+        add_analysis_issue(analysis, 'disk', 'full')
+        add_analysis_issue(analysis, 'disk', 'full')
 
         rows, state = apply_table_filters(self.factory.get('/', {'filter_category': 'PC'}),
             _error_records(), get_table_definition('error_records'))
 
-        self.assertEqual([(row['category'], row['type'], row['message']) for row in rows], [
-            ('PC', 'disk', 'full'), ('PC', 'disk', 'full'),
-        ])
+        rows = list(rows)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0]['category'], rows[0]['message']), ('PC', 'disk full'))
         self.assertIn(('PC', 'PC'), state['field_options']['category'])
 
     def test_network_filters_and_pages_in_sql_without_payloads(self):
@@ -117,7 +115,7 @@ class ResultPaginationTests(TestCase):
         record = ComputerAnalysis.objects.create(computer=computer, log_file=log,
             details={'enrichment': {'department': 'Research', 'employee_number': '001'},
                      'resource': {'当前CPU占用率': '12%'}, 'large': 'x' * 10000})
-        Error_Computer.objects.create(inspection=record, error_type='disk', error_message='full')
+        add_analysis_issue(record, 'disk', 'full')
         with CaptureQueriesContext(connection) as queries:
             source = _computer_analysis_records()
             self.assertIsInstance(source, QuerySet)
@@ -195,26 +193,6 @@ class ResultPaginationTests(TestCase):
         self.assertEqual(row['result_level'], 'warning')
         self.assertFalse(row['ok'])
         self.assertEqual(row['key_metrics'], 'CPU 98%')
-
-    def test_migration_backfill_is_frozen_and_preserves_error_only_results(self):
-        from importlib import import_module
-        from unittest.mock import patch
-        from django.apps import apps
-        from types import SimpleNamespace
-        computer = Computer.objects.create(computer_name='PC-OLD')
-        log = create_log_file(source_path='old.json', modified_at=timezone.now(),
-                                            content_hash='c' * 64, import_status='success')
-        record = ComputerAnalysis.objects.create(computer=computer, log_file=log,
-            details={'resource': {'当前CPU占用率': '8%'}})
-        Error_Computer.objects.create(inspection=record, error_type='old', error_message='old error')
-        ComputerAnalysis.objects.filter(pk=record.pk).update(report_metrics='')
-        migration = import_module('net.migrations.0036_record_report_fields')
-        with patch('net.models.records.record_report_values', side_effect=AssertionError('live helper called')):
-            migration.backfill_reports(apps, SimpleNamespace(connection=connection))
-        row = _computer_analysis_records().get(pk=record.pk)
-        self.assertEqual(row.result_level, 'warning')
-        self.assertEqual(row.error_count, 1)
-        self.assertEqual(row.key_metrics, 'CPU 8%')
 
     def test_all_infrastructure_filters_and_sorts_are_sql_fields(self):
         device = Network_Device.objects.create(device_name='Filter', ip='192.0.2.15')

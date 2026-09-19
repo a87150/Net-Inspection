@@ -5,7 +5,6 @@ from net import models as net_models
 
 Computer = net_models.Computer
 ComputerAnalysis = getattr(net_models, 'ComputerAnalysis', None)
-Error_Computer = getattr(net_models, 'Error_Computer', None)
 Error_Monitor = getattr(net_models, 'Error_Monitor', None)
 Error_Network_Device = getattr(net_models, 'Error_Network_Device', None)
 Error_Server = getattr(net_models, 'Error_Server', None)
@@ -44,9 +43,13 @@ class StaticAndDynamicModelBoundaryTests(TestCase):
                 model.__name__,
             )
 
-    def test_each_error_model_links_to_its_dynamic_record(self):
+    def test_pc_analysis_owns_its_findings_without_a_duplicate_error_model(self):
+        self.assertFalse(hasattr(net_models, 'Error_Computer'))
+        names = {field.name for field in ComputerAnalysis._meta.fields}
+        self.assertTrue({'exceptions', 'actionable_issue_count'} <= names)
+
+    def test_infrastructure_error_models_link_to_their_dynamic_record(self):
         for error_model, record_model in (
-            (Error_Computer, ComputerAnalysis),
             (Error_Network_Device, Network_Device_Inspection),
             (Error_Server, Server_Inspection),
             (Error_Monitor, Monitor_Inspection),

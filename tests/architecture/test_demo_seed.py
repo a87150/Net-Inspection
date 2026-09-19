@@ -22,7 +22,6 @@ from net.models import (
     Domain_Computer,
     Domain_Controller_Config,
     Domain_Group,
-    Error_Computer,
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
@@ -52,7 +51,6 @@ BUSINESS_MODELS = (
     Domain_Computer,
     Domain_Controller_Config,
     Domain_Group,
-    Error_Computer,
     Error_Network_Device,
     Error_Server,
     Error_Monitor,
@@ -145,14 +143,7 @@ class DeterministicDemoSeedTests(TestCase):
                 },
                 exceptions=spec['exceptions'],
             )
-            error = None
-            if spec['status'] == 'failed':
-                error = Error_Computer.objects.create(
-                    inspection=analysis,
-                    error_type='CPU 使用率过高',
-                    error_message='演示数据：CPU 使用率达到 70%。',
-                )
-            fixture.append((computer, log_file, analysis, error))
+            fixture.append((computer, log_file, analysis, None))
         return fixture
 
     def _create_previous_server_monitor_fixture(self):
@@ -588,7 +579,6 @@ class DeterministicDemoSeedTests(TestCase):
         computer_ids = [computer.pk for computer, _, _, _ in fixture]
         log_ids = [log_file.pk for _, log_file, _, _ in fixture]
         analysis_ids = [analysis.pk for _, _, analysis, _ in fixture]
-        error_ids = [error.pk for _, _, _, error in fixture if error is not None]
 
         call_command('seed_demo_data', reset=True, stdout=StringIO())
 
@@ -597,16 +587,13 @@ class DeterministicDemoSeedTests(TestCase):
         self.assertFalse(
             ComputerAnalysis.objects.filter(pk__in=analysis_ids).exists()
         )
-        self.assertFalse(Error_Computer.objects.filter(pk__in=error_ids).exists())
         self.assertEqual(Computer.objects.count(), 3)
         self.assertEqual(ComputerLogFile.objects.count(), 4)
         self.assertEqual(ComputerAnalysis.objects.count(), 4)
-        self.assertEqual(Error_Computer.objects.count(), 2)
 
-    def test_reset_preserves_non_demo_analyses_and_errors_on_previous_fixture(self):
-        first, second = self._create_previous_computer_fixture()
+    def test_reset_preserves_non_demo_analysis_on_previous_fixture(self):
+        first, _second = self._create_previous_computer_fixture()
         first_computer, first_log, first_owned_analysis, _ = first
-        second_computer, second_log, second_owned_analysis, second_owned_error = second
         user_analysis = ComputerAnalysis.objects.create(
             computer=first_computer,
             log_file=first_log,
@@ -614,27 +601,13 @@ class DeterministicDemoSeedTests(TestCase):
             summary='用户后来创建的分析',
             details={'owner': 'user'},
         )
-        user_error = Error_Computer.objects.create(
-            inspection=second_owned_analysis,
-            error_type='用户备注',
-            error_message='必须保留',
-        )
 
         call_command('seed_demo_data', reset=True, stdout=StringIO())
 
-        self.assertFalse(
-            ComputerAnalysis.objects.filter(pk=first_owned_analysis.pk).exists()
-        )
-        self.assertFalse(Error_Computer.objects.filter(pk=second_owned_error.pk).exists())
+        self.assertFalse(ComputerAnalysis.objects.filter(pk=first_owned_analysis.pk).exists())
         self.assertTrue(ComputerAnalysis.objects.filter(pk=user_analysis.pk).exists())
-        self.assertTrue(Error_Computer.objects.filter(pk=user_error.pk).exists())
-        self.assertTrue(
-            ComputerAnalysis.objects.filter(pk=second_owned_analysis.pk).exists()
-        )
         self.assertTrue(Computer.objects.filter(pk=first_computer.pk).exists())
-        self.assertTrue(Computer.objects.filter(pk=second_computer.pk).exists())
         self.assertTrue(ComputerLogFile.objects.filter(pk=first_log.pk).exists())
-        self.assertTrue(ComputerLogFile.objects.filter(pk=second_log.pk).exists())
 
     def test_seed_covers_assets_sources_records_domains_and_outcomes(self):
         call_command('seed_demo_data', reset=True, stdout=StringIO())
@@ -694,11 +667,11 @@ class DeterministicDemoSeedTests(TestCase):
             {True, False},
         )
         normal_analyses = ComputerAnalysis.objects.filter(
-            status='success', errors__isnull=True,
-        ).distinct()
+            status='success', actionable_issue_count=0,
+        )
         abnormal_analyses = ComputerAnalysis.objects.filter(
-            Q(errors__isnull=False) | ~Q(status='success'),
-        ).distinct()
+            Q(actionable_issue_count__gt=0) | ~Q(status='success'),
+        )
         self.assertEqual(
             set(normal_analyses.values_list('summary', flat=True)),
             {'分析正常'},
@@ -709,11 +682,9 @@ class DeterministicDemoSeedTests(TestCase):
             {'发现异常：系统盘空间不足', '发现异常：日志超过预期上报时间'},
         )
         self.assertEqual(abnormal_analyses.count(), 2)
-        self.assertEqual(Error_Computer.objects.count(), 2)
-        for analysis in abnormal_analyses.prefetch_related('errors'):
-            self.assertEqual(analysis.errors.count(), 1)
+        for analysis in abnormal_analyses:
+            self.assertEqual(analysis.actionable_issue_count, 1)
 
-        self.assertTrue(Error_Computer.objects.exists())
         self.assertTrue(Error_Network_Device.objects.exists())
         self.assertTrue(Error_Server.objects.exists())
         self.assertTrue(Error_Monitor.objects.exists())

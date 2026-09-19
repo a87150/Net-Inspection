@@ -15,7 +15,7 @@ from net.devices.pc.executor import execute_computer_target
 from net.inspections.executor import _SQLITE_EXECUTION_LOCK
 from net.inspections.queue import claim_next_task, enqueue_task, cancel_task
 from net.inspections.state import save_target
-from net.models import ComputerAnalysis, ComputerAnalysisProfile, Error_Computer, TaskRun
+from net.models import ComputerAnalysis, ComputerAnalysisProfile, TaskRun
 from tests.devices.pc.helpers import create_log_file
 
 
@@ -41,7 +41,6 @@ class AnalysisPreparationTests(TransactionTestCase):
 
     def assert_no_result(self):
         self.assertFalse(ComputerAnalysis.objects.exists())
-        self.assertFalse(Error_Computer.objects.exists())
         self.target.refresh_from_db()
         self.assertEqual(self.target.result_id, '')
 
@@ -56,7 +55,7 @@ class AnalysisPreparationTests(TransactionTestCase):
             outcome = self.execute()
         self.assertFalse(outcome.stale)
         self.assertEqual(ComputerAnalysis.objects.count(), 1)
-        self.assertTrue(Error_Computer.objects.exists())
+        self.assertEqual(ComputerAnalysis.objects.get().actionable_issue_count, 1)
         self.assert_compact_snapshot('abnormal')
 
     def assert_compact_snapshot(self, health):
@@ -203,13 +202,6 @@ class AnalysisPreparationTests(TransactionTestCase):
             return prepared
         with patch('net.devices.pc.executor.prepare_log', side_effect=compute):
             self.assertTrue(self.execute().stale)
-        self.assert_no_result()
-
-    def test_error_row_failure_rolls_back_analysis_and_fails_target(self):
-        with patch('net.devices.pc.analysis.Error_Computer.objects.bulk_create',
-                   side_effect=ValueError('invalid finding')):
-            result = self.execute()
-        self.assertEqual(result.status, 'failed')
         self.assert_no_result()
 
     def test_lease_loss_during_result_or_target_write_rolls_back(self):

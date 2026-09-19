@@ -72,3 +72,19 @@ def analysis_task_url(*records):
         record.task_target = target
         record.save(update_fields=['task_target'])
     return reverse('task_detail', args=[task.pk])
+
+
+def add_analysis_issue(analysis, issue_type='测试异常', detail='异常', *, severity='warning', analysis_item=None):
+    """Append canonical PC analysis evidence without a duplicate error row."""
+    if analysis_item is None:
+        analysis_item = 'disk' if '磁盘' in issue_type else ('domain_trust' if '网络' in issue_type else 'system')
+    issues = list(analysis.exceptions or [])
+    issues.append({'问题类型': issue_type, '详细问题': detail, 'severity': severity,
+                   'analysis_item': analysis_item})
+    analysis.exceptions = issues
+    if not analysis.summary:
+        analysis.summary = detail
+        analysis.save(update_fields=['exceptions', 'summary'])
+    else:
+        analysis.save(update_fields=['exceptions'])
+    return analysis

@@ -17,6 +17,7 @@ from net.devices.pc.checks import parse_local_datetime
 
 
 MAX_LOG_FILE_BYTES = 16 * 1024 * 1024
+OBSOLETE_TOP_LEVEL_FIELDS = frozenset({'日志文件元数据', '计算机和用户匹配情况'})
 
 def _aware_local(value):
     if timezone.is_aware(value):
@@ -38,6 +39,8 @@ def _read_payload(raw):
         # JSONField must receive finite standard JSON, never NaN/Infinity.
         json.dumps(payload, allow_nan=False)
         payload = sanitize(payload)
+        for field in OBSOLETE_TOP_LEVEL_FIELDS:
+            payload.pop(field, None)
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError) as exc:
         return None, digest, f'JSON 解析失败：{getattr(exc, "msg", str(exc))}'
     return payload, digest, ''

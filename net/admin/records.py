@@ -4,7 +4,7 @@ from django.contrib import admin
 
 from net.models import (
     ComputerAnalysis, ComputerLogFile,
-    Error_Computer, Error_Monitor, Error_Network_Device, Error_Server,
+    Error_Monitor, Error_Network_Device, Error_Server,
     Monitor_Inspection, Network_Device_Inspection, Server_Inspection,
 )
 
@@ -66,14 +66,6 @@ class MonitorInspectionAdmin(InfrastructureRecordAdmin):
 class GeneratedErrorAdmin(admin.ModelAdmin):
     readonly_fields = ('id', 'inspection', 'error_message')
     search_fields = ('error_message',)
-
-
-@admin.register(Error_Computer)
-class ComputerErrorAdmin(GeneratedErrorAdmin):
-    list_display = ('inspection', 'error_type', 'error_message')
-    readonly_fields = GeneratedErrorAdmin.readonly_fields + ('error_type',)
-    search_fields = ('error_type', 'error_message')
-    raw_id_fields = ('inspection',)
 
 
 @admin.register(Error_Network_Device)

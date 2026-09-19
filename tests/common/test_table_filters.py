@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from tests.auth import login_reader
-from tests.devices.pc.helpers import create_log_file
+from tests.devices.pc.helpers import add_analysis_issue, create_log_file
 from django.utils import timezone
 
 from index.common.table_options import build_field_option_context, build_field_options
@@ -19,7 +19,6 @@ from net.models import (
     ComputerAnalysis,
     ComputerAnalysisProfile,
     ComputerLogFile,
-    Error_Computer,
     Network_Device,
     Network_Device_Inspection,
     People,
@@ -491,11 +490,7 @@ class ComputerAnalysisOutcomeTests(TestCase):
             status=RecordStatus.SUCCESS,
             summary='未发现异常',
         )
-        Error_Computer.objects.create(
-            inspection=self.abnormal,
-            error_type='磁盘异常',
-            error_message='磁盘剩余空间不足',
-        )
+        add_analysis_issue(self.abnormal, '磁盘异常', '磁盘剩余空间不足')
         profile = ComputerAnalysisProfile.objects.create(name='Outcome details', analysis_items=['resource'])
         self.task = TaskRun.objects.create(task_type='computer_analysis', source='manual', analysis_profile=profile)
         for record in (self.normal, self.abnormal):

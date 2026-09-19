@@ -12,7 +12,6 @@ from net.models import (
     Computer,
     ComputerAnalysis,
     ComputerLogFile,
-    Error_Computer,
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
@@ -26,7 +25,7 @@ from net.models import (
     Server_Inspection,
 )
 from net.dashboard.assets import build_asset_card_summaries
-from tests.devices.pc.helpers import create_log_file
+from tests.devices.pc.helpers import add_analysis_issue, create_log_file
 
 
 class DashboardSummaryTests(TestCase):
@@ -93,11 +92,7 @@ class DashboardSummaryTests(TestCase):
         analysis = self._analysis(
             computer, 'analysis-error', created_at=timezone.now(),
         )
-        Error_Computer.objects.create(
-            inspection=analysis,
-            error_type='software',
-            error_message='Unsupported software found',
-        )
+        add_analysis_issue(analysis, 'software', 'Unsupported software found')
 
         summary = next(
             item for item in build_asset_card_summaries()
@@ -108,6 +103,25 @@ class DashboardSummaryTests(TestCase):
         self.assertEqual(summary['abnormal'], 1)
         self.assertEqual(summary['unchecked'], 0)
 
+    def test_pc_analysis_uses_json_findings_without_duplicate_error_rows(self):
+        computer = Computer.objects.create(computer_name='PC-JSON-FINDING')
+        self._analysis(computer, 'analysis-json-finding', created_at=timezone.now())
+        analysis = ComputerAnalysis.objects.get(computer=computer)
+        analysis.exceptions = [{
+            '问题类型': '磁盘空间不足',
+            '详细问题': 'C: 使用率超过阈值',
+            'severity': 'warning',
+        }]
+        analysis.save(update_fields=['exceptions'])
+
+        summary = next(
+            item for item in build_asset_card_summaries()
+            if item['key'] == 'computers'
+        )
+
+        self.assertEqual(summary['normal'], 0)
+        self.assertEqual(summary['abnormal'], 1)
+        self.assertEqual(summary['unchecked'], 0)
     def test_infrastructure_partial_or_unreachable_is_abnormal(self):
         """Dropping status or reachability from the condition would hide an outage."""
         normal = Network_Device.objects.create(device_name='SW-NORMAL', ip='192.0.2.11')
@@ -283,11 +297,7 @@ class DashboardSummaryTests(TestCase):
         analysis = self._analysis(
             computer, 'compatibility-error', created_at=timezone.now(),
         )
-        Error_Computer.objects.create(
-            inspection=analysis,
-            error_type='software',
-            error_message='Unsupported software found',
-        )
+        add_analysis_issue(analysis, 'software', 'Unsupported software found')
 
         response = self.client.get(reverse('index'))
         item = next(

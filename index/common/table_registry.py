@@ -247,12 +247,12 @@ TABLE_DEFINITIONS = {
     ),
     'computer_errors': TableDefinition(
         'computer_errors', 'PC 异常记录', (
-            _field('computer_name', 'PC 名称', source='inspection__computer__computer_name'),
-            _field('user_name', '登录用户', source='inspection__computer__user_name', default_filter=False),
-            _field('log_time', '日志时间', 'datetime', source='inspection__source_collected_at', default_filter=False),
-            _field('time', '异常时间', 'datetime', source='inspection__created_at', default_filter=False),
-            _field('type', '问题类型', 'choice', source='error_type'),
-            _field('message', '详细问题', source='error_message', sortable=False, default_filter=False),
+            _field('computer_name', 'PC 名称', source='computer__computer_name'),
+            _field('user_name', '登录用户', source='computer__user_name', default_filter=False),
+            _field('log_time', '日志时间', 'datetime', source='source_collected_at', default_filter=False),
+            _field('time', '异常时间', 'datetime', source='created_at', default_filter=False),
+            _field('type', '问题类型', 'choice', source='report_problem_types'),
+            _field('message', '分析摘要', source='summary', sortable=False, default_filter=False),
         ), 'time', 'desc', ('computer_name', 'user_name', 'type', 'message'), 20,
     ),
       'computer_logs': TableDefinition(

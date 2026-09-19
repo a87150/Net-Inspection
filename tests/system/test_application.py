@@ -1,4 +1,4 @@
-from tests.devices.pc.helpers import create_log_file
+from tests.devices.pc.helpers import add_analysis_issue, create_log_file
 from datetime import date, datetime, timedelta
 from html.parser import HTMLParser
 from io import StringIO
@@ -26,7 +26,6 @@ from net.models import (
     Domain_Account,
     Domain_Computer,
     Domain_Controller_Config,
-    Error_Computer,
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
@@ -236,8 +235,8 @@ class DashboardTests(TestCase):
             computer=computer,
             details={'system_info': {'计算机名': computer.computer_name}},
         )
-        Error_Computer.objects.create(inspection=inspection, error_type='A', error_message='a')
-        Error_Computer.objects.create(inspection=inspection, error_type='B', error_message='b')
+        add_analysis_issue(inspection, 'A', 'a')
+        add_analysis_issue(inspection, 'B', 'b')
         response = self.client.get(reverse('index'))
         computers = next(item for item in response.context['items'] if item['key'] == 'computers')
         self.assertEqual(computers['checked'], 1)
@@ -245,11 +244,7 @@ class DashboardTests(TestCase):
 
     def test_computer_record_workspace_exposes_task_statistics(self):
         analysis = create_computer_analysis('PC-DETAIL-ERROR')
-        Error_Computer.objects.create(
-            inspection=analysis,
-            error_type='磁盘异常',
-            error_message='空间不足',
-        )
+        add_analysis_issue(analysis, '磁盘异常', '空间不足')
 
         response = self.client.get(reverse('computer_analysis_list'))
 
@@ -810,9 +805,7 @@ class TableFilteringAndSortingTests(TestCase):
     def test_inspection_records_keeps_legacy_status_sort_key(self):
         normal = create_computer_analysis('PC-NORMAL')
         abnormal = create_computer_analysis('PC-ABNORMAL')
-        Error_Computer.objects.create(
-            inspection=abnormal, error_type='测试异常', error_message='异常',
-        )
+        add_analysis_issue(abnormal, '测试异常', '异常')
 
         response = self.client.get(reverse('inspection_records'), {
             'sort': 'status', 'order': 'asc',
@@ -1464,10 +1457,7 @@ class TablePaginationTests(TestCase):
             create_computer_analysis(f'ERROR-PC-{number:03d}')
             for number in range(51)
         ]
-        Error_Computer.objects.bulk_create([
-            Error_Computer(inspection=inspection, error_type='测试异常', error_message='异常')
-            for inspection in inspections
-        ])
+        [add_analysis_issue(inspection, '测试异常', '异常') for inspection in inspections]
 
         response = self.client.get(reverse('error_records'), {'page_size': '50'})
 
@@ -1494,23 +1484,12 @@ class TablePaginationTests(TestCase):
 
     def test_aggregate_error_search_includes_record_older_than_100_boundary(self):
         target = create_computer_analysis('BOUNDARY-ERROR')
-        Error_Computer.objects.create(
-            inspection=target,
-            error_type='边界异常',
-            error_message='目标历史异常',
-        )
+        add_analysis_issue(target, '边界异常', '目标历史异常')
         newer = [
             create_computer_analysis(f'NEW-ERROR-PC-{number:03d}')
             for number in range(100)
         ]
-        Error_Computer.objects.bulk_create([
-            Error_Computer(
-                inspection=inspection,
-                error_type='测试异常',
-                error_message='较新异常',
-            )
-            for inspection in newer
-        ])
+        [add_analysis_issue(inspection, '测试异常', '较新异常') for inspection in newer]
         ComputerAnalysis.objects.filter(pk=target.pk).update(
             created_at=timezone.now() - timedelta(days=30),
         )
@@ -1546,16 +1525,8 @@ class RecordWorkspaceTests(TestCase):
 
     def test_computer_record_list_does_not_duplicate_analysis_with_multiple_errors(self):
         analysis = create_computer_analysis('PC-MULTI-ERROR')
-        Error_Computer.objects.create(
-            inspection=analysis,
-            error_type='磁盘异常',
-            error_message='空间不足',
-        )
-        Error_Computer.objects.create(
-            inspection=analysis,
-            error_type='网络异常',
-            error_message='连接超时',
-        )
+        add_analysis_issue(analysis, '磁盘异常', '空间不足')
+        add_analysis_issue(analysis, '网络异常', '连接超时')
 
         response = self.client.get(analysis_task_url(analysis))
 
@@ -1716,9 +1687,7 @@ class RecordWorkspaceTests(TestCase):
 
     def test_dedicated_computer_record_pages_have_unique_registered_workspaces(self):
         inspection = create_computer_analysis('PC-DEDICATED', user_name='测试用户')
-        error = Error_Computer.objects.create(
-            inspection=inspection, error_type='磁盘异常', error_message='空间不足',
-        )
+        error = add_analysis_issue(inspection, '磁盘异常', '空间不足')
 
         inspection_response = self.client.get(analysis_task_url(inspection))
         error_response = self.client.get(reverse('computer_error_list'))
@@ -1735,19 +1704,14 @@ class RecordWorkspaceTests(TestCase):
         self.assertContains(inspection_response, f'href="{detail_url}"')
         self.assertContains(inspection_response, '<span class="badge status-badge text-bg-warning" data-status="warning">警告</span>', html=True)
         self.assertContains(error_response, f'href="{detail_url}"')
-        self.assertContains(error_response, f'<span class="badge status-badge text-bg-danger" data-status="abnormal">{error.error_type}</span>', html=True)
+        self.assertContains(error_response, f'<span class="badge status-badge text-bg-danger" data-status="abnormal">{error.report_problem_types}</span>', html=True)
 
     def test_dedicated_computer_record_pages_use_registered_page_size(self):
         inspections = [
             create_computer_analysis(f'PC-{number:03d}')
             for number in range(51)
         ]
-        Error_Computer.objects.bulk_create([
-            Error_Computer(
-                inspection=inspection, error_type='测试异常', error_message='异常',
-            )
-            for inspection in inspections
-        ])
+        [add_analysis_issue(inspection, '测试异常', '异常') for inspection in inspections]
 
         inspection_response = self.client.get(
             analysis_task_url(*inspections), {'page_size': '50'},
@@ -1764,9 +1728,7 @@ class RecordWorkspaceTests(TestCase):
     def test_computer_inspection_workspace_filters_registered_status_and_date_fields(self):
         abnormal = create_computer_analysis('PC-ABNORMAL', status=RecordStatus.FAILED)
         normal = create_computer_analysis('PC-NORMAL')
-        Error_Computer.objects.create(
-            inspection=abnormal, error_type='测试异常', error_message='异常',
-        )
+        add_analysis_issue(abnormal, '测试异常', '异常')
 
         response = self.client.get(analysis_task_url(abnormal, normal), {
             'filter_computer_name': 'ABNORMAL',
@@ -1782,12 +1744,8 @@ class RecordWorkspaceTests(TestCase):
     def test_computer_error_workspace_searches_registered_field_sources(self):
         matching = create_computer_analysis('PC-SEARCH-MATCH')
         other = create_computer_analysis('PC-SEARCH-OTHER')
-        matching_error = Error_Computer.objects.create(
-            inspection=matching, error_type='磁盘异常', error_message='空间不足',
-        )
-        Error_Computer.objects.create(
-            inspection=other, error_type='网络异常', error_message='连接超时',
-        )
+        matching_error = add_analysis_issue(matching, '磁盘异常', '空间不足')
+        add_analysis_issue(other, '网络异常', '连接超时')
 
         self.client.raise_request_exception = False
         response = self.client.get(reverse('computer_error_list'), {'q': 'MATCH'})
@@ -1798,9 +1756,7 @@ class RecordWorkspaceTests(TestCase):
     def test_aggregate_inspection_workspace_uses_only_registered_status_filter(self):
         normal = create_computer_analysis('PC-NORMAL')
         abnormal = create_computer_analysis('PC-ABNORMAL', status=RecordStatus.FAILED)
-        Error_Computer.objects.create(
-            inspection=abnormal, error_type='测试异常', error_message='异常',
-        )
+        add_analysis_issue(abnormal, '测试异常', '异常')
 
         response = self.client.get(reverse('inspection_records'), {
             'filter_status': 'abnormal',
@@ -1820,9 +1776,7 @@ class RecordWorkspaceTests(TestCase):
     def test_computer_inspection_workspace_status_filter_uses_anomaly_outcome(self):
         normal = create_computer_analysis('PC-NORMAL')
         abnormal = create_computer_analysis('PC-ABNORMAL')
-        Error_Computer.objects.create(
-            inspection=abnormal, error_type='测试异常', error_message='异常',
-        )
+        add_analysis_issue(abnormal, '测试异常', '异常')
 
         task_url = analysis_task_url(normal, abnormal)
         normal_response = self.client.get(task_url, {
@@ -1860,16 +1814,12 @@ class RecordWorkspaceTests(TestCase):
     def test_computer_error_workspace_filters_registered_type_and_date_fields(self):
         matching = create_computer_analysis('PC-MATCH')
         other = create_computer_analysis('PC-OTHER')
-        matching_error = Error_Computer.objects.create(
-            inspection=matching, error_type='磁盘异常', error_message='空间不足',
-        )
-        Error_Computer.objects.create(
-            inspection=other, error_type='网络异常', error_message='连接超时',
-        )
+        matching_error = add_analysis_issue(matching, '磁盘异常', '空间不足')
+        add_analysis_issue(other, '网络异常', '连接超时')
 
         response = self.client.get(reverse('computer_error_list'), {
             'filter_computer_name': 'MATCH',
-            'filter_type': '磁盘异常',
+            'filter_type': '硬件',
             'filter_time_from': timezone.localdate().isoformat(),
             'sort': 'computer_name',
             'order': 'asc',
@@ -1897,7 +1847,7 @@ class DemoDataCommandTests(TestCase):
         self.assertEqual(People.objects.get(pk=existing.pk).name, '真实人员')
         self.assertGreater(first_counts['computers'], 0)
         self.assertGreater(ComputerAnalysis.objects.count(), 0)
-        self.assertGreater(Error_Computer.objects.count(), 0)
+        self.assertTrue(ComputerAnalysis.objects.filter(actionable_issue_count__gt=0).exists())
         self.assertGreater(Error_Network_Device.objects.count(), 0)
         self.assertGreater(Error_Server.objects.count(), 0)
         self.assertGreater(Error_Monitor.objects.count(), 0)

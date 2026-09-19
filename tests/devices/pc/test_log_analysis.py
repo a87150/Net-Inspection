@@ -21,7 +21,6 @@ from net.models import (
     ComputerAnalysis,
     ComputerAnalysisProfile,
     ComputerLogFile,
-    Error_Computer,
     RecordStatus,
     Schedule,
     TaskRun,
@@ -109,7 +108,7 @@ class ComputerLogAnalysisTests(TestCase):
         self.assertEqual(analysis.details['resource'], {'当前CPU占用率': '23%', '当前内存使用率': '48%'})
         self.assertNotIn('activation', analysis.details)
         self.assertEqual(analysis.exceptions, [])
-        self.assertEqual(Error_Computer.objects.count(), 0)
+        self.assertEqual(analysis.actionable_issue_count, 0)
 
     def test_selected_activation_creates_an_abnormal_analysis_and_error_record(self):
         log_file, _path = self._import_payload(activation='未授权')
@@ -123,8 +122,7 @@ class ComputerLogAnalysisTests(TestCase):
         self.assertEqual(len(analysis.exceptions), 1)
         self.assertEqual(analysis.exceptions[0]['问题类型'], '系统激活问题')
         self.assertEqual(analysis.exceptions[0]['severity'], 'warning')
-        self.assertEqual(Error_Computer.objects.get().error_type, '系统激活问题')
-        self.assertEqual(Error_Computer.objects.get().inspection_id, analysis.pk)
+        self.assertEqual(analysis.actionable_issue_count, 1)
 
     def test_selected_bitlocker_reports_missing_or_unprotected_volume_without_unrelated_findings(self):
         log_file, _path = self._import_payload()
@@ -139,7 +137,7 @@ class ComputerLogAnalysisTests(TestCase):
         self.assertEqual(analysis.exceptions[0]['问题类型'], 'BitLocker数据缺失')
         self.assertEqual(analysis.exceptions[0]['severity'], 'info')
         self.assertEqual(analysis.exceptions[0]['data_state'], 'missing')
-        self.assertFalse(Error_Computer.objects.filter(inspection=analysis).exists())
+        self.assertEqual(analysis.actionable_issue_count, 0)
 
     def test_selected_defender_and_patches_run_only_their_missing_data_rules(self):
         log_file, _path = self._import_payload()
@@ -153,7 +151,7 @@ class ComputerLogAnalysisTests(TestCase):
         self.assertEqual(len(analysis.exceptions), 2)
         self.assertTrue(all(issue['severity'] == 'info' and issue['data_state'] == 'missing'
                             for issue in analysis.exceptions))
-        self.assertFalse(Error_Computer.objects.filter(inspection=analysis).exists())
+        self.assertEqual(analysis.actionable_issue_count, 0)
         self.assertEqual(
             {issue['问题类型'] for issue in analysis.exceptions},
             {'WindowsDefender数据缺失', '系统更新数据缺失'},
@@ -232,9 +230,7 @@ class ComputerLogAnalysisTests(TestCase):
         self.assertTrue(all(issue['severity'] == 'warning' for issue in analysis.exceptions), analysis.exceptions)
         self.assertEqual(analysis.details['severity_counts'],
                          {'info': 0, 'warning': len(analysis.exceptions), 'critical': 0})
-        self.assertCountEqual(
-            Error_Computer.objects.filter(inspection=analysis).values_list('error_type', 'error_message'),
-            [(issue['问题类型'], issue['详细问题']) for issue in analysis.exceptions])
+        self.assertEqual(analysis.actionable_issue_count, len(analysis.exceptions))
         self.assertEqual(
             {issue['问题类型'] for issue in analysis.exceptions},
             {
@@ -261,9 +257,8 @@ class ComputerLogAnalysisTests(TestCase):
         self.assertEqual(analysis.exceptions[0]['severity'], 'warning')
         self.assertEqual(analysis.details['health_status'], 'abnormal')
         self.assertEqual(analysis.details['severity_counts'], {'info': 0, 'warning': 1, 'critical': 0})
-        error = Error_Computer.objects.get(inspection=analysis)
-        self.assertEqual(error.error_type, '软件策略问题')
-        self.assertEqual(error.error_message, analysis.exceptions[0]['详细问题'])
+        self.assertEqual(analysis.actionable_issue_count, 1)
+        self.assertEqual(analysis.exceptions[0]['问题类型'], '软件策略问题')
 
     def test_domain_prefix_is_removed_before_matching_special_software_whitelist(self):
         policy = self.root / 'software-policy.ini'
@@ -319,7 +314,6 @@ class ComputerAnalysisWorkerTests(TransactionTestCase):
             phases.append(('prepare', connections['default'].in_atomic_block))
             result = prepare_log(*args, **kwargs)
             self.assertFalse(ComputerAnalysis.objects.exists())
-            self.assertFalse(Error_Computer.objects.exists())
             return result
 
         def persist(*args, **kwargs):
@@ -342,7 +336,8 @@ class ComputerAnalysisWorkerTests(TransactionTestCase):
         self.assertEqual(analysis.details['health_status'], 'abnormal')
         self.assertEqual(analysis.details['severity_counts'], {'info': 0, 'warning': 1, 'critical': 0})
         self.assertEqual(analysis.exceptions[0]['severity'], 'warning')
-        self.assertEqual(Error_Computer.objects.get(inspection=analysis).error_type, '系统激活问题')
+        self.assertEqual(analysis.actionable_issue_count, 1)
+        self.assertEqual(analysis.exceptions[0]['问题类型'], '系统激活问题')
         self.assertEqual(target.error_message, '')
         self.assertEqual(target.result_snapshot['health_status'], 'abnormal')
         self.assertNotIn('details', target.result_snapshot)
@@ -381,7 +376,8 @@ class ComputerAnalysisWorkerTests(TransactionTestCase):
         self.assertEqual(analysis.details['severity_counts'], {'info': 0, 'warning': 1, 'critical': 0})
         self.assertEqual(len(analysis.exceptions), 1)
         self.assertEqual(analysis.exceptions[0]['severity'], 'warning')
-        self.assertEqual(Error_Computer.objects.get(inspection=analysis).error_type, '系统激活问题')
+        self.assertEqual(analysis.actionable_issue_count, 1)
+        self.assertEqual(analysis.exceptions[0]['问题类型'], '系统激活问题')
         self.assertIn('KMS', analysis.exceptions[0]['详细问题'])
 
     def test_expired_owner_cannot_persist_a_computer_analysis_result(self):

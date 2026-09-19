@@ -37,9 +37,9 @@
 | 目标任务 | `TaskTargetRun` → `net_tasktargetrun` | 关联主任务；`task + target_type + target_id` 唯一；目标快照、执行状态、结果引用、告警处理状态、PC 分析交接子任务 |
 | PC API 配置 | `PCUploadConfig` → `net_pcuploadconfig` | 单例配置；保存上传端点、启用状态、日志留存方式以及加密令牌和令牌哈希 |
 | PC 日志 | `ComputerLogFile` → `net_computerlogfile` | 关联 PC，按上传 JSON 顶级属性分列保存平台、时间、系统、硬件、网络、软件、进程和策略状态；内容哈希用于去重 |
-| PC 分析结果 | `ComputerAnalysis` → `net_computeranalysis` | 关联 PC、保存普通数值 `log_id`、分析配置/日期/来源时间及结果；不复制完整日志，也不对日志建外键 |
+| PC 分析结果 | `ComputerAnalysis` → `net_computeranalysis` | 关联 PC、保存普通数值 `log_id`、分析配置/日期/来源时间、`exceptions` 唯一问题明细及可处理问题数投影；不复制完整日志，也不对日志建外键 |
 | 设备巡检结果 | `Network_Device_Inspection` / `Server_Inspection` / `Monitor_Inspection` → `net_network_device_inspection` / `net_server_inspection` / `net_monitor_inspection` | 分别关联设备、服务器、安防资产及可选的一对一目标任务；状态、详情和指标 |
-| 异常明细 | `Error_Computer` / `Error_Network_Device` / `Error_Server` / `Error_Monitor` → 对应 `net_error_*` 表 | 分别关联所属分析/巡检记录；不与任务执行失败混为一张表 |
+| 设备异常明细 | `Error_Network_Device` / `Error_Server` / `Error_Monitor` → 对应 `net_error_*` 表 | 关联所属设备巡检记录；PC 问题只保存在 `ComputerAnalysis.exceptions`，避免重复；业务问题不与任务执行失败混为一张表 |
 | 原始配置备份 | `DeviceConfigurationBackup` → `net_deviceconfigurationbackup` | `device_type + device_id + backup_date` 唯一；原文密文、SHA-256、大小、采集时间及目标任务引用 |
 | AD 本地对象 | `Domain_Account` / `Domain_Computer` / `Domain_Group` → `net_domain_account` / `net_domain_computer` / `net_domain_group` | AD object GUID 唯一，保存账号、计算机、分组及 DN 等本地快照 |
 | AD 成员与 OU | `DomainMembership` / `DomainOU` → `net_domainmembership` / `net_domainou` | 成员关联分组和一个账户或计算机，区分主组；OU 保存包括空 OU 的可选目录。账户/计算机的分组名称缓存用于数据库筛选、排序和导出 |

@@ -18,15 +18,22 @@ class JsonKeyType(Func):
 
 
 def report_queryset(model):
-    errors = model._meta.get_field('errors').related_model.objects.filter(
-        inspection_id=OuterRef('pk'),
-    ).order_by().values('inspection_id').annotate(total=Count('pk')).values('total')
+    from net.models import ComputerAnalysis
     queryset = model.objects.select_related('task_target__task').defer(
         'details', 'task_target__result_snapshot', 'task_target__target_snapshot',
         'task_target__task__selected_items_snapshot', 'task_target__task__parameters_snapshot',
         'task_target__task__target_scope_snapshot', 'task_target__task__profile_snapshot',
-    ).annotate(
-        _error_total=Coalesce(Subquery(errors, output_field=IntegerField()), Value(0)),
+    )
+    if model is ComputerAnalysis:
+        queryset = queryset.annotate(_error_total=F('actionable_issue_count'))
+    else:
+        errors = model._meta.get_field('errors').related_model.objects.filter(
+            inspection_id=OuterRef('pk'),
+        ).order_by().values('inspection_id').annotate(total=Count('pk')).values('total')
+        queryset = queryset.annotate(
+            _error_total=Coalesce(Subquery(errors, output_field=IntegerField()), Value(0)),
+        )
+    queryset = queryset.annotate(
         _report_execution_status=Case(*[
             When(status=value, then=Value(label)) for value, label in RecordStatus.choices
         ], default=F('status'), output_field=CharField()),

@@ -17,7 +17,6 @@ from net.models import (
     Domain_Controller_Config,
     Domain_Group,
     DomainOperation,
-    Error_Computer,
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
@@ -91,7 +90,6 @@ CURRENT_RECORD_IDENTITIES = (
     (Monitor_Inspection, 'monitor-inspection', range(1, 5)),
 )
 CURRENT_ERROR_IDENTITIES = (
-    (Error_Computer, 'computer-error', (3, 4)),
     (Error_Network_Device, 'network-error', (2, 4)),
     (Error_Server, 'server-error', (3, 4)),
     (Error_Monitor, 'monitor-error', (3, 4)),
@@ -251,8 +249,6 @@ FIXED_RECORD_OWNERS = (
       for index, ip in enumerate(('203.0.113.31', '203.0.113.31', '203.0.113.32', '203.0.113.33'), 1)),
 )
 FIXED_ERROR_OWNERS = (
-    (Error_Computer, 'computer-error-3', {'inspection_id': _demo_uuid('computer-analysis-3')}),
-    (Error_Computer, 'computer-error-4', {'inspection_id': _demo_uuid('computer-analysis-4')}),
     (Error_Network_Device, 'network-error-2', {'inspection_id': _demo_uuid('network-inspection-2')}),
     (Error_Network_Device, 'network-error-4', {'inspection_id': _demo_uuid('network-inspection-4')}),
     (Error_Server, 'server-error-3', {'inspection_id': _demo_uuid('server-inspection-3')}),
@@ -447,7 +443,7 @@ class Command(BaseCommand):
             for record in model.objects.filter(pk__in=[
                 _demo_uuid(f'{prefix}-{index}') for index in indexes
             ]):
-                if not record.errors.exists():
+                if model is ComputerAnalysis or not record.errors.exists():
                     record.delete()
 
         self._delete_legacy_infrastructure_rows()
@@ -728,15 +724,7 @@ class Command(BaseCommand):
                 analysis_items=[],
                 exceptions=spec['exceptions'],
             )
-            for analysis in analyses:
-                if spec['error'] is not None:
-                    Error_Computer.objects.filter(
-                        inspection=analysis,
-                        error_type=spec['error'][0],
-                        error_message=spec['error'][1],
-                    ).delete()
-                if not analysis.errors.exists():
-                    analysis.delete()
+            analyses.delete()
 
     def _delete_legacy_infrastructure_rows(self):
         for spec in LEGACY_SERVER_SPECS:
@@ -947,16 +935,6 @@ class Command(BaseCommand):
                 },
                 event_time,
             )
-            if error:
-                _upsert_error(
-                    Error_Computer,
-                    f'computer-error-{index}',
-                    {
-                        'inspection': analysis,
-                        'error_type': error[0],
-                        'error_message': f'演示数据：{error[1]}',
-                    },
-                )
         return list(computers.values())
 
     def _seed_networks(self, anchor):

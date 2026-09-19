@@ -13,7 +13,7 @@ from .integrations import PeopleSyncSource
 from .people import People
 from .issue_policy import IssueSeverityPolicy
 from .records import (
-    ComputerAnalysis, ComputerLogFile, Error_Computer,
+    ComputerAnalysis, ComputerLogFile,
     Error_Monitor, Error_Network_Device, Error_Server, Monitor_Inspection,
     Network_Device_Inspection, RecordStatus, Server_Inspection,
 )
@@ -31,7 +31,7 @@ __all__ = [
     'Server', 'SecurityDevice', 'Domain_Controller_Config', 'DomainOperation',
     'RecordStatus', 'ComputerLogFile', 'ComputerAnalysis',
     'Network_Device_Inspection', 'Server_Inspection', 'Monitor_Inspection',
-    'Error_Computer', 'Error_Network_Device', 'Error_Server', 'Error_Monitor',
+    'Error_Network_Device', 'Error_Server', 'Error_Monitor',
     'InspectionProfile', 'ComputerAnalysisProfile', 'Schedule', 'TaskRun',
     'TaskTargetRun', 'AlertChannel', 'AlertPolicy', 'AlertState', 'AlertEvent',
     'AlertDelivery', 'AlertTestSend', 'PeopleSyncSource',

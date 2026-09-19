@@ -70,7 +70,7 @@ class RemoteRuleTests(RemoteRuleFixture, TestCase):
         result = self.analyze(['domain_trust', 'cpu_health'], payload=payload,
                               rules={'cpu_temperature_max_celsius': 85})
         self.assertEqual(result.result_level, 'critical')
-        self.assertEqual(set(result.errors.values_list('error_type', flat=True)),
+        self.assertEqual({issue['问题类型'] for issue in result.exceptions if issue['severity'] != 'info'},
                          {'域信任问题', 'CPU温度问题'})
         result = self.analyze(['cpu_health'], payload=payload,
                               rules={'cpu_temperature_max_celsius': 95})
@@ -155,7 +155,7 @@ class RemoteRuleTests(RemoteRuleFixture, TestCase):
         self.payloads['windows']['计算机硬件资源情况']['当前CPU占用率'] = ' 12.0 % '
         self.assertEqual(self.analyze(['resource'], rules={'cpu_max_percent': 20}).status, 'success')
         result = self.analyze(['resource'], rules={'cpu_max_percent': 10})
-        self.assertEqual(set(result.errors.values_list('error_type', flat=True)), {'资源使用问题'})
+        self.assertEqual({issue['问题类型'] for issue in result.exceptions if issue['severity'] != 'info'}, {'资源使用问题'})
 
     def test_kms_normal_state_is_normalized(self):
         self.payloads['windows']['Windows激活信息']['描述'] = 'KMS'

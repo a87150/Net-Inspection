@@ -36,7 +36,7 @@ class IssueSettingsTests(RemoteRuleFixture, TestCase):
         self.payloads['windows']['当前与域服务器通讯情况'] = '失败'
         result = self.analyze(['domain_trust'], rules={'issue_severity_overrides': {'domain_trust': 'info'}})
         self.assertEqual(result.result_level, 'info')
-        self.assertFalse(result.errors.exists())
+        self.assertEqual(result.actionable_issue_count, 0)
 
     def test_history_task_uses_same_result_table_and_scoped_export(self):
         login_reader(self.client)

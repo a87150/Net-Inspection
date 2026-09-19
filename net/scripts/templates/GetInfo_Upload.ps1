@@ -263,7 +263,6 @@ $payload = [ordered]@{
         '磁盘总量' = ('{0:N2}GB' -f $totalDiskGb)
         '磁盘摘要' = $diskSummary
     }
-    '日志文件元数据' = @()
 }
 
 $payload['Windows激活信息'] = Read-Optional -Section 'Windows激活信息' {
@@ -355,9 +354,6 @@ $payload['浏览器插件情况'] = Read-Optional -Section '浏览器插件情�
     }
     $extensions
 }
-$payload['计算机和用户匹配情况'] = if (-not $computerSystem.UserName) { '未知' }
-    elseif (($computerSystem.UserName -replace '^.*\\', '') -eq $computerName) { '正常' }
-    else { '计算机名与登录用户名不匹配' }
 $payload['事件发现'] = Read-Optional -Section '事件发现' {
     $events = @()
     foreach ($log in @('System', 'Application')) {

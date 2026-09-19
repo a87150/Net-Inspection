@@ -75,8 +75,6 @@ def collect_payload(config):
         'CURRENT_USER_FULL_NAME': read_command('/usr/bin/id', '-F').strip(),
     }
     now = dt.datetime.now().astimezone()
-    metadata = []
-
     sysctl = dict(
         line.split(': ', 1) for line in observed['SYSCTL_OUTPUT'].splitlines() if ': ' in line
     )
@@ -159,7 +157,6 @@ def collect_payload(config):
             '磁盘总量': f'{disk_total_gb:.2f}GB',
             '磁盘摘要': disk_summary,
         },
-        '日志文件元数据': metadata,
     }
     return payload
 

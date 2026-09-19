@@ -23,7 +23,6 @@ from net.models import (
     Domain_Account,
     Domain_Computer,
     Domain_Group,
-    Error_Computer,
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
@@ -123,15 +122,11 @@ def _infrastructure_summary(model, inspection_model, foreign_key, key):
 def _computer_summary():
     latest = ComputerAnalysis.objects.filter(
         computer_id=OuterRef('pk'),
-    ).order_by('-created_at', '-pk').annotate(
-        has_errors=Exists(
-            Error_Computer.objects.filter(inspection_id=OuterRef('pk')),
-        ),
-    )
+    ).order_by('-created_at', '-pk')
     assets = Computer.objects.annotate(
         latest_analysis_status=Subquery(latest.values('status')[:1]),
-        latest_analysis_has_errors=Subquery(
-            latest.values('has_errors')[:1], output_field=BooleanField(),
+        latest_analysis_severity=Subquery(
+            latest.values('report_severity')[:1], output_field=CharField(),
         ),
         latest_analyzed_at=Subquery(latest.values('created_at')[:1]),
     ).annotate(
@@ -139,7 +134,7 @@ def _computer_summary():
             When(latest_analysis_status__isnull=True, then=Value('unchecked')),
             When(
                 latest_analysis_status=RecordStatus.SUCCESS,
-                latest_analysis_has_errors=False,
+                latest_analysis_severity__in=('', 'info'),
                 then=Value('normal'),
             ),
             default=Value('abnormal'),

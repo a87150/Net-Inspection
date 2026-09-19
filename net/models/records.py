@@ -119,7 +119,7 @@ class DynamicRecord(models.Model):
         abstract = True
 
 
-PC_LOG_SECTIONS = {'系统信息概览': 'system_info', '网络信息': 'network_info', '计算机硬件资源情况': 'hardware_info', '日志文件元数据': 'log_metadata', 'Windows激活信息': 'windows_activation', 'KMS服务器连通情况': 'kms_connectivity', '当前与域服务器通讯情况': 'domain_communication', '已安装软件列表': 'installed_software', '当前运行进程清单': 'running_processes', 'BitLocker状态': 'bitlocker', 'WindowsDefender状态': 'defender', '系统更新历史': 'system_updates', '已应用策略': 'applied_policies', '浏览器插件情况': 'browser_extensions', '计算机和用户匹配情况': 'identity_match', '事件发现': 'event_findings', '采集诊断': 'collection_diagnostics'}
+PC_LOG_SECTIONS = {'系统信息概览': 'system_info', '网络信息': 'network_info', '计算机硬件资源情况': 'hardware_info', 'Windows激活信息': 'windows_activation', 'KMS服务器连通情况': 'kms_connectivity', '当前与域服务器通讯情况': 'domain_communication', '已安装软件列表': 'installed_software', '当前运行进程清单': 'running_processes', 'BitLocker状态': 'bitlocker', 'WindowsDefender状态': 'defender', '系统更新历史': 'system_updates', '已应用策略': 'applied_policies', '浏览器插件情况': 'browser_extensions', '事件发现': 'event_findings', '采集诊断': 'collection_diagnostics'}
 
 
 class ComputerLogFile(models.Model):
@@ -143,7 +143,6 @@ class ComputerLogFile(models.Model):
     system_info = models.JSONField(null=True, blank=True)
     network_info = models.JSONField(null=True, blank=True)
     hardware_info = models.JSONField(null=True, blank=True)
-    log_metadata = models.JSONField(null=True, blank=True)
     windows_activation = models.JSONField(null=True, blank=True)
     kms_connectivity = models.JSONField(null=True, blank=True)
     domain_communication = models.JSONField(null=True, blank=True)
@@ -154,7 +153,6 @@ class ComputerLogFile(models.Model):
     system_updates = models.JSONField(null=True, blank=True)
     applied_policies = models.JSONField(null=True, blank=True)
     browser_extensions = models.JSONField(null=True, blank=True)
-    identity_match = models.JSONField(null=True, blank=True)
     event_findings = models.JSONField(null=True, blank=True)
     collection_diagnostics = models.JSONField(null=True, blank=True)
 
@@ -201,6 +199,28 @@ class ComputerLogFile(models.Model):
 
 
 class ComputerAnalysis(DynamicRecord):
+    def refresh_report(self):
+        super().refresh_report()
+        self.actionable_issue_count = sum(
+            1 for issue in self.exceptions or []
+            if isinstance(issue, dict) and issue.get('severity') != 'info'
+        )
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get('update_fields')
+        if update_fields is None or 'exceptions' in update_fields:
+            self.actionable_issue_count = sum(
+                1 for issue in self.exceptions or []
+                if isinstance(issue, dict) and issue.get('severity') != 'info'
+            )
+            if update_fields is not None:
+                kwargs['update_fields'] = set(update_fields) | {'actionable_issue_count'}
+        super().save(*args, **kwargs)
+
+    @property
+    def error_count(self):
+        return self.actionable_issue_count or (0 if self.status == 'success' else 1)
+
     @property
     def problem_types(self):
         if 'exceptions' in self.get_deferred_fields():
@@ -219,10 +239,7 @@ class ComputerAnalysis(DynamicRecord):
             return level
         if self.status == 'failed':
             return 'critical'
-        has_errors = getattr(self, 'has_errors', None)
-        if has_errors is None:
-            has_errors = self.errors.exists()
-        return 'warning' if has_errors else 'normal'
+        return 'normal'
 
     @property
     def graded_findings(self):
@@ -262,6 +279,7 @@ class ComputerAnalysis(DynamicRecord):
     analysis_date = models.DateField(null=True, blank=True, db_index=True)
     source_collected_at = models.DateTimeField(null=True, blank=True)
     retention_managed = models.BooleanField(default=False)
+    actionable_issue_count = models.PositiveSmallIntegerField(default=0)
     analysis_items = models.JSONField(default=list, blank=True)
     exceptions = models.JSONField(default=list, blank=True)
 
@@ -309,17 +327,6 @@ class Monitor_Inspection(InfrastructureRecord):
 
     class Meta:
         ordering = ['-created_at']
-
-
-class Error_Computer(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    error_type = models.CharField(max_length=255)
-    error_message = models.TextField()
-    inspection = models.ForeignKey(
-        ComputerAnalysis,
-        on_delete=models.CASCADE,
-        related_name='errors',
-    )
 
 
 class Error_Network_Device(models.Model):

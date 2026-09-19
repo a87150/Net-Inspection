@@ -135,7 +135,7 @@ class FinalOperatorTests(TestCase):
         self.assertEqual(analysis.result_level, 'info')
         self.assertEqual(analysis.details['severity_counts'], {'info': 1, 'warning': 0, 'critical': 0})
         self.assertEqual(analysis.exceptions[0]['analysis_item'], 'activation')
-        self.assertFalse(analysis.errors.exists())
+        self.assertEqual(analysis.actionable_issue_count, 0)
         page = self.client.get(analysis_task_url(analysis))
         self.assertContains(page, 'CPU 23%')
         self.assertContains(page, '<td data-column-key="execution_status">成功</td>', html=True)

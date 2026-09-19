@@ -89,7 +89,7 @@ class IdentityReferenceTests(RemoteRuleFixture, TestCase):
         self.assertEqual(result.result_level, 'normal')
         self.assertEqual(detail['reference_employee_id'], 'TEST053930')
         self.assertEqual(detail['matched_fields'], ['姓名', '当前登录用户工号'])
-        self.assertEqual(detail['reported_match'], '不匹配!')
+        self.assertNotIn('reported_match', detail)
 
     def test_computer_and_login_pair_requires_same_person_but_not_name(self):
         self.payloads['windows']['系统信息概览'].update({

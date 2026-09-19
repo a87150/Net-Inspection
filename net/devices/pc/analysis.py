@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from net.models import Computer, ComputerAnalysis, ComputerLogFile, Error_Computer, RecordStatus
+from net.models import Computer, ComputerAnalysis, ComputerLogFile, RecordStatus
 from net.infrastructure.sanitization import sanitize
 from net.devices.pc.checks import (
     check_activation,
@@ -335,7 +335,6 @@ def _analysis_rules(value):
 @dataclass(frozen=True)
 class PreparedAnalysis:
     fields: dict
-    errors: tuple
 
 
 def _compact_item(item, value):
@@ -427,10 +426,6 @@ def prepare_log(
             exceptions=sanitize(issues),
             finished_at=timezone.now(),
         ),
-        errors=tuple(
-            {'error_type': issue['问题类型'], 'error_message': issue['详细问题']}
-            for issue in issues if issue['severity'] != 'info'
-        ),
     )
 
 
@@ -447,13 +442,6 @@ def persist_analysis(prepared):
             remove_analysis_results(ComputerAnalysis.objects.filter(computer=analysis.computer,
                 analysis_profile_id=analysis.analysis_profile_id, analysis_date=analysis.analysis_date,
                 retention_managed=True).exclude(pk=analysis.pk))
-        Error_Computer.objects.bulk_create([
-            Error_Computer(
-                inspection=analysis,
-                **error,
-            )
-            for error in prepared.errors
-        ])
     return analysis
 
 

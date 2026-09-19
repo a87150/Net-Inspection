@@ -17,7 +17,6 @@ from index.common.table_query import (
 from index.common.table_registry import get_table_definition, project_record_definition
 from net.models import (
     ComputerAnalysis,
-    Error_Computer,
     Monitor_Inspection,
     Network_Device_Inspection,
     RecordStatus,
@@ -195,7 +194,7 @@ def computer_analysis_list(request):
 
 def computer_analysis_detail(request, pk):
     analysis = get_object_or_404(
-        ComputerAnalysis.objects.select_related('computer').prefetch_related('errors'),
+        ComputerAnalysis.objects.select_related('computer'),
         pk=pk,
     )
     return render(request, 'inspections/record_detail.html', {
@@ -334,10 +333,11 @@ def _inspection_records(per_type=None):
 def _error_records(per_type=None):
     from .result_query import infrastructure_queryset
     fields = ('category', 'asset', 'time', 'type', 'message', 'record_id', 'record_kind')
-    computer = Error_Computer.objects.annotate(
-        category=Value('PC'), asset=F('inspection__computer__computer_name'),
-        time=F('inspection__created_at'), type=F('error_type'), message=F('error_message'),
-        record_id=F('inspection_id'), record_kind=Value('computer'),
+    from .result_query import computer_queryset
+    computer = computer_queryset().filter(_error_total__gt=0).annotate(
+        category=Value('PC'), asset=F('computer__computer_name'),
+        time=F('created_at'), type=F('report_problem_types'), message=F('summary'),
+        record_id=F('pk'), record_kind=Value('computer'),
     ).order_by().values(*fields)
     projections = [computer]
     actionable = Q(is_reachable=False) | ~Q(status=RecordStatus.SUCCESS) | Q(report_severity__in=('warning', 'critical'))
@@ -397,7 +397,8 @@ def error_records(request):
 
 def computer_error_list(request):
     table_definition = get_table_definition('computer_errors')
-    errors = Error_Computer.objects.select_related('inspection__computer')
+    from .result_query import computer_queryset
+    errors = computer_queryset().filter(_error_total__gt=0)
     errors, table_state = apply_table_filters(request, errors, table_definition)
     page_obj = Paginator(errors, table_state['page_size']).get_page(
         request.GET.get('page'),

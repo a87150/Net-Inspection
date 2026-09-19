@@ -9,14 +9,14 @@ class SeverityTests(RemoteRuleFixture, TestCase):
         result = self.analyze(['identity_match'])
         self.assertEqual(result.status, 'success')
         self.assertEqual(result.exceptions[0]['severity'], 'info')
-        self.assertFalse(result.errors.exists())
+        self.assertEqual(result.actionable_issue_count, 0)
 
     def test_real_problem_does_not_mean_execution_failed(self):
         self.payloads['windows']['当前与域服务器通讯情况'] = '失败'
         result = self.analyze(['domain_trust'])
         self.assertEqual(result.status, 'success')
         self.assertEqual(result.exceptions[0]['severity'], 'critical')
-        self.assertEqual(result.errors.count(), 1)
+        self.assertEqual(result.actionable_issue_count, 1)
 
     def test_optional_temperature_is_notice(self):
         result = self.analyze(['cpu_health'])

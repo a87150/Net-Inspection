@@ -318,7 +318,7 @@ def check_remote_item(item, payload, issues, rules):
         system = evidence if isinstance(evidence, dict) else {}
         login = normalize_login(system.get('当前登录用户工号'))
         name = system.get('计算机名')
-        result.update(login_identifier=login, reported_match=payload.get('计算机和用户匹配情况'))
+        result.update(login_identifier=login)
         person_name = str(system.get('当前登录用户姓名') or system.get('当前登录用户名')
                           or system.get('姓名') or '').strip()
         computer_name = name.strip() if isinstance(name, str) else ''

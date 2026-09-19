@@ -36,7 +36,7 @@ class CollectionDiagnosticsTests(RemoteRuleFixture, TestCase):
         findings = [item for item in result.exceptions if item['问题类型'] == '软件问题']
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0]['详细问题'], 'BlockedApp')
-        self.assertTrue(result.errors.filter(error_type='软件问题').exists())
+        self.assertTrue(any(issue['问题类型'] == '软件问题' for issue in result.exceptions))
         self.assertTrue(any(item.get('data_state') == 'partial' for item in result.exceptions))
         self.assertEqual(result.details['software'], {'data_state': 'known', 'count': 2})
 
@@ -47,4 +47,4 @@ class CollectionDiagnosticsTests(RemoteRuleFixture, TestCase):
             'BLACKLIST': {'keywords': ['BlockedApp']},
         }}})
         self.assertEqual(result.result_level, 'info')
-        self.assertFalse(result.errors.filter(error_type='软件问题').exists())
+        self.assertFalse(any(issue['问题类型'] == '软件问题' for issue in result.exceptions))
