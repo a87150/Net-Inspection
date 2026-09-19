@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from net.models import Computer
+from net.models import Computer, ComputerLogFile
 from net.devices.pc.snapshot import SNAPSHOT_FIELD_NAMES, update_computer_snapshot
 
 
@@ -13,9 +13,10 @@ class Command(BaseCommand):
 
         for computer in Computer.objects.all():
             scanned += 1
-            analysis = computer.analyses.select_related('log_file').order_by(
-                '-log_file__modified_at', '-created_at',
-            ).first()
+            log_ids = computer.analyses.exclude(log_id__isnull=True).values_list('log_id', flat=True)
+            log = ComputerLogFile.objects.filter(pk__in=log_ids).order_by('-collected_at', '-pk').first()
+            analysis = (computer.analyses.filter(log_id=log.pk).order_by('-created_at').first()
+                        if log else None)
             if analysis is None:
                 continue
 

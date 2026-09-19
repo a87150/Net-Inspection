@@ -1,3 +1,5 @@
+__version__ = "0.9.1"
+
 """Application runtime boundary (includes pathlib junction protection)."""
 import sys
 

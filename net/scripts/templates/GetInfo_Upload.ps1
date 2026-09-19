@@ -2,33 +2,38 @@
 # PC_CONFIG: __PC_CONFIG_BASE64__
 $ErrorActionPreference = 'Stop'
 $ProfileConfig = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__PC_CONFIG_BASE64__')) | ConvertFrom-Json
-$PC_LOG_DESTINATION = $ProfileConfig.destination
+$PC_UPLOAD_ENDPOINT = $ProfileConfig.endpoint_url
+$PC_UPLOAD_TOKEN = $ProfileConfig.token
 
 function Publish-PCDaily {
-    param([string]$Destination, [string]$StateDirectory, [string]$ComputerName, [scriptblock]$Collect, [scriptblock]$CanPublish = { $true }, [scriptblock]$CanPublishPayload = { param($Payload) $true })
+    param([string]$Endpoint, [string]$Token, [string]$StateDirectory, [string]$ComputerName, [scriptblock]$Collect)
     if ([string]::IsNullOrWhiteSpace($ComputerName)) { throw 'Cannot publish without a computer name.' }
-    $safeName = $ComputerName -replace '[^a-zA-Z0-9._-]', '_'
-    $day = Get-Date -Format 'yyyyMMdd'
     [IO.Directory]::CreateDirectory($StateDirectory) | Out-Null
-    $marker = Join-Path $StateDirectory "$safeName-$day.done"
-    $lock = $null
-    $partial = $null
+    $lock = $null; $partial = $null
     try {
-        $lock = [IO.File]::Open((Join-Path $StateDirectory "$safeName.lock"), 'OpenOrCreate', 'ReadWrite', 'None')
-        if (Test-Path -LiteralPath $marker) { return }
-        if (-not (& $CanPublish)) { Write-Output 'PC collector is waiting for an interactive Windows login before completing today''s upload.'; return }
-        if (-not (Test-Path -LiteralPath $Destination -PathType Container)) { throw 'Shared folder is unavailable.' }
-        $final = Join-Path $Destination "$safeName-$day.json"
-        if (-not (Test-Path -LiteralPath $final)) {
-            $collected = & $Collect
-            if (-not (& $CanPublishPayload $collected)) { Write-Output 'PC collector is waiting for a Windows login with identity in the collected data.'; return }
-            $json = $collected | ConvertTo-Json -Depth 12
-            $partial = Join-Path $Destination ("$safeName-$day." + [guid]::NewGuid().ToString('N') + '.uploading')
-            [IO.File]::WriteAllText($partial, $json, [Text.UTF8Encoding]::new($false))
-            [IO.File]::Move($partial, $final)
-            $partial = $null
+        $lock = [IO.File]::Open((Join-Path $StateDirectory 'latest.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+        $collected = & $Collect
+        $raw = [Text.UTF8Encoding]::new($false).GetBytes(($collected | ConvertTo-Json -Depth 12))
+        if ($raw.Length -gt 16MB) { throw 'PC_LOG_TOO_LARGE: Collected JSON exceeds the 16 MiB upload limit.' }
+        $final = Join-Path $StateDirectory 'latest.json'
+        $partial = Join-Path $StateDirectory ('latest.' + [guid]::NewGuid().ToString('N') + '.tmp')
+        [IO.File]::WriteAllBytes($partial, $raw)
+        if (Test-Path -LiteralPath $final) { [IO.File]::Replace($partial, $final, $null) } else { [IO.File]::Move($partial, $final) }
+        $partial = $null
+        for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+                $request = [Net.HttpWebRequest]::Create($Endpoint)
+                $request.Method='POST'; $request.ContentType='application/json; charset=utf-8'; $request.ContentLength=$raw.Length
+                $request.Timeout=10000; $request.ReadWriteTimeout=10000; $request.AllowAutoRedirect=$false
+                $request.Headers[[Net.HttpRequestHeader]::Authorization]='Bearer ' + $Token
+                $stream=$request.GetRequestStream(); try { $stream.Write($raw,0,$raw.Length) } finally { $stream.Dispose() }
+                $response=$request.GetResponse(); try { if ([int]$response.StatusCode -lt 200 -or [int]$response.StatusCode -ge 300) { throw 'unexpected API response' } } finally { $response.Dispose() }
+                Write-Output 'PC_UPLOAD_COMPLETE: latest.json was saved locally and accepted by the monitoring API.'; return
+            } catch {
+                if ($attempt -eq 3) { throw 'PC_UPLOAD_FAILED: Monitoring API upload failed after 3 attempts; latest.json was retained locally.' }
+                Start-Sleep -Seconds $attempt
+            }
         }
-        [IO.File]::WriteAllText($marker, $day)
     } finally {
         if ($partial -and (Test-Path -LiteralPath $partial)) { Remove-Item -LiteralPath $partial -Force }
         if ($lock) { $lock.Dispose() }
@@ -86,13 +91,35 @@ function Get-PCInstalledSoftware {
     return ,@($apps | Sort-Object -Property 软件名,版本 -Unique)
 }
 
+function Import-PCSensorLibrary {
+    $hashes = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__PC_SENSOR_HASHES_BASE64__')) | ConvertFrom-Json
+    foreach ($entry in $hashes.PSObject.Properties) {
+        $file = Join-Path $PSScriptRoot $entry.Name
+        if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw 'CPU_TEMP_DEPENDENCY_MISSING: Download the complete updated collector package.' }
+        if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $entry.Value) { throw 'CPU_TEMP_CHECKSUM_FAILED: Download the collector package again.' }
+    }
+    Add-Type -Path (Join-Path $PSScriptRoot 'LibreHardwareMonitorLib.dll')
+}
+
+function Get-PCSensorPrerequisites {
+    $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+    $version = $null
+    $registry = [Microsoft.Win32.RegistryKey]::OpenBaseKey('LocalMachine', 'Registry64')
+    try {
+        $key = $registry.OpenSubKey('SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO')
+        if ($key) {
+            try { $version = [version]$key.GetValue('DisplayVersion') } finally { $key.Dispose() }
+        }
+    } finally { $registry.Dispose() }
+    return @{elevated=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator); version=$version}
+}
+
 function New-PCBundledMonitor {
-    $library = Join-Path $PSScriptRoot 'OpenHardwareMonitorLib.dll'
-    if (-not (Test-Path -LiteralPath $library -PathType Leaf)) { throw 'Extract the complete collector ZIP; the hardware library is missing.' }
-    $expected = 'EF02B0991AAC678052BB79DFDFD5BFA0B42B1F34B209E35819BA606909655F58'
-    if ((Get-FileHash -LiteralPath $library -Algorithm SHA256).Hash -ne $expected) { throw 'Hardware library checksum mismatch; download the collector package again.' }
-    Add-Type -Path $library
-    return New-Object OpenHardwareMonitor.Hardware.Computer
+    $state = Get-PCSensorPrerequisites
+    if (-not $state.elevated) { throw 'CPU_TEMP_NOT_ELEVATED: Run via the installed SYSTEM task or an elevated administrator console.' }
+    if ($null -eq $state.version -or $state.version -lt [version]'2.2.0') { throw 'CPU_TEMP_PAWNIO_MISSING: Run Install-PCCollector.ps1 from the updated package to install PawnIO 2.2.0 or later.' }
+    Import-PCSensorLibrary
+    return New-Object LibreHardwareMonitor.Hardware.Computer
 }
 
 function Read-PCCpuTemperatures {
@@ -110,7 +137,7 @@ function Get-PCBundledTemperature {
     $monitor = $null
     try {
         $monitor = New-PCBundledMonitor
-        $monitor.CPUEnabled = $true
+        $monitor.IsCpuEnabled = $true
         $monitor.Open()
         $values = @()
         for ($attempt = 0; $attempt -lt 2; $attempt++) {
@@ -121,12 +148,12 @@ function Get-PCBundledTemperature {
             if ($attempt -eq 0) { Start-Sleep -Milliseconds 500 }
         }
         if ($values.Count) {
-            return [ordered]@{value=[string]::Format([Globalization.CultureInfo]::InvariantCulture, '{0:0.0}C', ($values | Measure-Object -Maximum).Maximum); source='OpenHardwareMonitorLib 0.9.6 (bundled)'}
+            return [ordered]@{value=[string]::Format([Globalization.CultureInfo]::InvariantCulture, '{0:0.0}C', ($values | Measure-Object -Maximum).Maximum); source='LibreHardwareMonitorLib 0.9.6 (bundled)'}
         }
-        Add-PCDiagnostic 'CPU温度' 'Bundled library returned no CPU temperature. Check administrator rights, hardware support and driver blocking in Windows security logs.'
+        Add-PCDiagnostic 'CPU温度' ('CPU_TEMP_NO_SENSOR: CPU devices={0}; no readable CPU temperature after updates. Check hardware support and PawnIO driver status; do not disable Windows protection.' -f @($monitor.Hardware | Where-Object { [string]$_.HardwareType -eq 'Cpu' }).Count)
     } catch {
-        Add-PCDiagnostic 'CPU温度' $_
-        Add-PCDiagnostic 'CPU温度' 'Could not load/read the bundled monitor. Extract the whole ZIP and run as administrator; check hardware/driver support.'
+        if ($_.Exception.Message -match '^CPU_TEMP_[A-Z_]+:') { Add-PCDiagnostic 'CPU温度' $_.Exception.Message }
+        else { Add-PCDiagnostic 'CPU温度' $_; Add-PCDiagnostic 'CPU温度' 'CPU_TEMP_LIBRARY_ERROR: Sensor library initialization/read failed; check .NET Framework 4.7.2 or later and driver/hardware support.' }
     } finally {
         if ($null -ne $monitor) {
             try { $monitor.Close() } catch { Add-PCDiagnostic 'CPU温度' $_ }
@@ -201,7 +228,7 @@ $memoryUsage = if ($memoryTotalBytes -gt 0) {
 $invariantCulture = [Globalization.CultureInfo]::InvariantCulture
 $cpuUsageText = if ($null -eq $cpuUsage) { '未知' } else { [string]::Format($invariantCulture, '{0:0.0}%', [math]::Max(0, [math]::Min(100, $cpuUsage))) }
 $memoryUsageText = [string]::Format($invariantCulture, '{0:0.0}%', [math]::Max(0, [math]::Min(100, $memoryUsage)))
-$diskSummary = ($logicalDisks | ForEach-Object { '{0} {1:N2} GB ({2:N2} GB free)' -f $_.DeviceID, ($_.Size / 1GB), ($_.FreeSpace / 1GB) }) -join '; '
+$diskSummary = ($logicalDisks | ForEach-Object { [string]::Format($invariantCulture, '{0} {1:0} B ({2:0} B free)', $_.DeviceID, $_.Size, $_.FreeSpace) }) -join '; '
 $totalDiskGb = [math]::Round((($logicalDisks | Measure-Object -Property Size -Sum).Sum / 1GB), 2)
 $computerName = $env:COMPUTERNAME
 $cpuTemperature = Get-PCCpuTemperature
@@ -223,9 +250,6 @@ $payload = [ordered]@{
         '型号' = $computerSystem.Model
     }
     '网络信息' = $adapters
-    '磁盘空间情况' = @($logicalDisks | ForEach-Object {
-        [ordered]@{device=$_.DeviceID; total_bytes=$_.Size; free_bytes=$_.FreeSpace}
-    })
     '计算机硬件资源情况' = [ordered]@{
         '当前CPU温度' = if ($cpuTemperature) { $cpuTemperature.value } else { $null }
         'CPU温度来源' = if ($cpuTemperature) { $cpuTemperature.source } else { $null }
@@ -238,9 +262,6 @@ $payload = [ordered]@{
         '当前内存使用率' = $memoryUsageText
         '磁盘总量' = ('{0:N2}GB' -f $totalDiskGb)
         '磁盘摘要' = $diskSummary
-        'cpu_physical_core_count' = $physicalCores
-        'cpu_logical_processor_count' = $logicalProcessors
-        'disk_summary' = $diskSummary
     }
     '日志文件元数据' = @()
 }
@@ -358,19 +379,12 @@ return $payload
 # Collection entry point
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 if ($args -contains '-PackageSelfTest') {
-    $library = Join-Path $PSScriptRoot 'OpenHardwareMonitorLib.dll'
-    $hash = (Get-FileHash -LiteralPath $library -Algorithm SHA256).Hash
-    if ($hash -ne 'EF02B0991AAC678052BB79DFDFD5BFA0B42B1F34B209E35819BA606909655F58') { throw 'Packaged hardware library checksum mismatch' }
-    Add-Type -Path $library
-    @{status='ok'; runtime=$PSVersionTable.PSEdition; library_hash=$hash} | ConvertTo-Json -Compress
+    Import-PCSensorLibrary
+    $monitor = New-Object LibreHardwareMonitor.Hardware.Computer
+    $monitor.IsCpuEnabled = $true
+    @{status='ok'; runtime=$PSVersionTable.PSEdition; library='LibreHardwareMonitorLib 0.9.6'} | ConvertTo-Json -Compress
     return
 }
 if ($args -contains '-Preview') { Get-PCPayload | ConvertTo-Json -Depth 12; return }
 $stateDirectory = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'PCDailyCollector'
-Publish-PCDaily $PC_LOG_DESTINATION $stateDirectory $env:COMPUTERNAME { Get-PCPayload } {
-    $system = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
-    -not [string]::IsNullOrWhiteSpace($system.UserName)
-} {
-    param($collected)
-    -not [string]::IsNullOrWhiteSpace($collected['系统信息概览']['当前登录用户工号'])
-}
+Publish-PCDaily $PC_UPLOAD_ENDPOINT $PC_UPLOAD_TOKEN $stateDirectory $env:COMPUTERNAME { Get-PCPayload }

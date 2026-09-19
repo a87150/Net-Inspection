@@ -24,7 +24,7 @@ class ApplicationContractTests(SimpleTestCase):
             "net.models.tasks",
             "net.models.alerts",
             "net.models.domain",
-            "net.devices.pc.remote_ingestion",
+            "net.devices.pc.ingestion",
             "net.inspections.queue",
             "index.urls",
             "index.views",

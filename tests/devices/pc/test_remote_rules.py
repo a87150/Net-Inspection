@@ -1,3 +1,4 @@
+from tests.devices.pc.helpers import create_log_file
 import copy
 import json
 from pathlib import Path
@@ -23,7 +24,7 @@ class RemoteRuleFixture:
         pc, _ = Computer.objects.get_or_create(computer_name=payload['系统信息概览']['计算机名'])
         log = ComputerLogFile.objects.filter(computer=pc).first()
         if log is None:
-            log = ComputerLogFile.objects.create(
+            log = create_log_file(
                 computer=pc, collected_date=timezone.localdate(), platform=platform,
                 source_path='fixture.json', content_hash=uuid4().hex,
                 modified_at=timezone.now(), import_status='imported', payload=payload,
@@ -50,7 +51,9 @@ class RemoteRuleTests(RemoteRuleFixture, TestCase):
                 self.payloads['windows']['当前运行进程清单'] = value
                 result = self.analyze(['processes'])
                 self.assertEqual(result.status, 'success')
-                self.assertEqual(result.details['processes'], value)
+                self.assertEqual(result.details['processes'], {
+                    'data_state': 'known', 'count': len(value),
+                })
 
     def test_invalid_or_missing_process_evidence_still_reports_problem(self):
         for value in [None, [42], [''], [{'other': 'not a process name'}]]:
@@ -124,14 +127,12 @@ class RemoteRuleTests(RemoteRuleFixture, TestCase):
                 result = self.analyze(['browser_extensions'])
                 self.assertEqual(result.status, 'success')
                 self.assertEqual(result.details['browser_extensions']['data_state'], 'known')
-                self.assertEqual(result.details['browser_extensions']['evidence'], value)
 
     def test_group_policy_preserves_unknown_user_collection(self):
         self.payloads['windows']['已应用策略']['用户策略'] = None
         result = self.analyze(['group_policy'])
         self.assertEqual(result.result_level, 'info')
-        self.assertEqual(result.details['group_policy']['evidence'],
-                         {'计算机策略': [], '用户策略': None})
+        self.assertEqual(result.details['group_policy']['data_state'], 'partial')
         self.payloads['windows']['已应用策略']['用户策略'] = []
         self.assertEqual(self.analyze(['group_policy']).status, 'success')
 

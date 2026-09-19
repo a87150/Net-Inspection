@@ -1,3 +1,4 @@
+from tests.devices.pc.helpers import create_log_file
 import csv
 from io import StringIO
 
@@ -43,7 +44,7 @@ class ResultPaginationTests(TestCase):
 
     def test_global_records_page_uses_union_limit_without_reading_all_rows(self):
         computer = Computer.objects.create(computer_name='PC-PAGE')
-        log = ComputerLogFile.objects.create(source_path='page.json', modified_at=timezone.now(),
+        log = create_log_file(source_path='page.json', modified_at=timezone.now(),
             content_hash='p' * 64, import_status='success')
         ComputerAnalysis.objects.bulk_create([
             ComputerAnalysis(computer=computer, log_file=log, summary=f'row {index}')
@@ -69,7 +70,7 @@ class ResultPaginationTests(TestCase):
 
     def test_global_error_rows_keep_duplicate_pc_errors_and_dynamic_categories(self):
         computer = Computer.objects.create(computer_name='PC-DUP')
-        log = ComputerLogFile.objects.create(source_path='dup.json', modified_at=timezone.now(),
+        log = create_log_file(source_path='dup.json', modified_at=timezone.now(),
             content_hash='d' * 64, import_status='success')
         analysis = ComputerAnalysis.objects.create(computer=computer, log_file=log)
         Error_Computer.objects.bulk_create([
@@ -110,7 +111,7 @@ class ResultPaginationTests(TestCase):
 
     def test_pc_query_defers_payload_and_keeps_error_severity_and_enrichment(self):
         computer = Computer.objects.create(computer_name='PC-1', user_name='alice')
-        log = ComputerLogFile.objects.create(source_path='a.json', modified_at=timezone.now(),
+        log = create_log_file(source_path='a.json', modified_at=timezone.now(),
                                             content_hash='a' * 64, import_status='success',
                                             payload={'large': 'x' * 10000})
         record = ComputerAnalysis.objects.create(computer=computer, log_file=log,
@@ -159,7 +160,7 @@ class ResultPaginationTests(TestCase):
 
     def test_pc_nullable_sort_keeps_missing_values_last_when_ascending(self):
         computer = Computer.objects.create(computer_name='PC-SORT')
-        log = ComputerLogFile.objects.create(source_path='sort.json', modified_at=timezone.now(),
+        log = create_log_file(source_path='sort.json', modified_at=timezone.now(),
                                             content_hash='b' * 64, import_status='success')
         missing = ComputerAnalysis.objects.create(computer=computer, log_file=log)
         present = ComputerAnalysis.objects.create(computer=computer, log_file=log,
@@ -201,7 +202,7 @@ class ResultPaginationTests(TestCase):
         from django.apps import apps
         from types import SimpleNamespace
         computer = Computer.objects.create(computer_name='PC-OLD')
-        log = ComputerLogFile.objects.create(source_path='old.json', modified_at=timezone.now(),
+        log = create_log_file(source_path='old.json', modified_at=timezone.now(),
                                             content_hash='c' * 64, import_status='success')
         record = ComputerAnalysis.objects.create(computer=computer, log_file=log,
             details={'resource': {'当前CPU占用率': '8%'}})
@@ -240,7 +241,7 @@ class ResultPaginationTests(TestCase):
 
     def test_all_pc_filters_and_sorts_are_sql_fields(self):
         computer = Computer.objects.create(computer_name='PC-FILTER', user_name='alice')
-        log = ComputerLogFile.objects.create(source_path='filter.json', modified_at=timezone.now(),
+        log = create_log_file(source_path='filter.json', modified_at=timezone.now(),
                                             content_hash='d' * 64, import_status='success')
         enrichment = {'employee_number': '001', 'personnel_name': 'Alice', 'department': 'IT',
                       'user_ou': 'OU=Users', 'computer_ou': 'OU=PCs', 'site': 'North'}
@@ -275,7 +276,7 @@ class ResultPaginationTests(TestCase):
 
     def test_enrichment_json_null_empty_and_chinese_have_text_sort_and_clean_options(self):
         computer = Computer.objects.create(computer_name='PC-JSON')
-        log = ComputerLogFile.objects.create(source_path='json.json', modified_at=timezone.now(),
+        log = create_log_file(source_path='json.json', modified_at=timezone.now(),
                                             content_hash='e' * 64, import_status='success')
         records = [ComputerAnalysis.objects.create(computer=computer, log_file=log,
                    details={'enrichment': enrichment}) for enrichment in (
@@ -294,7 +295,7 @@ class ResultPaginationTests(TestCase):
 
     def test_literal_null_enrichment_text_is_not_json_null(self):
         computer = Computer.objects.create(computer_name='PC-LITERAL')
-        log = ComputerLogFile.objects.create(source_path='literal.json', modified_at=timezone.now(),
+        log = create_log_file(source_path='literal.json', modified_at=timezone.now(),
                                             content_hash='f' * 64, import_status='success')
         real = ComputerAnalysis.objects.create(computer=computer, log_file=log,
                                               details={'enrichment': {'department': 'null'}})

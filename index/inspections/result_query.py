@@ -54,8 +54,8 @@ def computer_queryset():
             When(**{type_source: 'null'}, then=Value(None)),
             default=KeyTextTransform(key, 'report_enrichment'), output_field=CharField(),
         )
-    return report_queryset(ComputerAnalysis).select_related('computer', 'log_file').defer(
-        'exceptions', 'analysis_items', 'log_file__payload',
+    return report_queryset(ComputerAnalysis).select_related('computer').defer(
+        'exceptions', 'analysis_items',
     ).annotate(
         has_errors=Case(When(_error_total__gt=0, then=Value(True)), default=Value(False)),
         _report_level=Case(

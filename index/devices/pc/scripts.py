@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
-from net.models import ComputerAnalysisProfile, PCLogSourceConfig
+from net.models import ComputerAnalysisProfile, PCUploadConfig
 from net.scripts.generator import PLATFORM_TEMPLATES, generate_pc_download
 
 @login_required
@@ -16,9 +16,9 @@ def pc_script_download(request, profile_id, platform):
     profile = get_object_or_404(ComputerAnalysisProfile, pk=profile_id)
     if not profile.is_enabled:
         return HttpResponseBadRequest('请先启用分析配置后再下载采集脚本。')
-    source = PCLogSourceConfig.load()
+    source = PCUploadConfig.load()
     if source is None:
-        return HttpResponseBadRequest('请先保存 PC 日志来源并配置终端共享目录。')
+        return HttpResponseBadRequest('请先保存 PC 采集 API 配置。')
     try:
         filename, content_type, content = generate_pc_download(profile, source, platform)
     except (ValueError, OSError) as exc:

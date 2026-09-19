@@ -1,11 +1,44 @@
-﻿param([string]$InstallDirectory = (Join-Path $env:ProgramData 'PCDailyCollector'))
+param([string]$InstallDirectory = (Join-Path $env:ProgramData 'PCDailyCollector'), [switch]$SkipTemperatureDriver)
 $ErrorActionPreference = 'Stop'
 function Assert-PCCollectorAdministrator {
     $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
     if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Run this installer as administrator or deploy it as a computer startup script (SYSTEM).' }
 }
-function Install-PCCollector {
+function Get-PCPawnIOVersion {
+    $registry = [Microsoft.Win32.RegistryKey]::OpenBaseKey('LocalMachine', 'Registry64')
+    try {
+        $key = $registry.OpenSubKey('SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO')
+        if ($key) { try { return [version]$key.GetValue('DisplayVersion') } finally { $key.Dispose() } }
+    } finally { $registry.Dispose() }
+    return $null
+}
+function Install-PCSensorDriver {
     param([string]$SourceDirectory, [string]$Directory)
+    $version = Get-PCPawnIOVersion
+    if ($null -ne $version -and $version -ge [version]'2.2.0') { return }
+    $source = Join-Path $SourceDirectory 'PawnIO_setup.exe'
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw 'PawnIO_setup.exe is missing. Extract the complete updated ZIP or use -SkipTemperatureDriver when managed separately.' }
+    # Execute only a pinned official installer copied into the protected install directory.
+    $installer = Join-Path $Directory ('.pawnio-' + [guid]::NewGuid().ToString('N') + '.exe')
+    $process = $null
+    try {
+        [IO.File]::WriteAllBytes($installer, [IO.File]::ReadAllBytes($source))
+        if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ne '1F519A22E47187F70A1379A48CA604981C4FCF694F4E65B734AAA74A9FBA3032') { throw 'PawnIO installer checksum mismatch.' }
+        if ((Get-AuthenticodeSignature -LiteralPath $installer).Status -ne 'Valid') { throw 'PawnIO installer signature is not trusted on this computer.' }
+        $process = Start-Process -FilePath $installer -ArgumentList '-install','-silent' -WindowStyle Hidden -PassThru
+        if (-not $process.WaitForExit(120000)) { throw 'PawnIO installation did not finish within two minutes. Check the installer before retrying; it was not interrupted.' }
+        if ($process.ExitCode -ne 0) { throw ('PawnIO installation failed (exit {0}).' -f $process.ExitCode) }
+        $version = Get-PCPawnIOVersion
+        if ($null -eq $version -or $version -lt [version]'2.2.0') { throw 'PawnIO installation did not register version 2.2.0 or later.' }
+    } finally {
+        if ($null -eq $process -or $process.HasExited) {
+            if (Test-Path -LiteralPath $installer) { Remove-Item -LiteralPath $installer -Force }
+        }
+        if ($process) { $process.Dispose() }
+    }
+}
+function Install-PCCollector {
+    param([string]$SourceDirectory, [string]$Directory, [switch]$SkipTemperatureDriver)
     Assert-PCCollectorAdministrator
     $directoryPath = [IO.Path]::GetFullPath($Directory)
     $cursor = $directoryPath
@@ -58,11 +91,13 @@ function Install-PCCollector {
                 }
                 Set-Acl -LiteralPath $file -AclObject $fileAcl
             }
+            if (-not $SkipTemperatureDriver) { Install-PCSensorDriver -SourceDirectory $SourceDirectory -Directory $directoryPath }
+            else { Write-Warning 'Temperature driver installation skipped; other collection continues without guaranteed CPU temperature.' }
             $action=New-ScheduledTaskAction -Execute $target -WorkingDirectory $directoryPath
             $trigger=@(New-ScheduledTaskTrigger -Once -At (Get-Date).AddHours(2) -RepetitionInterval (New-TimeSpan -Hours 2); New-ScheduledTaskTrigger -AtLogOn)
             $identity=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
             $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 20) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-            Register-ScheduledTask -TaskName $taskName -TaskPath '\' -Action $action -Trigger $trigger -Principal $identity -Settings $settings -Description 'PC daily log collector; retries every two hours, one successful upload per day.' -Force | Out-Null
+            Register-ScheduledTask -TaskName $taskName -TaskPath '\' -Action $action -Trigger $trigger -Principal $identity -Settings $settings -Description 'PC collector; saves latest JSON locally then posts it to the monitoring API every two hours.' -Force | Out-Null
             $registered=$true
             Start-ScheduledTask -TaskName $taskName -TaskPath '\'
         } catch {
@@ -75,11 +110,11 @@ function Install-PCCollector {
             elseif (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target }
             throw $failure
         }
-        Write-Host "Installed $target. Task $taskName runs as SYSTEM every two hours; first run requested."
-        Write-Host 'Allow the client computer account to write to the configured network share. Task completion/result must be checked separately.'
+        Write-Host "Installed $target. Task $taskName runs as SYSTEM every two hours and at user login; first run requested."
+        Write-Host 'Each run replaces LocalApplicationData\PCDailyCollector\latest.json, then posts the same UTF-8 JSON to the configured monitoring API. Check task history and collector.log for API failures.'
     } finally {
         if ($locked) { $mutex.ReleaseMutex() }
         $mutex.Dispose()
     }
 }
-Install-PCCollector -SourceDirectory $PSScriptRoot -Directory $InstallDirectory
+Install-PCCollector -SourceDirectory $PSScriptRoot -Directory $InstallDirectory -SkipTemperatureDriver:$SkipTemperatureDriver

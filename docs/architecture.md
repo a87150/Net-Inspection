@@ -6,8 +6,8 @@
 
 1. 管理员提交表单，后端检查权限、CSRF、设备类型、参数和版本；保存配置后按本次所选设备/项目生成任务快照。
 2. `Schedule` 到期时由 Worker 创建 `TaskRun` 和 `TaskTargetRun`；手动任务使用同一队列。没有 Worker 时，网页仍可访问，但定时任务不会入队、后台操作不会执行。
-3. Worker 短事务领取任务并续租，在事务外完成 SSH、SNMP、HTTP、LDAP、SMB/FTP 请求及耗时解析，最后重新检查租约/配置并短事务保存。
-4. 设备巡检保存动态记录和异常；可采集的硬件资料按成功字段回填资产，失败项不清空旧资料。PC 先保存日志证据，再创建分析子任务；人员同步先获取完整预览，再事务应用。
+3. Worker 短事务领取任务并续租，在事务外完成 SSH、SNMP、HTTP、LDAP 等外部请求及耗时解析，最后重新检查租约/配置并短事务保存。PC 日志由 Web 写入 API 在短事务中接收。
+4. 设备巡检保存动态记录和异常；可采集硬件资料按成功字段回填资产。PC API 接收日志后更新台账；手动和定时分析均在入队时为每台 PC 冻结最新日志；人员同步先获取完整预览，再事务应用。
 5. 逐目标生成站内异常/恢复记录。整批任务终结且目标告警处理完成后，每渠道创建一条总结投递；网络发送在事务外完成，回写时校验投递租约。
 
 **三种状态需要分开看**：任务执行状态（等待/运行/成功/部分成功/失败/取消）、所选项目的业务健康状态、消息投递状态。任务执行成功仍可能有 CPU 超限等业务异常；信息不足不代表设备故障；通知失败也不抹掉已保存的巡检结果。
@@ -35,10 +35,9 @@
 | 定时计划 | `Schedule` → `net_schedule` | 每行只关联一种巡检/PC 分析/人员来源/域控配置；间隔或每日时间、启用、下次执行、最近入队、最近调度尝试/状态/原因 |
 | 主任务 | `TaskRun` → `net_taskrun` | 类型/来源、配置关联、规则/参数/目标快照、进度计数、租约/尝试次数、活动范围键 |
 | 目标任务 | `TaskTargetRun` → `net_tasktargetrun` | 关联主任务；`task + target_type + target_id` 唯一；目标快照、执行状态、结果引用、告警处理状态、PC 分析交接子任务 |
-| PC 日志来源 | `PCLogSourceConfig` → `net_pclogsourceconfig`；`PCLogSourceCredential` → `net_pclogsourcecredential` | 单一共享来源及目录、协议设置；凭据一对一独立加密保存 |
-| PC 传输与日志 | `ComputerLogTransfer` → `net_computerlogtransfer`；`ComputerLogFile` → `net_computerlogfile` | 传输关联来源、目标和日志；日志关联 PC，保存内容哈希、日期、路径、导入状态和原始 JSON |
-| 旧日志归档关联 | `ComputerLogArchive` → `net_computerlogarchive` | 关联日志的历史归档信息，保留用于历史追溯 |
-| PC 分析结果 | `ComputerAnalysis` → `net_computeranalysis` | 关联 PC、日志和可选的一对一目标任务；所选项目、详情、异常和报告查询字段 |
+| PC API 配置 | `PCUploadConfig` → `net_pcuploadconfig` | 单例配置；保存上传端点、启用状态、日志留存方式以及加密令牌和令牌哈希 |
+| PC 日志 | `ComputerLogFile` → `net_computerlogfile` | 关联 PC，按上传 JSON 顶级属性分列保存平台、时间、系统、硬件、网络、软件、进程和策略状态；内容哈希用于去重 |
+| PC 分析结果 | `ComputerAnalysis` → `net_computeranalysis` | 关联 PC、保存普通数值 `log_id`、分析配置/日期/来源时间及结果；不复制完整日志，也不对日志建外键 |
 | 设备巡检结果 | `Network_Device_Inspection` / `Server_Inspection` / `Monitor_Inspection` → `net_network_device_inspection` / `net_server_inspection` / `net_monitor_inspection` | 分别关联设备、服务器、安防资产及可选的一对一目标任务；状态、详情和指标 |
 | 异常明细 | `Error_Computer` / `Error_Network_Device` / `Error_Server` / `Error_Monitor` → 对应 `net_error_*` 表 | 分别关联所属分析/巡检记录；不与任务执行失败混为一张表 |
 | 原始配置备份 | `DeviceConfigurationBackup` → `net_deviceconfigurationbackup` | `device_type + device_id + backup_date` 唯一；原文密文、SHA-256、大小、采集时间及目标任务引用 |
@@ -60,9 +59,8 @@ flowchart TD
     Task --> Target[TaskTargetRun 目标]
     Target --> Result[巡检或分析记录]
     Asset[资产基本资料] --> Result
-    Source[PC 日志来源] --> Transfer[传输记录]
-    Transfer --> Log[原始日志]
-    Log --> Analysis[PC 分析记录]
+    Api[PC API 上报] --> Log[原始日志]
+    Log -. 普通 log_id .-> Analysis[PC 分析记录]
     Target --> Analysis
     Result --> Errors[异常明细]
     Task --> Event[站内事件 / 任务总结]
@@ -76,8 +74,8 @@ flowchart TD
 
 **关系字段与 JSON 的分工**：资产、任务、来源、时间、状态及常用查询字段使用关系字段和索引；异构回显、详情、规则和快照使用 JSON。`TaskTargetRun.result_snapshot` 的新版格式主要保存结果引用和摘要，详情从对应业务记录读取，不应把所有历史 JSON 载入内存再分页。`DeviceCollectionBinding.target_id`、备份的 `device_id`、任务的 `target_id` 是带类型的业务引用，并非每种资产表都有一个数据库外键；不要据此手工删除关联对象。
 
-**去重与并发**：日志内容哈希和有效的每日 PC 日志标记用于避免重复导入；活动传输标记用于避免重复领取远程文件；任务 `active_scope_key` 唯一约束控制相同范围的活动任务，目标还有执行范围互斥。门禁用平台事件 ID 去重，配置备份按设备和日期去重，任务总结及渠道投递各自有唯一约束。它们分别解决不同边界，不能把一次失败重试简单替换为删除历史记录。
+**去重与并发**：日志内容哈希用于避免重复上报；daily_latest 按每台 PC 的日志日期保留最新版本；任务 `active_scope_key` 唯一约束控制相同范围的活动任务，目标还有执行范围互斥。门禁用平台事件 ID 去重，配置备份按设备和日期去重，任务总结及渠道投递各自有唯一约束。它们分别解决不同边界，不能把一次失败重试简单替换为删除历史记录。
 
 **MariaDB 特别说明**：模型声明的条件唯一约束不等于数据库一定直接支持。`0040_mariadb_active_target_scope` 为目标执行范围添加了生成列 `net_active_execution_scope` 和唯一索引 `net_target_active_scope_mysql`，补足 MariaDB/MySQL 上的对应约束；不要只因 `models.W036` 就认定没有防重，也不要只屏蔽警告而忽略迁移。域分组 DN 的长字段唯一性会触发 `mysql.W003`，须在目标数据库核实索引能力和迁移结果，不能擅自截断 DN 或重置表。
 
-维护时应备份数据库、环境配置、独立密钥和日志归档。`migrate` 更新结构；`makemigrations --check --dry-run` 只检查模型漂移；`showmigrations` 检查应用状态。不要把 ORM 模型自动序列化结果当成包含全部凭据及原始证据的完整备份。
+维护时应备份数据库、环境配置和独立密钥。`migrate` 更新结构；`makemigrations --check --dry-run` 只检查模型漂移；`showmigrations` 检查应用状态。不要把 ORM 模型自动序列化结果当成包含全部凭据及原始证据的完整备份。

@@ -50,12 +50,16 @@ class SeverityTests(RemoteRuleFixture, TestCase):
         task = run()
         self.assertEqual(summarize_task(task)['abnormal'], 1)
         self.assertTrue(task.alert_events.filter(event_type='abnormal').exists())
-        log.payload['当前与域服务器通讯情况'] = '未知'
-        log.save(update_fields=['payload'])
+        payload = log.payload
+        payload['当前与域服务器通讯情况'] = '未知'
+        log.payload = payload
+        log.save()
         task = run()
         self.assertFalse(task.alert_events.exists())
         self.assertEqual(summarize_task(task)['normal'], 1)
-        log.payload['当前与域服务器通讯情况'] = '正常'
-        log.save(update_fields=['payload'])
+        payload = log.payload
+        payload['当前与域服务器通讯情况'] = '正常'
+        log.payload = payload
+        log.save()
         task = run()
         self.assertTrue(task.alert_events.filter(event_type='recovery').exists())

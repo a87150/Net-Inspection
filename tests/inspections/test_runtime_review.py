@@ -14,10 +14,7 @@ from tests.devices.pc.helpers import create_log_file
 
 from net.models import (ComputerAnalysisProfile, ComputerLogFile, InspectionProfile,
                         Schedule, Server, Server_Inspection, TaskRun)
-from net.devices.pc.remote_ingestion import FetchSummary
-from net.inspections.queue import enqueue_computer_fetch_task
 from net.inspections.queue import claim_next_task
-from net.devices.pc import executor as scan_executor
 from net.inspections.executor import _begin_target
 
 
@@ -126,34 +123,3 @@ class ScheduleUniquenessTests(TransactionTestCase):
             results = list(pool.map(save, [1, 2]))
         self.assertEqual(results, [302, 302])
         self.assertEqual(Schedule.objects.filter(inspection_profile=profile).count(), 1)
-
-
-class ScanFenceTests(TransactionTestCase):
-    def setUp(self):
-        from tests.devices.pc.test_source_models import valid_smb_source
-        valid_smb_source()
-        profile = ComputerAnalysisProfile.objects.create(name='Scan', analysis_items=['activation'])
-        self.task = enqueue_computer_fetch_task(profile, 'manual')
-        claim_next_task('scan-owner', 60)
-        self.target = self.task.target_runs.get()
-        _begin_target(self.target.pk, 'scan-owner')
-        log = create_log_file(source_path='fixture.json', modified_at=timezone.now(), content_hash='a'*64, import_status='imported')
-        self.summary = FetchSummary(imported=1, log_files=[log])
-
-    def test_lease_loss_immediately_before_child_enqueue_creates_no_orphan(self):
-        original = scan_executor._enqueue_scanned_analyses
-        def expire_then_enqueue(task, ids):
-            TaskRun.objects.filter(pk=task.pk).update(lease_expires_at=timezone.now()-timedelta(seconds=1))
-            return original(task, ids)
-        with patch.object(scan_executor, '_enqueue_scanned_analyses', side_effect=expire_then_enqueue):
-            result = scan_executor._persist_scan(self.target.pk, 'scan-owner', self.summary)
-        self.assertTrue(result.stale)
-        self.assertFalse(TaskRun.objects.filter(task_type='computer_analysis').exists())
-        self.target.refresh_from_db()
-        self.assertEqual(self.target.result_id, '')
-
-    def test_parent_link_write_failure_rolls_back_child(self):
-        with patch.object(scan_executor, 'save_target', side_effect=RuntimeError('write failed')):
-            with self.assertRaises(RuntimeError):
-                scan_executor._persist_scan(self.target.pk, 'scan-owner', self.summary)
-        self.assertFalse(TaskRun.objects.filter(task_type='computer_analysis').exists())

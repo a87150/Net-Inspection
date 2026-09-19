@@ -41,7 +41,8 @@ from net.models import (
     TaskTargetRun,
 )
 from net.inspections.executor import _database_guard
-from net.inspections.queue import cancel_task, enqueue_computer_fetch_task, enqueue_task, is_sqlite_busy
+from net.inspections.queue import cancel_task, enqueue_task, is_sqlite_busy
+from net.devices.pc.analysis_scope import enqueue_latest_analysis
 
 
 PROJECTS = {
@@ -112,20 +113,12 @@ def task_modal_context(request, project_kind, *, allow_target_selection=False, t
         for value in values
         if key in ('q', 'target') or key.startswith('filter_')
     ]
-    pc_source = pc_source_form = pc_analysis_form = None
+    pc_upload_config = pc_upload_config_form = pc_analysis_form = None
     if project_kind == 'computers':
-        from django.conf import settings
-        from net.models import PCLogSourceConfig
-        from index.devices.pc.simple_source_form import SimplePCLogSourceForm
-        pc_source = PCLogSourceConfig.load()
-        pc_source_form = SimplePCLogSourceForm(instance=pc_source, initial={
-            'source_type': getattr(pc_source, 'source_type', 'smb'),
-            'port': getattr(pc_source, 'port', 445),
-            'remote_incoming_directory': getattr(pc_source, 'remote_incoming_directory', 'incoming'),
-            'file_time_mode': getattr(pc_source, 'file_time_mode', 'recent_days'),
-            'local_staging_directory': getattr(pc_source, 'local_staging_directory',
-                                               str(settings.BASE_DIR / 'runtime' / 'pc-staging')),
-        })
+        from net.models import PCUploadConfig
+        from index.devices.pc.upload_config import PCUploadConfigForm
+        pc_upload_config = PCUploadConfig.load()
+        pc_upload_config_form = PCUploadConfigForm(instance=pc_upload_config)
         pc_analysis_form = ComputerAnalysisProfileConfigForm(
             instance=default_profile,
             schedule=_schedule_for_profile(default_profile) if default_profile else None,
@@ -157,8 +150,8 @@ def task_modal_context(request, project_kind, *, allow_target_selection=False, t
             raise Http404
     return {
         'task_single_asset': single_asset,
-        'pc_log_source': pc_source,
-        'pc_log_source_form': pc_source_form,
+        'pc_upload_config': pc_upload_config,
+        'pc_upload_config_form': pc_upload_config_form,
         'pc_analysis_form': pc_analysis_form,
         'target_rule_form': (InspectionProfileConfigForm(device_type=PROJECTS[project_kind][0], instance=default_profile)
                              if project_kind in PROJECTS else None),
@@ -207,7 +200,7 @@ def _filtered_queryset(post_data, profile):
     """Apply the exact allowlisted table filters submitted from the open page."""
     request = SimpleNamespace(GET=post_data)
     if isinstance(profile, ComputerAnalysisProfile):
-        source = ComputerLogFile.objects.filter(import_status='imported')
+        source = ComputerLogFile.objects.filter(retained=True)
         definition = get_table_definition('computer_logs')
     else:
         _device_type, model, table_key = next(
@@ -239,7 +232,7 @@ def _target_ids_from_request(post_data, profile, target_mode):
     filtered, state = _filtered_queryset(post_data, profile)
     if target_mode == 'all':
         if isinstance(profile, ComputerAnalysisProfile):
-            source = ComputerLogFile.objects.filter(import_status='imported')
+            source = ComputerLogFile.objects.filter(retained=True)
         else:
             _device_type, source, _table_key = next(
                 project for project in PROJECTS.values()
@@ -305,7 +298,7 @@ def manual_task_create(request):
     if not request.POST.get('target_mode'):
         try:
             if isinstance(profile, ComputerAnalysisProfile):
-                task = enqueue_computer_fetch_task(profile, TaskRun.Source.MANUAL)
+                task = enqueue_latest_analysis(profile, TaskRun.Source.MANUAL)
             else:
                 from net.inspections.schedules import _selected_target_ids
                 task = enqueue_task(
@@ -348,17 +341,11 @@ def manual_task_create(request):
             'concurrent_workers': cleaned['concurrent_workers'],
         }
     try:
-        if isinstance(profile, ComputerAnalysisProfile) and cleaned['target_mode'] == 'fetch':
-            task = enqueue_computer_fetch_task(
-                profile, TaskRun.Source.MANUAL, overrides=overrides,
-            )
+        if isinstance(profile, ComputerAnalysisProfile):
+            task = enqueue_latest_analysis(profile, TaskRun.Source.MANUAL, overrides=overrides)
         else:
-            target_ids = _target_ids_from_request(
-                request.POST, profile, cleaned['target_mode'],
-            )
-            task = enqueue_task(
-                profile, target_ids, TaskRun.Source.MANUAL, overrides=overrides,
-            )
+            target_ids = _target_ids_from_request(request.POST, profile, cleaned['target_mode'])
+            task = enqueue_task(profile, target_ids, TaskRun.Source.MANUAL, overrides=overrides)
     except ValidationError as exc:
         messages.error(request, '任务未创建：' + '；'.join(exc.messages))
         _remember_modal(request, 'run')
@@ -501,7 +488,8 @@ def task_list(request):
     definition = get_table_definition('task_runs')
     tasks, table_state = apply_table_filters(
         request,
-        TaskRun.objects.select_related('inspection_profile', 'analysis_profile', 'schedule'),
+        TaskRun.objects.select_related(
+            'inspection_profile', 'analysis_profile', 'schedule'),
         definition,
         include_legacy_status=False,
     )
@@ -548,14 +536,13 @@ def task_cancel(request, pk):
 
 
 def _target_result_url(target):
-    if target.analysis_handoff_task_id:
-        return reverse('task_detail', args=[target.analysis_handoff_task_id])
+    if isinstance(target.result_snapshot, dict) and target.result_snapshot.get('record_expired'):
+        return ''
     route_map = {
         'computer_analysis': ('computer_analysis_detail', (target.result_id,)),
         'network_device_inspection': ('record_detail', ('networks', target.result_id)),
         'server_inspection': ('record_detail', ('servers', target.result_id)),
         'monitor_inspection': ('record_detail', ('monitors', target.result_id)),
-        'computer_analysis_task': ('task_detail', (target.result_id,)),
     }
     try:
         route, args = route_map[target.result_type]
@@ -566,7 +553,8 @@ def _target_result_url(target):
 
 def task_detail(request, pk):
     task = get_object_or_404(
-        TaskRun.objects.select_related('inspection_profile', 'analysis_profile', 'schedule'),
+        TaskRun.objects.select_related(
+            'inspection_profile', 'analysis_profile', 'schedule'),
         pk=pk,
     )
     if task.task_type in TaskRun.PEOPLE_INTERACTIVE_TASK_TYPES:
@@ -629,14 +617,6 @@ def task_detail(request, pk):
         'domain_retry_requires_password': domain_retry_requires_password,
         'domain_manual_intervention': domain_manual_intervention,
     }
-    if task.task_type == TaskRun.TaskType.COMPUTER_FETCH:
-        fetch_target = task.target_runs.select_related('analysis_handoff_task').first()
-        child = fetch_target.analysis_handoff_task if fetch_target else None
-        if child is None and fetch_target and fetch_target.result_type == 'computer_analysis_task':
-            child = TaskRun.objects.filter(pk=fetch_target.result_id, analysis_profile_id=task.analysis_profile_id).first()
-        context['pc_analysis_task'] = child
-        context['pc_fetch_result'] = fetch_target.result_snapshot if fetch_target else {}
-        context['pc_reused_count'] = task.parameters_snapshot.get('reused_log_count', 0)
     from .task_results import task_result_context
     context.update(task_result_context(request, task))
     if context.get('show_result_table'):

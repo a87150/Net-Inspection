@@ -1,24 +1,7 @@
-"""Examples for PC sources and inspection parameters; never submitted defaults."""
+"""Examples for inspection parameters; never submitted defaults."""
 from index.common.form_examples import apply_field_examples
 from net.data_exchange.inventory_guidance import SNMP_EXAMPLES
 
-PC_SOURCE_EXAMPLES = {
-    'shared_path': (r'\\192.0.2.40\PCLogs\incoming', '填写终端日志汇总目录的 UNC 路径。'),
-    'ftp_directory': ('/logs/incoming', 'FTP 中存放日志的目录，根目录填 /。'),
-    'host': ('192.0.2.40', 'FTP 主机 IP 或名称，不加 ftp://。'),
-    'username': (r'EXAMPLE\log-reader', 'SMB 默认使用进程身份；手动凭据才填，FTP 可填 log-reader。'),
-    'password': ('CHANGE-ME', '填写实际连接密码；SMB 使用进程身份时不需要。'),
-    'port': ('445', '共享目录默认 445；FTP/显式 FTPS 默认 21。'),
-    'domain': ('EXAMPLE', '账号未包含域名前缀时可单独指定，通常留空。'),
-    'local_staging_directory': (r'C:\Inspection\pc-staging', 'Worker 本地绝对路径；留空自动填写。Linux 可填 /var/lib/inspection/pc-staging。'),
-    'remote_processed_directory': ('incoming/_processed', '相对于远程根目录，留空自动填写。'),
-    'remote_failed_directory': ('incoming/_failed', '相对于远程根目录，不要与已处理目录重叠。'),
-    'terminal_windows_path': (r'\\192.0.2.40\PCLogs\incoming', '采集脚本写入路径；共享来源自动填写。'),
-    'terminal_macos_path': ('/Volumes/PCLogs/incoming', '终端挂载共享目录后的路径。'),
-    'recent_days': ('7', '读取最近 7 天的日志。'),
-    'range_start_date': ('2026-01-01', '日期范围的开始日期，格式 YYYY-MM-DD。'),
-    'range_end_date': ('2026-01-07', '日期范围的结束日期，不能早于开始日期。'),
-}
 PROFILE_EXAMPLES = {
     'name': ('每日巡检', '填写便于区分用途的配置名称。'),
     'timeout_seconds': ('60', '单个目标执行超时秒数，范围 1–3600。'),

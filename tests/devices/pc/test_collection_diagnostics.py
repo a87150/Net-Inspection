@@ -18,7 +18,7 @@ class CollectionDiagnosticsTests(RemoteRuleFixture, TestCase):
         self.payloads['windows']['当前运行进程清单'] = ['chrome', 'svchost']
         self.payloads['windows']['采集诊断'] = {'CPU温度': ['No readable CPU sensor']}
         result = self.analyze(['processes', 'cpu_health'])
-        self.assertEqual(result.details['processes'], ['chrome', 'svchost'])
+        self.assertEqual(result.details['processes'], {'data_state': 'known', 'count': 2})
         self.assertIn('collection_diagnostic', result.details['cpu_health'])
         self.assertFalse(any(x['severity'] != 'info' for x in result.exceptions))
 
@@ -38,7 +38,7 @@ class CollectionDiagnosticsTests(RemoteRuleFixture, TestCase):
         self.assertEqual(findings[0]['详细问题'], 'BlockedApp')
         self.assertTrue(result.errors.filter(error_type='软件问题').exists())
         self.assertTrue(any(item.get('data_state') == 'partial' for item in result.exceptions))
-        self.assertEqual(result.details['software'], self.payloads['windows']['已安装软件列表'])
+        self.assertEqual(result.details['software'], {'data_state': 'known', 'count': 2})
 
     def test_missing_software_remains_unknown_without_fabricated_blacklist_findings(self):
         self.payloads['windows']['已安装软件列表'] = None

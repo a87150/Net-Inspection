@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.IO.Compression;
 using System.Reflection;
 using System.Diagnostics;
 using System.Security.AccessControl;
@@ -8,7 +9,7 @@ using System.Security.Principal;
 using System.Text;
 
 internal static class PCCollectorHost {
-    static readonly byte[] Magic = Encoding.ASCII.GetBytes("PCCOLV01");
+    static readonly byte[] Magic = Encoding.ASCII.GetBytes("PCCOLV02");
 
     static void Protect(string directory) {
         var acl = new DirectorySecurity();
@@ -46,7 +47,20 @@ internal static class PCCollectorHost {
             using (var hash = SHA256.Create()) {
                 if (!Equal(hash.ComputeHash(scriptBytes), ReadPart(payload, 16, 32)) || !Equal(hash.ComputeHash(libraryBytes), ReadPart(payload, 48, 32))) throw new InvalidDataException("Collector resource checksum failed.");
             }
-            File.WriteAllBytes(script, scriptBytes); File.WriteAllBytes(library, libraryBytes);
+            File.WriteAllBytes(script, scriptBytes);
+            using (var buffer = new MemoryStream(libraryBytes))
+            using (var archive = new ZipArchive(buffer, ZipArchiveMode.Read)) {
+                if (archive.Entries.Count == 0 || archive.Entries.Count > 64) throw new InvalidDataException("Invalid sensor dependency count.");
+                long total = 0;
+                foreach (var entry in archive.Entries) {
+                    total += entry.Length;
+                    if (entry.Name != entry.FullName || !entry.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) || entry.Name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || total > 64 * 1024 * 1024)
+                        throw new InvalidDataException("Invalid sensor dependency path or size.");
+                    string path = Path.Combine(Path.GetDirectoryName(script), entry.Name);
+                    using (var input = entry.Open())
+                    using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write)) input.CopyTo(output);
+                }
+            }
         }
     }
     static byte[] ReadPart(byte[] source, int offset, int length) { var part = new byte[length]; Buffer.BlockCopy(source, offset, part, 0, length); return part; }
@@ -61,7 +75,7 @@ internal static class PCCollectorHost {
         bool selfTest = args.Length == 1 && args[0] == "--self-test";
         if (args.Length != 0 && !preview && !selfTest) { Console.Error.WriteLine("Usage: PCCollector.exe [-Preview | --self-test]"); return 2; }
         string root = Path.Combine(Path.GetTempPath(), "PCCollector-" + Guid.NewGuid().ToString("N"));
-        string script = Path.Combine(root, "GetInfo_Upload.ps1"), library = Path.Combine(root, "OpenHardwareMonitorLib.dll");
+        string script = Path.Combine(root, "GetInfo_Upload.ps1"), library = Path.Combine(root, "LibreHardwareMonitorLib.dll");
         try {
             Directory.CreateDirectory(root); Protect(root); ExtractPayload(script, library);
             string windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
@@ -72,9 +86,9 @@ internal static class PCCollectorHost {
                 var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = process.StandardError.ReadToEndAsync();
                 if (!process.WaitForExit(15 * 60 * 1000)) { process.Kill(); process.WaitForExit(); throw new TimeoutException("Collector exceeded 15 minutes."); }
                 string output = stdout.Result, error = stderr.Result; Console.Write(output); Console.Error.Write(error);
-                if (!selfTest && !preview) Log("exit=" + process.ExitCode + (String.IsNullOrWhiteSpace(error) ? "" : " " + error)); return process.ExitCode;
+                if (!selfTest && !preview) Log("exit=" + process.ExitCode + (String.IsNullOrWhiteSpace(output) ? "" : " " + output.Trim()) + (String.IsNullOrWhiteSpace(error) ? "" : " " + error)); return process.ExitCode;
             }
         } catch (Exception ex) { Console.Error.WriteLine(ex.Message); if (!selfTest && !preview) { try { Log("failed: " + ex.Message); } catch { } } return 1; }
-        finally { foreach (var item in new[] {script, library}) { try { if (File.Exists(item)) File.Delete(item); } catch { } } try { Directory.Delete(root, false); } catch { } }
+        finally { foreach (var item in Directory.Exists(root) ? Directory.GetFiles(root) : new string[0]) { try { if (File.Exists(item)) File.Delete(item); } catch { } } try { Directory.Delete(root, false); } catch { } }
     }
 }

@@ -4,7 +4,7 @@
 
 ## PC 来源与采集脚本
 
-见 [PC 日志采集与分析](pc-collection.md)，包含 SMB/FTP 来源、终端 EXE、域启动脚本、每日去重与失败恢复。Web/Worker 的运行权限与终端写共享权限分别核对。
+见 [PC 日志采集与分析](pc-collection.md)，包含 API 配置、终端 EXE、域启动脚本、按日留存与失败恢复。终端必须能够访问 Web 的上传端点。
 
 ## 网络设备 SNMP / SSH 巡检
 

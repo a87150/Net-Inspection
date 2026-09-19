@@ -174,8 +174,7 @@ class Command(BaseCommand):
                 refs = protected_references(target) + protected_references(task)
                 if archive is not None:
                     row = encoded({'kind': 'result', 'target': fields(target), 'task': fields(task),
-                                   'protected_references': refs,
-                                   'fetched_log_ids': list(target.fetched_logs.values_list('pk', flat=True))})
+                                   'protected_references': refs})
                     archive.write(row)
                     digest.update(row)
                 else:

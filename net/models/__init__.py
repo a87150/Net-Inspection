@@ -1,3 +1,4 @@
+from .pc_upload import PCUploadConfig
 from .access import AccessRecordSource, AccessRecord
 from .collection_profiles import DeviceCollectionTemplate, DeviceCollectionBinding
 from .alerts import AlertChannel, AlertDelivery, AlertEvent, AlertPolicy, AlertState, AlertTestSend
@@ -11,9 +12,8 @@ from .domain import (
 from .integrations import PeopleSyncSource
 from .people import People
 from .issue_policy import IssueSeverityPolicy
-from .pc_sources import ComputerLogTransfer, PCLogSourceConfig
 from .records import (
-    ComputerAnalysis, ComputerLogArchive, ComputerLogFile, Error_Computer,
+    ComputerAnalysis, ComputerLogFile, Error_Computer,
     Error_Monitor, Error_Network_Device, Error_Server, Monitor_Inspection,
     Network_Device_Inspection, RecordStatus, Server_Inspection,
 )
@@ -21,6 +21,7 @@ from .tasks import ComputerAnalysisProfile, InspectionProfile, Schedule, TaskRun
 
 
 __all__ = [
+    "PCUploadConfig",
     "AccessRecordSource", "AccessRecord",
     "DeviceCollectionTemplate", "DeviceCollectionBinding",
     'AlertNotificationTemplate', 'DomainOU', 'DomainMembership',
@@ -28,8 +29,7 @@ __all__ = [
     'IssueSeverityPolicy',
     'People', 'Domain_Account', 'Domain_Computer', 'Domain_Group', 'Computer', 'Network_Device',
     'Server', 'SecurityDevice', 'Domain_Controller_Config', 'DomainOperation',
-    'RecordStatus', 'ComputerLogFile', 'PCLogSourceConfig', 'ComputerLogTransfer',
-    'ComputerLogArchive', 'ComputerAnalysis',
+    'RecordStatus', 'ComputerLogFile', 'ComputerAnalysis',
     'Network_Device_Inspection', 'Server_Inspection', 'Monitor_Inspection',
     'Error_Computer', 'Error_Network_Device', 'Error_Server', 'Error_Monitor',
     'InspectionProfile', 'ComputerAnalysisProfile', 'Schedule', 'TaskRun',

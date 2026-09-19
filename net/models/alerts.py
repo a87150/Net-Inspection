@@ -525,7 +525,7 @@ class AlertEvent(models.Model):
             task = target.task
         if task.task_type == 'inspection' and task.inspection_profile_id and not task.analysis_profile_id:
             profile_type, profile_id = 'inspection_profile', str(task.inspection_profile_id)
-        elif task.task_type in ('computer_analysis', 'computer_fetch') and task.analysis_profile_id and not task.inspection_profile_id:
+        elif task.task_type == 'computer_analysis' and task.analysis_profile_id and not task.inspection_profile_id:
             profile_type, profile_id = 'computer_analysis_profile', str(task.analysis_profile_id)
         else:
             raise ValidationError({'task': '任务配置类型无效。'})

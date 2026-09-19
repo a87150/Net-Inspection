@@ -1,100 +1,33 @@
-# Computer log import and selected analysis contract
+# PC 日志与分析合同（0.9.1）
 
-The Worker reads only JSON files already present in configured server-side
-directories. It does not start PowerShell, contact computers, or open remote
-terminals. Analysis of an existing `ComputerLogFile` never rescans its source.
+PC 日志以 UTF-8 JSON 直传 POST /api/pc/logs/。这是仅写入的 Bearer Token API：不创建网站会话，也不授予读取、下载或执行权限。服务端不扫描共享目录、FTP/FTPS，不远程运行 PowerShell 或登录终端。
 
-## Selected fields
+## 接收和存储
 
-Only selected items generate details/findings. An absent required top-level key
-produces `data_state=missing`; null, a wrong shape, unrecognized status or invalid
-required nested value produces `data_state=unknown`. Both are failed analyses,
-with the selected item named in `analysis_item`. Invalid selected details retain
-their original (sanitized) shape, not a fabricated empty list or healthy status.
+请求必须是 application/json、小于等于 16 MiB，并带 Authorization: Bearer <token>。JSON 必须有 platform（windows 或 macos）、可解析的 日志时间 和 系统信息概览.计算机名；日志时间不能比服务端当前时间晚十分钟。相同内容哈希返回原有 log_id。日志为 daily_latest 时，同一 PC 同一日志日期的较旧版本返回已保存的较新 log_id。
 
-| Item | Required PowerShell JSON contract | Empty / normal semantics |
+新日志按顶级字段拆到 JSON 列：已知采集区段进入对应列，出现的区段名进入 present_sections，其余顶级字段进入 extra_fields；读取时再组合逻辑 payload。旧记录仍用 legacy_payload 保存原始 JSON。0053_pc_api_logs 回填可得到的 collected_at 等字段，不删除历史记录。
+
+## 选择性分析
+
+仅任务选中的项目生成结果和问题。缺少字段为 missing；空值、结构错误、未知状态或无效嵌套值为 unknown，不会伪造成正常数据。
+
+| 项目 | 主要字段 | 语义 |
 | --- | --- | --- |
-| activation | `Windows激活信息` object with known `许可证状态` text | `已授权` is normal; other known states are findings. KMS clients are checked against the configured server list when that list is nonempty. |
-| software | `已安装软件列表` array; each object has nonempty known `软件名` | `[]` means collected, no entries. When a policy path is configured, INI allow-list, employee-specific allow-list and deny-list rules are applied. |
-| processes | `当前运行进程清单` array; each object has nonempty known `进程名` | `[]` means collected, no entries; inventory only. |
-| bitlocker | `BitLocker状态.磁盘卷信息` array; each row has known `卷` and `转换状态` | Empty volume array is explicitly `data_state=empty` and fails because it cannot establish encryption. Fully/encrypting used-space states use the existing encryption rule. |
-| defender | `WindowsDefender状态` object with known nonempty `当前病毒库版本` and valid update/scan times | Empty fields/object are unknown. Update and scan ages use their configured maximum days. |
-| patches | `系统更新历史` array; rows have known `补丁名称` and valid `日期` | `[]` means collected, no history entries. The newest patch date is checked against the configured maximum age. |
-| domain | `已应用策略` object and `当前与域服务器通讯情况` | Empty policy object is valid if communication is explicitly `正常通讯` or `未加入域`; `无法访问` is an issue; other statuses are unknown. |
-| system | `系统信息概览` object with `系统主要版本名` | The Windows release is compared with the configured minimum release. |
-| uptime | `系统信息概览` object with `开机时间` | Elapsed uptime is compared with the configured maximum hours. |
-| resource | `计算机硬件资源情况` object with `当前CPU占用率` and `当前内存使用率` | Both must be percentage strings in 0–100 and are checked against their configured warning thresholds. |
-| event_findings | `事件发现` array (legacy `事件日志` only if primary key is absent); rows have known `级别`, `severity` or `Level` | `[]` means no events; info/information/informational, warning, error, critical, verbose and documented Chinese equivalents are recognized. Error/critical are findings. |
+| activation | Windows激活信息 | 已授权为正常；KMS 配置存在时检查。 |
+| software / processes | 已安装软件列表 / 当前运行进程清单 | 空数组表示已采集但无条目；软件可使用白名单或黑名单。 |
+| bitlocker | BitLocker状态.磁盘卷信息 | 空卷不能证明加密状态。 |
+| defender / patches | WindowsDefender状态 / 系统更新历史 | 按配置时限检查。 |
+| domain / system / uptime | 域通信和策略、系统信息概览 | 按域、版本、开机时长检查；macOS 不执行 Windows 专用项目。 |
+| resource / disk | 计算机硬件资源情况 | CPU/内存百分比为 0–100；磁盘使用率取有效容量与空闲量。 |
+| event_findings | 事件发现（兼容旧事件日志） | 警告、错误、严重事件形成问题。 |
 
-Dates accept `YYYY-MM-DD HH:MM:SS` or `YYYY-MM-DD`. The existing supplied
-`agents/pc/windows/GetInfo_JSON.ps1` does **not** collect processes, domain or events: selecting
-those options on its output explicitly fails with missing-data findings. The
-script is unchanged by the review fix. Singleton objects instead of arrays and
-null collection outputs are not silently treated as valid collections.
+日期接受 YYYY-MM-DD HH:MM:SS 或 YYYY-MM-DD。success 仅表示所选项目满足已实现规则，不是完整安全或合规认证。
 
-`success` means the selected data satisfied these contracts and no implemented
-rule found an issue. It is not a broader security/compliance certification.
+## 入队、引用和留存
 
-## Configurable analysis rules
+手动和定时分析选择每台 PC 的最新保留日志，按 collected_at 再按 ID 排序，并在入队时冻结。分析保存普通 log_id、来源采集时间、规则快照、结果和问题；不保存完整原始日志，也不建立日志外键。
 
-The log-analysis configuration dialog stores the software-policy INI path,
-minimum Windows release, Defender update/scan ages, patch age, maximum uptime,
-CPU/memory thresholds and allowed KMS servers. Relative policy paths resolve
-from the Django project root. A missing or malformed policy is saved as a
-`软件策略问题` finding instead of aborting the Worker. Domain-qualified employee
-identities such as `DOMAIN\\H1` are matched by employee number (`H1`).
+日志 daily_latest 每台 PC 每日志日期仅保留最新版本，往日保留；all 保留所有版本。分析的 analysis_retention 独立按分析日期管理 daily_latest 或 all。日志清理不删除分析结果；详情按需用 log_id 读原始日志，已清理时页面说明不可用。已被排队或运行任务选中的日志延后至任务结束清理，分析 all 的结果不随日志删除。
 
-Each queued task contains an immutable snapshot of these values, so editing the
-profile does not change rules for a task that is already waiting or running.
-
-## File boundaries and producer handoff
-
-Each poll snapshots its configuration. Recent N days is the inclusive rolling
-window `[now - N days, now]`; explicit dates cover both complete days in Django's
-current/configured timezone, `[start midnight, midnight after end date)`.
-Recursion is optional. Configured processed/failed directories must be below a
-scan root and are excluded from discovery. Linked files, ancestor symlinks and
-Windows directory junctions are rejected.
-
-The scanner checks device/inode identity, size and nanosecond mtime before and
-after reading a regular-file descriptor. Total bytes read are bounded at
-`MAX_LOG_FILE_BYTES + 1` (default limit 16 MiB). Unstable files stay at source and
-produce retryable summaries. A SHA-256 check of the exact bytes and identity is
-repeated before archive and checked after rename. In-place changes with unchanged
-size/mtime are therefore detected as well. Malformed, nonfinite or excessively
-nested JSON is persisted as failed evidence; the original file is preserved.
-
-Producers should write a temporary non-JSON name, close it, then atomically rename
-it into the scan folder. They must not keep writing through an open descriptor
-after handoff. No portable scanner can prevent an uncooperative producer holding
-an already-open file from modifying it after the scanner has finished its checks.
-
-## Transactions and recoverable archives
-
-Import/scanning entry points reject an enclosing application transaction. Each
-hash attempt uses its own durable transaction; duplicate insert/deadlock/lock-timeout
-races roll back the whole transaction before retrying, at most three times. Valid,
-malformed and static-schema-invalid files use the same path. Static asset updates
-and evidence insert commit together. Exhausted races are summarized per candidate
-and do not abort the remaining poll. SQLite writers are additionally serialized
-inside a process; production MySQL uses row locks, uniqueness and fresh retries.
-
-Every source copy (including hash duplicates) has a `ComputerLogArchive` journal:
-a deterministic key/path derived from source path, identity and content hash is
-committed as `pending` **before** the filesystem move. Windows uses no-replace
-`rename`; Linux uses `renameat2(RENAME_NOREPLACE)`. There is no overwrite or
-copy/delete fallback: cross-filesystem/unsupported moves fail safely and retain
-the source plus journal. Configure archive folders on the same filesystem.
-
-Completing the journal and updating the legacy evidence `archived_path` share a
-transaction. If that transaction fails after a successful move, the next scan
-reconciles the durable destination by identity/hash even when source is absent.
-A failed move retries the same pending path. Changed generations are restored
-to source; if a new upload already owns that name, recovery uses a deterministic
-`*-retry.json` sibling without overwriting either file. Old attempts become
-`changed`. Destination collisions are retained and reported, never overwritten.
-Pending paths outside the currently configured roots are not followed; restore
-the original permitted configuration to reconcile them.
-
-Analysis history, Worker lease/cancellation checks and recursive sanitization
-remain unchanged. The additive archive-journal migration contains no data migration.
+PCUploadConfig 只有一份，含 endpoint_url、is_enabled、log_retention。首次保存生成令牌，以 PC_LOG_SOURCE_ENCRYPTION_KEY 加密且不回显；重置后重新下载部署包。普通用户不能配置、下载、执行或读取令牌。规则在入队时冻结。真实迁移与终端 API 连通性仍需部署验收。

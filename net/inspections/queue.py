@@ -60,7 +60,7 @@ _ASSET_SPECS = {
     ),
     TaskTargetRun.TargetType.COMPUTER_LOG: (
         ComputerLogFile,
-        ('source_path', 'modified_at', 'content_hash', 'import_status', 'archived_path'),
+        ('computer_id', 'collected_at', 'content_hash'),
     ),
 }
 
@@ -122,6 +122,7 @@ def _task_context_for_profile(profile):
                 'name': profile.name,
                 'analysis_items': list(profile.analysis_items),
                 'matching_mode': profile.matching_mode,
+                'analysis_retention': profile.analysis_retention,
                 'software_policy_path': profile.software_policy_path,
                 'software_policy_mode': profile.software_policy_mode,
                 'software_policy_snapshot': software_policy_snapshot(profile.software_policy_path),
@@ -187,7 +188,7 @@ def _target_snapshot(target, fields):
     for field_name in fields:
         value = getattr(target, field_name)
         snapshot[field_name] = (
-            value.isoformat() if hasattr(value, 'isoformat') else value
+            value.isoformat() if hasattr(value, 'isoformat') else (str(value) if field_name == 'computer_id' else value)
         )
     return snapshot
 
@@ -257,6 +258,28 @@ def _validate_target_before_enqueue(target):
 
 
 def enqueue_task(profile, target_ids, source, overrides=None, *, _frozen_parent=None):
+    if not isinstance(profile, ComputerAnalysisProfile):
+        return _enqueue_task(profile, target_ids, source, overrides, _frozen_parent=_frozen_parent)
+    from net.models import Computer
+    from net.devices.pc.analysis_scope import latest_logs
+    from net.inspections.executor import _database_guard
+    selected_ids = _normalize_target_ids(target_ids, TaskTargetRun.TargetType.COMPUTER_LOG)
+    with _database_guard(), transaction.atomic():
+        ComputerAnalysisProfile.objects.select_for_update().get(pk=profile.pk)
+        computer_ids = list(ComputerLogFile.objects.filter(pk__in=selected_ids).order_by('computer_id')
+                            .values_list('computer_id', flat=True).distinct())
+        if not computer_ids:
+            raise ValidationError('没有可分析的数据库日志，请等待终端上报。')
+        list(Computer.objects.select_for_update().filter(pk__in=computer_ids).order_by('pk').values_list('pk', flat=True))
+        if TaskTargetRun.objects.filter(task__analysis_profile=profile,
+                task__status__in=TaskRun.ACTIVE_STATUSES, target_type='computer_log',
+                target_snapshot__computer_id__in=[str(pk) for pk in computer_ids]).exists():
+            raise ValidationError('当前配置已有这些 PC 的活动分析任务，请等待完成。')
+        ids = list(latest_logs(computer_ids).values_list('pk', flat=True))
+        return _enqueue_task(profile, ids, source, overrides, _frozen_parent=_frozen_parent)
+
+
+def _enqueue_task(profile, target_ids, source, overrides=None, *, _frozen_parent=None):
     """Create one queued task with immutable profile and target snapshots."""
     if overrides is None:
         overrides = {}
@@ -389,134 +412,6 @@ def enqueue_task(profile, target_ids, source, overrides=None, *, _frozen_parent=
     return task
 
 
-def enqueue_computer_fetch_task(profile, source, overrides=None):
-    """Queue a Worker-owned fetch of the singleton remote inbox.
-
-    A fetch has one synthetic source target. This preserves normal task leases,
-    progress and duplicate-scope protection without allowing a Web request or
-    schedule poller to touch the filesystem.
-    """
-    if not isinstance(profile, ComputerAnalysisProfile):
-        raise ValidationError({'profile': '日志获取必须使用计算机日志分析配置。'})
-    if profile.pk is None:
-        raise ValidationError({'profile': '配置必须先保存。'})
-    if not profile.is_enabled:
-        raise ValidationError({'profile': '已停用的配置不能创建任务。'})
-    try:
-        profile.full_clean()
-    except ValidationError as exc:
-        raise ValidationError({'profile': exc.message_dict}) from exc
-    if source not in TaskRun.Source.values:
-        raise ValidationError({'source': '任务来源无效。'})
-    if overrides is None:
-        overrides = {}
-    elif not isinstance(overrides, Mapping):
-        raise ValidationError({'overrides': '任务参数必须是 JSON 对象。'})
-    else:
-        overrides = dict(overrides)
-    unsupported = set(overrides) - {
-        'selected_items', 'parameters', 'available_at', 'schedule',
-    }
-    if unsupported:
-        raise ValidationError({
-            'overrides': f'不支持的任务参数: {", ".join(sorted(unsupported))}',
-        })
-
-    selected_items = overrides.get('selected_items', profile.analysis_items)
-    if (
-        not isinstance(selected_items, list)
-        or any(not isinstance(item, str) or not item.strip() for item in selected_items)
-        or len(selected_items) != len(set(selected_items))
-        or any(item not in profile.analysis_items for item in selected_items)
-    ):
-        raise ValidationError({'selected_items': '只能选择配置已启用的分析项目。'})
-    parameters = _json_object_copy(overrides.get('parameters', {}), 'parameters')
-    available_at = overrides.get('available_at', timezone.now())
-    if not isinstance(available_at, datetime) or timezone.is_naive(available_at):
-        raise ValidationError({'available_at': '可执行时间必须使用带时区的时间。'})
-    schedule = overrides.get('schedule')
-    _task_type, _target_type, _profile_items, profile_snapshot = (
-        _task_context_for_profile(profile)
-    )
-    from net.models import PCLogSourceConfig
-    from net.devices.pc.configuration import source_snapshot
-    log_source = PCLogSourceConfig.load()
-    if log_source is None:
-        raise ValidationError('请先保存 PC 日志来源配置。')
-    log_source.full_clean()
-    profile_snapshot['log_source'] = source_snapshot(log_source)
-    from net.devices.pc.matching import personnel_snapshot
-    roster = (personnel_snapshot(active_only=True) if profile_snapshot.get('matching_mode') == 'people'
-              else personnel_snapshot())
-    parameters = _json_object_copy({**parameters, 'personnel_roster': roster}, 'parameters')
-    reused_ids = []
-    if source == TaskRun.Source.MANUAL:
-        from net.devices.pc.analysis_scope import stored_log_ids
-        scope_now = timezone.now()
-        reused_ids = stored_log_ids(log_source, now=scope_now)
-        parameters.update(analysis_scope='source_window', reused_log_count=len(reused_ids),
-                          log_window_at=scope_now.isoformat())
-    target_scope_snapshot = {
-        'targets': [{
-            'target_type': TaskTargetRun.TargetType.COMPUTER_SOURCE,
-            'target_id': str(log_source.pk),
-        }],
-    }
-    task = TaskRun(
-        task_type=TaskRun.TaskType.COMPUTER_FETCH,
-        source=source,
-        analysis_profile=profile,
-        schedule=schedule,
-        available_at=available_at,
-        profile_snapshot=_json_object_copy(profile_snapshot, 'profile_snapshot'),
-        parameters_snapshot=parameters,
-        selected_items_snapshot=list(selected_items),
-        target_scope_snapshot=_json_object_copy(
-            target_scope_snapshot, 'target_scope_snapshot',
-        ),
-        total_targets=1,
-    )
-    task.scope_key = TaskRun.build_scope_key(
-        task_type=task.task_type,
-        profile_id=profile.pk,
-        target_scope_snapshot=target_scope_snapshot,
-    )
-    task.active_scope_key = task.scope_key
-    if TaskRun.objects.filter(active_scope_key=task.scope_key).exists():
-        raise ValidationError({'profile': '当前配置已有活动获取任务。'})
-    task.full_clean()
-    target = TaskTargetRun(
-        task=task,
-        target_type=TaskTargetRun.TargetType.COMPUTER_SOURCE,
-        target_id=str(log_source.pk),
-        target_snapshot={
-            'profile_id': str(profile.pk),
-            'profile_name': profile.name,
-            'source': source_snapshot(log_source),
-        },
-    )
-    _validate_target_before_enqueue(target)
-    try:
-        with transaction.atomic():
-            current_source = PCLogSourceConfig.objects.select_for_update().get(pk=1)
-            if source_snapshot(current_source) != profile_snapshot['log_source']:
-                raise ValidationError('日志来源刚刚发生变化，请重新创建任务。')
-            if source == TaskRun.Source.MANUAL and TaskTargetRun.objects.filter(
-                task__analysis_profile=profile, target_type=TaskTargetRun.TargetType.COMPUTER_SOURCE,
-                analysis_handoff_task__status__in=TaskRun.ACTIVE_STATUSES,
-            ).exists():
-                raise ValidationError('当前配置的分析阶段尚未结束，请查看原任务，勿重复提交。')
-            task.save()
-            target.save()
-            if reused_ids:
-                target.fetched_logs.add(*reused_ids)
-    except IntegrityError as exc:
-        if TaskRun.objects.filter(active_scope_key=task.scope_key).exists():
-            raise ValidationError({'profile': '当前配置已有活动获取任务。'}) from exc
-        raise
-    return task
-
-
 def _queue_now(now):
     now = timezone.now() if now is None else now
     if not isinstance(now, datetime) or timezone.is_naive(now):
@@ -547,20 +442,10 @@ def _recover_expired_locked(now):
                     continue
                 target.status = TaskRun.Status.FAILED
                 target.finished_at = now
-                handoff_fields = set()
-                if task.task_type == TaskRun.TaskType.COMPUTER_FETCH and target.fetched_logs.exists():
-                    # The fetch retry budget must not erase already committed
-                    # analysis intent. Worker reconciles this DB-only outbox.
-                    target.result_snapshot = {
-                        **target.result_snapshot, 'analysis_handoff_pending': True,
-                    }
-                    handoff_fields.add('result_snapshot')
                 target.error_message = (
                     f'{target.error_message}\n' if target.error_message else ''
                 ) + '任务租约过期且已达到最大重试次数。'
-                save_target(target, {
-                    'status', 'finished_at', 'error_message', *handoff_fields,
-                })
+                save_target(target, {'status', 'finished_at', 'error_message'})
             _finish_locked(task, now=now, target_runs=target_runs)
             _aggregate_domain_operation(task)
         else:

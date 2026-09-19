@@ -8,11 +8,11 @@ import subprocess
 HOST_DIRECTORY = Path(__file__).resolve().parents[2] / 'agents' / 'pc' / 'windows'
 PREBUILT_HOST = HOST_DIRECTORY / 'PCCollectorHost.exe'
 HOST_TEMPLATE = Path(__file__).with_name('templates') / 'PCCollectorHost.cs'
-MAGIC = b'PCCOLV01'
+MAGIC = b'PCCOLV02'
 FOOTER_SIZE = len(MAGIC) + 8 + 32
 PAYLOAD_HEADER_SIZE = 8 + 8 + 32 + 32
 # Updated by the reproducible Windows build command whenever the host changes.
-PREBUILT_HOST_SHA256 = 'c4fe3d27656c7b839d960e58e8089bb6a502be5d8e8d42270d43e737a1b51c3f'
+PREBUILT_HOST_SHA256 = '4b46884681ce458d8de46c0ef55286e873b09cecc1b8eb3dad35e4fb2588bf12'
 
 
 def _u64(value: int) -> bytes:
@@ -55,7 +55,7 @@ def build_prebuilt_host(output: Path = PREBUILT_HOST) -> str:
     output.parent.mkdir(parents=True, exist_ok=True)
     try:
         result = subprocess.run([str(compiler), '/nologo', '/target:exe', '/platform:anycpu',
-                                 '/out:' + str(output), str(HOST_TEMPLATE)],
+                                 '/reference:System.IO.Compression.dll', '/out:' + str(output), str(HOST_TEMPLATE)],
                                 capture_output=True, timeout=60,
                                 creationflags=subprocess.CREATE_NO_WINDOW)
     except (OSError, subprocess.TimeoutExpired) as exc:

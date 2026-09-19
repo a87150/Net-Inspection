@@ -22,7 +22,7 @@ from index.common.imports import (
     import_inventory,
 )
 from index.common.exports import table_export
-from index.devices.pc.logs import computer_log_list, computer_log_detail, computer_log_analyze
+from index.devices.pc.logs import computer_log_list, computer_log_detail
 from index.devices.configuration import configuration_download, configuration_zip
 from index.devices.pc.scripts import pc_script_download
 from index.people.integrations import people_provider_save, people_schedule_save, people_test, people_preview, people_apply, people_operation, people_task_status, people_task_acknowledge

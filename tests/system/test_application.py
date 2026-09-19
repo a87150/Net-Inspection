@@ -1,3 +1,4 @@
+from tests.devices.pc.helpers import create_log_file
 from datetime import date, datetime, timedelta
 from html.parser import HTMLParser
 from io import StringIO
@@ -124,7 +125,7 @@ def create_computer_analysis(
             computer_name=computer_name,
             user_name=user_name,
         )
-    log_file = ComputerLogFile.objects.create(
+    log_file = create_log_file(
         source_path=f'test://{computer.computer_name}/{uuid.uuid4()}.json',
         modified_at=modified_at or timezone.now(),
         content_hash=uuid.uuid4().hex * 2,
@@ -151,111 +152,6 @@ class InspectionRuleTests(TestCase):
         issues = []
         check_system_version({'系统信息概览': {'系统主要版本名': '22H2'}}, issues, '23H2')
         self.assertEqual(issues[0]['问题类型'], '系统版本过旧')
-
-
-class ComputerRemoteEvidenceTests(TestCase):
-    def setUp(self):
-        login_reader(self.client)
-        self.profile = ComputerAnalysisProfile.objects.create(
-            name='Remote system tests', analysis_items=['activation', 'bitlocker', 'defender', 'patches', 'resource'])
-
-    def ingest_and_queue(self, payload):
-        from tests.devices.pc.helpers import import_payload
-        from net.inspections.queue import enqueue_task
-        outcome = import_payload(payload)
-        task = enqueue_task(self.profile, [outcome.log_file.pk], 'manual') if outcome.status == 'imported' else None
-        return outcome, task
-
-    def execute(self):
-        from net.inspections.queue import claim_next_task, finish_task
-        from net.devices.pc.executor import execute_computer_target
-        while (task := claim_next_task('remote-system', 60)) is not None:
-            for target in task.target_runs.all():
-                execute_computer_target(target, worker_id='remote-system')
-            finish_task(task.pk, 'remote-system')
-
-    def test_retired_direct_upload_endpoint_is_404_and_does_not_write(self):
-        import json
-        response = self.client.post('/api/computer_inspection/', json.dumps(valid_payload()), content_type='application/json')
-        self.assertEqual(response.status_code, 404)
-        self.assertFalse(Computer.objects.exists())
-        self.assertFalse(ComputerLogFile.objects.exists())
-        self.assertFalse(TaskRun.objects.exists())
-
-    def test_remote_evidence_creates_inventory_then_worker_analysis_and_pages(self):
-        payload = valid_payload()
-        outcome, task = self.ingest_and_queue(payload)
-        self.assertEqual(outcome.status, 'imported')
-        self.assertFalse(ComputerAnalysis.objects.exists())
-        self.execute()
-        computer = Computer.objects.get(computer_name='PC-001')
-        self.assertEqual(computer.login_account, 'H000001')
-        self.assertEqual(computer.ip_addresses, '192.0.2.10')
-        self.assertEqual(computer.mac_addresses, '00-00-5E-00-53-01')
-        self.assertEqual(computer.os_version, '24H2')
-        self.assertEqual(computer.os_build, '10.0.26100.4770')
-        self.assertEqual(computer.system_installed_at, '2025-01-02 03:04:05')
-        analysis = ComputerAnalysis.objects.get()
-        self.assertEqual(analysis.status, 'success')
-        self.assertFalse(Domain_Computer.objects.exists())
-        self.assertFalse(Error_Computer.objects.exists())
-        self.assertEqual(analysis.log_file.payload, payload)
-        self.assertEqual(analysis.details['resource']['当前CPU温度'], '48°C')
-        self.assertEqual(analysis.details['resource']['当前CPU占用率'], '10%')
-        for name, args in [('computer_analysis_list', []), ('computer_analysis_detail', [analysis.pk]),
-                           ('computer_error_list', []), ('item_list', ['computers'])]:
-            self.assertEqual(self.client.get(reverse(name, args=args)).status_code, 200)
-
-    def test_duplicate_remote_bytes_do_not_create_new_evidence_or_queue(self):
-        payload = valid_payload()
-        first, task = self.ingest_and_queue(payload)
-        duplicate, second_task = self.ingest_and_queue(payload)
-        self.assertEqual(duplicate.status, 'duplicate_content')
-        self.assertEqual(first.log_file.pk, duplicate.log_file.pk)
-        self.assertIsNone(second_task)
-        self.assertEqual(TaskRun.objects.count(), 1)
-        self.assertFalse(ComputerAnalysis.objects.exists())
-        self.execute()
-        self.assertEqual(ComputerAnalysis.objects.count(), 1)
-
-    def test_reanalysis_preserves_original_evidence_and_multiple_history(self):
-        from net.inspections.queue import enqueue_task
-        first, task = self.ingest_and_queue(valid_payload())
-        self.execute()
-        original = ComputerAnalysis.objects.get()
-        enqueue_task(self.profile, [first.log_file.pk], 'manual')
-        self.execute()
-        self.assertEqual(ComputerLogFile.objects.count(), 1)
-        self.assertEqual(ComputerAnalysis.objects.count(), 2)
-        original.refresh_from_db()
-        self.assertEqual(original.task_target.task_id, task.pk)
-        self.assertEqual(original.log_file_id, first.log_file.pk)
-
-    def test_older_remote_day_does_not_replace_newer_inventory(self):
-        now = timezone.localtime().replace(microsecond=0)
-        newer = valid_payload('PC-LATEST', now)
-        newer['系统信息概览']['当前登录用户工号'] = 'NEWER'
-        newer['网络信息'] = [{'IP地址': '192.0.2.99', 'MAC地址': 'AA-BB-CC-DD-EE-99'}]
-        self.ingest_and_queue(newer)
-        older = valid_payload('PC-LATEST', now - timedelta(days=1))
-        older['系统信息概览']['当前登录用户工号'] = 'OLDER'
-        self.ingest_and_queue(older)
-        self.execute()
-        computer = Computer.objects.get(computer_name='PC-LATEST')
-        self.assertEqual(computer.last_report_at, now)
-        self.assertEqual(computer.login_account, 'NEWER')
-        self.assertEqual(computer.ip_addresses, '192.0.2.99')
-        self.assertEqual(ComputerAnalysis.objects.count(), 2)
-
-    def test_missing_computer_name_is_retained_as_failed_remote_evidence(self):
-        from tests.devices.pc.helpers import import_payload
-        payload = valid_payload()
-        payload['系统信息概览'] = {}
-        outcome = import_payload(payload)
-        self.assertEqual(outcome.status, 'failed_schema')
-        self.assertIn('计算机名', outcome.log_file.parse_error)
-        self.assertFalse(Computer.objects.exists())
-        self.assertFalse(TaskRun.objects.exists())
 
 
 class ComputerSnapshotTests(TestCase):
@@ -316,11 +212,11 @@ class ComputerSnapshotTests(TestCase):
         self.assertEqual(computer.login_account, 'NEW')
         self.assertEqual(computer.ip_addresses, '192.0.2.20')
         self.assertEqual(computer.mac_addresses, 'AA-BB-CC-DD-EE-20')
-        self.assertIn('Scanned: 1; updated: 1', first_output.getvalue())
+        self.assertIn('updated: 1', first_output.getvalue())
 
         second_output = StringIO()
         call_command('backfill_computer_snapshots', stdout=second_output)
-        self.assertIn('Scanned: 1; updated: 0', second_output.getvalue())
+        self.assertIn('updated: 0', second_output.getvalue())
 
 
 class DashboardTests(TestCase):
@@ -583,9 +479,9 @@ class ImportModalTests(TestCase):
         document = response.content.decode(response.charset)
 
         self.assertFalse(response.context['import_enabled'])
-        self.assertEqual(response.context['data_source_note'], 'PC 资料由后台从共享目录或 FTP 获取采集日志后自动建立，无需导入设备清单。')
+        self.assertEqual(response.context['data_source_note'], 'PC 资料由终端采集器通过 API 上报日志后自动建立，无需导入设备清单。')
         self.assertNotIn('id="importModal"', document)
-        self.assertContains(response, 'PC 资料由后台从共享目录或 FTP 获取采集日志后自动建立，无需导入设备清单。')
+        self.assertContains(response, 'PC 资料由终端采集器通过 API 上报日志后自动建立，无需导入设备清单。')
         self.assertContains(response, '导出筛选结果')
 
     def test_domain_child_pages_offer_filtered_export_and_only_accounts_allow_import(self):

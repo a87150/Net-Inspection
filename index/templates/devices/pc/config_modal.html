@@ -1,25 +1,23 @@
 {% if can_administer %}
-{% load static %}
 <div class="modal fade inspection-config-modal" id="profileConfigModal" data-auto-open="{{ profile_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="profileConfigModalLabel" aria-hidden="true">
  <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
-  <div class="modal-header"><h2 class="modal-title fs-5" id="profileConfigModalLabel">PC 日志来源与分析配置</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
+  <div class="modal-header"><h2 class="modal-title fs-5" id="profileConfigModalLabel">PC API 与分析配置</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
   <div class="modal-body modal-body--scroll">
-   <p class="text-secondary small">终端每天写入汇总目录。手动执行会先获取新日志，再按当前来源和日期范围分析有效日志（含已入库日志），无需再单独启动分析。配置修改只影响后续任务。</p>
+   <p class="text-secondary small">终端通过 API 将日志直接写入数据库。手动和定时执行都只分析每台 PC 当前保留的最新日志。</p>
    <div class="inspection-config-layout">
-   {% if request.user.is_staff or request.user.is_superuser %}
-    <form id="pc-source-config-form" class="inspection-config-layout" method="post" action="{% url 'pc_log_source_save' %}" data-pc-source-form>
-    {% csrf_token %}
-    {% if can_administer %}{% include 'devices/pc/source_fields.html' with form=pc_log_source_form %}{% endif %}
-    </form>
-   {% else %}<div class="alert alert-secondary mb-0">日志来源设置与采集脚本下载需要管理员权限。</div>{% endif %}
+   <form id="pc-upload-config-form" class="inspection-config-layout" method="post" action="{% url 'pc_upload_config_save' %}">
+    {% csrf_token %}{{ pc_upload_config_form.non_field_errors }}
+    <section class="inspection-config-block"><div class="inspection-config-block__heading"><span class="inspection-config-block__index">01</span><div><h3 class="h6 mb-1">终端 API 配置</h3><p class="mb-0">保存后下载采集包；令牌不会再次显示。</p></div></div><div class="row g-3">{% include 'devices/pc/config_field.html' with field=pc_upload_config_form.endpoint_url col='col-md-8' %}{% include 'devices/pc/config_field.html' with field=pc_upload_config_form.log_retention col='col-md-4' %}{% include 'devices/pc/config_field.html' with field=pc_upload_config_form.is_enabled col='col-12' %}{% include 'devices/pc/config_field.html' with field=pc_upload_config_form.token col='col-12' %}</div></section>
+   </form>
+   {% if pc_upload_config %}<form id="pc-upload-token-reset-form" method="post" action="{% url 'pc_upload_config_reset_token' %}">{% csrf_token %}</form>{% endif %}
    <form id="pc-analysis-config-form" class="inspection-config-layout" method="post" enctype="multipart/form-data" action="{% url 'computer_analysis_profile_configure' %}">
     {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
     {{ pc_analysis_form.profile_id }}{{ pc_analysis_form.non_field_errors }}
 <section class="inspection-config-block"><div class="inspection-config-block__heading"><span class="inspection-config-block__index">04</span><div><h3 class="h6 mb-1">选择配置与执行参数</h3><p class="mb-0">选择已有分析配置，并设置名称及下载、分析的并发上限。</p></div></div><div class="row g-3">{% if task_profiles %}<div class="col-md-4"><label class="form-label" for="pc-profile-switch">编辑配置</label><select id="pc-profile-switch" class="form-select" data-pc-profile-switch>{% for profile in task_profiles %}<option value="{{ profile.pk }}"{% if profile.pk == task_default_profile.pk %} selected{% endif %}>{{ profile.name }}</option>{% endfor %}</select></div>{% endif %}
- {% include 'devices/pc/config_field.html' with field=pc_analysis_form.matching_mode col='col-md-6' %} {% include 'devices/pc/config_field.html' with field=pc_analysis_form.name col='col-md-5'   %}{% include 'devices/pc/config_field.html' with field=pc_analysis_form.concurrent_workers col='col-md-3'   %}</div>
- {% if pc_log_source and task_default_profile %}{% if request.user.is_staff or request.user.is_superuser %}
+ {% include 'devices/pc/config_field.html' with field=pc_analysis_form.matching_mode col='col-md-6' %}{% include 'devices/pc/config_field.html' with field=pc_analysis_form.analysis_retention col='col-md-6' %} {% include 'devices/pc/config_field.html' with field=pc_analysis_form.name col='col-md-5'   %}{% include 'devices/pc/config_field.html' with field=pc_analysis_form.concurrent_workers col='col-md-3'   %}</div>
+ {% if pc_upload_config and task_default_profile %}
  <div class="d-flex flex-wrap gap-2 mt-3"><a class="btn btn-outline-secondary btn-sm" href="{% url 'pc_script_download' task_default_profile.pk 'windows' %}">下载 Windows 采集包</a><a class="btn btn-outline-secondary btn-sm" href="{% url 'pc_script_download' task_default_profile.pk 'macos' %}">下载 macOS 采集脚本</a></div>
- {% endif %}{% endif %}</section>
+ {% endif %}</section>
 <section class="inspection-config-block"><div class="inspection-config-block__heading"><span class="inspection-config-block__index">05</span><div><h3 class="h6 mb-1">分析规则与阈值</h3><p class="mb-0">硬件阈值、软件策略及人员站点映射，均使用当前分析配置。</p></div></div><div class="row g-3">{% include 'devices/pc/config_field.html' with field=pc_analysis_form.cpu_max_percent col='col-md-3'   %}
 {% include 'devices/pc/config_field.html' with field=pc_analysis_form.memory_max_percent col='col-md-3'   %}
 {% include 'devices/pc/config_field.html' with field=pc_analysis_form.disk_max_percent col='col-md-3' %}
@@ -39,7 +37,7 @@
  <div class="row row-cols-1 row-cols-md-3 g-2">{% for key, label in task_item_choices %}
  <label class="col form-check" for="pc-analysis-{{ key }}"><input id="pc-analysis-{{ key }}" class="form-check-input" type="checkbox" data-bulk-choice name="analysis_items" value="{{ key }}"{% if key in task_default_items %} checked{% endif %}><span class="form-check-label">{{ label }}</span></label>
  {% endfor %}</div>{{ pc_analysis_form.analysis_items.errors }}</fieldset></section>
-<section class="inspection-config-block"><div class="inspection-config-block__heading"><span class="inspection-config-block__index">07</span><div><h3 class="h6 mb-1">定时设置</h3><p class="mb-0">保存并启用后，由独立 Worker 按计划获取日志并分析。</p></div></div><div class="row g-3">{% include 'devices/pc/config_field.html' with field=pc_analysis_form.schedule_enabled col='col-12'   %}
+<section class="inspection-config-block"><div class="inspection-config-block__heading"><span class="inspection-config-block__index">07</span><div><h3 class="h6 mb-1">定时设置</h3><p class="mb-0">保存并启用后，由独立 Worker 定时分析每台 PC 最新日志。</p></div></div><div class="row g-3">{% include 'devices/pc/config_field.html' with field=pc_analysis_form.schedule_enabled col='col-12'   %}
  <div class="col-md-3"><label class="form-label" for="pc-schedule-kind">执行方式</label><select id="pc-schedule-kind" class="form-select" name="schedule_kind" data-schedule-kind>
  <option value="interval"{% if pc_analysis_form.schedule_kind.value != 'daily' %} selected{% endif %}>每隔 N 分钟/小时</option><option value="daily"{% if pc_analysis_form.schedule_kind.value == 'daily' %} selected{% endif %}>每天指定时间</option></select></div>
  {% include 'devices/pc/config_field.html' with field=pc_analysis_form.interval_value col='col-md-3'  schedule='interval' %}
@@ -51,14 +49,9 @@
   </div>
   <div class="modal-footer modal-footer--sticky">
    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
-   {% if request.user.is_staff or request.user.is_superuser %}<button class="btn btn-outline-primary" type="submit" form="pc-source-config-form">保存日志来源</button>{% endif %}
+   <button class="btn btn-outline-primary" type="submit" form="pc-upload-config-form">保存 API 配置</button>{% if pc_upload_config %}<button class="btn btn-outline-danger" type="submit" form="pc-upload-token-reset-form">重置采集令牌</button>{% endif %}
    <button class="btn btn-primary" type="submit" form="pc-analysis-config-form">保存分析与定时配置</button>
   </div>
  </div></div>
 </div>
-{% if request.user.is_staff or request.user.is_superuser %}{% if pc_log_source %}
-<form id="pc-source-test-form" data-modal-owner="profileConfigModal" method="post" action="{% url 'pc_log_source_test' %}" hidden>{% csrf_token %}</form>
-<form id="pc-source-preview-form" data-modal-owner="profileConfigModal" method="post" action="{% url 'pc_log_source_preview' %}" hidden>{% csrf_token %}</form>
-{% endif %}{% endif %}
-<script src="{% static 'app/js/pc_source.js' %}" defer></script>
 {% endif %}

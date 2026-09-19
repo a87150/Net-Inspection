@@ -125,10 +125,11 @@ class DeterministicDemoSeedTests(TestCase):
                 is_active=True,
             )
             log_file = ComputerLogFile.objects.create(
-                source_path=f"demo://{spec['computer_name']}.json",
-                modified_at=now - timedelta(hours=index),
+                computer=computer,
+                collected_at=now - timedelta(hours=index),
+                collected_date=timezone.localdate(now - timedelta(hours=index)),
+                platform='windows',
                 content_hash=spec['content_hash'],
-                import_status='success',
                 payload={
                     '系统信息概览': {'计算机名': spec['computer_name']},
                 },
@@ -318,7 +319,7 @@ class DeterministicDemoSeedTests(TestCase):
     def test_reset_preserves_rows_outside_the_named_demo_scope(self):
         person = People.objects.create(name='真实人员', employee_id='REAL-001')
         device = Network_Device.objects.create(
-            device_name='真实交换机', ip='10.10.10.10',
+            device_name='真实交换机', ip='203.0.113.200',
         )
         config = Domain_Controller_Config.objects.create(
             name='生产域控', host='dc.corp.internal', bind_username='svc-reader',
@@ -349,7 +350,7 @@ class DeterministicDemoSeedTests(TestCase):
             error_message={'用户标记': '必须保留'},
         )
         owned_log = ComputerLogFile.objects.get(
-            source_path='demo://powershell/DEMO-PC-OPS-01-1.json',
+            content_hash='5a6d844f48ecb09223016b93d251e8863f3767c6c9e756efcfc655ac7f9b76e5',
         )
         shared_log_analysis = ComputerAnalysis.objects.create(
             computer=demo_computer,
@@ -357,10 +358,11 @@ class DeterministicDemoSeedTests(TestCase):
             summary='共享演示日志的用户分析',
         )
         user_log = ComputerLogFile.objects.create(
-            source_path='demo://user-upload.json',
-            modified_at=timezone.now(),
+            computer=demo_computer,
+            collected_at=timezone.now(),
+            collected_date=timezone.localdate(),
+            platform='windows',
             content_hash='a' * 64,
-            import_status='success',
         )
         user_log_analysis = ComputerAnalysis.objects.create(
             computer=demo_computer,
@@ -390,20 +392,20 @@ class DeterministicDemoSeedTests(TestCase):
         conflict = Network_Device.objects.create(
             id=uuid.UUID('92f5508e-a97a-5a1a-8762-22b735e2826f'),
             device_name='用户设备',
-            ip='10.20.30.41',
+            ip='203.0.113.201',
         )
 
         with self.assertRaisesMessage(CommandError, '演示数据 UUID 冲突'):
             call_command('seed_demo_data', reset=True, stdout=StringIO())
 
         conflict.refresh_from_db()
-        self.assertEqual(conflict.ip, '10.20.30.41')
+        self.assertEqual(conflict.ip, '203.0.113.201')
         self.assertFalse(People.objects.filter(employee_id='DEMO-P001').exists())
         self.assertFalse(Network_Device.objects.filter(ip='192.0.2.11').exists())
 
     def test_record_uuid_collision_is_not_deleted_or_overwritten(self):
         device = Network_Device.objects.create(
-            device_name='用户交换机', ip='10.20.30.42',
+            device_name='用户交换机', ip='203.0.113.202',
         )
         conflict = Network_Device_Inspection.objects.create(
             id=uuid.UUID('d69ccd6f-def8-5c0f-b9d8-23b3c50c9ecc'),
@@ -422,7 +424,7 @@ class DeterministicDemoSeedTests(TestCase):
 
     def test_error_uuid_collision_is_not_deleted_or_overwritten(self):
         device = Network_Device.objects.create(
-            device_name='用户交换机', ip='10.20.30.43',
+            device_name='用户交换机', ip='203.0.113.203',
         )
         inspection = Network_Device_Inspection.objects.create(
             device=device,
@@ -443,20 +445,19 @@ class DeterministicDemoSeedTests(TestCase):
         self.assertEqual(conflict.error_message, {'用户异常': '不可覆盖'})
         self.assertFalse(People.objects.filter(employee_id='DEMO-P001').exists())
 
-    def test_reserved_log_hash_with_different_path_rolls_back_without_mutation(self):
+    def test_reserved_log_hash_owned_by_other_computer_rolls_back_without_mutation(self):
         computer = Computer.objects.create(
             computer_name='USER-PC-LOG-01',
             os='Windows 11 Pro',
             user_name='用户-林工',
         )
-        original_modified_at = timezone.now()
+        original_collected_at = timezone.now()
         conflict = ComputerLogFile.objects.create(
-            source_path='C:/user/current-hash.json',
-            modified_at=original_modified_at,
+            computer=computer,
+            collected_at=original_collected_at,
+            collected_date=timezone.localdate(original_collected_at),
+            platform='windows',
             content_hash='5a6d844f48ecb09223016b93d251e8863f3767c6c9e756efcfc655ac7f9b76e5',
-            import_status='failed',
-            archived_path='C:/user/archive/current-hash.json',
-            parse_error='用户解析标记',
             payload={'owner': 'user', 'value': 17},
         )
         analysis = ComputerAnalysis.objects.create(
@@ -472,14 +473,8 @@ class DeterministicDemoSeedTests(TestCase):
 
         conflict.refresh_from_db()
         analysis.refresh_from_db()
-        self.assertEqual(conflict.source_path, 'C:/user/current-hash.json')
-        self.assertEqual(conflict.modified_at, original_modified_at)
-        self.assertEqual(conflict.import_status, 'failed')
-        self.assertEqual(
-            conflict.archived_path, 'C:/user/archive/current-hash.json',
-        )
-        self.assertEqual(conflict.parse_error, '用户解析标记')
-        self.assertEqual(conflict.payload, {'owner': 'user', 'value': 17})
+        self.assertEqual(conflict.collected_at, original_collected_at)
+        self.assertEqual(conflict.extra_fields, {'owner': 'user', 'value': 17})
         self.assertEqual(analysis.summary, '用户日志分析')
         self.assertEqual(analysis.details, {'owner': 'user'})
         self.assertFalse(People.objects.filter(employee_id='DEMO-P001').exists())
@@ -537,10 +532,11 @@ class DeterministicDemoSeedTests(TestCase):
             computer_name='DEMO-PC-01', os='Windows 11',
         )
         legacy_log = ComputerLogFile.objects.create(
-            source_path='demo://DEMO-PC-01.json',
-            modified_at=timezone.now(),
+            computer=legacy_computer,
+            collected_at=timezone.now(),
+            collected_date=timezone.localdate(),
+            platform='windows',
             content_hash='f' * 64,
-            import_status='success',
         )
         ComputerAnalysis.objects.create(
             computer=legacy_computer,
@@ -554,7 +550,7 @@ class DeterministicDemoSeedTests(TestCase):
             Computer.objects.filter(computer_name='DEMO-PC-01').exists()
         )
         self.assertTrue(
-            ComputerLogFile.objects.filter(source_path='demo://DEMO-PC-01.json').exists()
+            ComputerLogFile.objects.filter(content_hash='f' * 64).exists()
         )
         self.assertTrue(ComputerAnalysis.objects.filter(summary='旧版演示记录').exists())
 
@@ -565,21 +561,23 @@ class DeterministicDemoSeedTests(TestCase):
             user_name='演示-张工',
         )
         exact_log = ComputerLogFile.objects.create(
-            source_path='demo://DEMO-PC-01.json',
-            modified_at=timezone.now(),
+            computer=legacy_computer,
+            collected_at=timezone.now(),
+            collected_date=timezone.localdate(),
+            platform='windows',
             content_hash='03ce1696b1f9d7cf58632e13a534acba94ae49da32689ebf03cc5b93583baafc',
-            import_status='success',
         )
         same_path_other_hash = ComputerLogFile.objects.create(
-            source_path='demo://DEMO-PC-02.json',
-            modified_at=timezone.now(),
+            computer=legacy_computer,
+            collected_at=timezone.now(),
+            collected_date=timezone.localdate(),
+            platform='windows',
             content_hash='b' * 64,
-            import_status='success',
         )
 
         call_command('seed_demo_data', reset=True, stdout=StringIO())
 
-        self.assertFalse(Computer.objects.filter(pk=legacy_computer.pk).exists())
+        self.assertTrue(Computer.objects.filter(pk=legacy_computer.pk).exists())
         self.assertFalse(ComputerLogFile.objects.filter(pk=exact_log.pk).exists())
         self.assertTrue(
             ComputerLogFile.objects.filter(pk=same_path_other_hash.pk).exists()

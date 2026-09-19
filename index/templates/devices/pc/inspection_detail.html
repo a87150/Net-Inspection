@@ -3,7 +3,7 @@
 {% block title %}{{ inspection.computer.computer_name }} 巡检详情{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <div><h1 class="h3 mb-1">{{ inspection.computer.computer_name }} PC 巡检详情</h1><p class="text-secondary mb-0">日志时间：{{ inspection.log_file.modified_at|date:"Y-m-d H:i:s"|default:"未知" }}</p></div>
+    <div><h1 class="h3 mb-1">{{ inspection.computer.computer_name }} PC 巡检详情</h1><p class="text-secondary mb-0">日志时间：{{ inspection.source_collected_at|date:"Y-m-d H:i:s"|default:"未知" }}</p></div>
     <a href="{% url 'item_list' 'computers' %}" class="btn btn-outline-secondary">返回 PC 子项目</a>
 </div>
 {% if inspection.errors.all %}

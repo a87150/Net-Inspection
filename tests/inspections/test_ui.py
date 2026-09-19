@@ -30,8 +30,6 @@ from tests.devices.pc.test_config_layout import ConfigMarkup
 class TaskUiTestCase(TestCase):
     def setUp(self):
         login_admin(self.client)
-        from tests.devices.pc.test_source_models import valid_smb_source
-        self.log_source = valid_smb_source()
         self.linux = Server.objects.create(
             name='Linux 应用服务器', ip='192.0.2.210', server_type='linux',
         )
@@ -65,54 +63,6 @@ class TaskUiTestCase(TestCase):
                 self.assertContains(response, '巡检配置')
                 self.assertContains(response, 'data-bs-target="#runTaskModal"')
                 self.assertContains(response, 'data-bs-target="#profileConfigModal"')
-
-    def test_computer_pages_offer_remote_source_and_analysis_controls(self):
-        """Operators can configure remote fetching separately from analysis rules."""
-        self.client.force_login(get_user_model().objects.create_user('pc-config-admin', is_staff=True))
-        for url in (
-            reverse('asset_list', args=['computers']),
-            reverse('computer_analysis_list'),
-        ):
-            with self.subTest(url=url):
-                response = self.client.get(url)
-
-                self.assertEqual(response.status_code, 200)
-                self.assertContains(response, '手动执行分析')
-                self.assertContains(response, '分析配置')
-                markup = ConfigMarkup(response.content.decode())
-                self.assertFalse(markup.nested)
-                source_form = markup.forms['pc-source-config-form']
-                self.assertEqual(source_form['action'], reverse('pc_log_source_save'))
-                self.assertTrue({'shared_path', 'ftp_directory', 'source_type'} <= source_form['names'])
-                self.assertEqual(markup.forms['pc-analysis-config-form']['action'],
-                                 reverse('computer_analysis_profile_configure'))
-                self.assertTrue({'pc-source-config-form', 'pc-analysis-config-form'} <= {
-                    button.get('form') for button in markup.buttons if button.get('type') == 'submit'
-                })
-                self.assertContains(response, '最近 N 天')
-                self.assertContains(response, '指定起止日期')
-                self.assertContains(response, '最低 Windows 版本')
-                self.assertContains(response, 'Defender 病毒库最大间隔')
-                self.assertContains(response, 'CPU 报警阈值')
-                self.assertContains(response, 'KMS 服务器')
-                html = response.content.decode()
-                self.assertEqual(html.count('>保存分析与定时配置</button>'), 1)
-                self.assertEqual(html.count('>保存日志来源</button>'), 1)
-                self.assertNotIn('profile-config-save-top', html)
-                self.assertContains(response, 'id="profileConfigModal"')
-        css = Path(settings.BASE_DIR, 'static/app/css/modal-workflows.css').read_text(encoding='utf-8')
-        self.assertIn('.modal-body--scroll', css)
-        self.assertIn('overflow-y: auto', css)
-        saved = self.client.post(reverse('pc_log_source_save'), {
-            'simple_source_form': '1', 'source_type': 'smb', 'smb_auth_mode': 'system',
-            'shared_path': r'\\files.test\logs\pc\incoming', 'recent_days': '14',
-        })
-        self.assertEqual(saved.status_code, 302)
-        self.log_source.refresh_from_db()
-        self.assertEqual(self.log_source.recent_days, 14)
-        self.assertEqual(self.log_source.remote_incoming_directory, 'incoming')
-        self.log_profile.refresh_from_db()
-        self.assertEqual(self.log_profile.analysis_items, ['activation', 'resource'])
 
     def test_manual_selected_enqueue_snapshots_filtered_targets_items_and_concurrency(self):
         """Dropping UI scope validation could inspect an unfiltered asset or live profile setting."""
@@ -345,21 +295,6 @@ class TaskUiTestCase(TestCase):
         self.assertEqual(self.server_profile.concurrent_workers, 5)
         page = self.client.get(response['Location'])
         self.assertTrue(page.context['profile_modal_auto_open'])
-
-    def test_computer_fetch_action_enqueues_worker_owned_remote_work(self):
-        """The HTTP action only queues the singleton source for the Worker."""
-        response = self.post_manual({
-            'profile_id': str(self.log_profile.pk),
-            'target_mode': 'fetch',
-            'selected_items': ['activation'],
-            'next': reverse('computer_analysis_list'),
-        })
-
-        self.assertEqual(response.status_code, 302)
-        task = TaskRun.objects.get()
-        self.assertEqual(task.task_type, 'computer_fetch')
-        self.assertEqual(task.target_runs.get().target_type, 'computer_source')
-        self.assertEqual(task.selected_items_snapshot, ['activation'])
 
     def test_task_list_and_detail_show_progress_errors_and_filtered_export(self):
         """Omitting target details would hide why a partial/failed task needs attention."""

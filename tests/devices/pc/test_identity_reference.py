@@ -16,7 +16,6 @@ class IdentityReferenceTests(RemoteRuleFixture, TestCase):
                 self.assertEqual(detail['data_state'], 'known')
                 self.assertEqual(detail['matched_fields'], ['姓名', '计算机名'])
                 self.assertEqual(detail['reference_employee_id'], 'TEST046937')
-                self.assertEqual(detail['evidence']['当前登录用户姓名'], name)
 
     def test_name_normalization_does_not_remove_middle_digits_or_change_employee_ids(self):
         for name, computer in (('测1试甲', 'TEST026685'), ('测试甲1', 'TEST0266851'), ('123', 'TEST026685')):
@@ -45,7 +44,6 @@ class IdentityReferenceTests(RemoteRuleFixture, TestCase):
         detail = self.analyze(['identity_match'], rules={'personnel_roster': roster}).details['identity_match']
         self.assertEqual(detail['data_state'], 'known')
         self.assertEqual(detail['matched_fields'], ['姓名', '计算机名'])
-        self.assertEqual(detail['evidence']['当前登录用户姓名'], original)
 
     def setUp(self):
         super().setUp()

@@ -1,16 +1,6 @@
 {% extends 'common/base.html' %}{% load extras %}
-{% block title %}导入日志证据{% endblock %}
+{% block title %}PC 日志{% endblock %}
 {% block content %}
-<header class="page-heading"><div class="page-heading__copy"><p class="page-heading__eyebrow">PC 日志</p><h1 class="page-heading__title">导入日志证据</h1><p class="page-heading__description">查看导入、解析和归档状态；可按筛选结果或最新获取批次批量重新分析。</p></div><div class="page-heading__actions"><a class="btn btn-outline-secondary" href="{% url 'computer_analysis_list' %}">分析历史</a></div></header>
-{% if can_administer %}{% include 'devices/pc/bulk_analysis_modal.html' %}{% endif %}
-<div data-table-workspace data-table-key="computer_logs"><div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
-<div class="card surface-card table-scroll-shell"><p class="table-scroll-hint">可横向滚动查看文件、解析和归档状态</p><div class="table-responsive" role="region" aria-label="日志证据数据表" tabindex="0"><table class="table data-table table-hover align-middle mb-0">
-{% include 'common/table_caption.html' %}<thead><tr>
-{% include 'common/table_sort_headers.html' %}<th scope="col" class="table-actions-column table-actions-cell">操作</th></tr></thead><tbody>
-{% for log in page_obj %}<tr>{% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ log|get_attr:field.source|format_table_value:field.kind }}</td>{% endfor %}<td class="table-actions-cell"><a class="btn btn-outline-dark btn-sm" href="{% url 'computer_log_detail' log.pk %}">查看证据</a></td></tr>{% empty %}<tr><td colspan="5"><div class="empty-state"><strong>暂无导入日志</strong><span>后台获取日志后，证据状态会显示在这里。</span></div></td></tr>{% endfor %}
-</tbody></table></div></div>{% include 'common/pagination.html' %}</div>{% endblock %}
-{% block page_scripts %}
-{% include 'common/scripts/table_workspace.html' %}
-{% include 'common/scripts/modal_workflows.html' %}
-{% include 'common/scripts/inspection_workflows.html' %}
-{% endblock %}
+<header class="page-heading"><div class="page-heading__copy"><p class="page-heading__eyebrow">PC 日志</p><h1 class="page-heading__title">PC 日志</h1><p class="page-heading__description">终端通过 API 写入数据库的只读日志列表。</p></div><div class="page-heading__actions"><a class="btn btn-outline-secondary" href="{% url 'computer_analysis_list' %}">分析历史</a></div></header>
+<div data-table-workspace data-table-key="computer_logs"><div class="table-toolbar">{% include 'common/table_workspace.html' %}{% if can_administer %}{% include 'devices/pc/bulk_analysis_modal.html' %}{% endif %}</div><div class="card surface-card table-scroll-shell"><div class="table-responsive" role="region" aria-label="PC 日志数据表" tabindex="0"><table class="table data-table table-hover align-middle mb-0">{% include 'common/table_caption.html' %}<thead><tr>{% include 'common/table_sort_headers.html' %}<th scope="col" class="table-actions-column table-actions-cell">操作</th></tr></thead><tbody>{% for log in page_obj %}<tr>{% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ log|get_attr:field.source|format_table_value:field.kind }}</td>{% endfor %}<td class="table-actions-cell"><a class="btn btn-outline-dark btn-sm" href="{% url 'computer_log_detail' log.pk %}">查看详情</a></td></tr>{% empty %}<tr><td colspan="5"><div class="empty-state"><strong>暂无 PC 日志</strong><span>终端 API 上报后，日志会显示在这里。</span></div></td></tr>{% endfor %}</tbody></table></div></div>{% include 'common/pagination.html' %}</div>{% endblock %}
+{% block page_scripts %}{% include 'common/scripts/table_workspace.html' %}{% include 'common/scripts/modal_workflows.html' %}{% include 'common/scripts/inspection_workflows.html' %}{% endblock %}

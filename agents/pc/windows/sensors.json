@@ -1,0 +1,36 @@
+{
+  "library": "LibreHardwareMonitorLib",
+  "version": "0.9.6",
+  "release_url": "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases/tag/v0.9.6",
+  "release_sha256": "086d9f1b5a99e643edc2cfaaac16051685b551e4c5ac0b32a57c58c0e529c001",
+  "files": {
+    "BlackSharp.Core.dll": "cafb93afcc8d8a367e21f619673d05c06887d8964867fed1371f02ded1cd3e23",
+    "DiskInfoToolkit.dll": "1acbf51b3c10c51c986cf43021680d34a2e38d9a5ba652bcfa9a1b5f7fc09800",
+    "HidSharp.dll": "d86690efde30ea9179f669320f39148853793b743a98b531afeaf30598e22f54",
+    "LibreHardwareMonitorLib.dll": "6ebc194316536ba61af5be24508ad9fcbb2ecc685e716c12e787c79530f66bf0",
+    "Microsoft.Bcl.AsyncInterfaces.dll": "bda069b17261a50f36b3a79a88b0243d7b9f6508725598adf88d42471977720e",
+    "Microsoft.Bcl.HashCode.dll": "3a4e851ee5fc0f6182aa5a3d65dc56fcd6979b65334b5c3b92fbdc791457c0ab",
+    "RAMSPDToolkit-NDD.dll": "b6882354c7c8ec186617e421507743dbfae09c5c1fc24cef76a1d0c0c26651de",
+    "System.Buffers.dll": "2d78d770c9cb997199154ae8c018b9f1d1efbc86729f7264dde6dbad2a12cac3",
+    "System.CodeDom.dll": "e9bca8ecab5f02df389ee4b306c32a93d7822b524a6eca90e449e13d4b4283a3",
+    "System.Collections.Immutable.dll": "8c0f09a8b1fd730da3f3d2c4c831cdd76e3fca6bc588523d8f7eacf16d5a24e9",
+    "System.Formats.Nrbf.dll": "27514fbffb0776c37ede88ec371310844f7bec55a017627aad60180f268769e4",
+    "System.IO.Pipelines.dll": "52a813c62932462d8f070f001acd1f264c0766a11a78c6d3c4f81ee3b1d67223",
+    "System.Memory.dll": "d5e8e4866f9cfa66f7765660f84b210198893e55335487afe5ebda342c0e913d",
+    "System.Numerics.Vectors.dll": "20c2fa81b8c70d651099d762954f285fd4f942e63b2d7217c145dab8d4b2f4c9",
+    "System.Reflection.Metadata.dll": "6c1fe5d140f0f21fac0eea7b1d3e3bc2526c0027e857bcf5227af722a9b32a0d",
+    "System.Resources.Extensions.dll": "c3748f17d2f5209cc795a88ad4946c12c3f6ef73b3015dc92c43f932a342b17c",
+    "System.Runtime.CompilerServices.Unsafe.dll": "08cbd7278b66f1e68425a82d4b97181a4130d93e3dd91831407aba7212ccdacf",
+    "System.Security.AccessControl.dll": "ff14c5f628b9a6798d173aefbba0a43d61e66f715108e2576ac0d3dfab9071d0",
+    "System.Security.Principal.Windows.dll": "b4d8e15adc235d0e858e39b5133e5d00a4baa8c94f4f39e3b5e791b0f9c0c806",
+    "System.Text.Encodings.Web.dll": "43e6dfb4aa333848be5066dcb3d490afc417d0f896aada2f17b5db5fcbb819fc",
+    "System.Threading.AccessControl.dll": "5e3a3902f04f840c0fc1f9c2f249f804f6cfdf7901b2e06778bc2a4603ae4694",
+    "System.Text.Json.dll": "7a7f2e0b942782739551b37546efc842f53c7fce3a8f0f56ad45a5cf78e2c214",
+    "System.Threading.Tasks.Extensions.dll": "af4e13ef418fd89b432de20cd1dfb7fa10a7179c8dd049c9856316e50c5949ca"
+  },
+  "driver": {
+    "version": "2.2.0",
+    "url": "https://github.com/namazso/PawnIO.Setup/releases/download/2.2.0/PawnIO_setup.exe",
+    "sha256": "1f519a22e47187f70a1379a48ca604981c4fcf694f4e65b734aaa74a9fba3032"
+  }
+}

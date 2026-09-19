@@ -431,7 +431,7 @@ def process_persisted_target(target_run):
         try:
             with transaction.atomic():
                 target = TaskTargetRun.objects.select_for_update().get(pk=target_id)
-                if target.task.task_type not in ('inspection', 'computer_analysis', 'computer_fetch'):
+                if target.task.task_type not in ('inspection', 'computer_analysis'):
                     return []
                 if target.status not in TaskRun.TERMINAL_STATUSES or target.alert_processed_at is not None:
                     return []
@@ -465,7 +465,7 @@ def reconcile_terminal_targets(*, limit=100):
     targets = list(TaskTargetRun.objects.filter(
         status__in=TaskRun.TERMINAL_STATUSES,
         alert_processed_at__isnull=True,
-        task__task_type__in=('inspection', 'computer_analysis', 'computer_fetch'),
+        task__task_type__in=('inspection', 'computer_analysis'),
     ).order_by(
         F('alert_attempted_at').asc(nulls_first=True), 'finished_at', 'pk')[:limit])
     for target in targets:

@@ -71,7 +71,7 @@ to delete anything or a complete recursive deletion analysis. A null
 `compaction_blocked` means duplicate details are eligible at preview time.
 
 Archives are UTF-8 JSONL: a versioned manifest, complete target and task concrete
-fields (including original snapshots and result references), fetched-log IDs and
+fields (including original snapshots and result references), PC log IDs and
 incoming protected reference counts, then a `complete` footer with count and
 SHA-256 of all preceding raw bytes, including newlines. This is a snapshot archive,
 not a complete database backup; referenced records/files stay in the database and
@@ -88,7 +88,7 @@ v2 snapshots, and changes that would not save bytes are skipped. Only duplicate
 `details` is removed; all original status, health, summary and other markers are
 preserved, including the absence of status/health keys in legacy snapshots; helper
 defaults never introduce new outcome markers. References/version are supplied by
-the helper. PC `exceptions` and `analysis_items` are retained unchanged, even when
+the helper. PC `exceptions`, `analysis_items`, `log_id` and `source_collected_at` are retained unchanged, even when
 they duplicate the canonical record; this command removes only matched `details`.
 Evidence is never
 rewritten. Before each update, the command locks/rechecks the record in a short

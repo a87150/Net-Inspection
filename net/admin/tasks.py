@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.utils.html import format_html_join
 
 from net.models import (
-    ComputerAnalysisProfile, InspectionProfile, PCLogSourceConfig,
+    ComputerAnalysisProfile, InspectionProfile,
     PeopleSyncSource, Schedule, TaskRun, TaskTargetRun,
 )
 from net.secret_masks import MASKED_SECRET
@@ -26,18 +26,6 @@ class ComputerAnalysisProfileAdmin(admin.ModelAdmin):
     search_fields = ('name',)
     readonly_fields = ('created_at', 'updated_at')
     date_hierarchy = 'updated_at'
-
-
-@admin.register(PCLogSourceConfig)
-class PCLogSourceConfigAdmin(admin.ModelAdmin):
-    list_display = ('host', 'source_type', 'port', 'username', 'last_tested_at')
-    list_filter = ('source_type', 'ftp_use_tls', 'recursive')
-    search_fields = ('host', 'username', 'domain', 'share_name')
-    readonly_fields = ('id', 'last_tested_at', 'public_last_test_error')
-    exclude = ('last_test_error',)
-
-    def has_add_permission(self, request):
-        return PCLogSourceConfig.load() is None
 
 
 @admin.register(Schedule)
@@ -68,7 +56,7 @@ class TaskRunAdmin(admin.ModelAdmin):
         return False
 
 
-TASK_TARGET_READONLY_FIELDS = ('id', 'task', 'target_type', 'target_id', 'target_snapshot', 'execution_scope_key', 'status', 'attempt_count', 'started_at', 'finished_at', 'result_type', 'result_id', 'result_snapshot', 'error_message', 'alert_processed_at', 'alert_attempted_at', 'alert_processing_error', 'created_at', 'updated_at', 'fetched_logs')
+TASK_TARGET_READONLY_FIELDS = ('id', 'task', 'target_type', 'target_id', 'target_snapshot', 'execution_scope_key', 'status', 'attempt_count', 'started_at', 'finished_at', 'result_type', 'result_id', 'result_snapshot', 'error_message', 'alert_processed_at', 'alert_attempted_at', 'alert_processing_error', 'created_at', 'updated_at')
 
 
 @admin.register(TaskTargetRun)

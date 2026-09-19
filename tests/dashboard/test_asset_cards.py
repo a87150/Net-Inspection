@@ -46,8 +46,8 @@ class AssetDashboardUiTests(TestCase):
         """Replacing PC-facing text with ordinary-computer wording must be caught."""
         response = self.client.get(reverse('asset_list', args=['computers']))
 
-        self.assertContains(response, 'PC 数据由 PowerShell 自动采集上报。')
-        self.assertNotContains(response, '计算机数据由 PowerShell 自动采集上报。')
+        self.assertContains(response, 'PC 资料由终端采集器通过 API 上报日志后自动建立')
+        self.assertNotContains(response, '共享目录或 FTP')
 class DashboardHierarchyTests(TestCase):
     def setUp(self):
         login_admin(self.client)

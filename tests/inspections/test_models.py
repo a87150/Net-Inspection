@@ -154,33 +154,6 @@ class TaskProfileContractTests(SimpleTestCase):
             {'timeout_seconds', 'concurrent_workers'},
         )
 
-    def test_computer_source_recent_days_mode_requires_a_window(self):
-        profile = net_models.PCLogSourceConfig(
-            file_time_mode='recent_days',
-            recent_days=None,
-        )
-
-        with self.assertRaises(ValidationError) as caught:
-            profile.clean()
-
-        self.assertEqual(set(caught.exception.message_dict), {'recent_days'})
-
-    def test_computer_source_date_range_requires_ordered_boundaries(self):
-        profile = net_models.PCLogSourceConfig(
-            file_time_mode='date_range',
-            recent_days=None,
-            range_start_date=date(2026, 8, 31),
-            range_end_date=date(2026, 8, 1),
-        )
-
-        with self.assertRaises(ValidationError) as caught:
-            profile.clean()
-
-        self.assertEqual(
-            set(caught.exception.message_dict),
-            {'range_start_date', 'range_end_date'},
-        )
-
     def test_computer_analysis_profile_requires_list_json_contracts(self):
         profile = ComputerAnalysisProfile(
             name='终端日志分析',

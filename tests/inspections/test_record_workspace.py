@@ -140,7 +140,7 @@ class ProjectRecordWorkspaceTests(TestCase):
         rows = list(csv.DictReader(StringIO(response_body(export).decode('utf-8-sig'))))
         self.assertEqual([row['摘要'] for row in rows], [latest_record.summary])
 
-    def test_pc_page_excludes_scan_tasks_and_only_lists_latest_analysis_results(self):
+    def test_pc_page_only_lists_latest_analysis_results(self):
         old_task, old_target = self.make_task(
             profile=self.analysis_profile,
             task_type=TaskRun.TaskType.COMPUTER_ANALYSIS,
@@ -149,12 +149,6 @@ class ProjectRecordWorkspaceTests(TestCase):
         )
         old_analysis = self.make_analysis(
             'PC-OLD', task=old_task, target=old_target,
-        )
-        scan_task, _ = self.make_task(
-            profile=self.analysis_profile,
-            task_type=TaskRun.TaskType.COMPUTER_FETCH,
-            target_type=TaskTargetRun.TargetType.COMPUTER_SOURCE,
-            target_id='scan-wrapper',
         )
         latest_task, latest_target = self.make_task(
             profile=self.analysis_profile,
@@ -170,7 +164,6 @@ class ProjectRecordWorkspaceTests(TestCase):
 
         task_ids = [summary['task'].pk for summary in response.context['task_page']]
         self.assertEqual(task_ids, [latest_task.pk, old_task.pk])
-        self.assertNotIn(scan_task.pk, task_ids)
         self.assertEqual(
             response.context['latest_analysis_statistics']['total'], 1,
         )

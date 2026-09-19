@@ -13,7 +13,7 @@
 - `net/alerts/`：报警策略、消息、飞书、钉钉和邮件发送。
 - `net/data_exchange/`：CSV 与设备配置导入导出。
 - `net/infrastructure/`：通用 SSH、HTTP、采集结果和脱敏工具。
-- `net/api/`：PC 日志上传等 HTTP API。
+- `net/devices/pc/`：PC API 上报、日志入库、留存、分析及终端数据解析。
 - `net/scripts/`：页面下载的 Windows/macOS PC 采集脚本模板与生成器。
 
 ## 页面与静态资源
@@ -38,5 +38,5 @@
 `index/urls.py` 注册；新增后台任务放入 `net/inspections/`；新增测试放入
 匹配的 `tests/<类型>/`；新增终端脚本放入 `agents/` 的对应平台目录。
 
-运行数据库、上传日志、归档、生成配置、`demo-runtime/`、`.venv/`、
+运行数据库、终端本地日志、生成配置、`demo-runtime/`、`.venv/`、
 `.worktrees/` 和 `staticfiles/` 都是运行或生成数据，不参与源码整理。

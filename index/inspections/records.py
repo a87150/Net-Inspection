@@ -195,9 +195,7 @@ def computer_analysis_list(request):
 
 def computer_analysis_detail(request, pk):
     analysis = get_object_or_404(
-        ComputerAnalysis.objects.select_related(
-            'computer', 'log_file',
-        ).prefetch_related('errors'),
+        ComputerAnalysis.objects.select_related('computer').prefetch_related('errors'),
         pk=pk,
     )
     return render(request, 'inspections/record_detail.html', {
@@ -399,9 +397,7 @@ def error_records(request):
 
 def computer_error_list(request):
     table_definition = get_table_definition('computer_errors')
-    errors = Error_Computer.objects.select_related(
-        'inspection__computer', 'inspection__log_file',
-    )
+    errors = Error_Computer.objects.select_related('inspection__computer')
     errors, table_state = apply_table_filters(request, errors, table_definition)
     page_obj = Paginator(errors, table_state['page_size']).get_page(
         request.GET.get('page'),

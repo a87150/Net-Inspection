@@ -1,11 +1,20 @@
 """PC logical volume capacity and usage; encryption percentage is never utilization."""
 from decimal import Decimal, InvalidOperation
+import re
 
 
 def volumes(payload):
+    hardware = payload.get('计算机硬件资源情况')
+    if isinstance(hardware, dict) and '磁盘卷信息' in hardware:
+        value = hardware['磁盘卷信息']
+        return value if isinstance(value, list) else None
     value = payload.get('磁盘空间情况')
     if value is not None:
         return value if isinstance(value, list) else None
+    if isinstance(hardware, dict):
+        summary = hardware.get('磁盘摘要') or hardware.get('disk_summary')
+        if summary:
+            return _summary_volumes(summary)
     bitlocker = payload.get('BitLocker状态')
     value = bitlocker.get('磁盘卷信息') if isinstance(bitlocker, dict) else None
     if not isinstance(value, list):
@@ -18,6 +27,30 @@ def volumes(payload):
             continue
         size = _gib(row.get('大小'))
         result.append({'device': row.get('卷'), 'total_bytes': int(size * 1024**3) if size is not None else None})
+    return result
+
+
+_SUMMARY_VOLUME = re.compile(
+    r'(?P<device>[^;]+?)\s+(?P<total>\d+(?:,\d{3})*(?:\.\d+)?)\s*(?P<total_unit>GiB|GB|B)'
+    r'\s*\(\s*(?P<free>\d+(?:,\d{3})*(?:\.\d+)?)\s*(?P<free_unit>GiB|GB|B)\s+free\s*\)', re.I)
+
+
+def _summary_volumes(summary):
+    """New summaries use exact bytes; old GB summaries retain their source precision."""
+    if not isinstance(summary, str):
+        return None
+    result = []
+    for fragment in summary.split(';'):
+        match = _SUMMARY_VOLUME.fullmatch(fragment.strip())
+        if not match:
+            result.append({})  # Keep incomplete volumes visible to missing-data checks.
+            continue
+        row = {'device': match['device'].strip()}
+        for field in ('total', 'free'):
+            value = number(match[field].replace(',', ''))
+            factor = 1 if match[field + '_unit'].upper() == 'B' else 1024**3
+            row[field + '_bytes'] = int((value * factor).to_integral_value()) if value is not None else None
+        result.append(row)
     return result
 
 

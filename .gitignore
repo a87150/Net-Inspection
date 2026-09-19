@@ -29,3 +29,7 @@ docs/superpowers/
 
 # Production installer logs, locks and generated static files.
 runtime/deployment/
+
+# Local PC API verification and generated runtime files.
+runtime/
+TEST-PC/

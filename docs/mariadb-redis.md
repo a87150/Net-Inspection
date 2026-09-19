@@ -6,7 +6,7 @@
 
 - MariaDB：`127.0.0.1:3306/net_inspection`，utf8mb4_bin，专用 `net_app` 账号仅拥有本项目库权限。
 - 密码：Windows 凭据管理器服务 `net-inspection-mariadb`、用户名 `net_app`。配置文件不保存数据库密码；root 仅用于建库授权。
-- 原 PC 加密密钥通过 `PC_LOG_SOURCE_ENCRYPTION_KEY_FILE` 读取，不能丢失或随意替换。
+- PC API 令牌由 `PC_LOG_SOURCE_ENCRYPTION_KEY`（或同名 `_FILE`）加密，不能丢失或随意替换；更换后需重置令牌并重新部署采集包。
 - Windows Web/Worker 应由同一 Windows 账号运行；换服务账号需在该账号凭据管理器设置密码。Linux 可通过服务环境注入 `DB_PASSWORD`，不必依赖桌面凭据管理器。
 - Redis：`127.0.0.1:6379/1`，键前缀 `net-inspection`。不执行全库 flush。
 
@@ -30,7 +30,7 @@ Redis 连接/读取超时均为 0.2 秒，失败回退到真实页面。浏览�
 
 该工具拒绝覆盖已有应用数据和导出文件。源库只读；实体先入库、关联后入库；在单一数据事务内比较每个模型的数量和规范化 SHA-256，任何差异回滚。规范化保留微秒、统一 UUID 排序和无序多对多集合，JSON 业务列表顺序不变。Django 生成的 ContentType/Permission 按自然键关联，其余账号、会话和业务数据保留。成功生成 `.verification.json` 报告。
 
-MariaDB 的 `0040` 迁移用生成列唯一索引补齐域控活动目标的条件唯一约束。Django 仍可能提示原条件约束不受支持，但替代索引已在数据库生效；不能跳过该迁移。长域 DN 唯一字段也可能触发通用长度警告，应核对实际索引，不截断域路径。
+MariaDB 的 `0040` 迁移用生成列唯一索引补齐域控活动目标的条件唯一约束。PC API 改造包含 `0053_pc_api_logs` 和 `0054_pc_analysis_log_reference`；前者保留历史 payload 并回填可得到的时间字段，后者将分析来源改为普通 `log_id`，不建立日志外键。Django 仍可能提示原条件约束不受支持，但替代索引已在数据库生效；不能跳过该迁移。长域 DN 唯一字段也可能触发通用长度警告，应核对实际索引，不截断域路径。
 
 ## 回退
 

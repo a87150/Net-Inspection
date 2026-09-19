@@ -16,13 +16,7 @@ from django.db import OperationalError, close_old_connections, connections
 
 from net.models import TaskRun
 
-from net.devices.pc.executor import (
-    execute_computer_fetch_target,
-    execute_computer_target,
-    persist_computer_fetch_failure,
-    persist_computer_execution_failure,
-    reconcile_pending_analysis_handoffs,
-)
+from net.devices.pc.executor import execute_computer_target, persist_computer_execution_failure
 from net.domain.executor import (
     aggregate_domain_operation,
     abort_password_domain_task,
@@ -43,6 +37,7 @@ from .queue import (
     is_sqlite_busy,
 )
 from .schedules import enqueue_due_schedules
+from net.devices.pc.retention import cleanup_retained_logs
 
 
 def default_worker_id():
@@ -111,11 +106,6 @@ class TaskWorker:
                     executor = execute_access_target
                 elif task_type in TaskRun.PEOPLE_TASK_TYPES:
                     executor = execute_people_target
-                elif task_type == TaskRun.TaskType.COMPUTER_FETCH:
-                    return execute_computer_fetch_target(
-                        target, worker_id=self.worker_id, lease_guard=lease_guard,
-                        max_download_workers=self._max_workers(target.task),
-                    )
                 elif task_type == TaskRun.TaskType.COMPUTER_ANALYSIS:
                     executor = execute_computer_target
                 else:
@@ -150,8 +140,6 @@ class TaskWorker:
                             persist_failure = persist_access_failure
                         elif task_type in TaskRun.PEOPLE_TASK_TYPES:
                             persist_failure = persist_people_failure
-                        elif task_type == TaskRun.TaskType.COMPUTER_FETCH:
-                            persist_failure = persist_computer_fetch_failure
                         elif task_type == TaskRun.TaskType.COMPUTER_ANALYSIS:
                             persist_failure = persist_computer_execution_failure
                         else:
@@ -311,7 +299,7 @@ class TaskWorker:
             return False
         if schedule:
             with _database_guard():
-                reconcile_pending_analysis_handoffs(limit=self.threads * 4)
+                cleanup_retained_logs(limit=self.threads * 4)
                 if self._stopped(stop_event, maintenance_stop):
                     return False
                 enqueue_due_schedules()
@@ -361,7 +349,7 @@ class TaskWorker:
                 return False
             with _database_guard():
                 recover_expired_tasks()
-                handoffs = reconcile_pending_analysis_handoffs(limit=self.threads * 4)
+                handoffs = cleanup_retained_logs(limit=self.threads * 4)
                 if stop_event.is_set():
                     return False
                 enqueue_due_schedules()

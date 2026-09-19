@@ -1,3 +1,4 @@
+from tests.devices.pc.helpers import create_log_file
 import csv
 
 from tests import response_body
@@ -31,7 +32,7 @@ class PeopleResultPaginationTests(TestCase):
         for i in range(45):
             person = self.roster[0 if i < 44 else 22]
             computer = Computer.objects.create(computer_name=f'PC-{i:03}', user_name='alice')
-            log = ComputerLogFile.objects.create(source_path=f'{i}.json', content_hash=f'{i:064x}',
+            log = create_log_file(source_path=f'{i}.json', content_hash=f'{i:064x}',
                 modified_at=timezone.now(), import_status='success', payload={'large': 'x' * 10000})
             target = TaskTargetRun.objects.create(task=self.task, target_type='computer_log', target_id=str(log.pk))
             self.records.append(ComputerAnalysis.objects.create(computer=computer, log_file=log, task_target=target,

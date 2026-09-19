@@ -9,7 +9,7 @@
 3. Windows 安装 **64 位 Python 3.12+（为所有用户安装）**，需要“计划任务”服务；Linux 需要 systemd、root/sudo。Ubuntu 24.04+/Debian 13+ 可使用发行版 Python；支持提供 Python 3.12 软件包的 dnf 系统，其他环境可预装依赖后加 `--skip-system-packages --python /path/to/python3.12`。
 4. 安装依赖需要访问 Python 包源和 Linux 软件源。使用内部软件源时先配置 pip/系统包管理器。Windows 若 mysqlclient 没有当前 Python 版本的轮子，请安装 MariaDB Connector/C 与 C++ 编译工具，或选用锁文件支持的 Python 3.12 环境。
 
-**迁移现有项目时**：先备份并迁移数据库，连同原 `.env`、所有 `*_KEY_FILE` 指向的密钥文件、设备备份密钥和软件策略/日志归档一起保存。检查 Windows/Linux 路径差异。不要给已有密文生成新密钥，也不要仅迁移代码后误连空库。Windows 凭据管理器的 keyring 数据不会随 `.env` 自动迁移，需要在目标运行账号下恢复。新建空库不会复制原机器的设备、人员、配置模板或历史记录。
+**迁移现有项目时**：先备份并迁移数据库，连同原 `.env`、所有 `*_KEY_FILE` 指向的密钥文件、设备备份密钥和软件策略一起保存。检查 Windows/Linux 路径差异。不要给已有密文生成新密钥，也不要仅迁移代码后误连空库。Windows 凭据管理器的 keyring 数据不会随 `.env` 自动迁移，需要在目标运行账号下恢复。新建空库不会复制原机器的设备、人员、配置模板或历史记录。
 
 ## Windows Server
 
@@ -40,13 +40,13 @@ Django 密钥和三个独立 Fernet 密钥只在首次新建配置时生成。�
 - `NetInspectionWeb`：Waitress Web。
 - `NetInspectionWorker`：后台任务与定时调度。
 - 开机启动，不需要保持终端打开；进程失败每分钟重试，最多 999 次；同一任务不重复启动。
-- 默认 SYSTEM 身份。若 SMB 共享要求域用户或 keyring 绑定特定用户，用该账号运行两个任务：
+- 默认 SYSTEM 身份。若数据库密码保存在特定用户的 keyring，或其他已部署的本机资源要求该身份，可用该账号运行两个任务：
 
 ```powershell
 .\deploy\windows\Install-NetInspection.ps1 -ServiceCredential (Get-Credential)
 ```
 
-该账号需要批处理登录权限、读取项目/Python/密钥文件以及写入实际静态目录、日志暂存与归档目录的权限。脚本只自动授权自身 `runtime\deployment` 目录，已有自定义目录须按实际路径授权。SYSTEM 对远程共享通常使用计算机身份，不等于你当前交互登录的域用户。
+该账号需要批处理登录权限、读取项目/Python/密钥文件以及写入实际静态目录和部署日志目录的权限。脚本只自动授权自身 `runtime\deployment` 目录，已有自定义目录须按实际路径授权。PC 日志由终端直传 API，不需要给 Web/Worker 配置共享盘、SMB 或 FTP 收集权限。
 
 查看/停用：
 
@@ -100,7 +100,7 @@ sudo systemctl disable --now network-inspection-worker network-inspection-web
 - `-EnvFile C:\path\.env` / `--env-file /path/.env` 使用其他受限配置文件。
 - `-NonInteractive` / `--non-interactive` 要求配置和活跃管理员已存在。
 - `-PrepareOnly` / `--prepare-only` **不是只读演练**：仍停止已有受管进程、安装依赖、迁移和收集静态文件，只是不注册/启动新任务或服务。
-- 空库需要默认网络模板时，使用同一配置执行 `python manage.py create_network_templates`；它不覆盖已有模板。服务器及安防模板可从设备列表创建。迁移已有项目以数据库备份中的模板为准。
+- 空库需要默认网络模板时，使用同一配置执行 `python manage.py create_network_templates`；它不覆盖已有模板。服务器及安防模板可从设备列表创建。PC API 升级后还需重新下载并部署终端采集包，旧共享盘/FTP 脚本应停止分发。迁移已有项目以数据库备份中的模板为准。
 
 验证范围：脚本语法、配置/密钥保留、重复进程锁和临时 SQLite 的迁移/静态文件流程可在开发机隔离测试；Windows 计划任务注册、Linux 包安装/systemd、目标 MariaDB 与真实外部设备仍须在目标机验证。
 

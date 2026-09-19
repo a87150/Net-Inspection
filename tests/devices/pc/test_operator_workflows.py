@@ -106,28 +106,6 @@ class FinalOperatorTests(TestCase):
         csv = self.client.get('/tables/inspection_records/servers/export/', query)
         self.assertIn('local-next-day', response_body(csv).decode())
 
-    def test_log_detail_enqueues_only_and_failure_is_read_only(self):
-        Computer.objects.create(computer_name='LOG-UI')
-        profile = ComputerAnalysisProfile.objects.create(name='log UI', analysis_items=['activation'])
-        log = create_log_file(source_path='fixture.json', modified_at=timezone.now(),
-            content_hash='c'*64, import_status='imported', payload={'系统信息概览': {'计算机名': 'LOG-UI'}})
-        detail = f'/computers/logs/{log.pk}/'
-        self.assertContains(self.client.get('/computers/logs/'), 'fixture.json')
-        self.assertContains(self.client.get('/computers/logs/'), '按文件时间升序排列')
-        self.assertContains(self.client.get(detail), '重新分析')
-        csrf_client = Client(enforce_csrf_checks=True)
-        login_admin(csrf_client)
-        self.assertEqual(csrf_client.post(detail+'analyze/', {}).status_code, 403)
-        response = self.client.post(detail+'analyze/', {'profile_id': profile.pk, 'selected_items': ['activation']})
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(log.analyses.count(), 0)
-        self.assertEqual(TaskRun.objects.get().task_type, 'computer_analysis')
-        failed = create_log_file(source_path='failed.json', modified_at=timezone.now(),
-            content_hash='d'*64, import_status='failed', parse_error='bad JSON')
-        self.assertContains(self.client.get(f'/computers/logs/{failed.pk}/'), 'bad JSON')
-        self.assertEqual(self.client.post(f'/computers/logs/{failed.pk}/analyze/', {'profile_id': profile.pk,
-            'selected_items': ['activation']}).status_code, 400)
-
     def test_provenance_latest_and_record_metrics(self):
         login_reader(self.client)
         person = People.objects.create(employee_id='CSV', source='csv', platform_user_id='safe-platform')
