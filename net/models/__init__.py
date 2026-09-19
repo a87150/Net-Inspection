@@ -18,6 +18,10 @@ from .records import (
     Network_Device_Inspection, RecordStatus, Server_Inspection,
 )
 from .tasks import ComputerAnalysisProfile, InspectionProfile, Schedule, TaskRun, TaskTargetRun
+from .topology import (
+    NetworkTopologyInterface, NetworkTopologyLink, NetworkTopologyObservation,
+    TopologyDiscoveryBatch,
+)
 
 
 __all__ = [
@@ -35,4 +39,6 @@ __all__ = [
     'InspectionProfile', 'ComputerAnalysisProfile', 'Schedule', 'TaskRun',
     'TaskTargetRun', 'AlertChannel', 'AlertPolicy', 'AlertState', 'AlertEvent',
     'AlertDelivery', 'AlertTestSend', 'PeopleSyncSource',
+    'TopologyDiscoveryBatch', 'NetworkTopologyInterface', 'NetworkTopologyLink',
+    'NetworkTopologyObservation',
 ]
