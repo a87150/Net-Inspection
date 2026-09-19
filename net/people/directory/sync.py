@@ -251,6 +251,8 @@ def _apply_locked_preview(source, locked_people, preview) -> SyncResult:
         if person is None or not _owned_by_source(person, source):
             raise PeopleSyncApplyError()
         person.is_active = False
+        if person.departure_date is None:
+            person.departure_date = timezone.localdate(now)
         person.last_synced_at = now
         _validate_person(person)
         deactivations.append(person)
@@ -262,7 +264,7 @@ def _apply_locked_preview(source, locked_people, preview) -> SyncResult:
     for person in updates:
         person.save()
     for person in deactivations:
-        person.save(update_fields=['is_active', 'last_synced_at'])
+        person.save(update_fields=['is_active', 'departure_date', 'last_synced_at'])
     source.last_synced_at = now
     # Synchronization is operational metadata, not a provider configuration change.
     # Preview signatures separately bind last_synced_at to prevent replay, including no-op imports.

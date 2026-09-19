@@ -1,5 +1,6 @@
 from importlib import import_module
 from dataclasses import replace
+from datetime import date
 import json
 from unittest.mock import patch
 
@@ -448,6 +449,35 @@ class PeopleSyncPreviewTests(TestCase):
         self.assertEqual(second_preview.deactivations, ())
         self.assertEqual(second.deactivated, 0)
         self.assertEqual(person.last_synced_at, first_timestamp)
+
+    def test_first_complete_omission_records_departure_date_without_rewriting_it_later(self):
+        """The first successful complete absence is the local departure date evidence."""
+        sync = _sync_module()
+        source = self.source()
+        person = People.objects.create(
+            employee_id='EMP-1202', source='feishu', sync_source=source,
+        )
+
+        with patch('net.people.directory.sync.timezone.localdate', return_value=date(2026, 9, 19)):
+            first = sync.apply_people_sync(
+                source, sync.preview_people_sync(source, SnapshotAdapter(source, [])),
+            )
+
+        person.refresh_from_db()
+        self.assertEqual(first.deactivated, 1)
+        self.assertFalse(person.is_active)
+        self.assertEqual(person.departure_date, date(2026, 9, 19))
+
+        person.departure_date = date(2026, 9, 18)
+        person.save(update_fields=['departure_date'])
+        with patch('net.people.directory.sync.timezone.localdate', return_value=date(2026, 9, 20)):
+            second = sync.apply_people_sync(
+                source, sync.preview_people_sync(source, SnapshotAdapter(source, [])),
+            )
+
+        person.refresh_from_db()
+        self.assertEqual(second.deactivated, 0)
+        self.assertEqual(person.departure_date, date(2026, 9, 18))
 
     def test_dictionary_roundtrip_and_expired_preview_are_safe_apply_boundaries(self):
         """Would fail if a UI payload could not round-trip or an expired token were accepted."""
