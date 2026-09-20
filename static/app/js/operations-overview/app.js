@@ -30,6 +30,7 @@ if (mountElement && bootstrapElement) {
         controller: null,
         unsubscribe: null,
         ambientEffects: null,
+        requestAbortController: null,
         panStart: null,
       };
     },
@@ -66,7 +67,18 @@ if (mountElement && bootstrapElement) {
       },
       topology() {
         const graph = normalizeTopology(this.snapshot.topology || {});
+        if (this.filter !== 'all') {
+          graph.physicalEdges = graph.physicalEdges.filter((edge) => (
+            this.filter === 'unresolved'
+              ? edge.resolutionStatus === 'unresolved'
+              : edge.status === this.filter
+          ));
+        }
         return layoutTopology(graph, { width: this.topologyWidth, height: this.topologyHeight });
+      },
+      truncationCount() {
+        return Object.values(this.snapshot.topology?.logical_truncation || {})
+          .reduce((total, value) => total + Number(value || 0), 0);
       },
       topologyNodes() {
         return new Map(this.topology.nodes.map((node) => [node.id, node]));
@@ -80,6 +92,12 @@ if (mountElement && bootstrapElement) {
         this.view = view;
         this.controller?.updateUiState({ view });
         this.liveStatus = view === 'topology' ? '已切换到网络拓扑' : '已切换到运维态势';
+        if (view === 'topology') this.$nextTick(this.updateDimensions);
+      },
+      setFilter() {
+        this.controller?.updateUiState({ filter: this.filter });
+        this.selectedEdgeId = '';
+        this.liveStatus = '拓扑链路筛选已更新';
       },
       togglePause() {
         this.controller?.setManualPaused(!this.manualPaused);
@@ -118,6 +136,11 @@ if (mountElement && bootstrapElement) {
       resetViewport() {
         this.viewport = { scale: 1, x: 0, y: 0 };
         this.controller?.updateUiState({ viewport: this.viewport });
+      },
+      fitViewport() {
+        this.updateDimensions();
+        this.resetViewport();
+        this.liveStatus = '拓扑已适应当前屏幕';
       },
       startPan(event) {
         event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -181,6 +204,12 @@ if (mountElement && bootstrapElement) {
       resolutionLabel(value) {
         return value === 'resolved' ? '已解析设备' : '未解析邻居';
       },
+      nodeKindLabel(value) {
+        return ({ root: '管理台', category: '逻辑分组', asset: '资产节点', external: '未解析邻居' })[value] || '节点';
+      },
+      nodeStatusLabel(value) {
+        return ({ normal: '正常', abnormal: '异常', disabled: '停用', stale: '陈旧', unknown: '状态未知' })[value] || '状态未知';
+      },
       handleVisibility() {
         this.controller?.handleVisibilityChange();
       },
@@ -190,11 +219,20 @@ if (mountElement && bootstrapElement) {
         initialSnapshot,
         intervalMs: 30000,
         fetchSnapshot: async () => {
-          const response = await fetch(endpoint, {
-            credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' },
-          });
-          if (!response.ok) throw new Error(`Snapshot request failed: ${response.status}`);
-          return response.json();
+          const requestController = new AbortController();
+          this.requestAbortController = requestController;
+          const timeoutId = window.setTimeout(() => requestController.abort(), 10000);
+          try {
+            const response = await fetch(endpoint, {
+              credentials: 'same-origin', cache: 'no-store', signal: requestController.signal,
+              headers: { Accept: 'application/json' },
+            });
+            if (!response.ok) throw new Error(`Snapshot request failed: ${response.status}`);
+            return response.json();
+          } finally {
+            window.clearTimeout(timeoutId);
+            if (this.requestAbortController === requestController) this.requestAbortController = null;
+          }
         },
         isVisible: () => !document.hidden,
       });
@@ -206,6 +244,7 @@ if (mountElement && bootstrapElement) {
       this.ambientEffects = createAmbientEffects(document.querySelector('[data-overview-ambient]'));
     },
     beforeUnmount() {
+      this.requestAbortController?.abort();
       this.controller?.stop();
       this.unsubscribe?.();
       this.ambientEffects?.destroy();

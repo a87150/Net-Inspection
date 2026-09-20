@@ -16,12 +16,14 @@ from net.models import (
     Domain_Computer,
     Domain_Group,
     Network_Device,
-    People,
     SecurityDevice,
     Server,
     TaskRun,
 )
 from net.topology.read_model import current_topology_payload
+
+
+LOGICAL_NODE_LIMIT_PER_KIND = 80
 
 
 def _iso(value):
@@ -155,11 +157,10 @@ def _node(node_id, kind, label, url, parent_id, *, subtitle='', status='unknown'
     }
 
 
-def _build_logical_nodes():
+def _build_logical_nodes(required_network_ids=()):
     nodes = [_node('root', 'root', '运维管理台', reverse('index'), None)]
     edges = []
     categories = (
-        ('people', '人员', reverse('asset_list', args=['people'])),
         ('computers', 'PC', reverse('asset_list', args=['computers'])),
         ('networks', '网络设备', reverse('asset_list', args=['networks'])),
         ('servers', '服务器', reverse('asset_list', args=['servers'])),
@@ -173,52 +174,69 @@ def _build_logical_nodes():
                       'relationship': 'logical_membership'})
 
     assets = (
-        ('people', People.objects.only('id', 'name', 'employee_id', 'is_active'),
-         lambda row: row.name or '未命名人员', lambda row: row.employee_id or '',
-         lambda row: reverse('person_detail', args=[row.pk]), lambda row: 'normal' if row.is_active else 'disabled'),
-        ('computers', Computer.objects.only('id', 'computer_name', 'ip_addresses', 'is_active'),
+        ('computers', 'computers', Computer.objects.only('id', 'computer_name', 'ip_addresses', 'is_active'),
          lambda row: row.computer_name, lambda row: row.ip_addresses or '',
          lambda row: reverse('asset_detail', args=['computers', row.pk]), lambda row: 'normal' if row.is_active else 'disabled'),
-        ('networks', Network_Device.objects.only('id', 'device_name', 'ip'),
+        ('networks', 'networks', Network_Device.objects.only('id', 'device_name', 'ip'),
          lambda row: row.device_name or row.ip, lambda row: row.ip,
          lambda row: reverse('asset_detail', args=['networks', row.pk]), lambda row: 'unknown'),
-        ('servers', Server.objects.only('id', 'name', 'ip'),
+        ('servers', 'servers', Server.objects.only('id', 'name', 'ip'),
          lambda row: row.name or row.ip, lambda row: row.ip,
          lambda row: reverse('asset_detail', args=['servers', row.pk]), lambda row: 'unknown'),
-        ('monitors', SecurityDevice.objects.only('id', 'device_name', 'ip'),
+        ('monitors', 'monitors', SecurityDevice.objects.only('id', 'device_name', 'ip'),
          lambda row: row.device_name or row.ip, lambda row: row.ip,
          lambda row: reverse('asset_detail', args=['monitors', row.pk]), lambda row: 'unknown'),
-        ('domain', Domain_Account.objects.only('id', 'login_name', 'is_active'),
+        ('domain_accounts', 'domain', Domain_Account.objects.only('id', 'login_name', 'is_active'),
          lambda row: row.login_name, lambda row: '域账号',
          lambda row: reverse('domain_account_detail', args=[row.pk]), lambda row: 'normal' if row.is_active else 'disabled'),
-        ('domain', Domain_Computer.objects.only('id', 'computer_name', 'is_active'),
+        ('domain_computers', 'domain', Domain_Computer.objects.only('id', 'computer_name', 'is_active'),
          lambda row: row.computer_name, lambda row: '域计算机',
          lambda row: reverse('domain_computer_detail', args=[row.pk]), lambda row: 'normal' if row.is_active else 'disabled'),
-        ('domain', Domain_Group.objects.only('id', 'group_name', 'is_available'),
+        ('domain_groups', 'domain', Domain_Group.objects.only('id', 'group_name', 'is_available'),
          lambda row: row.group_name, lambda row: '域分组',
          lambda row: reverse('domain_group_detail', args=[row.pk]), lambda row: 'normal' if row.is_available else 'disabled'),
     )
-    for category, queryset, label, subtitle, url, status in assets:
+    truncation = {}
+    required_network_ids = {str(value) for value in required_network_ids if value}
+    for key, category, queryset, label, subtitle, url, status in assets:
         parent_id = f'category:{category}'
-        for row in queryset.iterator():
+        total = queryset.count()
+        if key == 'networks' and required_network_ids:
+            required_rows = list(queryset.filter(pk__in=required_network_ids).order_by('pk'))
+            remaining = max(0, LOGICAL_NODE_LIMIT_PER_KIND - len(required_rows))
+            rows = required_rows + list(
+                queryset.exclude(pk__in=required_network_ids).order_by('pk')[:remaining]
+            )
+        else:
+            rows = list(queryset.order_by('pk')[:LOGICAL_NODE_LIMIT_PER_KIND])
+        omitted = max(0, total - len(rows))
+        if omitted:
+            truncation[key] = omitted
+        for row in rows:
             node_id = f'{category}:{row.pk}'
             nodes.append(_node(node_id, 'asset', label(row), url(row), parent_id,
                                subtitle=subtitle(row), status=status(row)))
             edges.append({'id': f'logical:{parent_id}:{row.pk}', 'source': parent_id,
                           'target': node_id, 'relationship': 'logical_membership'})
-    return nodes, edges
+    return nodes, edges, truncation
 
 
 def _build_topology():
-    nodes, logical_edges = _build_logical_nodes()
     physical = current_topology_payload(include_stale=True, limit=1000)
     physical_edges = physical['links']
+    required_network_ids = {
+        value for edge in physical_edges
+        for value in (edge.get('local_device_id'), edge.get('remote_device_id'))
+        if value
+    }
+    nodes, logical_edges, truncation = _build_logical_nodes(required_network_ids)
     return {
         'mode': 'hybrid' if physical_edges else 'logical',
         'nodes': nodes,
         'logical_edges': logical_edges,
         'interfaces': physical['interfaces'],
         'physical_edges': physical_edges,
+        'logical_truncation': truncation,
     }
 
 

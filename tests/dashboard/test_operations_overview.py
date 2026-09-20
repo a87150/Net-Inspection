@@ -11,6 +11,7 @@ from net.models import (
     AlertChannel,
     AlertDelivery,
     AlertEvent,
+    Computer,
     InspectionProfile,
     Network_Device,
     NetworkTopologyInterface,
@@ -152,6 +153,57 @@ class OperationsSnapshotTests(TestCase):
         self.assertEqual(snapshot['summary'], {'error': 'summary_unavailable'})
         self.assertIn('items', snapshot['tasks'])
         self.assertNotIn('secret database coordinates', str(snapshot))
+
+    def test_logical_topology_caps_dense_categories_and_reports_omissions(self):
+        from index.dashboard.operations import LOGICAL_NODE_LIMIT_PER_KIND, build_operations_snapshot
+
+        Computer.objects.bulk_create([
+            Computer(computer_name=f'overview-pc-{index:03d}')
+            for index in range(LOGICAL_NODE_LIMIT_PER_KIND + 5)
+        ])
+
+        topology = build_operations_snapshot(now=self.now)['topology']
+        computer_nodes = [
+            node for node in topology['nodes'] if node['id'].startswith('computers:')
+        ]
+
+        self.assertEqual(len(computer_nodes), LOGICAL_NODE_LIMIT_PER_KIND)
+        self.assertEqual(topology['logical_truncation']['computers'], 5)
+
+    def test_physical_link_endpoints_survive_the_logical_network_cap(self):
+        from index.dashboard.operations import LOGICAL_NODE_LIMIT_PER_KIND, build_operations_snapshot
+
+        devices = Network_Device.objects.bulk_create([
+            Network_Device(device_name=f'network-{index:03d}', ip=f'198.18.{index // 250}.{index % 250 + 1}')
+            for index in range(LOGICAL_NODE_LIMIT_PER_KIND + 1)
+        ])
+        linked_device = devices[-1]
+        task, target = self.inspection_task(
+            status=TaskRun.Status.SUCCESS, target_id=str(linked_device.pk),
+        )
+        batch = TopologyDiscoveryBatch.objects.create(
+            source_task=task, source_target=target, device=linked_device,
+            protocol=TopologyDiscoveryBatch.Protocol.SNMP_LLDP,
+            status=TopologyDiscoveryBatch.Status.SUCCESS,
+            started_at=self.now, collected_at=self.now, finished_at=self.now,
+        )
+        interface = NetworkTopologyInterface.objects.create(
+            device=linked_device, stable_key='ifindex:99', name='Gi99',
+            first_seen_at=self.now, last_seen_at=self.now, last_batch=batch,
+        )
+        NetworkTopologyLink.objects.create(
+            stable_link_key='e' * 64, local_interface=interface,
+            remote_system_name='external-edge', protocols=['snmp_lldp'],
+            confidence='0.60', first_seen_at=self.now, last_seen_at=self.now,
+            last_batch=batch,
+        )
+
+        topology = build_operations_snapshot(now=self.now)['topology']
+
+        self.assertIn(
+            f'networks:{linked_device.pk}',
+            {node['id'] for node in topology['nodes']},
+        )
 
 
 class OperationsOverviewViewTests(TestCase):
