@@ -137,3 +137,13 @@ class NavigationDropdownTests(TestCase):
                 self.assertEqual(attributes.get('data-bs-toggle'), 'dropdown')
                 self.assertEqual(attributes.get('aria-expanded'), 'false')
                 self.assertTrue(attributes.get('aria-controls'))
+
+    def test_operations_overview_precedes_alerts_in_primary_navigation(self):
+        response = self.client.get(reverse('index'))
+        html = response.content.decode(response.charset)
+
+        overview_link = f'href="{reverse("operations_overview")}">综合展示</a>'
+        alert_link = f'href="{reverse("alert_list")}">告警记录</a>'
+        self.assertIn(overview_link, html)
+        self.assertIn(alert_link, html)
+        self.assertLess(html.index(overview_link), html.index(alert_link))

@@ -18,6 +18,8 @@ from index.devices.pc.bulk_analysis import computer_logs_analyze_bulk
 from index.devices.pc.software_policy import pc_software_policy_template_download
 
 urlpatterns = [
+    path('operations/overview/', views.operations_overview, name='operations_overview'),
+    path('operations/overview/data/', views.operations_overview_data, name='operations_overview_data'),
     path('operations/topology/', topology_data, name='topology_data'),
     path('operations/topology/batches/', topology_batches, name='topology_batches'),
     path('operations/topology/interfaces/', topology_interfaces, name='topology_interfaces'),

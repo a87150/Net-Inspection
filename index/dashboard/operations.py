@@ -2,8 +2,11 @@
 
 from django.db import DatabaseError
 from django.db.models import Count, Q
+from django.http import JsonResponse
+from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.http import require_GET
 
 from net.dashboard.assets import build_asset_card_summaries
 from net.models import (
@@ -229,3 +232,17 @@ def build_operations_snapshot(*, now=None):
         'alerts': _safe_region('alerts', _build_alerts),
         'topology': _safe_region('topology', _build_topology),
     }
+
+
+@require_GET
+def operations_overview(request):
+    return render(
+        request,
+        'dashboard/operations_overview.html',
+        {'snapshot': build_operations_snapshot()},
+    )
+
+
+@require_GET
+def operations_overview_data(request):
+    return JsonResponse(build_operations_snapshot())

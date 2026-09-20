@@ -46,7 +46,7 @@ class ReaderControlsTests(TestCase):
                 ('people', 'computers', 'networks', 'servers', 'monitors')]
         urls += [reverse('alert_list'), reverse('computer_log_list'),
                  reverse('computer_analysis_list'), reverse('domain_account_list'),
-                 reverse('task_list')]
+                 reverse('task_list'), reverse('operations_overview')]
         for url in urls:
             with self.subTest(url=url):
                 response = self.client.get(url)
@@ -54,6 +54,8 @@ class ReaderControlsTests(TestCase):
                 if url == reverse('computer_analysis_list'):
                     self.assertContains(response, 'id="latest-analysis-title"')
                     self.assertContains(response, reverse('task_detail', args=[self.task.pk]))
+                elif url == reverse('operations_overview'):
+                    self.assertContains(response, 'id="operations-overview-app"')
                 else:
                     self.assertContains(response, 'data-table-workspace')
                     self.assertContains(response, 'data-table-query-form')

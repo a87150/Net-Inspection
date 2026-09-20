@@ -17,6 +17,7 @@ READER_VIEWS = PUBLIC_VIEWS | frozenset({
     'domain_computer_list', 'domain_computer_detail', 'domain_group_list', 'domain_group_detail',
     'inspection_records', 'error_records', 'record_list', 'record_detail',
     'infrastructure_inspection_detail', 'analysis_problem_list',
+    'operations_overview', 'operations_overview_data',
     'topology_data', 'topology_batches', 'topology_interfaces', 'topology_links', 'topology_evidence',
 })
 AUTH_VIEWS = frozenset({

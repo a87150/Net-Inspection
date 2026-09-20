@@ -8,6 +8,7 @@ from index.devices.views import (
     run_infrastructure_inspection,
 )
 from index.dashboard.views import index, with_latest_status
+from index.dashboard.operations import operations_overview, operations_overview_data
 from index.domain.views import (
     domain_account_detail,
     domain_computer_detail,
@@ -82,6 +83,8 @@ __all__ = [
     'error_records',
     'import_inventory',
     'index',
+    'operations_overview',
+    'operations_overview_data',
     'infrastructure_inspection_detail',
     'inspection_records',
     'item_list',

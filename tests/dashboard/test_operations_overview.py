@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from django.db import DatabaseError
 from django.test import TestCase
+from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 
@@ -18,6 +19,7 @@ from net.models import (
     TaskTargetRun,
     TopologyDiscoveryBatch,
 )
+from tests.auth import login_reader
 
 
 class OperationsSnapshotTests(TestCase):
@@ -150,3 +152,42 @@ class OperationsSnapshotTests(TestCase):
         self.assertEqual(snapshot['summary'], {'error': 'summary_unavailable'})
         self.assertIn('items', snapshot['tasks'])
         self.assertNotIn('secret database coordinates', str(snapshot))
+
+
+class OperationsOverviewViewTests(TestCase):
+    def test_named_routes_are_stable(self):
+        self.assertEqual(reverse('operations_overview'), '/operations/overview/')
+        self.assertEqual(reverse('operations_overview_data'), '/operations/overview/data/')
+
+    def test_reader_can_open_page_and_read_snapshot(self):
+        login_reader(self.client)
+
+        page = self.client.get(reverse('operations_overview'))
+        data = self.client.get(reverse('operations_overview_data'))
+
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(data.status_code, 200)
+        self.assertContains(page, 'id="operations-overview-app"')
+        self.assertContains(page, 'id="operations-overview-bootstrap"')
+        self.assertContains(page, 'data-snapshot-url="/operations/overview/data/"')
+        self.assertEqual(data.json()['schema_version'], 1)
+        cache_control = data.headers.get('Cache-Control', '')
+        self.assertIn('no-cache', cache_control)
+        self.assertIn('no-store', cache_control)
+
+    def test_anonymous_user_is_redirected_to_login(self):
+        for name in ('operations_overview', 'operations_overview_data'):
+            with self.subTest(name=name):
+                response = self.client.get(reverse(name))
+                self.assertEqual(response.status_code, 302)
+                self.assertIn(reverse('login'), response.url)
+
+    def test_data_endpoint_rejects_post(self):
+        user = get_user_model().objects.create_user(
+            'overview-admin', is_staff=True, is_active=True,
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(reverse('operations_overview_data'))
+
+        self.assertEqual(response.status_code, 405)

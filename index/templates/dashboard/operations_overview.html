@@ -1,0 +1,35 @@
+{% extends 'common/base.html' %}
+{% load static %}
+
+{% block title %}综合展示 · 网络巡检中心{% endblock %}
+
+{% block content %}
+<section class="operations-overview" aria-labelledby="operations-overview-title">
+    <header class="operations-overview__header">
+        <div>
+            <p class="eyebrow mb-2">OPERATIONS INTELLIGENCE</p>
+            <h1 class="h2 mb-2" id="operations-overview-title">综合展示</h1>
+            <p class="text-secondary mb-0">统一查看运维态势、逻辑资产关系与 LLDP/CDP 物理拓扑。</p>
+        </div>
+        <div class="operations-overview__actions" aria-label="展示控制">
+            <div class="btn-group" role="group" aria-label="视图切换">
+                <button class="btn btn-primary" type="button" data-overview-mode="situation" aria-pressed="true">运维态势</button>
+                <button class="btn btn-outline-primary" type="button" data-overview-mode="topology" aria-pressed="false">网络拓扑</button>
+            </div>
+            <button class="btn btn-outline-secondary" type="button" data-overview-pause aria-pressed="false">暂停刷新</button>
+            <button class="btn btn-outline-primary" type="button" data-overview-refresh>立即刷新</button>
+        </div>
+    </header>
+
+    <p class="visually-hidden" role="status" aria-live="polite" aria-atomic="true" data-overview-status>综合展示已就绪</p>
+    {{ snapshot|json_script:'operations-overview-bootstrap' }}
+    <div id="operations-overview-app"
+         data-snapshot-url="{% url 'operations_overview_data' %}"
+         aria-busy="false">
+        <div class="operations-overview__loading" role="status">正在加载运维态势…</div>
+    </div>
+    <noscript>
+        <div class="alert alert-warning mt-3" role="alert">综合展示需要启用 JavaScript；其他运维页面仍可正常使用。</div>
+    </noscript>
+</section>
+{% endblock %}
