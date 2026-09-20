@@ -68,7 +68,7 @@ ENT_SENSOR_STATUS = "1.3.6.1.2.1.99.1.1.1.5"
 QBRIDGE_VLAN_NAME = "1.3.6.1.2.1.17.7.1.4.3.1.1"
 
 SNMP_ITEMS = frozenset(
-    {"device_info", "cpu", "memory", "temperature", "interface_status", "vlan_status", "traffic"}
+    {"device_info", "cpu", "memory", "temperature", "interface_status", "vlan_status", "traffic", "lldp_neighbors"}
 )
 _ITEM_ORDER = (
     "device_info",
@@ -77,6 +77,7 @@ _ITEM_ORDER = (
     "temperature",
     "interface_status",
     "vlan_status",
+    "lldp_neighbors",
 )
 
 # Ordered scalar candidates. Standard MIBs remain the portable fallback.
@@ -420,6 +421,14 @@ def parse_snmp_snapshot(snapshot, selected_items, vendor):
         "vlan_status": (_parse_vlans, (), (QBRIDGE_VLAN_NAME,)),
     }
     for item in requested:
+        if item == 'lldp_neighbors':
+            from .topology_protocols import parse_lldp_snapshot
+            parsed = parse_lldp_snapshot(snapshot, snapshot.get('_lldp_table_states', {}))
+            data[item] = parsed
+            raw[item] = parsed.get('evidence', {})
+            if parsed.get('status') == 'success':
+                completed.add(item)
+            continue
         if item == 'traffic':
             traffic = snapshot.get('traffic')
             if traffic:
@@ -761,6 +770,20 @@ async def _collect_snapshot(device, timeout, selected_items, session_factory):
                 snapshot["tables"][oid] = await _safe_walk(session, oid)
         if "vlan_status" in requested:
             snapshot["tables"][QBRIDGE_VLAN_NAME] = await _safe_walk(session, QBRIDGE_VLAN_NAME)
+        if 'lldp_neighbors' in requested:
+            from .topology_protocols import LLDP_TABLE_GROUPS
+            states = {}
+            for group, oids in LLDP_TABLE_GROUPS.items():
+                state = 'success'
+                for oid in oids:
+                    try:
+                        snapshot['tables'][oid] = await session.walk(oid)
+                    except SnmpQueryError as exc:
+                        snapshot['tables'][oid] = []
+                        state = exc.category if exc.category in {'timeout', 'unsupported'} else 'failed'
+                        break
+                states[group] = state
+            snapshot['_lldp_table_states'] = states
         if 'traffic' in requested:
             from .traffic import collect_traffic
             try:
@@ -831,4 +854,6 @@ __all__ = [
     "collect_network_snmp",
     "parse_snmp_snapshot",
 ]
+
+
 

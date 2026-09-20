@@ -530,7 +530,7 @@ class NetworkSnmpCollectionTests(SimpleTestCase):
                     "interface_status",
                     "vlan_status",
                     "traffic",
-                }
+                    "lldp_neighbors",                }
             ),
         )
 
@@ -735,3 +735,5 @@ class NetworkSnmpCollectionTests(SimpleTestCase):
         self.assertEqual(result.status, "success")
         self.assertEqual(result.data["device_info"]["description"], "Example Switch")
         self.assertTrue(engine.closed)
+
+
