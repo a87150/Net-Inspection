@@ -840,28 +840,6 @@ details > summary {
     text-align: center;
 }
 
-#profileConfigModal .modal-content {
-    max-height: calc(100vh - 2rem);
-}
-
-#profileConfigModal form {
-    display: flex;
-    min-height: 0;
-    flex: 1 1 auto;
-    flex-direction: column;
-}
-
-#profileConfigModal .modal-header,
-#profileConfigModal .modal-footer {
-    flex: 0 0 auto;
-}
-
-#profileConfigModal .modal-body {
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-}
-
 .list-group-item {
     border-color: var(--color-border);
 }
@@ -957,16 +935,6 @@ details > summary {
         margin-inline: -1px;
         overflow-x: auto;
         overscroll-behavior-inline: contain;
-    }
-
-    .modal-footer {
-        display: grid;
-        grid-template-columns: 1fr;
-    }
-
-    .modal-footer .btn {
-        width: 100%;
-        margin: 0;
     }
 
     .metric-card__actions > a,

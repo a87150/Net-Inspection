@@ -49,6 +49,9 @@ test('table and modal components own scrolling without assigning it to modal con
 
   assert.match(modal, /\.modal-body--scroll\s*\{[^}]*overflow-y:\s*auto/s);
   assert.doesNotMatch(modal, /\.modal-content\s*\{[^}]*overflow-y:\s*auto/s);
+  assert.match(modal, /max-height:\s*calc\(100dvh - 1rem\)/);
+  assert.match(modal, /\.modal-shell \.modal-header,[\s\S]*?flex:\s*0 0 auto/);
+  assert.match(modal, /@media \(max-width:\s*575\.98px\)[\s\S]*?\.modal-footer--sticky/);
   assert.equal((templates.match(/modal-dialog-scrollable/g) || []).length >= 4, true);
   assert.equal((templates.match(/modal-footer--sticky/g) || []).length >= 4, true);
 });

@@ -1,4 +1,42 @@
 /* Unified Apple-inspired modal system for import, configuration and confirmation workflows. */
+.modal-shell {
+    max-height: calc(100vh - 1rem);
+    max-height: calc(100dvh - 1rem);
+    margin-block: .5rem;
+}
+
+.modal-shell .modal-content,
+.modal-shell .modal-content > form {
+    display: flex;
+    min-height: 0;
+    max-height: inherit;
+    flex: 1 1 auto;
+    flex-direction: column;
+}
+
+.modal-shell .modal-content {
+    overflow: hidden;
+    border-color: var(--color-border-glass);
+    background: linear-gradient(145deg, var(--color-surface-glass-strong), rgba(241, 245, 252, .76));
+    box-shadow: 0 22px 60px rgba(20, 34, 60, .18), inset 0 1px 0 rgba(255, 255, 255, .9);
+    -webkit-backdrop-filter: blur(18px) saturate(125%);
+    backdrop-filter: blur(18px) saturate(125%);
+}
+
+.modal-shell .modal-header,
+.modal-shell .modal-footer {
+    z-index: 2;
+    flex: 0 0 auto;
+    background: rgba(248, 250, 255, .7);
+}
+
+.modal-shell .modal-header { padding: 1rem 1.25rem; }
+
+.modal-shell .modal-body {
+    min-height: 0;
+    padding: 1.25rem;
+}
+
 .modal-surface {
     border: 1px solid var(--color-border-glass);
     border-radius: 1.35rem;
@@ -174,7 +212,21 @@
     .config-modal-grid { grid-template-columns: 1fr; }
     .domain-config-modal [data-domain-config-section] { grid-column: auto; }
     .modal-surface { border-radius: 1rem; }
-    .modal-footer--sticky { position: static; }
+    .modal-shell { max-height: calc(100vh - .5rem); max-height: calc(100dvh - .5rem); margin: .25rem; }
+    .modal-shell .modal-body { padding: 1rem; }
+}
+
+@media (max-width: 575.98px) {
+    .modal-footer--sticky {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .modal-footer--sticky .btn {
+        width: 100%;
+        min-height: var(--control-touch-size);
+        margin: 0;
+    }
 }
 
 .modal-backdrop.show {
