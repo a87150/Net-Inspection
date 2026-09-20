@@ -311,6 +311,22 @@ class AlertUiTests(TestCase):
         self.assertEqual(exported.status_code, 200)
         self.assertIn('任务总结', response_body(exported).decode('utf-8-sig'))
 
+    def test_alert_statistics_follow_the_current_filtered_result_set(self):
+        partial = self.event()
+        AlertEvent.objects.filter(pk=partial.pk).update(status=AlertEvent.Status.PARTIAL)
+        delivered = self.event()
+        AlertEvent.objects.filter(pk=delivered.pk).update(status=AlertEvent.Status.DELIVERED)
+
+        response = self.client.get(reverse('alert_list'), {'filter_status': 'partial'})
+
+        self.assertEqual(response.context['alert_metrics'], {
+            'total': 1, 'pending': 0, 'delivered': 0,
+            'partial': 1, 'failed': 0, 'recorded': 0,
+        })
+        self.assertContains(response, '告警总数')
+        self.assertContains(response, '待发送 / 发送中')
+        self.assertContains(response, 'page-metric-grid')
+
     def test_delivery_filter_and_csv_use_channel_rows_independent_of_event_status(self):
         """Aggregate status or a non-distinct delivery join must not change event membership."""
         events = []

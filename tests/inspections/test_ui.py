@@ -344,6 +344,36 @@ class TaskUiTestCase(TestCase):
         self.assertNotContains(response, 'name="filter_progress"')
         self.assertNotContains(response, 'data-sort-key="progress"')
 
+    def test_task_statistics_follow_the_current_filtered_result_set(self):
+        success = enqueue_task(self.server_profile, [self.linux.pk], TaskRun.Source.MANUAL)
+        TaskRun.objects.filter(pk=success.pk).update(
+            status=TaskRun.Status.SUCCESS,
+            active_scope_key=None,
+            progress=100,
+            completed_targets=1,
+            successful_targets=1,
+            finished_at=timezone.now(),
+        )
+        failed = enqueue_task(self.server_profile, [self.windows.pk], TaskRun.Source.MANUAL)
+        TaskRun.objects.filter(pk=failed.pk).update(
+            status=TaskRun.Status.FAILED,
+            active_scope_key=None,
+            progress=100,
+            completed_targets=1,
+            failed_targets=1,
+            finished_at=timezone.now(),
+        )
+
+        response = self.client.get(reverse('task_list'), {'filter_status': 'success'})
+
+        self.assertEqual(response.context['task_metrics'], {
+            'total': 1, 'queued': 0, 'running': 0, 'success': 1,
+            'attention': 0, 'cancelled': 0,
+        })
+        self.assertContains(response, '任务总数')
+        self.assertContains(response, '部分成功 / 失败')
+        self.assertContains(response, 'page-metric-grid')
+
     def test_active_task_pages_offer_authenticated_manual_stop(self):
         """Omitting the stop control would leave an operator unable to cancel stuck work."""
         task = enqueue_task(

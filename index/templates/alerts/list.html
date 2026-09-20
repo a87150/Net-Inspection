@@ -16,6 +16,14 @@
     </div>
     {% endif %}
 </header>
+<section class="page-metric-grid" aria-label="当前筛选告警统计">
+    <article class="page-metric-card glass-card"><span>告警总数</span><strong>{{ alert_metrics.total }}</strong><small>当前筛选范围</small></article>
+    <article class="page-metric-card glass-card"><span>待发送 / 发送中</span><strong>{{ alert_metrics.pending }}</strong><small>正在处理</small></article>
+    <article class="page-metric-card glass-card page-metric-card--success"><span>已送达</span><strong>{{ alert_metrics.delivered }}</strong><small>渠道发送成功</small></article>
+    <article class="page-metric-card glass-card page-metric-card--warning"><span>部分送达</span><strong>{{ alert_metrics.partial }}</strong><small>部分渠道失败</small></article>
+    <article class="page-metric-card glass-card page-metric-card--danger"><span>发送失败</span><strong>{{ alert_metrics.failed }}</strong><small>全部渠道失败</small></article>
+    <article class="page-metric-card glass-card"><span>仅记录</span><strong>{{ alert_metrics.recorded }}</strong><small>未要求发送</small></article>
+</section>
 {% if can_administer %}
     {% include 'alerts/template_modal.html' %}
     {% include 'alerts/channel_modal.html' %}

@@ -9,6 +9,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import OperationalError, transaction
+from django.db.models import Count, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import NoReverseMatch, reverse
@@ -493,9 +494,18 @@ def task_list(request):
         definition,
         include_legacy_status=False,
     )
+    task_metrics = tasks.aggregate(
+        total=Count('pk'),
+        queued=Count('pk', filter=Q(status=TaskRun.Status.QUEUED)),
+        running=Count('pk', filter=Q(status=TaskRun.Status.RUNNING)),
+        success=Count('pk', filter=Q(status=TaskRun.Status.SUCCESS)),
+        attention=Count('pk', filter=Q(status__in=(TaskRun.Status.PARTIAL, TaskRun.Status.FAILED))),
+        cancelled=Count('pk', filter=Q(status=TaskRun.Status.CANCELLED)),
+    )
     page_obj = Paginator(tasks, table_state['page_size']).get_page(request.GET.get('page'))
     return render(request, 'inspections/task_list.html', {
         'page_obj': page_obj,
+        'task_metrics': task_metrics,
         'table_definition': definition,
         'table_state': table_state,
         'page_sizes': PAGE_SIZES,

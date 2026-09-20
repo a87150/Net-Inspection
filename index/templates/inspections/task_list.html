@@ -10,6 +10,14 @@
     </div>
     <div class="page-heading__actions"><a class="btn btn-outline-secondary" href="{% url 'index' %}">返回总览</a></div>
 </header>
+<section class="page-metric-grid" aria-label="当前筛选任务统计">
+    <article class="page-metric-card glass-card"><span>任务总数</span><strong>{{ task_metrics.total }}</strong><small>当前筛选范围</small></article>
+    <article class="page-metric-card glass-card"><span>等待</span><strong>{{ task_metrics.queued }}</strong><small>尚未开始执行</small></article>
+    <article class="page-metric-card glass-card"><span>运行中</span><strong>{{ task_metrics.running }}</strong><small>正在执行</small></article>
+    <article class="page-metric-card glass-card page-metric-card--success"><span>成功</span><strong>{{ task_metrics.success }}</strong><small>已正常完成</small></article>
+    <article class="page-metric-card glass-card page-metric-card--danger"><span>部分成功 / 失败</span><strong>{{ task_metrics.attention }}</strong><small>需要关注</small></article>
+    <article class="page-metric-card glass-card"><span>已取消</span><strong>{{ task_metrics.cancelled }}</strong><small>已停止执行</small></article>
+</section>
 <div data-table-workspace data-table-key="task-runs">
     <div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
     <div class="card surface-card table-scroll-shell execution-list-workspace">

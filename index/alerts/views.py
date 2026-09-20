@@ -8,6 +8,7 @@ from index.common.access import is_admin
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
+from django.db.models import Count, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -171,9 +172,18 @@ def alert_list(request):
     events, table_state = apply_table_filters(
         request, _alert_events(), definition, include_legacy_status=False,
     )
+    alert_metrics = events.aggregate(
+        total=Count('pk'),
+        pending=Count('pk', filter=Q(status__in=(AlertEvent.Status.PENDING, AlertEvent.Status.SENDING))),
+        delivered=Count('pk', filter=Q(status=AlertEvent.Status.DELIVERED)),
+        partial=Count('pk', filter=Q(status=AlertEvent.Status.PARTIAL)),
+        failed=Count('pk', filter=Q(status=AlertEvent.Status.FAILED)),
+        recorded=Count('pk', filter=Q(status=AlertEvent.Status.RECORDED)),
+    )
     page_obj = Paginator(events, table_state['page_size']).get_page(request.GET.get('page'))
     context = {
         'page_obj': page_obj,
+        'alert_metrics': alert_metrics,
         'table_definition': definition,
         'table_state': table_state,
         'page_sizes': PAGE_SIZES,
