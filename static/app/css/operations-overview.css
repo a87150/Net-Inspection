@@ -82,7 +82,7 @@
 .operations-overview__refresh-controls,
 .topology-toolbar__controls { display: flex; align-items: center; gap: .45rem; }
 .topology-toolbar__controls select {
-    min-height: 44px;
+    min-height: var(--control-touch-size);
     border: 1px solid rgba(120, 217, 241, .2);
     border-radius: .68rem;
     padding: .5rem 2rem .5rem .7rem;
@@ -90,7 +90,7 @@
     color: var(--overview-text);
 }
 .operations-overview button {
-    min-height: 44px;
+    min-height: var(--control-touch-size);
     border: 1px solid rgba(120, 217, 241, .2);
     border-radius: .68rem;
     padding: .55rem .9rem;
@@ -176,7 +176,7 @@
 .topology-detail span { display: block; color: var(--overview-muted); font-size: .68rem; }
 .topology-detail strong { display: block; margin-top: .2rem; overflow-wrap: anywhere; color: var(--overview-text); font-size: .78rem; }
 .topology-text-list { margin-top: .8rem; border: 1px solid rgba(85, 222, 246, .13); border-radius: .75rem; background: rgba(4, 15, 25, .45); }
-.topology-text-list summary { min-height: 44px; padding: .75rem .85rem; cursor: pointer; color: var(--overview-cyan); font-weight: 650; }
+.topology-text-list summary { min-height: var(--control-touch-size); padding: .75rem .85rem; cursor: pointer; color: var(--overview-cyan); font-weight: 650; }
 .topology-text-list ul { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem; max-height: 20rem; margin: 0; padding: 0 .85rem .85rem; overflow: auto; list-style: none; }
 .topology-text-list li { min-width: 0; padding: .5rem; border-radius: .5rem; background: rgba(16, 48, 66, .48); }
 .topology-text-list a,

@@ -103,7 +103,7 @@ class SharedInterfaceContractTests(TestCase):
         self.assertNotIn('innerHTML', app + effects)
         self.assertNotIn('v-html', app)
         self.assertIn('prefers-reduced-motion: reduce', css)
-        self.assertIn('min-height: 44px', css)
+        self.assertIn('min-height: var(--control-touch-size)', css)
         self.assertIn('@media (max-width: 767.98px)', css)
 
     def test_mobile_navigation_keeps_account_controls_inside_collapse(self):
