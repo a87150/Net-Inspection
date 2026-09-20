@@ -87,6 +87,7 @@ def _merge_network_results(requested, results, *, item_completed=None):
     duration_ms = 0
     messages = []
     completed = set()
+    partial_items = set()
     for protocol, result in results:
         reachable = reachable or bool(result.reachable)
         duration_ms += max(0, int(result.duration_ms or 0))
@@ -118,8 +119,10 @@ def _merge_network_results(requested, results, *, item_completed=None):
                 completed.add('lldp_neighbors')
             else:
                 completed.discard('lldp_neighbors')
+                if data['lldp_neighbors']['status'] == 'partial':
+                    partial_items.add('lldp_neighbors')
     missing = [item for item in requested if item not in completed]
-    status = 'failed' if missing and not completed else 'partial' if missing else 'success'
+    status = 'failed' if missing and not (completed or partial_items) else 'partial' if missing else 'success'
     message = '缺少有效采集证据：' + ', '.join(missing) if missing else ''
     if messages:
         message = '; '.join(([message] if message else []) + messages)
@@ -168,6 +171,11 @@ def collect_network(
             )
         else:
             snmp_result = snmp_collector(device, timeout, selected_items=snmp_items)
+        if 'lldp_neighbors' in snmp_items and 'lldp_neighbors' not in (snmp_result.data or {}):
+            snmp_result.data['lldp_neighbors'] = {
+                'status': 'failed', 'complete': False, 'protocols': ['snmp_lldp'],
+                'interfaces': [], 'neighbors': [], 'evidence': {},
+            }
         results.append(('snmp', snmp_result))
         if auto_fallback:
             snmp_data = snmp_result.data if isinstance(snmp_result.data, dict) else {}
@@ -193,6 +201,11 @@ def collect_network(
             )
         else:
             ssh_result = ssh_collector(device, timeout, selected_items=ssh_items)
+        if 'lldp_neighbors' in ssh_items and 'lldp_neighbors' not in (ssh_result.data or {}):
+            ssh_result.data['lldp_neighbors'] = {
+                'status': 'failed', 'complete': False, 'protocols': ['ssh_lldp'],
+                'interfaces': [], 'neighbors': [], 'evidence': {},
+            }
         results.append((
             'ssh',
             ssh_result,

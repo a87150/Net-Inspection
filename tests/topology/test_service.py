@@ -46,6 +46,15 @@ class TopologyServiceTests(TestCase):
             complete_topology_batch(begin_topology_batch(target.pk,timezone.now()),empty,collection_status='success',collected_at=empty.collected_at)
         link.refresh_from_db(); self.assertEqual(link.status,'stale'); self.assertEqual(link.missing_complete_batches,2)
 
+    def test_interface_rediscovery_preserves_first_seen(self):
+        target=self.target(); payload=self.payload(); first=payload.collected_at
+        complete_topology_batch(begin_topology_batch(target.pk,first),payload,collection_status='success',collected_at=first)
+        target=self.target(); later=first+timedelta(hours=1); payload=self.payload(when=later)
+        complete_topology_batch(begin_topology_batch(target.pk,later),payload,collection_status='success',collected_at=later)
+        interface=self.device.topology_interfaces.get()
+        self.assertEqual(interface.first_seen_at,first)
+        self.assertEqual(interface.last_seen_at,later)
+
     def test_rediscovery_recovers_stale_link(self):
         target=self.target(); payload=self.payload(); complete_topology_batch(begin_topology_batch(target.pk,timezone.now()),payload,collection_status='success',collected_at=payload.collected_at)
         link=NetworkTopologyLink.objects.get(); link.status='stale'; link.missing_complete_batches=2; link.save()

@@ -26,6 +26,22 @@ class FakeCollector:
 
 
 class HybridNetworkCollectorTests(SimpleTestCase):
+    def test_topology_auto_is_partial_when_one_protocol_fails(self):
+        device = SimpleNamespace(
+            connection_type='hybrid', effective_connection_type='hybrid',
+            collection_settings={'item_methods': {'lldp_neighbors': 'auto'}},
+            snmp_version='v2c', snmp_community='public', username='reader', password='secret',
+        )
+        good = {'status':'success','complete':True,'protocols':['ssh_lldp'],'interfaces':[],
+                'neighbors':[],'evidence':{}}
+        result = collect_network(
+            device, selected_items=['lldp_neighbors'],
+            snmp_collector=lambda *args, **kwargs: CollectionResult(False, 'failed', 'timeout'),
+            ssh_collector=lambda *args, **kwargs: CollectionResult(True, 'success', data={'lldp_neighbors':good}),
+        )
+        self.assertEqual(result.status, 'partial')
+        self.assertFalse(result.data['lldp_neighbors']['complete'])
+
     def test_topology_protocol_evidence_is_combined_without_duplicate_neighbors(self):
         payload = {'status':'success','complete':True,'protocols':['snmp_lldp'],'interfaces':[],
                    'neighbors':[{'local_port_id':'GE1','remote_system_name':'core','protocol':'lldp'}],'evidence':{}}

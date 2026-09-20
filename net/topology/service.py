@@ -69,7 +69,7 @@ def complete_topology_batch(batch_id, payload, *, collection_status, collected_a
             }
             row, _created = NetworkTopologyInterface.objects.update_or_create(
                 device=batch.device, stable_key=key,
-                defaults={**defaults, 'first_seen_at': collected_at},
+                defaults=defaults,
                 create_defaults={**defaults, 'first_seen_at': collected_at},
             )
             interface_rows[key] = row
@@ -107,7 +107,15 @@ def complete_topology_batch(batch_id, payload, *, collection_status, collected_a
             if link:
                 if link.local_interface.device_id != batch.device_id:
                     defaults['evidence_direction'] = 'bidirectional'
+                    # Keep the canonical orientation created by the first side.
                     defaults['local_interface'] = link.local_interface
+                    defaults['remote_device_id'] = link.remote_device_id
+                    defaults['remote_interface'] = link.remote_interface
+                    defaults['remote_chassis_id'] = link.remote_chassis_id
+                    defaults['remote_port_id'] = link.remote_port_id
+                    defaults['remote_port_description'] = link.remote_port_description
+                    defaults['remote_system_name'] = link.remote_system_name
+                    defaults['remote_management_addresses'] = link.remote_management_addresses
                 for field, value in defaults.items():
                     setattr(link, field, value)
                 link.save()
@@ -156,6 +164,8 @@ def complete_topology_batch(batch_id, payload, *, collection_status, collected_a
         batch.observation_count = NetworkTopologyObservation.objects.filter(batch=batch).count()
         batch.resolved_count, batch.unresolved_count, batch.conflict_count = resolved, unresolved, conflicts
         batch.save()
+        from net.infrastructure.page_cache import invalidate_page_cache_namespace
+        transaction.on_commit(invalidate_page_cache_namespace)
         return batch
 
 
