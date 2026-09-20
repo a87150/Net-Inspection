@@ -64,7 +64,9 @@ def function_rules(vendor):
         parsers['wireless_clients']=regex(r'^\s*(?P<mac_address>'+MAC+r')\s+(?P<username>\S+)\s+(?P<ap_name>\S+)\s+(?P<radio>\d+)\s+(?P<ip_address>'+IP+r'|N/A|-)\s+(?P<details>.*\S)\s*$',r'^\s*Total number of clients:\s*0\s*$')
     else:
         parsers['wireless_clients']=regex(r'^\s*(?P<mac_address>'+MAC+r')\s+(?P<details>\S.*)$',r'^\s*(?:Number of Clients|Total STA|Total stations|Total clients)\s*:\s*0\s*$')
-    return {'commands':{key:[value] for key,value in commands.items()},'parsers':parsers,'item_methods':{key:'ssh' for key in commands}}
+    result={'commands':{key:[value] for key,value in commands.items()},'parsers':parsers,'item_methods':{key:'ssh' for key in commands}}
+    if vendor=='cisco':result['commands']['lldp_neighbors'].append('show cdp neighbors')
+    return result
 
 
 def base_settings(vendor):
@@ -123,4 +125,5 @@ def create_default_network_templates():
                 row=DeviceCollectionTemplate(name=label+' '+title,kind='networks',vendor=vendor,subtype=subtype,parent=base,settings=type_settings(subtype))
                 row.full_clean();row.save();created.append(row)
     return created
+
 

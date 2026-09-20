@@ -1,0 +1,1 @@
+core-cdp Gi1/0/1 153 R S I WS-C9300 Gi1/0/2

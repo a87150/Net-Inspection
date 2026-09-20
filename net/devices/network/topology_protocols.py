@@ -169,3 +169,117 @@ def parse_lldp_snapshot(snapshot: dict, table_states: dict) -> dict:
 
 
 
+
+_RECORD_ALIASES = {
+    'local_port_id': ('local_port_id', 'local_interface', 'local_intf', 'local_port', 'local_port'),
+    'local_port_description': ('local_port_description',),
+    'remote_chassis_id': ('remote_chassis_id', 'chassis_id', 'neighbor_chassis_id'),
+    'remote_port_id': ('remote_port_id', 'neighbor_interface', 'neighbor_port_id', 'port_id'),
+    'remote_port_description': ('remote_port_description', 'neighbor_port_description', 'port_description'),
+    'remote_system_name': ('remote_system_name', 'system_name', 'neighbor_name', 'neighbor', 'device_id'),
+    'remote_management_addresses': ('remote_management_addresses', 'management_addresses', 'management_address', 'mgmt_address', 'ip_address'),
+}
+_EMPTY_TOPOLOGY = re.compile(r'(?im)(?:total\s+(?:number\s+of\s+)?neighbors?\s*[:=]\s*0|no\s+(?:lldp|cdp)\s+neighbors?)')
+_INTERFACE = re.compile(r'^(?:[A-Za-z-]*Ethernet|Eth|GE|Gi|Te|Fa|XGE|Ten|Gig|Hu)\S+$', re.I)
+
+
+def _first(row, names):
+    lowered = {str(key).lower(): value for key, value in row.items()}
+    return next((lowered[name] for name in names if lowered.get(name) not in (None, '')), '')
+
+
+def _record_neighbor(row, protocol):
+    neighbor = {name: _first(row, aliases) for name, aliases in _RECORD_ALIASES.items()}
+    neighbor['remote_chassis_id'] = _identity(neighbor['remote_chassis_id'])
+    addresses = neighbor['remote_management_addresses']
+    if isinstance(addresses, str):
+        addresses = [part.strip() for part in re.split(r'[,;\s]+', addresses) if part.strip()]
+    elif not isinstance(addresses, list):
+        addresses = []
+    neighbor['remote_management_addresses'] = addresses[:MAX_ADDRESSES]
+    neighbor['protocol'] = protocol
+    for field in ('local_port_id', 'local_port_description', 'remote_port_id', 'remote_port_description', 'remote_system_name'):
+        neighbor[field] = _text(neighbor[field])[:500 if 'description' in field else 255]
+    if not neighbor['local_port_id'] or not any(neighbor[name] for name in (
+        'remote_chassis_id', 'remote_port_id', 'remote_system_name', 'remote_management_addresses'
+    )):
+        return None
+    neighbor['local_key_hint'] = 'name:' + neighbor['local_port_id'].casefold()
+    return neighbor
+
+
+def _raw_neighbors(command, output, vendor):
+    protocol = 'cdp' if 'cdp' in command.casefold() else 'lldp'
+    result = []
+    for line in str(output).splitlines():
+        tokens = line.split()
+        if len(tokens) < 4 or line.lstrip().startswith(('-', '=')):
+            continue
+        if vendor in {'huawei', 'h3c'} and _INTERFACE.match(tokens[0]):
+            row = {'local_port_id': tokens[0], 'remote_chassis_id': tokens[1],
+                   'remote_port_id': tokens[2], 'remote_system_name': tokens[3]}
+        elif len(tokens) >= 4 and _INTERFACE.match(tokens[1]) and _INTERFACE.match(tokens[-1]):
+            row = {'remote_system_name': tokens[0], 'local_port_id': tokens[1],
+                   'remote_port_id': tokens[-1]}
+        else:
+            continue
+        neighbor = _record_neighbor(row, protocol)
+        if neighbor:
+            result.append(neighbor)
+    return result
+
+
+def normalize_ssh_neighbors(value: object, raw: dict, vendor: str) -> dict:
+    """Normalize validated LLDP/CDP template records and bounded raw evidence."""
+    vendor = (vendor or '').strip().lower()
+    if isinstance(value, dict) and 'records' in value:
+        records = value.get('records') or []
+        inherited_partial = value.get('status') == 'partial'
+    elif isinstance(value, list):
+        records, inherited_partial = value, False
+    elif isinstance(value, dict) and value and not value.get('status'):
+        records, inherited_partial = [value], False
+    else:
+        records, inherited_partial = [], isinstance(value, dict) and value.get('status') == 'partial'
+    protocols = set()
+    neighbors = []
+    for row in records[:MAX_NEIGHBORS]:
+        if not isinstance(row, dict):
+            continue
+        protocol = 'cdp' if str(row.get('protocol', '')).casefold() == 'cdp' else 'lldp'
+        neighbor = _record_neighbor(row, protocol)
+        if neighbor:
+            neighbors.append(neighbor)
+            protocols.add('ssh_' + protocol)
+    relevant_raw = {}
+    any_nonempty = False
+    explicit_empty = False
+    for command, output in (raw or {}).items():
+        if not isinstance(output, str) or not any(name in str(command).casefold() for name in ('lldp', 'cdp')):
+            continue
+        text = output[:MAX_EVIDENCE_BYTES]
+        relevant_raw[str(command)[:255]] = text
+        any_nonempty = any_nonempty or bool(text.strip())
+        explicit_empty = explicit_empty or bool(_EMPTY_TOPOLOGY.search(text))
+        for neighbor in _raw_neighbors(str(command), text, vendor):
+            marker = json.dumps(neighbor, ensure_ascii=False, sort_keys=True)
+            if marker not in {json.dumps(item, ensure_ascii=False, sort_keys=True) for item in neighbors}:
+                neighbors.append(neighbor)
+            protocols.add('ssh_' + neighbor['protocol'])
+            if len(neighbors) >= MAX_NEIGHBORS:
+                break
+    complete = bool(neighbors) and not inherited_partial or explicit_empty and not inherited_partial
+    status = 'success' if complete else 'partial' if neighbors else 'failed'
+    interfaces = []
+    seen = set()
+    for neighbor in neighbors:
+        name = neighbor['local_port_id']
+        key = name.casefold()
+        if key not in seen:
+            interfaces.append({'if_index': None, 'stable_key_hint': 'name:' + key, 'name': name,
+                               'description': neighbor['local_port_description']})
+            seen.add(key)
+    evidence = _bounded_evidence({'raw': relevant_raw, 'record_count': len(records), 'parsed_count': len(neighbors)})
+    return {'status': status, 'complete': complete, 'protocols': sorted(protocols),
+            'interfaces': interfaces, 'neighbors': neighbors, 'evidence': evidence,
+            'message': '' if complete else ('SSH 拓扑回显未完整解析。' if any_nonempty else 'SSH 拓扑命令未返回有效证据。')}

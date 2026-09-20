@@ -337,6 +337,12 @@ def collect_network_ssh(device, timeout=12, selected_items=None):
         data = selected_fields(_network_data(raw, vendor_key), selected_items)
         data = {key: value for key, value in data.items() if key in successful_items - failed_items}
         data.update(_template_network_data(template_data))
+        if selected_items is not None and 'lldp_neighbors' in selected_items:
+            from net.devices.network.topology_protocols import normalize_ssh_neighbors
+            value = data.get('lldp_neighbors', template_data.get('lldp_neighbors', []))
+            topology_raw = {key: value for key, value in raw.items()
+                            if isinstance(value, str) and any(token in str(key).lower() for token in ('lldp', 'cdp'))}
+            data['lldp_neighbors'] = normalize_ssh_neighbors(value, topology_raw, vendor_key)
         if 'cpu' in data and data['cpu']['usage_percent'] is None:
             del data['cpu']
         if 'temperature' in data and not data['temperature']['values_celsius']:
@@ -423,3 +429,4 @@ def _template_network_data(values):
         elif item == 'device_info':
             result[item] = row if isinstance(row, dict) else {'records': value}
     return result
+
