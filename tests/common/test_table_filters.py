@@ -137,6 +137,28 @@ class CompactFilterWorkspaceTests(TestCase):
             'distinct',
         )
 
+    def test_workspace_keeps_accessible_filter_table_summary_and_pagination_order(self):
+        People.objects.bulk_create([
+            People(name=f'分页人员{index:02d}', employee_id=f'PAGE-{index:02d}')
+            for index in range(25)
+        ])
+
+        response = self.client.get(reverse('asset_list', args=['people']))
+        html = response.content.decode(response.charset)
+
+        filter_position = html.index('data-filter-submit')
+        reset_position = html.index('data-query-reset')
+        export_position = html.index('data-filtered-export')
+        self.assertLess(filter_position, reset_position)
+        self.assertLess(reset_position, export_position)
+        self.assertContains(response, 'class="table-responsive" role="region"')
+        self.assertContains(response, 'aria-label="人员数据表"')
+        self.assertContains(response, 'tabindex="0"')
+        self.assertContains(response, 'data-result-summary aria-live="polite"')
+        self.assertContains(response, 'class="page-pagination" aria-label="分页"')
+        self.assertContains(response, 'page-pagination__links')
+        self.assertContains(response, 'aria-current="page"')
+
     def test_selected_text_option_does_not_hide_other_candidates(self):
         response = self.client.get(reverse('asset_list', args=['people']), {
             'filter_name': '张三',

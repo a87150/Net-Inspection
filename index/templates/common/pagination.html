@@ -1,7 +1,7 @@
 {% load extras %}
 {% if page_obj.paginator.num_pages > 1 %}
 {% page_window page_obj 2 as visible_pages %}
-<nav class="page-pagination" aria-label="分页"><ul class="pagination justify-content-center mb-0">
+<nav class="page-pagination" aria-label="分页"><ul class="pagination page-pagination__links justify-content-center mb-0">
     {% if page_obj.has_previous %}<li class="page-item">{% query_transform request page=page_obj.previous_page_number page_size=table_state.page_size as previous_query %}<a class="page-link" data-page="previous" href="?{{ previous_query }}">上一页</a></li>{% endif %}
     <li class="page-item{% if page_obj.number == 1 %} active{% endif %}">{% query_transform request page=1 page_size=table_state.page_size as first_query %}{% if page_obj.number == 1 %}<span class="page-link" aria-current="page">1</span>{% else %}<a class="page-link" data-page="1" href="?{{ first_query }}">1</a>{% endif %}</li>
     {% for page_number in visible_pages %}

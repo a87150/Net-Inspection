@@ -251,7 +251,27 @@ body.app-shell {
 }
 
 .table-filter-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    align-items: end;
+    column-gap: .65rem;
     row-gap: .8rem;
+}
+
+.table-filter-bar .table-filter-field,
+.table-filter-bar .table-filter-field--keyword,
+.table-filter-bar .table-filter-field--editable-options {
+    width: 100%;
+    min-width: 0;
+}
+
+.table-filter-bar .table-filter-actions,
+.table-filter-bar .table-action-feedback {
+    grid-column: 1 / -1;
+}
+
+.table-filter-bar .table-filter-actions {
+    align-items: stretch;
 }
 
 .table-more-filters,
@@ -273,6 +293,7 @@ body.app-shell {
 
 .table-scroll-shell {
     position: relative;
+    overflow: visible;
 }
 
 .table-scroll-hint {
@@ -314,6 +335,7 @@ body.app-shell {
     border-left: 1px solid var(--color-border);
     background: var(--color-surface) !important;
     box-shadow: -8px 0 14px -14px rgba(20, 34, 60, .8);
+    white-space: nowrap;
 }
 
 .table-actions-column {
@@ -1415,7 +1437,8 @@ code {
 }
 .table-filter-chip:hover,
 .table-filter-chip:focus-visible { border-color: var(--color-primary); background: #e4ecff; }
-.page-pagination .pagination { flex-wrap: wrap; gap: .2rem; }
+.page-pagination { flex-wrap: wrap; }
+.page-pagination .pagination { max-width: 100%; flex-wrap: wrap; gap: .2rem; }
 .page-pagination .page-link { min-width: 2.25rem; min-height: 2.25rem; border-radius: .55rem; text-align: center; }
 .table-row-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .4rem; white-space: normal; }
 .table-text-disclosure { min-width: 10rem; max-width: 28rem; }
@@ -1427,6 +1450,25 @@ code {
     .table-actions-column, .table-actions-cell { position: static; min-width: 8.5rem; box-shadow: none; }
     .table-row-actions { justify-content: flex-start; }
     .page-pagination .pagination { justify-content: flex-start !important; }
+}
+@media (max-width: 575.98px) {
+    .table-filter-bar,
+    .table-more-filters__grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .table-filter-bar .table-filter-actions {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .table-filter-bar .table-filter-actions > *,
+    .table-filter-bar .table-filter-actions .btn {
+        width: 100%;
+    }
+    .page-pagination,
+    .page-pagination__links {
+        justify-content: flex-start !important;
+    }
 }
 /* Dashboard hierarchy: one obvious action and compact inactive task state. */
 .dashboard-refreshed-at { margin: 0; color: var(--color-text-muted); font-size: .78rem; white-space: nowrap; }
