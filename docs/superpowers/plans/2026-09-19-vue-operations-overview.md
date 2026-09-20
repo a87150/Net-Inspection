@@ -4,7 +4,7 @@
 
 **Goal:** 新增一个可在“运维态势”和“网络拓扑”之间切换的综合展示页，以现有只读数据呈现真实运行状态；页面每 30 秒局部刷新，支持暂停、手动刷新、隐藏页暂停和失败保留旧数据。
 
-**Architecture:** Django 提供首屏 JSON 和只读快照端点；Vue 3.5.43 仅挂载到综合展示页根节点，使用本地 production ESM 构建，不接管公共导航。纯 JavaScript 模块负责刷新状态机、拓扑规范化和效果生命周期。当前拓扑只展示明确的逻辑归属边，并为后端未来提供的 physical_edges 留出稳定接口。
+**Architecture:** Django 提供首屏 JSON 和只读快照端点；Vue 3.5.43 仅挂载到综合展示页根节点，使用本地 production ESM 构建，不接管公共导航。纯 JavaScript 模块负责刷新状态机、拓扑规范化和效果生命周期。拓扑区域同时组合逻辑归属边与 net.topology.read_model 已白名单化的 LLDP/CDP 物理链路；无物理数据时自然降级为逻辑拓扑。
 
 **Tech Stack:** Django, Vue 3.5.43 local ESM build, SVG, Canvas 2D, Bootstrap 5, CSS custom properties, Django TestCase, Node built-in test runner.
 
@@ -26,7 +26,8 @@
 - 页面隐藏时停止定时器；重新可见后立即刷新；手动暂停不被可见性变化覆盖。
 - 请求失败时保留上一份成功数据并显示可访问的陈旧状态提示。
 - prefers-reduced-motion 下停止非必要动画；Canvas 正确销毁，不重复注册事件。
-- 逻辑拓扑和未来物理拓扑在数据结构、标签和图例上明确区分。
+- 逻辑拓扑和 LLDP/CDP 物理拓扑在数据结构、标签和图例上明确区分。
+- 未解析邻居保留为外部节点；单向、双向、陈旧和冲突证据均有文字与线型，不只依靠颜色。
 
 ---
 
@@ -82,8 +83,9 @@ Use a temporary directory for download/extraction and verify the version from pa
     snapshot['summary'] contains people, computers, networks, servers, monitors, domain, tasks
     snapshot['tasks'] contains only display-safe status/count/time fields
     snapshot['alerts'] contains only display-safe severity/status/summary/time/channel-result fields
-    snapshot['topology']['mode'] == 'logical'
-    snapshot['topology']['physical_edges'] == []
+    snapshot['topology']['mode'] is 'logical' without discoveries and 'hybrid' with discoveries
+    snapshot['topology']['interfaces'] contains only read-model allowlisted fields
+    snapshot['topology']['physical_edges'][0]['kind'] == 'physical_discovered'
 
 Create a partial-failure test by mocking one region builder to raise DatabaseError. The overall snapshot must still return other regions and include a stable error code such as summary_unavailable, never the raw exception text.
 
@@ -106,7 +108,7 @@ Create a partial-failure test by mocking one region builder to raise DatabaseErr
 
 Reuse build_asset_card_summaries() and inspection_task_queryset()/summarize_tasks() where their semantics already match. Limit task and alert lists to the newest 10 rows. Use model display labels, not internal enum values, for visible text.
 
-Topology nodes must have stable ids, kind, label, status, url and optional parent_id. Edges must have id, source, target, relationship='logical_membership', protocol=None, confidence=None, observed_at and stale. Keep physical_edges as an empty array until the backend supplies verified observations.
+Topology nodes must have stable ids, kind, label, status, url and optional parent_id. Logical edges must have id, source, target and relationship='logical_membership'. Build the physical portion by calling current_topology_payload(include_stale=True, limit=1000) directly; do not call the HTTP API from the server. Keep its allowlisted interface/link fields intact under interfaces and physical_edges. Map known device ids to logical device nodes in the Vue adapter; unresolved remote endpoints remain external nodes labelled from remote_system_name, chassis id, management address or “未解析邻居”. Never request or embed evidence.
 
 - [ ] Re-run the tests and verify all assertions pass.
 
@@ -132,8 +134,8 @@ Topology nodes must have stable ids, kind, label, status, url and optional paren
 
 - [ ] Add failing route/access/rendering tests for:
 
-    reverse('operations_overview') == '/operations/'
-    reverse('operations_overview_data') == '/operations/data/'
+    reverse('operations_overview') == '/operations/overview/'
+    reverse('operations_overview_data') == '/operations/overview/data/'
     reader GET receives 200 for both routes
     anonymous GET is redirected to login
     POST to the data endpoint is rejected
@@ -156,7 +158,7 @@ Topology nodes must have stable ids, kind, label, status, url and optional paren
     def operations_overview_data(request):
         return JsonResponse(build_operations_snapshot())
 
-Export them through index/views/__init__.py, register /operations/ and /operations/data/, and add both names to READER_VIEWS.
+Export them through index/views/__init__.py, register /operations/overview/ and /operations/overview/data/, and add both names to READER_VIEWS. Do not modify the existing /operations/topology/ endpoints.
 
 - [ ] Build a semantic template skeleton extending common/base.html. Use Django json_script:
 
@@ -220,13 +222,13 @@ It returns getState(), subscribe(listener), start(), stop(), refresh(), setManua
 - Create: static/app/js/operations-overview/topology.js
 - Create: tests/frontend/operations_overview_topology.test.js
 
-- [ ] Write failing tests for normalizeTopology(snapshot) and layoutTopology(graph, viewport). Cover deterministic ordering, stable coordinates, unknown endpoints dropped, self-edges dropped, duplicate edges deduplicated, logical and physical edges kept separate, status labels retained, and mobile viewport bounds.
+- [ ] Write failing tests for normalizeTopology(snapshot) and layoutTopology(graph, viewport). Cover deterministic ordering, stable coordinates, invalid logical endpoints dropped, unresolved physical endpoints retained as stable external nodes, self-edges dropped, reciprocal physical observations deduplicated, logical and physical edges kept separate, protocol/evidence/status labels retained, and mobile viewport bounds.
 
 - [ ] Run the test and verify the missing module fails.
 
     node --test tests/frontend/operations_overview_topology.test.js
 
-- [ ] Implement a deterministic layered layout: root column, category column, asset grid. Clamp positions within the supplied SVG viewport. Return nodes, logicalEdges, physicalEdges, legend and bounds. Do not infer any physical link.
+- [ ] Implement a deterministic layered layout: root column, category column, asset grid and an external-neighbor rail. Clamp positions within the supplied SVG viewport. Return nodes, logicalEdges, physicalEdges, legend and bounds. Consume only physical_discovered links supplied by the backend; do not infer any physical link.
 
 - [ ] Run the topology test and verify it passes.
 
@@ -264,7 +266,7 @@ Read initial data only from #operations-overview-bootstrap.textContent using JSO
 
 - [ ] Render the 运维态势 view with summary cards, task progress rows, alert feed, health labels, last refresh time, pause/resume button, manual refresh button and stale/error banner. Each status uses icon/text plus color.
 
-- [ ] Render the 网络拓扑 view as accessible SVG. Provide zoom in/out/reset controls, drag-to-pan, keyboard-operable node links and a legend that explicitly says “逻辑归属”. Preserve view and viewport through data refresh.
+- [ ] Render the 网络拓扑 view as accessible SVG. Provide zoom in/out/reset controls, drag-to-pan, keyboard-operable node links and a legend that distinguishes “逻辑归属” from “LLDP/CDP 物理发现”. Link details show local/remote interfaces, protocol, direction, resolution, current/stale state, speed, VLAN, confidence and last-seen time. Preserve view and viewport through data refresh.
 
 - [ ] Implement effects.js as a disposable Canvas background controller. Cap devicePixelRatio, limit particle count on small screens, pause on hidden documents, and fully remove listeners/animation frames in destroy(). Return a no-op controller when prefers-reduced-motion is true.
 
