@@ -12,7 +12,6 @@
     <div class="page-heading__actions">
         {% if can_administer and task_project_kind == 'computers' %}<a class="btn btn-outline-primary" href="{% url 'issue_severity_settings' %}?project=computers" data-modal-load="issueSeverityModal">问题等级设置</a>{% endif %}
         {% if record_kind == 'servers' %}{% if can_administer %}<a class="btn btn-outline-primary" href="{% url 'windows_server_script_download' %}">下载 Windows 采集脚本</a>{% endif %}{% endif %}
-        {% if record_type == 'computer_analysis' %}<a class="btn btn-outline-primary" href="{% url 'computer_log_list' %}">导入日志证据 / 重新分析</a>{% endif %}
         {% if can_administer and task_project_kind %}{% if can_administer %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#profileConfigModal">{{ task_config_label }}</button>{% endif %}{% if can_administer %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#alertPolicyModal">告警配置</button>{% endif %}{% if can_administer %}<button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#runTaskModal">{{ task_action_label }}</button>{% endif %}{% endif %}
         <a class="btn btn-outline-secondary" href="{% if record_type == 'computer_analysis' %}{% url 'asset_list' 'computers' %}{% else %}{% url 'asset_list' record_kind %}{% endif %}">返回{% if record_type == 'computer_analysis' %}PC{% else %}设备{% endif %}列表</a>
     </div>

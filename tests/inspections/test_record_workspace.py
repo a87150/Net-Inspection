@@ -207,6 +207,13 @@ class ProjectRecordWorkspaceTests(TestCase):
         self.assertEqual(metrics['failure_rate'], 50.0)
         self.assertEqual(metrics['latest_task_at'], task.created_at)
 
+    def test_computer_analysis_records_do_not_repeat_the_log_list_entry(self):
+        response = self.client.get(reverse('computer_analysis_list'))
+
+        self.assertContains(response, '日志分析记录')
+        self.assertContains(response, '总体统计')
+        self.assertNotContains(response, '导入日志证据 / 重新分析')
+
     def test_project_task_list_uses_seven_rows_per_page(self):
         tasks = []
         for index in range(9):
