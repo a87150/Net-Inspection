@@ -34,20 +34,42 @@ def _allocate_raw_key(raw, preferred):
     return f'{preferred}#{suffix}'
 
 
-def _network_item_plan(mode, selected_items):
+def _network_item_plan(mode, selected_items, item_methods=None):
     """Return ordered SNMP/SSH selections and whether SNMP may fall back."""
     requested = _ordered_unique(_DEFAULT_ITEMS if selected_items is None else selected_items)
     mode = mode if mode in {'ssh', 'snmp', 'hybrid', 'auto'} else 'ssh'
-    if mode == 'ssh':
-        return [item for item in requested if item == 'traffic'], [item for item in requested if item != 'traffic'], False
-    snmp_items = [item for item in requested if item in SNMP_ITEMS]
-    if mode == 'snmp':
-        # Metrics stay SNMP-only; native configuration requires SSH.
-        return snmp_items, [item for item in requested if item == 'config_info'], False
-    ssh_items = [item for item in requested if item in SSH_ONLY_ITEMS]
-    return snmp_items, ssh_items, mode == 'auto'
-
-
+    methods = item_methods or {}
+    snmp_items = []
+    ssh_items = []
+    for item in requested:
+        method = methods.get(item)
+        if method == 'snmp':
+            snmp_items.append(item)
+            continue
+        if method == 'ssh':
+            ssh_items.append(item)
+            continue
+        if item == 'lldp_neighbors' and method == 'auto':
+            if mode in {'snmp', 'hybrid', 'auto'}:
+                snmp_items.append(item)
+            if mode in {'ssh', 'hybrid', 'auto'}:
+                ssh_items.append(item)
+            continue
+        if mode == 'ssh':
+            (snmp_items if item == 'traffic' else ssh_items).append(item)
+        elif mode == 'snmp':
+            if item in SNMP_ITEMS:
+                snmp_items.append(item)
+            elif item == 'config_info':
+                ssh_items.append(item)
+        else:
+            if item in SNMP_ITEMS:
+                snmp_items.append(item)
+            if item in SSH_ONLY_ITEMS:
+                ssh_items.append(item)
+    return snmp_items, ssh_items, mode == 'auto' and not any(
+        method == 'auto' for method in methods.values()
+    )
 def _merge_network_results(requested, results, *, item_completed=None):
     """Merge protocol evidence and derive status only from requested data."""
     requested = _ordered_unique(requested)
@@ -120,11 +142,9 @@ def collect_network(
     mode = getattr(device, 'effective_connection_type', None)
     if mode not in {'ssh', 'snmp', 'hybrid', 'auto'}:
         mode = getattr(device, 'connection_type', 'ssh')
-    snmp_items, ssh_items, auto_fallback = _network_item_plan(mode, requested)
     settings = getattr(device, 'collection_settings', {}) or {}
-    methods = {item:method for item,method in settings.get('item_methods',{}).items() if item in requested and method in {'snmp','ssh'}}
-    snmp_items = [item for item in requested if (item in snmp_items and methods.get(item)!='ssh') or methods.get(item)=='snmp']
-    ssh_items = [item for item in requested if (item in ssh_items and methods.get(item)!='snmp') or methods.get(item)=='ssh']
+    methods = {item:method for item,method in settings.get('item_methods',{}).items() if item in requested and method in {'snmp','ssh','auto'}}
+    snmp_items, ssh_items, auto_fallback = _network_item_plan(mode, requested, methods)
     use_default_snmp = snmp_collector is None
     use_default_ssh = ssh_collector is None
     snmp_collector = snmp_collector or collect_network_snmp
@@ -185,3 +205,4 @@ __all__ = [
     '_network_item_plan',
     'collect_network',
 ]
+

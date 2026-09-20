@@ -1,11 +1,17 @@
 from django.test import TestCase
 from django.core.exceptions import ValidationError
 from net.models import Network_Device, DeviceCollectionTemplate, DeviceCollectionBinding
-from net.devices.collection_profiles import resolve_collection_settings
+from net.devices.collection_profiles import collection_method_choices, resolve_collection_settings
 
 class CollectionProfilesTests(TestCase):
     def setUp(self):
         self.device = Network_Device.objects.create(ip='192.0.2.10', vendor='华为', device_type='交换机', connection_type='ssh')
+
+    def test_topology_discovery_can_use_snmp_ssh_or_both(self):
+        self.assertEqual(
+            [value for value, _label in collection_method_choices('networks', 'lldp_neighbors')],
+            ['snmp', 'ssh', 'auto'],
+        )
 
     def test_vendor_type_and_device_override_precedence(self):
         DeviceCollectionTemplate.objects.create(name='all', kind='networks', vendor='', subtype='', settings={'thresholds': {'cpu': 80, 'memory': 85}})
@@ -323,3 +329,4 @@ class CollectionProfilesTests(TestCase):
         self.assertEqual(standard.cleaned_data['api_url'], existing.api_url)
         self.assertEqual(standard.cleaned_data['api_shared_secret'], existing.api_shared_secret)
         self.assertFalse(standard.cleaned_data['verify_ssl'])
+

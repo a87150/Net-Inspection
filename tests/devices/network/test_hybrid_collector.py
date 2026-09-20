@@ -6,6 +6,7 @@ from django.test import SimpleTestCase
 from net.infrastructure.collection import CollectionResult
 from net.devices.network.collector import (
     _merge_network_results,
+    _network_item_plan,
     collect_network,
 )
 
@@ -25,6 +26,20 @@ class FakeCollector:
 
 
 class HybridNetworkCollectorTests(SimpleTestCase):
+    def test_topology_auto_uses_both_protocols_and_explicit_method_uses_one(self):
+        self.assertEqual(
+            _network_item_plan('hybrid', ['lldp_neighbors'], {'lldp_neighbors': 'auto'}),
+            (['lldp_neighbors'], ['lldp_neighbors'], False),
+        )
+        self.assertEqual(
+            _network_item_plan('hybrid', ['lldp_neighbors'], {'lldp_neighbors': 'snmp'}),
+            (['lldp_neighbors'], [], False),
+        )
+        self.assertEqual(
+            _network_item_plan('hybrid', ['lldp_neighbors'], {'lldp_neighbors': 'ssh'}),
+            ([], ['lldp_neighbors'], False),
+        )
+
     def setUp(self):
         self.device = SimpleNamespace(connection_type='hybrid')
         self.snmp = FakeCollector(CollectionResult(
@@ -227,3 +242,5 @@ class HybridNetworkCollectorTests(SimpleTestCase):
         snmp.assert_not_called()
         self.assertEqual(result.status, 'failed')
         self.assertIn('未配置网络设备 SNMP 凭据', result.message)
+
+

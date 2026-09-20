@@ -88,6 +88,7 @@ def collection_method_choices(kind, item):
     if item == 'inspection_collection':return []
     if kind == 'networks':
         from net.inspections.selection import NETWORK_FUNCTION_ITEMS
+        if item == 'lldp_neighbors':return [('snmp','SNMP'),('ssh','SSH 命令'),('auto','SNMP + SSH 自动补充')]
         if item in NETWORK_FUNCTION_ITEMS:return [('ssh','SSH 命令')]
         if item == 'traffic':return [('snmp','SNMP')]
         if item in {'logs','config_info'}:return [('ssh','SSH 命令')]
@@ -295,3 +296,4 @@ def attach_live_credentials(kind, target_id, effective):
         raise ValidationError('SNMP 凭据在任务入队后已变更，请重新创建巡检任务。')
     result['snmp'] = {**result.get('snmp',{}), **decrypt_credentials(row)}
     return result
+

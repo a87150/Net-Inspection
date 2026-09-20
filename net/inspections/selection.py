@@ -36,6 +36,7 @@ def selected_fields(payload, selected_items, aliases=None):
 # Keep NETWORK_FIELDS aligned with the legacy positional command table.
 NETWORK_FUNCTION_ITEMS = {
     'routing_table': 'IPv4 路由表', 'arp_table': 'ARP 地址表',
-    'mac_table': 'MAC 地址表', 'lldp_neighbors': 'LLDP 邻居',
+    'mac_table': 'MAC 地址表', 'lldp_neighbors': '拓扑发现（LLDP/CDP）',
     'wireless_aps': '无线 AP 状态', 'wireless_clients': '无线客户端',
 }
+

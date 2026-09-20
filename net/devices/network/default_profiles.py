@@ -94,7 +94,9 @@ def base_settings(vendor):
     # Functions live in the base as reusable definitions; child types enable only
     # applicable ones. This permits a layer-3 switch to enable routing individually.
     from net.devices.collection_profiles import merge
-    return merge(result,function_rules(vendor))
+    result=merge(result,function_rules(vendor))
+    result['item_methods']['lldp_neighbors']='auto'
+    return result
 
 
 def type_settings(subtype):
@@ -121,3 +123,4 @@ def create_default_network_templates():
                 row=DeviceCollectionTemplate(name=label+' '+title,kind='networks',vendor=vendor,subtype=subtype,parent=base,settings=type_settings(subtype))
                 row.full_clean();row.save();created.append(row)
     return created
+

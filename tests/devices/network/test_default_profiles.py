@@ -84,6 +84,7 @@ class DefaultTemplateWorkflowTests(TestCase):
         }
         for vendor,(cpu,memory) in samples.items():
             settings=base_settings(vendor)
+            self.assertEqual(settings['item_methods']['lldp_neighbors'], 'auto')
             for item,output,expected in [('cpu',cpu,37),('memory',memory,50)]:
                 with self.subTest(vendor=vendor,item=item):
                     rows=parse_template_output(settings['parsers'][item],output)
@@ -137,3 +138,4 @@ class DefaultTemplateWorkflowTests(TestCase):
         self.assertTrue(any(f['analysis_item']=='wireless_aps' for f in record.details['issue_findings']))
         self.assertIn('无线 AP 状态 2 条',key_metrics(record.details))
         self.assertIn('display wlan ap all',record.raw_output)
+
