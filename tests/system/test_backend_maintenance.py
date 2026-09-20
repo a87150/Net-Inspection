@@ -285,3 +285,35 @@ class ResultArchiveTests(TestCase):
             if rows[-1]['next_cursor']:
                 cursor = rows[-1]['next_cursor']
         self.assertEqual(seen, sorted(str(target.pk) for target in targets))
+
+class TopologyEvidenceRetentionTests(TestCase):
+    def setUp(self):
+        from net.models import Network_Device, NetworkTopologyInterface, NetworkTopologyLink, NetworkTopologyObservation, TopologyDiscoveryBatch
+        self.models=(NetworkTopologyInterface,NetworkTopologyLink,NetworkTopologyObservation,TopologyDiscoveryBatch)
+        now=timezone.now(); self.cutoff=now-timedelta(days=30)
+        device=Network_Device.objects.create(device_name='retention',ip='192.0.2.77')
+        profile=InspectionProfile.objects.create(name='topology-retention',device_type='network_device',selected_items=['lldp_neighbors'])
+        task=TaskRun.objects.create(task_type='inspection',inspection_profile=profile,source='manual',selected_items_snapshot=['lldp_neighbors'],target_scope_snapshot={},total_targets=1)
+        target=TaskTargetRun.objects.create(task=task,target_type='network_device',target_id=str(device.pk),target_snapshot={})
+        batch=TopologyDiscoveryBatch.objects.create(source_task=task,source_target=target,device=device,protocol='snmp_lldp',status='success',started_at=now,collected_at=now,finished_at=now)
+        interface=NetworkTopologyInterface.objects.create(device=device,stable_key='ifindex:1',first_seen_at=now,last_seen_at=now,last_batch=batch)
+        link=NetworkTopologyLink.objects.create(stable_link_key='c'*64,local_interface=interface,first_seen_at=now,last_seen_at=now,last_batch=batch)
+        self.old=NetworkTopologyObservation.objects.create(batch=batch,source_target=target,local_device=device,local_interface=interface,link=link,protocol='snmp_lldp',neighbor={},evidence='{}',evidence_sha256='d'*64,collected_at=now-timedelta(days=91))
+        self.recent=NetworkTopologyObservation.objects.create(batch=batch,source_target=target,local_device=device,local_interface=interface,link=link,protocol='snmp_lldp',neighbor={},evidence='{}',evidence_sha256='e'*64,collected_at=now-timedelta(days=89))
+
+    def test_dry_run_preserves_and_apply_prunes_only_expired_observations(self):
+        from net.models import NetworkTopologyObservation
+        output=io.StringIO()
+        call_command('archive_task_results',before=self.cutoff.isoformat(),limit=1,topology_evidence_days=90,batch_size=1,stdout=output)
+        self.assertEqual(NetworkTopologyObservation.objects.count(),2)
+        with tempfile.TemporaryDirectory() as directory:
+            call_command('archive_task_results',before=self.cutoff.isoformat(),limit=1,topology_evidence_days=90,batch_size=1,apply=True,output=str(Path(directory)/'archive.jsonl'),stdout=io.StringIO())
+        self.assertFalse(NetworkTopologyObservation.objects.filter(pk=self.old.pk).exists())
+        self.assertTrue(NetworkTopologyObservation.objects.filter(pk=self.recent.pk).exists())
+        Interface,Link,_Observation,Batch=self.models
+        self.assertEqual(Interface.objects.count(),1);self.assertEqual(Link.objects.count(),1);self.assertEqual(Batch.objects.count(),1)
+
+    def test_invalid_topology_retention_bounds_are_rejected(self):
+        for days,size in ((0,1),(90,0),(90,10001)):
+            with self.subTest(days=days,size=size),self.assertRaises(CommandError):
+                call_command('archive_task_results',before=self.cutoff.isoformat(),limit=1,topology_evidence_days=days,batch_size=size,stdout=io.StringIO())

@@ -105,6 +105,21 @@ def compact_archived_target(row, cutoff):
         ).filter(~Exists(unfinished)).update(result_snapshot=compact))
 
 
+def prune_topology_observations(*, retention_days=90, batch_size=500, apply=False):
+    from net.models import NetworkTopologyObservation
+    cutoff = timezone.now() - timezone.timedelta(days=retention_days)
+    candidates = NetworkTopologyObservation.objects.filter(collected_at__lt=cutoff).order_by('collected_at', 'id')
+    if not apply:
+        return candidates.count()
+    deleted = 0
+    while True:
+        ids = list(candidates.values_list('pk', flat=True)[:batch_size])
+        if not ids:
+            return deleted
+        with transaction.atomic():
+            count, _details = NetworkTopologyObservation.objects.filter(pk__in=ids).delete()
+        deleted += count
+
 class Command(BaseCommand):
     help = 'Preview old terminal results; --apply --output archives, and optional --compact reduces verified duplicates.'
 
@@ -116,6 +131,8 @@ class Command(BaseCommand):
         parser.add_argument('--output', help='New JSONL path; parent directory must already exist.')
         parser.add_argument('--apply', action='store_true', help='Write archive; database changes require --compact too.')
         parser.add_argument('--compact', action='store_true', help='After durable archive, compact verified duplicate details with compare-and-swap.')
+        parser.add_argument('--topology-evidence-days', type=int, default=90, help='Retain topology observations for this many days (default: 90).')
+        parser.add_argument('--batch-size', type=int, default=500, help='Topology observation delete batch size, 1..10000.')
 
     def handle(self, *args, **options):
         try:
@@ -126,6 +143,10 @@ class Command(BaseCommand):
             raise CommandError('--before must be a past ISO-8601 timestamp with timezone.')
         if not 1 <= options['limit'] <= 1000:
             raise CommandError('--limit must be between 1 and 1000.')
+        if not 1 <= options['topology_evidence_days'] <= 3650:
+            raise CommandError('--topology-evidence-days must be between 1 and 3650.')
+        if not 1 <= options['batch_size'] <= 10000:
+            raise CommandError('--batch-size must be between 1 and 10000.')
         if options['apply'] and not options['output']:
             raise CommandError('--apply requires a new --output archive path.')
 
@@ -207,7 +228,9 @@ class Command(BaseCommand):
         finally:
             if archive is not None:
                 archive.close()
+        topology_observations = prune_topology_observations(retention_days=options['topology_evidence_days'], batch_size=options['batch_size'], apply=options['apply'])
         mode = ('archive_then_compact' if options['compact'] else 'archive') if options['apply'] else 'preview'
         self.stdout.write(encoded({'kind': 'summary', 'mode': mode,
                                    'count': count, 'compacted': compacted, 'next_cursor': last_cursor,
                                    'database_changed': bool(compacted)}).decode().rstrip('\n'))
+

@@ -37,8 +37,8 @@ after maintenance. This implementation has not changed any live database.
 ## Historical result retention
 
 Historical large snapshots remain until an operator optionally runs maintenance.
-Default behavior is read-only preview; even `--apply` alone only creates an archive.
-No command deletes evidence rows, audit history, PROTECT links, log files, or tasks.
+Default behavior is read-only preview. `--apply` creates the task archive, prunes expired topology observations, and only compacts task snapshots when `--compact` is also present.
+Task/inspection evidence, audit history, PROTECT links, log files and tasks are not deleted. Topology observations are the one bounded exception described below; current interfaces, links and discovery batches remain.
 No automatic cleanup, VACUUM, or archive expiry is installed.
 
 Use an explicit past ISO timestamp with timezone and a bounded limit (1..1000).
@@ -108,6 +108,20 @@ snapshots requires a separately reviewed operation using the archive and current
 record identities; do not overwrite concurrent data. Compaction can reduce JSON
 storage but does not necessarily shrink the SQLite file on disk.
 
+## Topology evidence retention
+
+`archive_task_results` also reports topology observations older than 90 days. Preview remains read-only. An `--apply` run, after successfully creating the requested task archive, deletes only expired `NetworkTopologyObservation` rows in short ordered batches; discovery batches, current interfaces and links remain. Set `--topology-evidence-days` from 1 to 3650 and `--batch-size` from 1 to 10000. Defaults are 90 days and 500 rows.
+
+```powershell
+# Preview archive candidates and the expired topology observation count.
+.venv/Scripts/python.exe manage.py archive_task_results --before '2026-08-01T00:00:00+08:00' --limit 100 --topology-evidence-days 90 --batch-size 500
+
+# Archive eligible task results, then prune expired topology observations.
+.venv/Scripts/python.exe manage.py archive_task_results --before '2026-08-01T00:00:00+08:00' --limit 100 --apply --output 'D:/Backups/net/results-001.jsonl' --topology-evidence-days 90 --batch-size 500
+```
+
+The summary field `topology_observations` is the preview count or number deleted. Invalid retention values are rejected. Run this command with the same database configuration as Web and Worker; do not point maintenance at a copied or different database by mistake.
+
 ## Verification
 
 Focused tests run with an isolated Django test database and temporary SQLite files:
@@ -119,3 +133,4 @@ $env:NET_SQLITE_WAL_ENABLED = 'false'
 ```
 
 WAL is tested only on disposable files, never the configured service database.
+
