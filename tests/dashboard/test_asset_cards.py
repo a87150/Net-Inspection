@@ -87,6 +87,12 @@ class DashboardHierarchyTests(TestCase):
         self.assertContains(response, 'metric-card__secondary-actions')
         self.assertContains(response, 'dashboard-refreshed-at')
 
+        pc_item = next(item for item in response.context['items'] if item['key'] == 'computers')
+        self.assertEqual(
+            [action['label'] for action in pc_item['secondary_actions']],
+            ['PC列表', '日志列表', '日志分析记录'],
+        )
+
     def test_empty_task_region_is_collapsed_but_remains_available(self):
         with patch('index.dashboard.views.build_asset_card_summaries', return_value=self.summaries()):
             response = self.client.get(reverse('index'))

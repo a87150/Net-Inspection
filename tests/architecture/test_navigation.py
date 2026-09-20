@@ -95,6 +95,7 @@ class NavigationDropdownTests(TestCase):
                     'toggle': 'PC',
                     'links': [
                         ('PC 列表', '/assets/computers/'),
+                        ('日志列表', '/computers/logs/'),
                         ('日志分析记录', '/computers/analyses/'),
                     ],
                 },

@@ -68,6 +68,7 @@ class DashboardActionTests(TestCase):
         items = {item['key']: item for item in response.context['items']}
 
         self.assertContains(response, 'PC列表')
+        self.assertContains(response, '日志列表')
         self.assertContains(response, '日志分析记录')
         self.assertContains(response, '手动执行巡检', count=3)
         self.assertEqual(

@@ -59,6 +59,8 @@ def _with_card_actions(item):
         primary = {'label': '进入管理', 'url': item['target_url']}
     else:
         primary = {'label': f"查看{item['name']}", 'url': item['list_url']}
+    if item.get('log_url'):
+        secondary.append({'label': item['log_label'], 'url': item['log_url']})
     if item.get('record_url'):
         secondary.append({'label': item['record_label'], 'url': item['record_url']})
     if item.get('key') == 'monitors':
@@ -109,6 +111,8 @@ def index(request):
             'checked_label': '已分析设备',
             'bad_label': '异常设备',
             'list_url': reverse('asset_list', args=['computers']),
+            'log_url': reverse('computer_log_list'),
+            'log_label': '日志列表',
             'record_url': reverse('computer_analysis_list'),
             'record_label': '日志分析记录',
             'manual_action_label': '手动执行分析',
