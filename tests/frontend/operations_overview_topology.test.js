@@ -14,16 +14,14 @@ async function loadModule() {
 function topologySnapshot() {
   return {
     nodes: [
-      { id: 'networks:b', kind: 'asset', label: 'Edge B', parent_id: 'category:networks', status: 'normal' },
-      { id: 'root', kind: 'root', label: 'Console', parent_id: null, status: 'normal' },
-      { id: 'category:networks', kind: 'category', label: 'Network', parent_id: 'root', status: 'unknown' },
-      { id: 'networks:a', kind: 'asset', label: 'Core A', parent_id: 'category:networks', status: 'abnormal' },
+      { id: 'networks:b', kind: 'asset', asset_type: 'networks', label: 'Edge B', parent_id: 'subnet:192.0.2.0/24', status: 'normal' },
+      { id: 'subnet:192.0.2.0/24', kind: 'subnet', label: '192.0.2.0/24', parent_id: null, status: 'unknown' },
+      { id: 'networks:a', kind: 'asset', asset_type: 'networks', label: 'Core A', parent_id: 'subnet:192.0.2.0/24', status: 'abnormal' },
     ],
     logical_edges: [
-      { id: 'z', source: 'category:networks', target: 'missing', relationship: 'logical_membership' },
-      { id: 'b', source: 'category:networks', target: 'networks:b', relationship: 'logical_membership' },
-      { id: 'a', source: 'root', target: 'category:networks', relationship: 'logical_membership' },
-      { id: 'c', source: 'category:networks', target: 'networks:a', relationship: 'logical_membership' },
+      { id: 'z', source: 'subnet:192.0.2.0/24', target: 'missing', relationship: 'subnet_membership' },
+      { id: 'b', source: 'subnet:192.0.2.0/24', target: 'networks:b', relationship: 'subnet_membership' },
+      { id: 'c', source: 'subnet:192.0.2.0/24', target: 'networks:a', relationship: 'subnet_membership' },
     ],
     interfaces: [
       { id: 'if-a', device_id: 'a', name: 'Gi1/0/1', speed_bps: 1000000000, vlan_ids: [10], is_stale: false },
@@ -64,10 +62,10 @@ test('normalizes deterministic logical and physical topology without inventing l
   const graph = normalizeTopology(topologySnapshot());
 
   assert.deepEqual(graph.nodes.map((node) => node.id), [
-    'root', 'category:networks', 'networks:a', 'networks:b',
+    'subnet:192.0.2.0/24', 'networks:a', 'networks:b',
     'external:00-11-22-33-44-55:eth9',
   ]);
-  assert.deepEqual(graph.logicalEdges.map((edge) => edge.id), ['a', 'c', 'b']);
+  assert.deepEqual(graph.logicalEdges.map((edge) => edge.id), ['c', 'b']);
   assert.equal(graph.physicalEdges.length, 2);
 
   const resolved = graph.physicalEdges.find((edge) => edge.resolutionStatus === 'resolved');
@@ -107,11 +105,11 @@ test('lays out every layer deterministically inside a narrow viewport', async ()
 
   assert.deepEqual(first, second);
   assert.deepEqual(first.legend, [
-    { kind: 'logical', label: '逻辑归属' },
+    { kind: 'subnet', label: 'IP 网段归属' },
     { kind: 'physical', label: 'LLDP/CDP 物理发现' },
     { kind: 'external', label: '未解析邻居' },
   ]);
-  assert.equal(first.logicalEdges.length, 3);
+  assert.equal(first.logicalEdges.length, 2);
   assert.equal(first.physicalEdges.length, 2);
   for (const node of first.nodes) {
     assert.ok(node.x >= first.bounds.minX && node.x <= first.bounds.maxX, node.id);

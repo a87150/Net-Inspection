@@ -1,4 +1,4 @@
-const NODE_KIND_ORDER = { root: 0, category: 1, asset: 2, external: 3 };
+const NODE_KIND_ORDER = { subnet: 0, asset: 1, external: 2 };
 
 function text(value) {
   return String(value ?? '').trim();
@@ -192,20 +192,17 @@ export function layoutTopology(graph, viewport = {}) {
   const minY = padding + 28;
   const maxY = height - padding - 28;
   const groups = {
-    root: graph.nodes.filter((node) => node.kind === 'root'),
-    category: graph.nodes.filter((node) => node.kind === 'category'),
+    subnet: graph.nodes.filter((node) => node.kind === 'subnet'),
     asset: graph.nodes.filter((node) => node.kind === 'asset'),
     external: graph.nodes.filter((node) => node.kind === 'external'),
   };
   const columns = {
-    root: padding + 20,
-    category: clamp(width * 0.32, padding + 72, width - padding),
-    asset: clamp(width * 0.61, padding + 150, width - padding - 72),
+    subnet: clamp(width * 0.22, padding + 20, width - padding),
+    asset: clamp(width * 0.58, padding + 120, width - padding - 72),
     external: width - padding - 20,
   };
   const positioned = [
-    ...distribute(groups.root, columns.root, minY, maxY),
-    ...distribute(groups.category, columns.category, minY, maxY),
+    ...distribute(groups.subnet, columns.subnet, minY, maxY),
     ...distributeAssetGrid(groups.asset, columns.asset, minY, maxY, width),
     ...distribute(groups.external, columns.external, minY, maxY),
   ].map((node) => ({
@@ -219,7 +216,7 @@ export function layoutTopology(graph, viewport = {}) {
     logicalEdges: graph.logicalEdges.map((edge) => ({ ...edge })),
     physicalEdges: graph.physicalEdges.map((edge) => ({ ...edge })),
     legend: [
-      { kind: 'logical', label: '逻辑归属' },
+      { kind: 'subnet', label: 'IP 网段归属' },
       { kind: 'physical', label: 'LLDP/CDP 物理发现' },
       { kind: 'external', label: '未解析邻居' },
     ],

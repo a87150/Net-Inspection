@@ -64,7 +64,6 @@ test('starts with the server snapshot and schedules a visible refresh', async ()
     manualPaused: false,
     hidden: false,
     running: false,
-    view: 'situation',
     filter: 'all',
     viewport: { scale: 1, x: 0, y: 0 },
   });
@@ -92,7 +91,6 @@ test('successful and failed refreshes preserve UI state and the last good snapsh
     isVisible: () => true,
   });
   controller.updateUiState({
-    view: 'topology',
     filter: 'abnormal',
     viewport: { scale: 1.5, x: 12, y: -8 },
   });
@@ -108,7 +106,6 @@ test('successful and failed refreshes preserve UI state and the last good snapsh
   assert.equal(state.lastSnapshot.schema_version, 2);
   assert.equal(state.stale, true);
   assert.equal(state.error, '数据刷新失败，正在显示上次成功结果。');
-  assert.equal(state.view, 'topology');
   assert.equal(state.filter, 'abnormal');
   assert.deepEqual(state.viewport, { scale: 1.5, x: 12, y: -8 });
   assert.doesNotMatch(state.error, /database|credential/i);

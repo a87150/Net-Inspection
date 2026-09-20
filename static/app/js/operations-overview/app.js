@@ -20,13 +20,12 @@ if (mountElement && bootstrapElement) {
         error: '',
         manualPaused: false,
         hidden: document.hidden,
-        view: 'situation',
         filter: 'all',
         viewport: { scale: 1, x: 0, y: 0 },
         topologyWidth: 1100,
         topologyHeight: 620,
         selectedEdgeId: '',
-        liveStatus: '综合展示已就绪',
+        liveStatus: '网络拓扑已就绪',
         controller: null,
         unsubscribe: null,
         ambientEffects: null,
@@ -37,33 +36,6 @@ if (mountElement && bootstrapElement) {
     computed: {
       generatedLabel() {
         return this.formatTime(this.snapshot.generated_at);
-      },
-      summaryCards() {
-        const labels = {
-          people: ['人员', '/assets/people/'],
-          computers: ['PC', '/assets/computers/'],
-          networks: ['网络设备', '/assets/networks/'],
-          servers: ['服务器', '/assets/servers/'],
-          monitors: ['安防设备', '/assets/monitors/'],
-          domain: ['域控对象', '/domain/accounts/'],
-          tasks: ['巡检任务', '/tasks/'],
-        };
-        return Object.entries(labels).map(([key, [label, url]]) => {
-          const value = this.snapshot.summary?.[key] || {};
-          return {
-            key, label, url,
-            total: value.total ?? 0,
-            normal: value.normal ?? Math.max(0, (value.total ?? 0) - (value.failed ?? 0)),
-            abnormal: value.abnormal ?? value.failed ?? 0,
-            unchecked: value.unchecked ?? value.running ?? 0,
-          };
-        });
-      },
-      tasks() {
-        return this.snapshot.tasks?.items || [];
-      },
-      alerts() {
-        return this.snapshot.alerts?.items || [];
       },
       topology() {
         const graph = normalizeTopology(this.snapshot.topology || {});
@@ -77,7 +49,7 @@ if (mountElement && bootstrapElement) {
         return layoutTopology(graph, { width: this.topologyWidth, height: this.topologyHeight });
       },
       truncationCount() {
-        return Object.values(this.snapshot.topology?.logical_truncation || {})
+        return Object.values(this.snapshot.topology?.asset_truncation || {})
           .reduce((total, value) => total + Number(value || 0), 0);
       },
       topologyNodes() {
@@ -88,12 +60,6 @@ if (mountElement && bootstrapElement) {
       },
     },
     methods: {
-      setView(view) {
-        this.view = view;
-        this.controller?.updateUiState({ view });
-        this.liveStatus = view === 'topology' ? '已切换到网络拓扑' : '已切换到运维态势';
-        if (view === 'topology') this.$nextTick(this.updateDimensions);
-      },
       setFilter() {
         this.controller?.updateUiState({ filter: this.filter });
         this.selectedEdgeId = '';
@@ -115,11 +81,10 @@ if (mountElement && bootstrapElement) {
         this.error = next.error;
         this.manualPaused = next.manualPaused;
         this.hidden = next.hidden;
-        this.view = next.view;
         this.filter = next.filter;
         this.viewport = { ...next.viewport };
         if (previousGeneratedAt !== this.snapshot?.generated_at && !next.refreshing) {
-          this.liveStatus = '综合展示数据已更新';
+          this.liveStatus = '网络拓扑数据已更新';
         }
       },
       updateDimensions() {
@@ -205,7 +170,7 @@ if (mountElement && bootstrapElement) {
         return value === 'resolved' ? '已解析设备' : '未解析邻居';
       },
       nodeKindLabel(value) {
-        return ({ root: '管理台', category: '逻辑分组', asset: '资产节点', external: '未解析邻居' })[value] || '节点';
+        return ({ subnet: 'IP 网段', asset: '设备节点', external: '未解析邻居' })[value] || '节点';
       },
       nodeStatusLabel(value) {
         return ({ normal: '正常', abnormal: '异常', disabled: '停用', stale: '陈旧', unknown: '状态未知' })[value] || '状态未知';
@@ -238,6 +203,7 @@ if (mountElement && bootstrapElement) {
       });
       this.unsubscribe = this.controller.subscribe(this.syncControllerState);
       this.controller.start();
+      this.$nextTick(this.updateDimensions);
       document.addEventListener('visibilitychange', this.handleVisibility);
       window.addEventListener('resize', this.updateDimensions, { passive: true });
       this.updateDimensions();

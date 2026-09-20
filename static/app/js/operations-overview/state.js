@@ -24,7 +24,6 @@ export function createRefreshController({
     manualPaused: false,
     hidden: !isVisible(),
     running: false,
-    view: 'situation',
     filter: 'all',
     viewport: { scale: 1, x: 0, y: 0 },
   };
@@ -127,7 +126,6 @@ export function createRefreshController({
   }
 
   function updateUiState(nextState) {
-    if (nextState.view !== undefined) state.view = nextState.view;
     if (nextState.filter !== undefined) state.filter = nextState.filter;
     if (nextState.viewport !== undefined) {
       state.viewport = { ...state.viewport, ...nextState.viewport };

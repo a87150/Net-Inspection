@@ -1,33 +1,21 @@
-"""Presentation-safe data for the operations overview page."""
+"""Presentation-safe data for the network topology page."""
+
+import re
+from ipaddress import ip_interface
 
 from django.db import DatabaseError
-from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
-from net.dashboard.assets import build_asset_card_summaries
-from net.models import (
-    AlertEvent,
-    Computer,
-    Domain_Account,
-    Domain_Computer,
-    Domain_Group,
-    Network_Device,
-    SecurityDevice,
-    Server,
-    TaskRun,
-)
+from net.models import Computer, Network_Device, SecurityDevice, Server
 from net.topology.read_model import current_topology_payload
 
 
-LOGICAL_NODE_LIMIT_PER_KIND = 80
-
-
-def _iso(value):
-    return value.isoformat() if value else None
+ASSET_NODE_LIMIT_PER_KIND = 80
+DEFAULT_PREFIX_LENGTH = {4: 24, 6: 64}
 
 
 def _safe_region(name, builder):
@@ -37,115 +25,8 @@ def _safe_region(name, builder):
         return {'error': f'{name}_unavailable'}
 
 
-def _summary_value(value):
-    if not value:
-        return {'total': 0, 'normal': 0, 'abnormal': 0, 'unchecked': 0}
-    if value.get('error'):
-        return {'error': 'category_unavailable'}
-    return {
-        'total': value['total'],
-        'normal': value['normal'],
-        'abnormal': value['abnormal'],
-        'unchecked': value['unchecked'],
-        'last_run_at': _iso(value.get('last_run_at')),
-    }
-
-
-def _build_summary():
-    summaries = {row['key']: row for row in build_asset_card_summaries()}
-    domain_parts = [
-        summaries.get('domain_accounts'),
-        summaries.get('domain_computers'),
-        summaries.get('domain_groups'),
-    ]
-    if any(not row or row.get('error') for row in domain_parts):
-        domain = {'error': 'category_unavailable'}
-    else:
-        domain = {
-            'total': sum(row['total'] for row in domain_parts),
-            'normal': sum(row['normal'] for row in domain_parts),
-            'abnormal': sum(row['abnormal'] for row in domain_parts),
-            'unchecked': 0,
-        }
-    task_counts = TaskRun.objects.aggregate(
-        total=Count('pk'),
-        running=Count('pk', filter=Q(status__in=TaskRun.ACTIVE_STATUSES)),
-        failed=Count('pk', filter=Q(status__in=(TaskRun.Status.FAILED, TaskRun.Status.PARTIAL))),
-    )
-    return {
-        'people': _summary_value(summaries.get('people')),
-        'computers': _summary_value(summaries.get('computers')),
-        'networks': _summary_value(summaries.get('networks')),
-        'servers': _summary_value(summaries.get('servers')),
-        'monitors': _summary_value(summaries.get('monitors')),
-        'domain': domain,
-        'tasks': task_counts,
-    }
-
-
-def _task_payload(task):
-    return {
-        'id': str(task.pk),
-        'type': task.task_type,
-        'type_label': task.get_task_type_display(),
-        'source_label': task.get_source_display(),
-        'status': task.status,
-        'status_label': task.get_status_display(),
-        'progress': task.progress,
-        'total_targets': task.total_targets,
-        'completed_targets': task.completed_targets,
-        'successful_targets': task.successful_targets,
-        'failed_targets': task.failed_targets,
-        'created_at': _iso(task.created_at),
-        'started_at': _iso(task.started_at),
-        'finished_at': _iso(task.finished_at),
-        'url': reverse('task_detail', args=[task.pk]),
-    }
-
-
-def _build_tasks():
-    rows = TaskRun.objects.defer(
-        'parameters_snapshot', 'target_scope_snapshot', 'profile_snapshot',
-        'error_summary',
-    ).order_by('-created_at', '-pk')[:10]
-    return {'items': [_task_payload(row) for row in rows]}
-
-
-def _delivery_payload(delivery):
-    return {
-        'name': delivery.channel.name,
-        'type': delivery.channel.channel_type,
-        'type_label': delivery.channel.get_channel_type_display(),
-        'status': delivery.status,
-        'status_label': delivery.get_status_display(),
-    }
-
-
-def _alert_payload(event):
-    deliveries = sorted(
-        event.deliveries.all(), key=lambda row: (row.channel.name, str(row.pk)),
-    )
-    return {
-        'id': str(event.pk),
-        'severity': event.severity or 'unknown',
-        'status': event.status,
-        'status_label': event.get_status_display(),
-        'summary': event.summary,
-        'target_type': event.target_type,
-        'occurred_at': _iso(event.occurred_at),
-        'url': reverse('alert_detail', args=[event.pk]),
-        'deliveries': [_delivery_payload(row) for row in deliveries],
-    }
-
-
-def _build_alerts():
-    rows = AlertEvent.objects.prefetch_related('deliveries__channel').order_by(
-        '-occurred_at', '-pk',
-    )[:10]
-    return {'items': [_alert_payload(row) for row in rows]}
-
-
-def _node(node_id, kind, label, url, parent_id, *, subtitle='', status='unknown'):
+def _node(node_id, kind, label, url='', parent_id=None, *, subtitle='', status='unknown',
+          asset_type=''):
     return {
         'id': node_id,
         'kind': kind,
@@ -154,100 +35,148 @@ def _node(node_id, kind, label, url, parent_id, *, subtitle='', status='unknown'
         'status': status,
         'url': url,
         'parent_id': parent_id,
+        'asset_type': asset_type,
     }
 
 
-def _build_logical_nodes(required_network_ids=()):
-    nodes = [_node('root', 'root', '运维管理台', reverse('index'), None)]
-    edges = []
-    categories = (
-        ('computers', 'PC', reverse('asset_list', args=['computers'])),
-        ('networks', '网络设备', reverse('asset_list', args=['networks'])),
-        ('servers', '服务器', reverse('asset_list', args=['servers'])),
-        ('monitors', '安防设备', reverse('asset_list', args=['monitors'])),
-        ('domain', '域控对象', reverse('domain_account_list')),
-    )
-    for key, label, url in categories:
-        node_id = f'category:{key}'
-        nodes.append(_node(node_id, 'category', label, url, 'root'))
-        edges.append({'id': f'logical:root:{key}', 'source': 'root', 'target': node_id,
-                      'relationship': 'logical_membership'})
+def _network_segments(value):
+    segments = set()
+    for candidate in re.split(r'[,;|\s]+', str(value or '').strip()):
+        if not candidate:
+            continue
+        try:
+            interface = ip_interface(candidate)
+            if '/' not in candidate:
+                interface = ip_interface(f'{candidate}/{DEFAULT_PREFIX_LENGTH[interface.version]}')
+        except ValueError:
+            continue
+        segments.add(str(interface.network))
+    return sorted(segments)
 
-    assets = (
-        ('computers', 'computers', Computer.objects.only('id', 'computer_name', 'ip_addresses', 'is_active'),
-         lambda row: row.computer_name, lambda row: row.ip_addresses or '',
-         lambda row: reverse('asset_detail', args=['computers', row.pk]), lambda row: 'normal' if row.is_active else 'disabled'),
-        ('networks', 'networks', Network_Device.objects.only('id', 'device_name', 'ip'),
-         lambda row: row.device_name or row.ip, lambda row: row.ip,
-         lambda row: reverse('asset_detail', args=['networks', row.pk]), lambda row: 'unknown'),
-        ('servers', 'servers', Server.objects.only('id', 'name', 'ip'),
-         lambda row: row.name or row.ip, lambda row: row.ip,
-         lambda row: reverse('asset_detail', args=['servers', row.pk]), lambda row: 'unknown'),
-        ('monitors', 'monitors', SecurityDevice.objects.only('id', 'device_name', 'ip'),
-         lambda row: row.device_name or row.ip, lambda row: row.ip,
-         lambda row: reverse('asset_detail', args=['monitors', row.pk]), lambda row: 'unknown'),
-        ('domain_accounts', 'domain', Domain_Account.objects.only('id', 'login_name', 'is_active'),
-         lambda row: row.login_name, lambda row: '域账号',
-         lambda row: reverse('domain_account_detail', args=[row.pk]), lambda row: 'normal' if row.is_active else 'disabled'),
-        ('domain_computers', 'domain', Domain_Computer.objects.only('id', 'computer_name', 'is_active'),
-         lambda row: row.computer_name, lambda row: '域计算机',
-         lambda row: reverse('domain_computer_detail', args=[row.pk]), lambda row: 'normal' if row.is_active else 'disabled'),
-        ('domain_groups', 'domain', Domain_Group.objects.only('id', 'group_name', 'is_available'),
-         lambda row: row.group_name, lambda row: '域分组',
-         lambda row: reverse('domain_group_detail', args=[row.pk]), lambda row: 'normal' if row.is_available else 'disabled'),
+
+def _asset_sources():
+    return (
+        (
+            'computers',
+            Computer.objects.only('id', 'computer_name', 'ip_addresses', 'is_active'),
+            lambda row: row.computer_name,
+            lambda row: row.ip_addresses or '',
+            lambda row: reverse('asset_detail', args=['computers', row.pk]),
+            lambda row: 'normal' if row.is_active else 'disabled',
+        ),
+        (
+            'networks',
+            Network_Device.objects.only('id', 'device_name', 'ip'),
+            lambda row: row.device_name or row.ip,
+            lambda row: row.ip,
+            lambda row: reverse('asset_detail', args=['networks', row.pk]),
+            lambda row: 'unknown',
+        ),
+        (
+            'servers',
+            Server.objects.only('id', 'name', 'ip'),
+            lambda row: row.name or row.ip,
+            lambda row: row.ip,
+            lambda row: reverse('asset_detail', args=['servers', row.pk]),
+            lambda row: 'unknown',
+        ),
+        (
+            'monitors',
+            SecurityDevice.objects.only('id', 'device_name', 'ip'),
+            lambda row: row.device_name or row.ip,
+            lambda row: row.ip,
+            lambda row: reverse('asset_detail', args=['monitors', row.pk]),
+            lambda row: 'unknown',
+        ),
     )
+
+
+def _selected_rows(key, queryset, required_network_ids):
+    total = queryset.count()
+    if key != 'networks' or not required_network_ids:
+        rows = list(queryset.order_by('pk')[:ASSET_NODE_LIMIT_PER_KIND])
+        return rows, max(0, total - len(rows))
+
+    required_rows = list(queryset.filter(pk__in=required_network_ids).order_by('pk'))
+    remaining = max(0, ASSET_NODE_LIMIT_PER_KIND - len(required_rows))
+    rows = required_rows + list(
+        queryset.exclude(pk__in=required_network_ids).order_by('pk')[:remaining]
+    )
+    return rows, max(0, total - len(rows))
+
+
+def _build_asset_nodes(required_network_ids=()):
+    nodes = []
+    edges = []
+    subnets = set()
     truncation = {}
     required_network_ids = {str(value) for value in required_network_ids if value}
-    for key, category, queryset, label, subtitle, url, status in assets:
-        parent_id = f'category:{category}'
-        total = queryset.count()
-        if key == 'networks' and required_network_ids:
-            required_rows = list(queryset.filter(pk__in=required_network_ids).order_by('pk'))
-            remaining = max(0, LOGICAL_NODE_LIMIT_PER_KIND - len(required_rows))
-            rows = required_rows + list(
-                queryset.exclude(pk__in=required_network_ids).order_by('pk')[:remaining]
-            )
-        else:
-            rows = list(queryset.order_by('pk')[:LOGICAL_NODE_LIMIT_PER_KIND])
-        omitted = max(0, total - len(rows))
+
+    for key, queryset, label, addresses, url, status in _asset_sources():
+        rows, omitted = _selected_rows(key, queryset, required_network_ids)
         if omitted:
             truncation[key] = omitted
         for row in rows:
-            node_id = f'{category}:{row.pk}'
-            nodes.append(_node(node_id, 'asset', label(row), url(row), parent_id,
-                               subtitle=subtitle(row), status=status(row)))
-            edges.append({'id': f'logical:{parent_id}:{row.pk}', 'source': parent_id,
-                          'target': node_id, 'relationship': 'logical_membership'})
-    return nodes, edges, truncation
+            node_id = f'{key}:{row.pk}'
+            segments = _network_segments(addresses(row)) or ['unassigned']
+            parent_id = f'subnet:{segments[0]}'
+            nodes.append(_node(
+                node_id,
+                'asset',
+                label(row),
+                url(row),
+                parent_id,
+                subtitle=addresses(row),
+                status=status(row),
+                asset_type=key,
+            ))
+            for segment in segments:
+                subnet_id = f'subnet:{segment}'
+                subnets.add(segment)
+                edges.append({
+                    'id': f'membership:{subnet_id}:{node_id}',
+                    'source': subnet_id,
+                    'target': node_id,
+                    'relationship': 'subnet_membership',
+                })
+
+    subnet_nodes = [
+        _node(
+            f'subnet:{segment}',
+            'subnet',
+            '未识别网段' if segment == 'unassigned' else segment,
+            subtitle='缺少有效 IP 地址' if segment == 'unassigned' else 'IP 网段',
+        )
+        for segment in sorted(subnets, key=lambda value: (value == 'unassigned', value))
+    ]
+    return subnet_nodes + nodes, edges, truncation
 
 
 def _build_topology():
     physical = current_topology_payload(include_stale=True, limit=1000)
     physical_edges = physical['links']
     required_network_ids = {
-        value for edge in physical_edges
+        value
+        for edge in physical_edges
         for value in (edge.get('local_device_id'), edge.get('remote_device_id'))
         if value
     }
-    nodes, logical_edges, truncation = _build_logical_nodes(required_network_ids)
+    nodes, membership_edges, truncation = _build_asset_nodes(required_network_ids)
     return {
-        'mode': 'hybrid' if physical_edges else 'logical',
+        'mode': 'hybrid' if physical_edges else 'subnet',
         'nodes': nodes,
-        'logical_edges': logical_edges,
+        'logical_edges': membership_edges,
         'interfaces': physical['interfaces'],
         'physical_edges': physical_edges,
-        'logical_truncation': truncation,
+        'asset_truncation': truncation,
     }
 
 
 def build_operations_snapshot(*, now=None):
     generated_at = now or timezone.now()
     return {
-        'schema_version': 1,
+        'schema_version': 2,
         'generated_at': generated_at.isoformat(),
-        'summary': _safe_region('summary', _build_summary),
-        'tasks': _safe_region('tasks', _build_tasks),
-        'alerts': _safe_region('alerts', _build_alerts),
         'topology': _safe_region('topology', _build_topology),
     }
 

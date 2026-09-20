@@ -1,7 +1,7 @@
 {% extends 'common/base.html' %}
 {% load static %}
 
-{% block title %}综合展示 · 网络巡检中心{% endblock %}
+{% block title %}网络拓扑 · 网络巡检中心{% endblock %}
 
 {% block page_css %}
 <link href="{% static 'app/css/operations-overview.css' %}" rel="stylesheet">
@@ -14,9 +14,9 @@
     <div id="operations-overview-app" data-snapshot-url="{% url 'operations_overview_data' %}" :aria-busy="refreshing ? 'true' : 'false'">
         <header class="operations-overview__header">
             <div>
-                <p class="operations-overview__eyebrow mb-2">OPERATIONS INTELLIGENCE</p>
-                <h1 id="operations-overview-title">综合展示</h1>
-                <p class="operations-overview__lede mb-0">统一查看实时运维态势、逻辑资产关系与 LLDP/CDP 物理拓扑。</p>
+                <p class="operations-overview__eyebrow mb-2">NETWORK DISCOVERY</p>
+                <h1 id="operations-overview-title">网络拓扑</h1>
+                <p class="operations-overview__lede mb-0">按设备实际 IP 网段组织 PC、服务器、网络与安防设备，并叠加 LLDP/CDP 采集到的物理链路。</p>
             </div>
             <div class="operations-overview__timestamp">
                 <span class="status-indicator" :class="stale ? 'is-warning' : 'is-normal'" aria-hidden="true"></span>
@@ -26,14 +26,7 @@
         </header>
 
         <div class="operations-overview__control-rail glass-panel">
-            <div class="operations-overview__tabs" role="tablist" aria-label="综合展示视图">
-                <button id="overview-situation-tab" role="tab" type="button" data-overview-mode="situation"
-                        :aria-selected="view === 'situation' ? 'true' : 'false'" aria-controls="overview-situation-panel"
-                        :class="{ 'is-active': view === 'situation' }" @click="setView('situation')">运维态势</button>
-                <button id="overview-topology-tab" role="tab" type="button" data-overview-mode="topology"
-                        :aria-selected="view === 'topology' ? 'true' : 'false'" aria-controls="overview-topology-panel"
-                        :class="{ 'is-active': view === 'topology' }" @click="setView('topology')">网络拓扑</button>
-            </div>
+            <p class="operations-overview__scope mb-0">虚线表示 IP 网段归属，实线仅表示 LLDP/CDP 实际发现关系。</p>
             <div class="operations-overview__refresh-controls" aria-label="数据刷新控制">
                 <button type="button" data-overview-pause :aria-pressed="manualPaused ? 'true' : 'false'" @click="togglePause">
                     <span aria-hidden="true">[[ manualPaused ? '▶' : 'Ⅱ' ]]</span>[[ manualPaused ? '恢复刷新' : '暂停刷新' ]]
@@ -49,55 +42,9 @@
             <span aria-hidden="true">⚠</span><strong>数据刷新异常</strong><span>[[ error ]]</span>
         </div>
 
-        <section id="overview-situation-panel" role="tabpanel" aria-labelledby="overview-situation-tab"
-                 v-show="view === 'situation'" class="operations-overview__panel">
-            <div class="operations-overview__legend" aria-label="状态图例">
-                <span><i class="status-indicator is-normal" aria-hidden="true"></i>正常</span>
-                <span><i class="status-indicator is-abnormal" aria-hidden="true"></i>异常</span>
-                <span><i class="status-indicator is-unknown" aria-hidden="true"></i>未检查</span>
-            </div>
-            <div class="overview-metrics">
-                <a v-for="card in summaryCards" :key="card.key" class="overview-metric glass-panel" :href="card.url">
-                    <span class="overview-metric__label">[[ card.label ]]</span>
-                    <strong>[[ card.total ]]</strong>
-                    <span class="overview-metric__health" :class="card.abnormal ? 'is-abnormal' : 'is-normal'">
-                        <i class="status-indicator" :class="card.abnormal ? 'is-abnormal' : 'is-normal'" aria-hidden="true"></i>
-                        [[ card.abnormal ? `异常 ${card.abnormal}` : '状态正常' ]]
-                    </span>
-                    <small>正常 [[ card.normal ]] · 未检查 [[ card.unchecked ]]</small>
-                </a>
-            </div>
-
-            <div class="overview-streams">
-                <section class="overview-stream glass-panel" aria-labelledby="overview-task-title">
-                    <header><div><p>EXECUTION</p><h2 id="overview-task-title">任务执行中心</h2></div><a href="{% url 'task_list' %}">查看全部</a></header>
-                    <div v-if="tasks.length" class="overview-task-list">
-                        <a v-for="task in tasks" :key="task.id" :href="task.url" class="overview-task">
-                            <div><strong>[[ task.type_label ]]</strong><span>[[ task.source_label ]] · [[ task.status_label ]]</span></div>
-                            <span class="overview-task__value">[[ task.progress ]]%</span>
-                            <span class="overview-progress" aria-hidden="true"><i :style="{ width: `${task.progress}%` }"></i></span>
-                        </a>
-                    </div>
-                    <p v-else class="overview-empty">当前没有任务记录</p>
-                </section>
-
-                <section class="overview-stream glass-panel" aria-labelledby="overview-alert-title">
-                    <header><div><p>ALERT FEED</p><h2 id="overview-alert-title">实时告警</h2></div><a href="{% url 'alert_list' %}">查看全部</a></header>
-                    <div v-if="alerts.length" class="overview-alert-list">
-                        <a v-for="alert in alerts" :key="alert.id" :href="alert.url" class="overview-alert">
-                            <span class="status-indicator is-abnormal" aria-hidden="true"></span>
-                            <span><strong>[[ alert.summary ]]</strong><small>[[ alert.status_label ]] · [[ formatTime(alert.occurred_at) ]]</small></span>
-                        </a>
-                    </div>
-                    <p v-else class="overview-empty">当前没有告警记录</p>
-                </section>
-            </div>
-        </section>
-
-        <section id="overview-topology-panel" role="tabpanel" aria-labelledby="overview-topology-tab"
-                 v-show="view === 'topology'" class="operations-overview__panel topology-workspace glass-panel">
+        <section id="overview-topology-panel" class="operations-overview__panel topology-workspace glass-panel" aria-labelledby="topology-workspace-title">
             <header class="topology-toolbar">
-                <div><p>DISCOVERED RELATIONSHIPS</p><h2>逻辑与物理拓扑</h2></div>
+                <div><p>SUBNETS &amp; DISCOVERED LINKS</p><h2 id="topology-workspace-title">设备网段与物理链路</h2></div>
                 <div class="topology-toolbar__controls" aria-label="拓扑缩放控制">
                     <label class="visually-hidden" for="topology-link-filter">链路筛选</label>
                     <select id="topology-link-filter" v-model="filter" @change="setFilter" aria-label="筛选物理链路">
@@ -113,7 +60,7 @@
                 </div>
             </header>
             <p v-if="truncationCount" class="topology-limit-note">
-                <span aria-hidden="true">ⓘ</span>为保证交互流畅，当前按类别展示代表节点；另有 [[ truncationCount ]] 个逻辑对象未绘制，汇总数字仍包含全部数据。
+                <span aria-hidden="true">ⓘ</span>为保证交互流畅，另有 [[ truncationCount ]] 个设备未绘制；已采集物理链路的网络设备始终保留。
             </p>
             <div class="topology-legend" aria-label="拓扑图例">
                 <span v-for="item in topology.legend" :key="item.kind" :class="`is-${item.kind}`"><i aria-hidden="true"></i>[[ item.label ]]</span>
@@ -122,14 +69,16 @@
                 <svg class="topology-canvas" :viewBox="`0 0 ${topologyWidth} ${topologyHeight}`"
                      role="img" aria-labelledby="topology-title topology-description"
                      @pointerdown.self="startPan" @pointermove="movePan" @pointerup="endPan" @pointercancel="endPan">
-                    <title id="topology-title">网络设备逻辑关系与 LLDP/CDP 物理拓扑</title>
-                    <desc id="topology-description">实线表示后端采集的物理链路，虚线表示逻辑归属；节点可通过键盘打开详情。</desc>
+                    <title id="topology-title">设备 IP 网段与 LLDP/CDP 物理拓扑</title>
+                    <desc id="topology-description">虚线连接设备与其 IP 网段，实线只表示后端采集的 LLDP/CDP 物理链路；节点可通过键盘打开详情。</desc>
                     <g :transform="`translate(${viewport.x} ${viewport.y}) scale(${viewport.scale})`">
                         <path v-for="edge in topology.logicalEdges" :key="edge.id" :d="edgePath(edge)" class="topology-edge topology-edge--logical" />
                         <path v-for="edge in topology.physicalEdges" :key="edge.id" :d="edgePath(edge)"
                               class="topology-edge topology-edge--physical" :class="{ 'is-stale': edge.status === 'stale' }"
                               tabindex="0" role="button" :aria-label="edgeAriaLabel(edge)" @click="selectEdge(edge)" @keydown.enter.prevent="selectEdge(edge)" @keydown.space.prevent="selectEdge(edge)" />
-                        <g v-for="node in topology.nodes" :key="node.id" class="topology-node" :class="[`is-${node.kind}`, `is-${node.status || 'unknown'}`]" :transform="`translate(${node.x} ${node.y})`">
+                        <g v-for="node in topology.nodes" :key="node.id" class="topology-node"
+                           :class="[`is-${node.kind}`, `is-${node.asset_type || 'generic'}`, `is-${node.status || 'unknown'}`]"
+                           :transform="`translate(${node.x} ${node.y})`">
                             <a v-if="node.url" :href="node.url" tabindex="0" :aria-label="`${node.label} ${node.subtitle || ''}`">
                                 <circle r="18"></circle><text y="34" text-anchor="middle">[[ truncate(node.label, 15) ]]</text>
                             </a>
@@ -156,7 +105,7 @@
             </details>
         </section>
     </div>
-    <noscript><div class="alert alert-warning mt-3" role="alert">综合展示需要启用 JavaScript；其他运维页面仍可正常使用。</div></noscript>
+    <noscript><div class="alert alert-warning mt-3" role="alert">网络拓扑需要启用 JavaScript；其他运维页面仍可正常使用。</div></noscript>
 </section>
 {% endblock %}
 

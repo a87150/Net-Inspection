@@ -8,14 +8,16 @@ from django.urls import reverse
 from django.utils import timezone
 
 from net.models import (
-    AlertChannel,
-    AlertDelivery,
-    AlertEvent,
     Computer,
+    Domain_Account,
+    Domain_Computer,
+    Domain_Group,
     InspectionProfile,
     Network_Device,
     NetworkTopologyInterface,
     NetworkTopologyLink,
+    SecurityDevice,
+    Server,
     TaskRun,
     TaskTargetRun,
     TopologyDiscoveryBatch,
@@ -65,46 +67,47 @@ class OperationsSnapshotTests(TestCase):
         )
         return task, target
 
-    def test_snapshot_has_stable_regions_and_safe_task_and_alert_fields(self):
+    def test_snapshot_contains_only_network_topology_data(self):
         from index.dashboard.operations import build_operations_snapshot
-
-        task, target = self.inspection_task()
-        event = AlertEvent.objects.create(
-            task=task,
-            target_run=target,
-            event_type=AlertEvent.EventType.ABNORMAL,
-            status=AlertEvent.Status.PARTIAL,
-            severity='critical',
-            summary='接口异常',
-            findings=[{'key': 'port', 'severity': 'critical', 'title': '端口异常'}],
-        )
-        channel = AlertChannel.objects.create(
-            name='飞书告警', channel_type=AlertChannel.ChannelType.FEISHU,
-            settings={'webhook_url': 'https://example.invalid/hook', 'secret': 'never-export'},
-        )
-        AlertDelivery.objects.create(event=event, channel=channel, status=AlertDelivery.Status.FAILED)
 
         snapshot = build_operations_snapshot(now=self.now)
 
-        self.assertEqual(snapshot['schema_version'], 1)
+        self.assertEqual(snapshot['schema_version'], 2)
         self.assertEqual(snapshot['generated_at'], self.now.isoformat())
-        self.assertEqual(
-            set(snapshot['summary']),
-            {'people', 'computers', 'networks', 'servers', 'monitors', 'domain', 'tasks'},
+        self.assertEqual(set(snapshot), {'schema_version', 'generated_at', 'topology'})
+
+    def test_topology_groups_supported_devices_by_ip_subnet_and_excludes_domain_objects(self):
+        from index.dashboard.operations import build_operations_snapshot
+
+        computer = Computer.objects.create(
+            computer_name='pc-a', ip_addresses='10.20.30.14, 2001:db8:20::14/64',
         )
-        self.assertEqual(
-            set(snapshot['tasks']['items'][0]),
-            {'id', 'type', 'type_label', 'source_label', 'status', 'status_label', 'progress',
-             'total_targets', 'completed_targets', 'successful_targets', 'failed_targets',
-             'created_at', 'started_at', 'finished_at', 'url'},
+        server = Server.objects.create(name='server-a', ip='10.20.30.22')
+        network = Network_Device.objects.create(device_name='switch-a', ip='10.20.31.130/25')
+        monitor = SecurityDevice.objects.create(device_name='camera-a', ip='not-an-ip')
+        Domain_Account.objects.create(account_name='ignored', login_name='ignored-account')
+        Domain_Computer.objects.create(computer_name='ignored-domain-pc')
+        Domain_Group.objects.create(
+            distinguished_name='CN=ignored,DC=example,DC=test', group_name='ignored-group',
         )
+
+        topology = build_operations_snapshot(now=self.now)['topology']
+        nodes = {node['id']: node for node in topology['nodes']}
+        edges = {(edge['source'], edge['target']) for edge in topology['logical_edges']}
+
         self.assertEqual(
-            set(snapshot['alerts']['items'][0]),
-            {'id', 'severity', 'status', 'status_label', 'summary', 'target_type',
-             'occurred_at', 'url', 'deliveries'},
+            {node['asset_type'] for node in nodes.values() if node['kind'] == 'asset'},
+            {'computers', 'servers', 'networks', 'monitors'},
         )
-        self.assertNotIn('settings', str(snapshot))
-        self.assertNotIn('never-export', str(snapshot))
+        self.assertIn('subnet:10.20.30.0/24', nodes)
+        self.assertIn('subnet:10.20.31.128/25', nodes)
+        self.assertIn('subnet:2001:db8:20::/64', nodes)
+        self.assertIn('subnet:unassigned', nodes)
+        self.assertIn(('subnet:10.20.30.0/24', f'computers:{computer.pk}'), edges)
+        self.assertIn(('subnet:10.20.30.0/24', f'servers:{server.pk}'), edges)
+        self.assertIn(('subnet:10.20.31.128/25', f'networks:{network.pk}'), edges)
+        self.assertIn(('subnet:unassigned', f'monitors:{monitor.pk}'), edges)
+        self.assertFalse(any(node_id.startswith('domain') for node_id in nodes))
 
     def test_snapshot_includes_allowlisted_physical_topology(self):
         from index.dashboard.operations import build_operations_snapshot
@@ -141,25 +144,24 @@ class OperationsSnapshotTests(TestCase):
         self.assertNotIn('password', str(topology))
         self.assertNotIn('community', str(topology))
 
-    def test_region_database_failure_is_isolated_and_sanitized(self):
+    def test_topology_database_failure_is_isolated_and_sanitized(self):
         from index.dashboard.operations import build_operations_snapshot
 
         with patch(
-            'index.dashboard.operations._build_summary',
+            'index.dashboard.operations._build_topology',
             side_effect=DatabaseError('secret database coordinates'),
         ):
             snapshot = build_operations_snapshot(now=self.now)
 
-        self.assertEqual(snapshot['summary'], {'error': 'summary_unavailable'})
-        self.assertIn('items', snapshot['tasks'])
+        self.assertEqual(snapshot['topology'], {'error': 'topology_unavailable'})
         self.assertNotIn('secret database coordinates', str(snapshot))
 
     def test_logical_topology_caps_dense_categories_and_reports_omissions(self):
-        from index.dashboard.operations import LOGICAL_NODE_LIMIT_PER_KIND, build_operations_snapshot
+        from index.dashboard.operations import ASSET_NODE_LIMIT_PER_KIND, build_operations_snapshot
 
         Computer.objects.bulk_create([
             Computer(computer_name=f'overview-pc-{index:03d}')
-            for index in range(LOGICAL_NODE_LIMIT_PER_KIND + 5)
+            for index in range(ASSET_NODE_LIMIT_PER_KIND + 5)
         ])
 
         topology = build_operations_snapshot(now=self.now)['topology']
@@ -167,15 +169,15 @@ class OperationsSnapshotTests(TestCase):
             node for node in topology['nodes'] if node['id'].startswith('computers:')
         ]
 
-        self.assertEqual(len(computer_nodes), LOGICAL_NODE_LIMIT_PER_KIND)
-        self.assertEqual(topology['logical_truncation']['computers'], 5)
+        self.assertEqual(len(computer_nodes), ASSET_NODE_LIMIT_PER_KIND)
+        self.assertEqual(topology['asset_truncation']['computers'], 5)
 
     def test_physical_link_endpoints_survive_the_logical_network_cap(self):
-        from index.dashboard.operations import LOGICAL_NODE_LIMIT_PER_KIND, build_operations_snapshot
+        from index.dashboard.operations import ASSET_NODE_LIMIT_PER_KIND, build_operations_snapshot
 
         devices = Network_Device.objects.bulk_create([
             Network_Device(device_name=f'network-{index:03d}', ip=f'198.18.{index // 250}.{index % 250 + 1}')
-            for index in range(LOGICAL_NODE_LIMIT_PER_KIND + 1)
+            for index in range(ASSET_NODE_LIMIT_PER_KIND + 1)
         ])
         linked_device = devices[-1]
         task, target = self.inspection_task(
@@ -222,7 +224,7 @@ class OperationsOverviewViewTests(TestCase):
         self.assertContains(page, 'id="operations-overview-app"')
         self.assertContains(page, 'id="operations-overview-bootstrap"')
         self.assertContains(page, 'data-snapshot-url="/operations/overview/data/"')
-        self.assertEqual(data.json()['schema_version'], 1)
+        self.assertEqual(data.json()['schema_version'], 2)
         cache_control = data.headers.get('Cache-Control', '')
         self.assertIn('no-cache', cache_control)
         self.assertIn('no-store', cache_control)
