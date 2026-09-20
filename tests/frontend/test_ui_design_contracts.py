@@ -72,6 +72,36 @@ class SharedInterfaceContractTests(TestCase):
         self.assertIn('href="/destination/"', html)
         self.assertIn('网络巡检中心', html)
         self.assertIn('Operations Console', html)
+
+    def test_operations_overview_is_local_accessible_and_page_scoped(self):
+        response = self.client.get(reverse('operations_overview'))
+        html = response.content.decode(response.charset)
+
+        self.assertContains(response, 'app/css/operations-overview.css')
+        self.assertContains(response, 'type="module"')
+        self.assertContains(response, 'app/js/operations-overview/app.js')
+        self.assertContains(response, 'role="tablist"')
+        self.assertContains(response, 'role="tab"', count=2)
+        self.assertContains(response, 'data-overview-pause')
+        self.assertContains(response, 'data-overview-refresh')
+        self.assertContains(response, '<title id="topology-title">')
+        self.assertContains(response, '<desc id="topology-description">')
+        self.assertContains(response, 'aria-hidden="true"')
+        self.assertContains(response, '正常')
+        self.assertContains(response, '异常')
+        self.assertNotIn('v-html', html)
+
+        app = Path(finders.find('app/js/operations-overview/app.js')).read_text(encoding='utf-8')
+        effects = Path(finders.find('app/js/operations-overview/effects.js')).read_text(encoding='utf-8')
+        css = Path(finders.find('app/css/operations-overview.css')).read_text(encoding='utf-8')
+        self.assertIn("../../../vendor/vue/vue.esm-browser.prod.js", app)
+        self.assertIn("delimiters: ['[[', ']]']", app)
+        self.assertIn('operations-overview-bootstrap', app)
+        self.assertNotIn('innerHTML', app + effects)
+        self.assertNotIn('v-html', app)
+        self.assertIn('prefers-reduced-motion: reduce', css)
+        self.assertIn('min-height: 44px', css)
+        self.assertIn('@media (max-width: 767.98px)', css)
     def test_shared_shell_links_ordered_local_design_layers_without_css_imports(self):
         template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
         base = (template_root / 'common' / 'base.html').read_text(encoding='utf-8')
