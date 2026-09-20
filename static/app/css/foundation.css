@@ -179,6 +179,83 @@ body.app-shell {
     gap: .6rem;
 }
 
+@media (max-width: 991.98px) {
+    .app-navbar .navbar-toggler {
+        min-width: var(--control-touch-size);
+        min-height: var(--control-touch-size);
+        border-color: rgba(255, 255, 255, .2);
+    }
+
+    .app-navbar .navbar-collapse {
+        max-height: calc(100vh - 5rem);
+        max-height: calc(100dvh - 5rem);
+        margin-top: .7rem;
+        padding: .7rem;
+        overflow-y: auto;
+        border: 1px solid rgba(255, 255, 255, .12);
+        border-radius: var(--radius);
+        background: rgba(18, 34, 55, .94);
+        box-shadow: 0 18px 42px rgba(0, 0, 0, .24);
+        overscroll-behavior: contain;
+        backdrop-filter: blur(18px) saturate(125%);
+    }
+
+    .app-navbar .navbar-nav,
+    .app-navbar .nav-item,
+    .app-navbar .nav-link {
+        width: 100%;
+    }
+
+    .app-navbar .nav-link {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: var(--control-touch-size);
+        margin: 0;
+    }
+
+    .app-navbar .dropdown-menu {
+        position: static !important;
+        width: 100%;
+        margin: .2rem 0 .45rem;
+        transform: none !important;
+        box-shadow: none;
+    }
+
+    .app-navbar__context {
+        display: flex;
+        align-items: center;
+        min-height: var(--control-touch-size);
+        padding-inline: .75rem;
+    }
+
+    .app-navbar__account {
+        margin-left: 0 !important;
+        padding-top: .55rem;
+        border-top: 1px solid rgba(255, 255, 255, .12);
+    }
+
+    .app-account-trigger {
+        width: 100%;
+        min-height: var(--control-touch-size);
+        justify-content: space-between;
+        padding-inline: .75rem;
+    }
+}
+
+@media (pointer: coarse) {
+    .app-navbar .navbar-toggler,
+    .app-navbar .nav-link,
+    .app-navbar__dropdown-menu .dropdown-item,
+    .app-account-trigger,
+    .btn:not(.btn-sm),
+    .form-control:not(.form-control-sm),
+    .form-select:not(.form-select-sm),
+    summary {
+        min-height: var(--control-touch-size);
+    }
+}
+
 .surface-card {
     overflow: hidden;
     border: 1px solid var(--color-border-glass) !important;
@@ -839,6 +916,20 @@ details > summary {
         gap: 1rem;
     }
 
+    .page-heading__copy,
+    .page-heading__description,
+    .page-heading__meta {
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    .break-anywhere,
+    .detail-value,
+    .interactive-list__meta,
+    .table-text-disclosure__content {
+        overflow-wrap: anywhere;
+    }
+
     .page-heading__actions,
     .page-heading__actions > *,
     .page-heading__actions form,
@@ -902,6 +993,24 @@ details > summary {
     .interactive-list__aside {
         width: 100%;
         justify-content: space-between;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .app-navbar__inner,
+    .app-main {
+        padding-inline: .75rem;
+    }
+
+    .page-heading {
+        gap: .75rem;
+        margin-bottom: 1rem;
+    }
+
+    .page-heading__actions,
+    .table-toolbar__actions {
+        align-items: stretch;
+        gap: .5rem;
     }
 }
 

@@ -21,6 +21,7 @@
     --radius: .85rem;
     --radius-lg: 1.1rem;
     --control-height: 2.5rem;
+    --control-touch-size: 2.75rem;
     --modal-backdrop: rgba(11, 23, 42, .44);
     --shadow-surface: 0 10px 30px rgba(20, 34, 60, .07);
     --shadow-raised: 0 16px 38px rgba(20, 34, 60, .13);

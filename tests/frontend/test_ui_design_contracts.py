@@ -105,6 +105,37 @@ class SharedInterfaceContractTests(TestCase):
         self.assertIn('prefers-reduced-motion: reduce', css)
         self.assertIn('min-height: 44px', css)
         self.assertIn('@media (max-width: 767.98px)', css)
+
+    def test_mobile_navigation_keeps_account_controls_inside_collapse(self):
+        response = self.client.get(reverse('index'))
+        html = response.content.decode(response.charset)
+
+        self.assertContains(response, 'data-bs-target="#mainNav"')
+        collapse_start = html.index('id="mainNav"')
+        account_menu = html.index('data-account-menu', collapse_start)
+        navigation_end = html.index('</nav>', account_menu)
+        self.assertLess(collapse_start, account_menu)
+        self.assertLess(account_menu, navigation_end)
+
+    def test_long_workflow_modals_share_scrollable_body_and_sticky_actions(self):
+        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        paths = (
+            'inspections/profile_modal.html',
+            'devices/pc/config_modal.html',
+            'alerts/channel_modal.html',
+            'alerts/policy_modal.html',
+            'alerts/template_modal.html',
+            'integrations/preview_modal.html',
+            'common/import_modal.html',
+            'domain/group_members.html',
+            'domain/controller_settings.html',
+        )
+        for relative_path in paths:
+            with self.subTest(template=relative_path):
+                source = (template_root / relative_path).read_text(encoding='utf-8')
+                self.assertIn('modal-dialog-scrollable', source)
+                self.assertIn('modal-body--scroll', source)
+                self.assertIn('modal-footer--sticky', source)
     def test_shared_shell_links_ordered_local_design_layers_without_css_imports(self):
         template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
         base = (template_root / 'common' / 'base.html').read_text(encoding='utf-8')

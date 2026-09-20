@@ -36,6 +36,7 @@
             {% endif %}
             <a class="btn btn-outline-secondary" href="{% url 'asset_list' 'people' %}?import=people&amp;provider={{ people_operation_source.source_type }}">返回 API 设置 / 重新预览</a>
         </div>
+        <div class="modal-footer modal-footer--sticky"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">关闭</button></div>
     </div></div>
 </div>
 {% endif %}

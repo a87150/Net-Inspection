@@ -57,7 +57,7 @@
                 </ul>
                 {% if can_administer %}<a class="navbar-text app-navbar__context" href="{% url 'admin:index' %}"><span class="status-dot status-dot--success" aria-hidden="true"></span>运维管理台</a>{% endif %}
                 {% if user.is_authenticated %}
-                <div class="dropdown ms-3" data-account-menu>
+                <div class="dropdown ms-3 app-navbar__account" data-account-menu>
                     <button class="app-account-trigger dropdown-toggle d-inline-flex align-items-center gap-2" id="accountMenuToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="accountMenu" aria-label="账号 {{ user.get_username }}，查看用户组">
                         <span>{{ user.get_username }}</span>
                     </button>
