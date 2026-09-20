@@ -34,6 +34,20 @@ class SharedInterfaceContractTests(TestCase):
                     match.group(),
                 )
 
+    def test_table_workspace_exposes_guarded_page_action_after_export(self):
+        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        source = (template_root / 'common' / 'table_workspace.html').read_text(encoding='utf-8')
+
+        self.assertIn('{% if table_filter_actions_template %}', source)
+        self.assertIn('{% include table_filter_actions_template %}', source)
+        export_position = source.index('data-filtered-export')
+        action_position = source.index('{% if table_filter_actions_template %}')
+        include_position = source.index('{% include table_filter_actions_template %}')
+        configuration_position = source.index('{% if configuration_selection_path %}', export_position)
+        self.assertLess(export_position, action_position)
+        self.assertLess(action_position, include_position)
+        self.assertLess(include_position, configuration_position)
+
     def test_shared_brand_partial_renders_application_identity_and_destination(self):
         html = render_to_string('common/brand.html', {'brand_url': '/destination/'})
 

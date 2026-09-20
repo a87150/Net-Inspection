@@ -2,7 +2,7 @@ from datetime import timedelta
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
-from tests.auth import login_admin
+from tests.auth import login_admin, login_reader
 from net.models import Computer, ComputerAnalysisProfile, ComputerLogFile, TaskRun
 
 
@@ -30,3 +30,17 @@ class BulkLogAnalysisTests(TestCase):
     def test_list_offers_only_filtered_analysis(self):
         self.assertContains(self.client.get(reverse('computer_log_list') + '?bulk_mode=filtered'), '分析筛选结果')
         self.assertNotContains(self.client.get(reverse('computer_log_list')), '分析最新批次')
+
+    def test_filtered_analysis_is_adjacent_to_export_and_modal_is_outside_query_form(self):
+        response = self.client.get(reverse('computer_log_list'))
+        html = response.content.decode(response.charset)
+
+        self.assertIn('data-bulk-analysis-action', html)
+        self.assertLess(html.index('data-filtered-export'), html.index('data-bulk-analysis-action'))
+        self.assertEqual(html.count('id="bulkAnalysisModal"'), 1)
+        query_start = html.index('data-table-query-form')
+        self.assertLess(html.index('</form>', query_start), html.index('id="bulkAnalysisModal"'))
+
+        login_reader(self.client, username='bulk-reader')
+        reader_html = self.client.get(reverse('computer_log_list')).content.decode()
+        self.assertNotIn('data-bulk-analysis-action', reader_html)

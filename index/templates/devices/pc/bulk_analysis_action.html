@@ -1,0 +1,6 @@
+{% if can_administer %}
+{% load extras %}
+{% query_transform request bulk_mode='filtered' as filtered_url %}
+<a class="btn btn-outline-primary text-nowrap d-inline-flex align-items-center justify-content-center"
+   href="?{{ filtered_url }}" data-bulk-analysis-action>分析筛选结果</a>
+{% endif %}

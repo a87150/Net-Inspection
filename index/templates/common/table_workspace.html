@@ -28,6 +28,9 @@
             <a class="btn btn-outline-secondary text-nowrap d-inline-flex align-items-center justify-content-center" href="{{ request.path }}{% if table_state.reset_query %}?{{ table_state.reset_query }}{% endif %}" data-query-reset>重置查询</a>
             {% if can_administer and task_allow_target_selection %}<button class="btn btn-outline-primary text-nowrap d-inline-flex align-items-center justify-content-center" type="button" data-device-select-all>全选</button><button class="btn btn-outline-secondary text-nowrap d-inline-flex align-items-center justify-content-center" type="button" data-device-select-invert>反选</button>{% endif %}
             {% if table_export_path %}{% query_transform request page=None as export_query %}<a class="btn btn-outline-success text-nowrap d-inline-flex align-items-center justify-content-center" href="{{ table_export_path }}{% if export_query %}?{{ export_query }}{% endif %}" data-filtered-export>导出筛选结果</a>{% endif %}
+            {% if table_filter_actions_template %}
+                {% include table_filter_actions_template %}
+            {% endif %}
             {% if configuration_selection_path %}<a class="btn btn-outline-primary text-nowrap d-inline-flex align-items-center justify-content-center disabled" href="{{ configuration_selection_path }}" data-selected-config-export aria-disabled="true" tabindex="-1">请先选择设备</a>{% endif %}
         </div>
         {% if configuration_selection_path %}<div class="alert alert-danger table-action-feedback mb-0" role="alert" aria-live="assertive" data-configuration-export-feedback hidden></div>{% endif %}
