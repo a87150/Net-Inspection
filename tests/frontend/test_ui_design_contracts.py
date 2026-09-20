@@ -13,6 +13,24 @@ class SharedInterfaceContractTests(TestCase):
     def setUp(self):
         login_admin(self.client)
 
+    def test_pinned_vue_distribution_is_vendored_with_provenance(self):
+        static_root = Path(__file__).resolve().parents[2] / 'static' / 'vendor' / 'vue'
+        bundle = static_root / 'vue.esm-browser.prod.js'
+        license_file = static_root / 'LICENSE'
+        readme = static_root / 'README.md'
+
+        self.assertTrue(bundle.is_file())
+        self.assertTrue(license_file.is_file())
+        self.assertTrue(readme.is_file())
+        provenance = readme.read_text(encoding='utf-8')
+        for expected in (
+            'Vue 3.5.43',
+            'vue.esm-browser.prod.js',
+            'MIT',
+            'https://github.com/vuejs/core/releases/tag/v3.5.43',
+        ):
+            self.assertIn(expected, provenance)
+
     def test_table_query_actions_share_vertical_centering_contract(self):
         response = self.client.get(reverse('asset_list', args=['networks']))
         html = response.content.decode(response.charset)
