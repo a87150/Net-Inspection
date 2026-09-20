@@ -17,6 +17,7 @@ READER_VIEWS = PUBLIC_VIEWS | frozenset({
     'domain_computer_list', 'domain_computer_detail', 'domain_group_list', 'domain_group_detail',
     'inspection_records', 'error_records', 'record_list', 'record_detail',
     'infrastructure_inspection_detail', 'analysis_problem_list',
+    'topology_data', 'topology_batches', 'topology_interfaces', 'topology_links', 'topology_evidence',
 })
 AUTH_VIEWS = frozenset({
     'login', 'logout', 'admin_password_reset', 'password_reset_done',
@@ -77,3 +78,4 @@ class AccessMiddleware(MiddlewareMixin):
         add_never_cache_headers(response)
         patch_vary_headers(response, ('Cookie',))
         return response
+

@@ -5,10 +5,10 @@ from urllib.parse import quote, quote_plus, unquote, urlsplit, urlunsplit
 
 
 REDACTED = '[REDACTED]'
-_SECRET_KEY = re.compile(r'password|passwd|pwd|secret|token|authorization|credential|api[_-]?key|cookie|signature|^(?:auth|key|sig)$', re.I)
+_SECRET_KEY = re.compile(r'password|passwd|pwd|secret|token|authorization|credential|api[_-]?key|cookie|signature|community|^(?:auth|key|sig)$', re.I)
 _AUTH = re.compile(r'\b(Bearer|Basic)\s+(?!\[REDACTED\])[^\s,;\"\'<>]+', re.I)
 _ASSIGNMENT = re.compile(
-    r'''(?ix)(\b(?:[\w%-]*(?:password|passwd|pwd|secret|token|authorization|credential|api[_-]?key|cookie|signature)[\w%-]*|auth|key|sig)["']?\s*[:=]\s*)
+    r'''(?ix)(\b(?:[\w%-]*(?:password|passwd|pwd|secret|token|authorization|credential|api[_-]?key|cookie|signature|community)[\w%-]*|auth|key|sig)["']?\s*[:=]\s*)
     ("[^"\r\n]*"|'[^'\r\n]*'|\[REDACTED\]|[^\s,;&<>]+)'''
 )
 _URL = re.compile(r'https?://[^\s<>"\']+', re.I)
@@ -193,3 +193,4 @@ def sanitize_configuration_items(items, *, secrets=()):
                 pass
     result['config_info'] = safe_item
     return result
+

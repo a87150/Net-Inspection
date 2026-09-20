@@ -171,3 +171,4 @@ def fail_topology_batch(batch_id, *, status='failed', message='', finished_at=No
         batch.finished_at = finished_at or timezone.now()
         batch.save(update_fields=('status', 'message', 'finished_at'))
 
+

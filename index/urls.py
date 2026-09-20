@@ -1,3 +1,4 @@
+from index.operations.topology import topology_data, topology_batches, topology_interfaces, topology_links, topology_evidence
 from index.domain.memberships import domain_group_members
 from index.access.views import (access_record_list, access_record_sync, access_source_settings, access_source_save, access_source_test)
 from index.devices.collection_profiles import collection_templates, device_collection_settings
@@ -17,6 +18,11 @@ from index.devices.pc.bulk_analysis import computer_logs_analyze_bulk
 from index.devices.pc.software_policy import pc_software_policy_template_download
 
 urlpatterns = [
+    path('operations/topology/', topology_data, name='topology_data'),
+    path('operations/topology/batches/', topology_batches, name='topology_batches'),
+    path('operations/topology/interfaces/', topology_interfaces, name='topology_interfaces'),
+    path('operations/topology/links/', topology_links, name='topology_links'),
+    path('operations/topology/evidence/<uuid:pk>/', topology_evidence, name='topology_evidence'),
     path('domain/groups/<uuid:pk>/members/', domain_group_members, name='domain_group_members'),
     path("access/records/", access_record_list, name="access_record_list"),
     path("access/sources/", access_source_settings, name="access_source_settings"),
@@ -98,3 +104,4 @@ urlpatterns = [
     path('records/<str:kind>/<uuid:pk>/', views.record_detail, name='record_detail'),
     path('inspection/<str:category>/<uuid:pk>/', views.infrastructure_inspection_detail, name='infrastructure_inspection_detail'),
 ]
+

@@ -39,7 +39,21 @@ DISPLAY_ROUTES = frozenset({'index', 'people_statistics', 'asset_detail', 'perso
 DISPLAY_QUERY_KEYS = frozenset({'page', 'task_page'})
 SESSION_EPOCH = '_net_page_cache_epoch_v1'
 NAMESPACE = 'net:pages:v1:'
+GENERATION_KEY = NAMESPACE + 'generation'
 
+
+def _page_cache_generation():
+    try:
+        return caches['pages'].get(GENERATION_KEY, '')
+    except Exception:
+        return ''
+
+def invalidate_page_cache_namespace():
+    """Make existing permission-aware page snapshots unreachable."""
+    try:
+        caches['pages'].set(GENERATION_KEY, uuid4().hex, timeout=None)
+    except Exception:
+        pass
 
 def _directives(value):
     return {part.strip().split('=', 1)[0].lower() for part in value.split(',')}
@@ -79,6 +93,7 @@ class PageCacheMiddleware(MiddlewareMixin):
             sorted(request.COOKIES.items()),
             getattr(request, 'LANGUAGE_CODE', None), translation.get_language(),
             timezone.get_current_timezone_name(),
+            _page_cache_generation(),
             request.headers.get('Accept-Language', ''),
             request.headers.get('Accept', ''),
         ]
@@ -151,3 +166,5 @@ class PageCacheMiddleware(MiddlewareMixin):
         add_never_cache_headers(response)
         patch_vary_headers(response, ('Cookie',))
         return response
+
+
