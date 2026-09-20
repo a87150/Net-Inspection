@@ -283,3 +283,26 @@ def normalize_ssh_neighbors(value: object, raw: dict, vendor: str) -> dict:
     return {'status': status, 'complete': complete, 'protocols': sorted(protocols),
             'interfaces': interfaces, 'neighbors': neighbors, 'evidence': evidence,
             'message': '' if complete else ('SSH 拓扑回显未完整解析。' if any_nonempty else 'SSH 拓扑命令未返回有效证据。')}
+
+
+def merge_topology_results(results):
+    """Combine protocol payloads while keeping partial evidence non-authoritative."""
+    payloads = [value for value in results if isinstance(value, dict)]
+    interfaces, neighbors, protocols = [], [], set()
+    seen_interfaces, seen_neighbors = set(), set()
+    for payload in payloads:
+        protocols.update(payload.get('protocols', []))
+        for item in payload.get('interfaces', []):
+            marker = json.dumps(item, ensure_ascii=False, sort_keys=True, default=str)
+            if marker not in seen_interfaces:
+                seen_interfaces.add(marker); interfaces.append(item)
+        for item in payload.get('neighbors', []):
+            marker = json.dumps(item, ensure_ascii=False, sort_keys=True, default=str)
+            if marker not in seen_neighbors:
+                seen_neighbors.add(marker); neighbors.append(item)
+    complete = bool(payloads) and all(item.get('complete') is True for item in payloads)
+    any_evidence = any(item.get('status') in {'success', 'partial'} for item in payloads)
+    status = 'success' if complete else 'partial' if any_evidence else 'failed'
+    return {'status': status, 'complete': complete, 'protocols': sorted(protocols),
+            'interfaces': interfaces[:MAX_NEIGHBORS], 'neighbors': neighbors[:MAX_NEIGHBORS],
+            'evidence': _bounded_evidence({'sources': [item.get('evidence', {}) for item in payloads]})}

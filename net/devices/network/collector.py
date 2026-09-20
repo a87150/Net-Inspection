@@ -108,6 +108,16 @@ def _merge_network_results(requested, results, *, item_completed=None):
                 preferred = f'{protocol}:{key}' if raw_counts[key] > 1 else key
                 raw[_allocate_raw_key(raw, preferred)] = value
 
+    if 'lldp_neighbors' in requested:
+        from net.devices.network.topology_protocols import merge_topology_results
+        topology_values = [result.data.get('lldp_neighbors') for _protocol, result in results
+                           if isinstance(result.data, dict) and isinstance(result.data.get('lldp_neighbors'), dict)]
+        if topology_values:
+            data['lldp_neighbors'] = merge_topology_results(topology_values)
+            if data['lldp_neighbors']['status'] == 'success':
+                completed.add('lldp_neighbors')
+            else:
+                completed.discard('lldp_neighbors')
     missing = [item for item in requested if item not in completed]
     status = 'failed' if missing and not completed else 'partial' if missing else 'success'
     message = '缺少有效采集证据：' + ', '.join(missing) if missing else ''
@@ -205,4 +215,5 @@ __all__ = [
     '_network_item_plan',
     'collect_network',
 ]
+
 
