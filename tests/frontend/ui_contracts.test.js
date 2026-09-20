@@ -55,3 +55,12 @@ test('table and modal components own scrolling without assigning it to modal con
   assert.equal((templates.match(/modal-dialog-scrollable/g) || []).length >= 4, true);
   assert.equal((templates.match(/modal-footer--sticky/g) || []).length >= 4, true);
 });
+
+test('decorative workspace glows stay inside the page canvas', () => {
+  const foundation = read('static/app/css/foundation.css');
+  const glowRule = foundation.match(/\.execution-workspace::before,[\s\S]*?\{([^}]+)\}/);
+
+  assert.ok(glowRule, 'shared execution glow rule should exist');
+  assert.match(glowRule[1], /right:\s*0/);
+  assert.doesNotMatch(glowRule[1], /right:\s*-[\d.]+(?:rem|px)/);
+});

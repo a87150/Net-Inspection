@@ -780,7 +780,7 @@ details > summary {
     position: absolute;
     z-index: -1;
     top: -6rem;
-    right: -4rem;
+    right: 0;
     width: 15rem;
     height: 15rem;
     border-radius: 50%;
