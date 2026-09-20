@@ -478,6 +478,28 @@ def _persist_collection(target_run_id, worker_id, collection, lease_guard=None, 
             )
 
 
+def _topology_payload(device_id, collected, collected_at):
+    value = collected.data.get('lldp_neighbors') if isinstance(collected.data, dict) else None
+    if not isinstance(value, dict):
+        return None
+    from net.models import NetworkTopologyInterface
+    from net.topology.discovery import build_discovery_payload
+    device = Network_Device.objects.get(pk=device_id)
+    known_devices = list(Network_Device.objects.only('id', 'ip', 'device_name'))
+    known_interfaces = list(NetworkTopologyInterface.objects.only(
+        'device_id', 'stable_key', 'name', 'mac_address'
+    ))
+    return build_discovery_payload(device, [value], known_devices, known_interfaces, collected_at)
+
+
+def _append_topology_error(collection, message):
+    safe = sanitize(message)[:1000]
+    collection.raw.setdefault('collection_errors', {})['lldp_neighbors'] = safe
+    collection.message = '; '.join(part for part in (collection.message, safe) if part)
+    if collection.status == RecordStatus.SUCCESS:
+        collection.status = RecordStatus.PARTIAL
+
+
 def execute_target(target_run, *, worker_id, lease_guard=None):
     """Collect and persist one infrastructure target for the supplied lease owner."""
     target_run_id = _target_id(target_run)
@@ -488,6 +510,15 @@ def execute_target(target_run, *, worker_id, lease_guard=None):
         return ExecutionOutcome(target_run_id, started.status)
     if lease_guard is not None and lease_guard.is_set():
         return ExecutionOutcome(target_run_id, started.status, stale=True)
+    effective_task = _device_task(started, started.task)
+    wants_topology = (
+        started.target_type == TaskTargetRun.TargetType.NETWORK_DEVICE
+        and 'lldp_neighbors' in effective_task.selected_items_snapshot
+    )
+    topology_batch_id = None
+    if wants_topology:
+        from net.topology.service import begin_topology_batch
+        topology_batch_id = begin_topology_batch(started.pk, started.started_at or timezone.now())
     secrets = ()
     try:
         asset = _asset_context(started)
@@ -495,7 +526,7 @@ def execute_target(target_run, *, worker_id, lease_guard=None):
             'username', 'password', 'snmp_community', 'snmp_auth_password',
             'snmp_priv_password', 'api_username', 'api_password', 'api_token', 'api_shared_secret',
         ))
-        if 'config_info' in _device_task(started, started.task).selected_items_snapshot:
+        if 'config_info' in effective_task.selected_items_snapshot:
             secrets += configuration_secrets()
         collection = _collect(started, started.task, asset)
     except Exception as exc:  # Collector boundaries must never terminate sibling work.
@@ -504,6 +535,23 @@ def execute_target(target_run, *, worker_id, lease_guard=None):
             RecordStatus.FAILED,
             message=f'采集执行失败：{sanitize(str(exc), secrets=secrets)}',
         )
+    if topology_batch_id:
+        from net.topology.service import complete_topology_batch, fail_topology_batch
+        if lease_guard is not None and lease_guard.is_set():
+            fail_topology_batch(topology_batch_id, status='cancelled', message='任务已取消或租约失效。')
+        else:
+            try:
+                collected_at = timezone.now()
+                payload = _topology_payload(started.target_id, collection, collected_at)
+                if payload is None:
+                    fail_topology_batch(topology_batch_id, status='failed', message='拓扑巡检未返回可解析证据。')
+                else:
+                    complete_topology_batch(topology_batch_id, payload,
+                                            collection_status=_record_status(collection),
+                                            collected_at=collected_at)
+            except Exception:
+                fail_topology_batch(topology_batch_id, status='failed', message='拓扑结果保存失败。')
+                _append_topology_error(collection, '拓扑结果保存失败；普通巡检结果仍会保存。')
     outcome = _persist_collection(target_run_id, worker_id, collection, lease_guard, secrets)
     if not outcome.stale:
         from net.alerts.service import process_persisted_target
@@ -513,8 +561,6 @@ def execute_target(target_run, *, worker_id, lease_guard=None):
         with _database_guard():
             process_persisted_target(target_run_id)
     return outcome
-
-
 def persist_execution_failure(target_run, *, worker_id, error, lease_guard=None):
     """Persist an unexpected executor failure without affecting sibling targets."""
     outcome = _persist_collection(
@@ -529,3 +575,4 @@ def persist_execution_failure(target_run, *, worker_id, error, lease_guard=None)
         with _database_guard():
             process_persisted_target(target_run)
     return outcome
+
