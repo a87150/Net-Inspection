@@ -138,6 +138,91 @@ class OperationsSnapshotTests(TestCase):
         self.assertFalse(topology['has_physical_links'])
         self.assertEqual(topology['mode'], 'empty')
 
+    def test_endpoint_attachment_prefers_access_and_is_stable(self):
+        from index.dashboard.operations import build_operations_snapshot
+
+        Network_Device.objects.create(
+            device_name='CORE', ip='10.30.0.2', device_type='core switch',
+        )
+        access = Network_Device.objects.create(
+            device_name='ACCESS', ip='10.30.0.3', device_type='access switch',
+        )
+        pc = Computer.objects.create(
+            computer_name='PC-01', ip_addresses='10.30.0.90, 10.31.0.90',
+        )
+
+        first = build_operations_snapshot(now=self.now)['topology']
+        second = build_operations_snapshot(now=self.now)['topology']
+        pc_node = next(node for node in first['nodes'] if node['id'] == f'computers:{pc.pk}')
+
+        self.assertEqual(pc_node['parent_id'], f'networks:{access.pk}')
+        self.assertEqual(pc_node['attachment_source'], 'inferred_subnet')
+        self.assertEqual(first['attachment_edges'], second['attachment_edges'])
+        self.assertEqual(len(first['attachment_edges']), 1)
+        access_node = next(node for node in first['nodes'] if node['id'] == f'networks:{access.pk}')
+        self.assertEqual(access_node['child_count'], 1)
+
+    def test_invalid_endpoint_address_remains_unattached(self):
+        from index.dashboard.operations import build_operations_snapshot
+
+        Network_Device.objects.create(
+            device_name='ACCESS', ip='10.30.0.3', device_type='access switch',
+        )
+        camera = SecurityDevice.objects.create(
+            device_name='CAM-01', ip='not-an-ip', device_type='摄像机',
+        )
+
+        topology = build_operations_snapshot(now=self.now)['topology']
+        camera_node = next(
+            node for node in topology['nodes'] if node['id'] == f'monitors:{camera.pk}'
+        )
+
+        self.assertIsNone(camera_node['parent_id'])
+        self.assertEqual(camera_node['attachment_source'], '')
+        self.assertEqual(topology['attachment_edges'], [])
+
+    def test_ap_physical_relationship_beats_subnet_inference_and_stays_physical(self):
+        from index.dashboard.operations import build_operations_snapshot
+
+        switch = Network_Device.objects.create(
+            device_name='ACCESS', ip='10.40.0.2', device_type='access switch',
+        )
+        ap = Network_Device.objects.create(
+            device_name='AP-01', ip='10.40.0.3', device_type='ap',
+        )
+        task, target = self.inspection_task(
+            status=TaskRun.Status.SUCCESS, target_id=str(switch.pk),
+        )
+        batch = TopologyDiscoveryBatch.objects.create(
+            source_task=task, source_target=target, device=switch,
+            protocol=TopologyDiscoveryBatch.Protocol.SNMP_LLDP,
+            status=TopologyDiscoveryBatch.Status.SUCCESS,
+            started_at=self.now, collected_at=self.now, finished_at=self.now,
+        )
+        switch_if = NetworkTopologyInterface.objects.create(
+            device=switch, stable_key='ifindex:1', name='Gi1/0/1',
+            first_seen_at=self.now, last_seen_at=self.now, last_batch=batch,
+        )
+        ap_if = NetworkTopologyInterface.objects.create(
+            device=ap, stable_key='ifindex:1', name='Eth0',
+            first_seen_at=self.now, last_seen_at=self.now,
+        )
+        NetworkTopologyLink.objects.create(
+            stable_link_key='a' * 64, local_interface=switch_if,
+            remote_device=ap, remote_interface=ap_if,
+            protocols=['snmp_lldp'], resolution_status='resolved', status='stale',
+            confidence='0.90', first_seen_at=self.now, last_seen_at=self.now,
+            last_batch=batch,
+        )
+
+        topology = build_operations_snapshot(now=self.now)['topology']
+        ap_node = next(node for node in topology['nodes'] if node['id'] == f'networks:{ap.pk}')
+
+        self.assertEqual(ap_node['parent_id'], f'networks:{switch.pk}')
+        self.assertEqual(ap_node['attachment_source'], 'physical_discovered')
+        self.assertEqual(topology['attachment_edges'][0]['attachment_source'], 'physical_discovered')
+        self.assertEqual(topology['physical_edges'][0]['status'], 'stale')
+
     def test_snapshot_includes_allowlisted_physical_topology(self):
         from index.dashboard.operations import build_operations_snapshot
 
