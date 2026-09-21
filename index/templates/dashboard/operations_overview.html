@@ -16,7 +16,7 @@
             <div>
                 <p class="operations-overview__eyebrow mb-2">NETWORK DISCOVERY</p>
                 <h1 id="operations-overview-title">网络拓扑</h1>
-                <p class="operations-overview__lede mb-0">按设备实际 IP 网段组织 PC、服务器、网络与安防设备，并叠加 LLDP/CDP 采集到的物理链路。</p>
+                <p class="operations-overview__lede mb-0">默认聚焦防火墙、核心/汇聚/接入交换机和无线 AC；点击主设备展开其下联终端。</p>
             </div>
             <div class="operations-overview__timestamp">
                 <span class="status-indicator" :class="stale ? 'is-warning' : 'is-normal'" aria-hidden="true"></span>
@@ -26,7 +26,7 @@
         </header>
 
         <div class="operations-overview__control-rail glass-panel">
-            <p class="operations-overview__scope mb-0">虚线表示 IP 网段归属，实线仅表示 LLDP/CDP 实际发现关系。</p>
+            <p class="operations-overview__scope mb-0">粗实线表示 LLDP/CDP 物理链路；终端虚线明确标记为网段推断。</p>
             <div class="operations-overview__refresh-controls" aria-label="数据刷新控制">
                 <button type="button" data-overview-pause :aria-pressed="manualPaused ? 'true' : 'false'" @click="togglePause">
                     <span aria-hidden="true">[[ manualPaused ? '▶' : 'Ⅱ' ]]</span>[[ manualPaused ? '恢复刷新' : '暂停刷新' ]]
@@ -44,7 +44,7 @@
 
         <section id="overview-topology-panel" class="operations-overview__panel topology-workspace glass-panel" aria-labelledby="topology-workspace-title">
             <header class="topology-toolbar">
-                <div><p>SUBNETS &amp; DISCOVERED LINKS</p><h2 id="topology-workspace-title">设备网段与物理链路</h2></div>
+                <div><p>ENTERPRISE NETWORK MAP</p><h2 id="topology-workspace-title">企业网络主干与下联终端</h2></div>
                 <div class="topology-toolbar__controls" aria-label="拓扑缩放控制">
                     <label class="visually-hidden" for="topology-link-filter">链路筛选</label>
                     <select id="topology-link-filter" v-model="filter" @change="setFilter" aria-label="筛选物理链路">
@@ -65,34 +65,65 @@
             <div class="topology-legend" aria-label="拓扑图例">
                 <span v-for="item in topology.legend" :key="item.kind" :class="`is-${item.kind}`"><i aria-hidden="true"></i>[[ item.label ]]</span>
             </div>
-            <div class="topology-canvas-shell">
+            <div v-if="snapshot.topology?.mode === 'empty'" class="topology-empty-state" role="status">
+                <strong>暂无可绘制的主要网络设备</strong>
+                <span>请先维护防火墙、交换机、路由器或无线 AC。</span>
+                <a href="{% url 'asset_list' 'networks' %}">打开网络设备列表</a>
+            </div>
+            <p v-else-if="!snapshot.topology?.has_physical_links" class="topology-collection-hint">
+                <span aria-hidden="true">ⓘ</span>已显示主要网络设备，尚未采集到 LLDP/CDP 物理链路。
+            </p>
+            <div v-if="snapshot.topology?.mode !== 'empty'" class="topology-canvas-shell">
                 <svg class="topology-canvas" :viewBox="`0 0 ${topologyWidth} ${topologyHeight}`"
                      role="img" aria-labelledby="topology-title topology-description"
                      @pointerdown.self="startPan" @pointermove="movePan" @pointerup="endPan" @pointercancel="endPan">
-                    <title id="topology-title">设备 IP 网段与 LLDP/CDP 物理拓扑</title>
-                    <desc id="topology-description">虚线连接设备与其 IP 网段，实线只表示后端采集的 LLDP/CDP 物理链路；节点可通过键盘打开详情。</desc>
+                    <title id="topology-title">企业主要网络设备与 LLDP/CDP 物理拓扑</title>
+                    <desc id="topology-description">默认显示主要网络设备，点击交换机或无线控制器可展开下联终端；实线表示 LLDP/CDP，虚线表示网段推断。</desc>
                     <g :transform="`translate(${viewport.x} ${viewport.y}) scale(${viewport.scale})`">
-                        <path v-for="edge in topology.logicalEdges" :key="edge.id" :d="edgePath(edge)" class="topology-edge topology-edge--logical" />
+                        <path v-for="edge in topology.attachmentEdges" :key="edge.id" :d="edgePath(edge)"
+                              class="topology-edge" :class="edge.attachmentSource === 'physical_discovered' ? 'topology-edge--attachment-physical' : 'topology-edge--inferred'"
+                              tabindex="0" role="button" :aria-label="edgeAriaLabel(edge)" @click="selectEdge(edge)" @keydown.enter.prevent="selectEdge(edge)" @keydown.space.prevent="selectEdge(edge)" />
                         <path v-for="edge in topology.physicalEdges" :key="edge.id" :d="edgePath(edge)"
                               class="topology-edge topology-edge--physical" :class="{ 'is-stale': edge.status === 'stale' }"
                               tabindex="0" role="button" :aria-label="edgeAriaLabel(edge)" @click="selectEdge(edge)" @keydown.enter.prevent="selectEdge(edge)" @keydown.space.prevent="selectEdge(edge)" />
-                        <g v-for="node in topology.nodes" :key="node.id" class="topology-node"
-                           :class="[`is-${node.kind}`, `is-${node.asset_type || 'generic'}`, `is-${node.status || 'unknown'}`]"
-                           :transform="`translate(${node.x} ${node.y})`">
-                            <a v-if="node.url" :href="node.url" tabindex="0" :aria-label="`${node.label} ${node.subtitle || ''}`">
-                                <circle r="18"></circle><text y="34" text-anchor="middle">[[ truncate(node.label, 15) ]]</text>
+                        <g v-for="node in topology.nodes" :key="node.id" data-topology-device-card
+                           class="topology-node topology-device-card"
+                           :class="[`is-${node.kind}`, `is-${node.role || 'unknown'}`, `is-${node.status || 'unknown'}`, { 'is-expanded': expandedNodeIds.has(node.id) }]"
+                           :transform="`translate(${node.x} ${node.y})`"
+                           :role="node.kind === 'backbone' && node.childCount ? 'button' : 'group'"
+                           :tabindex="node.kind === 'backbone' && node.childCount ? 0 : -1"
+                           :aria-expanded="node.kind === 'backbone' && node.childCount ? (expandedNodeIds.has(node.id) ? 'true' : 'false') : undefined"
+                           :aria-label="`${node.label}，${roleLabel(node)}${node.childCount ? `，${node.childCount} 个下联终端` : ''}`"
+                           @click="toggleNode(node)" @keydown.enter.prevent="toggleNode(node)" @keydown.space.prevent="toggleNode(node)">
+                            <rect class="topology-device-card__surface" :x="node.kind === 'backbone' ? -78 : -60" :y="node.kind === 'backbone' ? -35 : -28"
+                                  :width="node.kind === 'backbone' ? 156 : 120" :height="node.kind === 'backbone' ? 70 : 56" rx="10" />
+                            <g class="topology-device-card__icon" transform="translate(-60 -13)" aria-hidden="true">
+                                <rect x="0" y="0" width="24" height="18" rx="3"></rect>
+                                <path d="M5 6h14M5 11h4m3 0h7"></path>
+                            </g>
+                            <text class="topology-device-card__role" :x="node.kind === 'backbone' ? -28 : -25" y="-15">[[ roleLabel(node) ]]</text>
+                            <text class="topology-device-card__name" :x="node.kind === 'backbone' ? -28 : -25" y="2">[[ truncate(node.label, node.kind === 'backbone' ? 18 : 13) ]]</text>
+                            <text class="topology-device-card__meta" :x="node.kind === 'backbone' ? -28 : -25" y="18">[[ truncate(node.ip || node.subtitle || '未配置 IP', 20) ]]</text>
+                            <text v-if="node.kind === 'backbone'" class="topology-device-card__status" x="72" y="-20" text-anchor="end">[[ nodeStatusLabel(node.status) ]]</text>
+                            <g v-if="node.childCount" class="topology-device-card__badge" transform="translate(58 21)">
+                                <rect x="-17" y="-10" width="34" height="19" rx="9"></rect><text text-anchor="middle" y="4">[[ node.childCount ]]</text>
+                            </g>
+                            <a v-if="node.url" class="topology-device-card__detail" :href="node.url" @click.stop tabindex="0" :aria-label="`打开 ${node.label} 详情`">
+                                <text :x="node.kind === 'backbone' ? -70 : -52" :y="node.kind === 'backbone' ? 29 : 23">详情</text>
                             </a>
-                            <g v-else><circle r="18"></circle><text y="34" text-anchor="middle">[[ truncate(node.label, 15) ]]</text></g>
                         </g>
                     </g>
                 </svg>
             </div>
             <aside v-if="selectedEdge" class="topology-detail" aria-live="polite">
                 <div><span>链路类型</span><strong>[[ selectedEdge.protocolLabel ]] · [[ selectedEdge.statusLabel ]]</strong></div>
-                <div><span>本地 / 对端接口</span><strong>[[ selectedEdge.localInterfaceLabel || '未知' ]] → [[ selectedEdge.remoteInterfaceLabel || '未知' ]]</strong></div>
-                <div><span>方向 / 解析状态</span><strong>[[ directionLabel(selectedEdge.evidenceDirection) ]] · [[ resolutionLabel(selectedEdge.resolutionStatus) ]]</strong></div>
-                <div><span>速率 / VLAN</span><strong>[[ formatSpeed(selectedEdge.speedBps) ]] · [[ selectedEdge.vlanIds.length ? selectedEdge.vlanIds.join(', ') : '无 VLAN 数据' ]]</strong></div>
-                <div><span>置信度 / 最后发现</span><strong>[[ formatConfidence(selectedEdge.confidence) ]] · [[ formatTime(selectedEdge.lastSeenAt) ]]</strong></div>
+                <template v-if="selectedEdge.kind === 'physical_discovered'">
+                    <div><span>本地 / 对端接口</span><strong>[[ selectedEdge.localInterfaceLabel || '未知' ]] → [[ selectedEdge.remoteInterfaceLabel || '未知' ]]</strong></div>
+                    <div><span>方向 / 解析状态</span><strong>[[ directionLabel(selectedEdge.evidenceDirection) ]] · [[ resolutionLabel(selectedEdge.resolutionStatus) ]]</strong></div>
+                    <div><span>速率 / VLAN</span><strong>[[ formatSpeed(selectedEdge.speedBps) ]] · [[ selectedEdge.vlanIds.length ? selectedEdge.vlanIds.join(', ') : '无 VLAN 数据' ]]</strong></div>
+                    <div><span>置信度 / 最后发现</span><strong>[[ formatConfidence(selectedEdge.confidence) ]] · [[ formatTime(selectedEdge.lastSeenAt) ]]</strong></div>
+                </template>
+                <div v-else><span>关系来源</span><strong>[[ selectedEdge.attachmentSource === 'physical_discovered' ? '设备物理发现' : '相同 IP 网段推断' ]]</strong></div>
             </aside>
             <details class="topology-text-list">
                 <summary>查看等价文字节点列表（[[ topology.nodes.length ]]）</summary>

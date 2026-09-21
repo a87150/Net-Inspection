@@ -92,7 +92,12 @@ class SharedInterfaceContractTests(TestCase):
         self.assertContains(response, '<desc id="topology-description">')
         self.assertContains(response, 'aria-hidden="true"')
         self.assertContains(response, 'LLDP/CDP')
-        self.assertContains(response, 'IP 网段')
+        self.assertContains(response, 'data-topology-device-card')
+        self.assertContains(response, '@click="toggleNode(node)"')
+        self.assertContains(response, 'topology-edge--physical')
+        self.assertContains(response, 'topology-edge--inferred')
+        self.assertContains(response, '暂无可绘制的主要网络设备')
+        self.assertNotContains(response, 'IP 网段归属')
         self.assertNotIn('v-html', html)
 
         app = Path(finders.find('app/js/operations-overview/app.js')).read_text(encoding='utf-8')
@@ -106,6 +111,11 @@ class SharedInterfaceContractTests(TestCase):
         self.assertIn('prefers-reduced-motion: reduce', css)
         self.assertIn('min-height: var(--control-touch-size)', css)
         self.assertIn('@media (max-width: 767.98px)', css)
+        self.assertIn('.topology-device-card', css)
+        self.assertIn('.topology-device-card__badge', css)
+        self.assertIn(':focus-visible', css)
+        self.assertIn('min-height: 44px', css)
+        self.assertNotIn('.operations-overview { overflow-x:', css)
 
     def test_mobile_navigation_keeps_account_controls_inside_collapse(self):
         response = self.client.get(reverse('index'))

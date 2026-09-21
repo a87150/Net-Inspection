@@ -158,6 +158,15 @@ if (mountElement && bootstrapElement) {
         const target = this.topologyNodes.get(edge.target)?.label || '未知邻居';
         return `${source} 到 ${target}，${edge.protocolLabel}，${edge.statusLabel}`;
       },
+      roleLabel(node) {
+        return ({
+          firewall: '防火墙', router: '路由器', core_switch: '核心交换机',
+          distribution_switch: '汇聚交换机', access_switch: '接入交换机',
+          wireless_controller: '无线 AC', network_other: '网络设备',
+          access_point: 'AP', computer: 'PC', server: '服务器',
+          security_device: node.subtitle || '安防设备', unresolved_neighbor: '未解析邻居',
+        })[node.role] || '终端';
+      },
       truncate(value, length) {
         const stringValue = String(value || '');
         return stringValue.length > length ? `${stringValue.slice(0, length - 1)}…` : stringValue;
