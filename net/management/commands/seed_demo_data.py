@@ -24,6 +24,8 @@ from net.models import (
     Monitor_Inspection,
     Network_Device,
     Network_Device_Inspection,
+    NetworkTopologyInterface,
+    NetworkTopologyLink,
     People,
     RecordStatus,
     Server,
@@ -52,11 +54,15 @@ DEMO_COMPUTER_NAMES = (
     'DEMO-PC-01',
     'DEMO-PC-02',
 )
-DEMO_NETWORK_IPS = ('192.0.2.11', '192.0.2.12', '192.0.2.13')
-DEMO_SERVER_IPS = ('198.51.100.21', '198.51.100.22', '198.51.100.23')
+DEMO_NETWORK_IPS = (
+    '192.0.2.1', '192.0.2.2', '192.0.2.11', '192.0.2.12', '192.0.2.13',
+    '192.0.2.14', '192.0.2.15', '10.10.10.1', '10.20.20.1', '10.30.30.1',
+    '10.40.40.1', '10.40.40.11',
+)
+DEMO_SERVER_IPS = ('198.51.100.21', '198.51.100.22', '198.51.100.23', '10.20.20.21')
 DEMO_MONITOR_IPS = (
     '203.0.113.31', '203.0.113.32', '203.0.113.33',
-    '203.0.113.34', '203.0.113.35',
+    '203.0.113.34', '203.0.113.35', '10.30.30.31',
 )
 DEMO_DOMAIN_LOGINS = (
     'demo.zhang@demo.invalid',
@@ -398,6 +404,7 @@ class Command(BaseCommand):
         people = self._seed_people(anchor)
         computers = self._seed_computers(anchor)
         networks = self._seed_networks(anchor)
+        self._seed_enterprise_topology(anchor, networks)
         servers = self._seed_servers(anchor)
         monitors = self._seed_monitors(anchor)
         domain_accounts, domain_computers, domain_groups = self._seed_domain(anchor)
@@ -820,7 +827,7 @@ class Command(BaseCommand):
                 'os': 'Windows 11 专业版',
                 'user_name': '演示-张瑾',
                 'login_account': 'DEMO\\zhang.jin',
-                'ip_addresses': '192.0.2.101; 2001:db8::101',
+                'ip_addresses': '10.10.10.101; 2001:db8::101',
                 'mac_addresses': '02-00-00-00-01-01',
                 'os_version': '23H2',
                 'os_build': '22631.4037',
@@ -837,7 +844,7 @@ class Command(BaseCommand):
                 'os': 'Windows 10 企业版',
                 'user_name': '演示-李然',
                 'login_account': 'DEMO\\li.ran',
-                'ip_addresses': '192.0.2.102',
+                'ip_addresses': '10.10.10.102',
                 'mac_addresses': '02-00-00-00-01-02',
                 'os_version': '22H2',
                 'os_build': '19045.4780',
@@ -854,7 +861,7 @@ class Command(BaseCommand):
                 'os': 'Windows 10 专业版',
                 'user_name': '演示-赵离',
                 'login_account': 'DEMO\\zhao.li',
-                'ip_addresses': '192.0.2.103',
+                'ip_addresses': '10.10.10.103',
                 'mac_addresses': '02-00-00-00-01-03',
                 'os_version': '21H2',
                 'os_build': '19044.3208',
@@ -940,20 +947,30 @@ class Command(BaseCommand):
     def _seed_networks(self, anchor):
         specs = (
             {
+                'ip': '192.0.2.1', 'name': '演示-出口防火墙-A',
+                'device_type': 'firewall', 'vendor': 'Huawei', 'model': 'USG6650E',
+                'port': 22, 'connection_type': 'auto',
+            },
+            {
+                'ip': '192.0.2.2', 'name': '演示-出口防火墙-B',
+                'device_type': 'firewall', 'vendor': 'H3C', 'model': 'F5000-AI',
+                'port': 22, 'connection_type': 'auto',
+            },
+            {
                 'ip': '192.0.2.11', 'name': '演示-核心交换机',
-                'device_type': '交换机', 'vendor': 'Huawei',
+                'device_type': 'core switch', 'vendor': 'Huawei',
                 'model': 'CloudEngine S5735-L', 'port': 22,
                 'connection_type': 'ssh',
             },
             {
                 'ip': '192.0.2.12', 'name': '演示-接入交换机',
-                'device_type': '交换机', 'vendor': 'H3C', 'model': 'S5130S',
+                'device_type': 'access switch', 'vendor': 'H3C', 'model': 'S5130S',
                 'port': 22, 'connection_type': 'hybrid',
                 'snmp_version': 'v2c', 'snmp_community': DEMO_SECRET,
             },
             {
                 'ip': '192.0.2.13', 'name': '演示-边界路由器',
-                'device_type': '路由器', 'vendor': 'Cisco', 'model': 'ISR 4331',
+                'device_type': 'router', 'vendor': 'Cisco', 'model': 'ISR 4331',
                 'port': 2222, 'connection_type': 'auto', 'snmp_version': 'v3',
                 'snmp_username': 'demo-snmp-reader',
                 'snmp_security_level': 'authPriv',
@@ -962,6 +979,41 @@ class Command(BaseCommand):
                 'snmp_priv_protocol': 'aes128',
                 'snmp_priv_password': DEMO_SECRET,
                 'snmp_context_name': 'demo-context',
+            },
+            {
+                'ip': '192.0.2.14', 'name': '演示-核心交换机-B',
+                'device_type': 'core switch', 'vendor': 'Huawei', 'model': 'CloudEngine S6730-H',
+                'port': 22, 'connection_type': 'auto',
+            },
+            {
+                'ip': '192.0.2.15', 'name': '演示-园区汇聚交换机',
+                'device_type': 'distribution switch', 'vendor': 'H3C', 'model': 'S6520X',
+                'port': 22, 'connection_type': 'auto',
+            },
+            {
+                'ip': '10.10.10.1', 'name': '演示-办公网接入交换机',
+                'device_type': 'access switch', 'vendor': 'Huawei', 'model': 'S5735-L',
+                'port': 22, 'connection_type': 'auto',
+            },
+            {
+                'ip': '10.20.20.1', 'name': '演示-服务器区接入交换机',
+                'device_type': 'access switch', 'vendor': 'H3C', 'model': 'S5130S',
+                'port': 22, 'connection_type': 'auto',
+            },
+            {
+                'ip': '10.30.30.1', 'name': '演示-安防网接入交换机',
+                'device_type': 'access switch', 'vendor': 'Ruijie', 'model': 'RG-S2910',
+                'port': 22, 'connection_type': 'auto',
+            },
+            {
+                'ip': '10.40.40.1', 'name': '演示-园区无线 AC',
+                'device_type': 'ac', 'vendor': 'Huawei', 'model': 'AirEngine 9700-M',
+                'port': 22, 'connection_type': 'auto',
+            },
+            {
+                'ip': '10.40.40.11', 'name': '演示-办公区 AP-01',
+                'device_type': 'ap', 'vendor': 'Huawei', 'model': 'AirEngine 6761-21',
+                'port': 22, 'connection_type': 'auto',
             },
         )
         devices = {}
@@ -1054,6 +1106,78 @@ class Command(BaseCommand):
                 )
         return list(devices.values())
 
+    def _seed_enterprise_topology(self, anchor, networks):
+        devices = {device.ip: device for device in networks}
+        pairs = (
+            ('192.0.2.13', '192.0.2.1'),
+            ('192.0.2.1', '192.0.2.11'),
+            ('192.0.2.2', '192.0.2.14'),
+            ('192.0.2.11', '192.0.2.14'),
+            ('192.0.2.11', '192.0.2.15'),
+            ('192.0.2.15', '10.10.10.1'),
+            ('192.0.2.15', '10.20.20.1'),
+            ('192.0.2.15', '10.30.30.1'),
+            ('192.0.2.14', '10.40.40.1'),
+            ('10.40.40.1', '10.40.40.11'),
+        )
+        for index, (local_ip, remote_ip) in enumerate(pairs, 1):
+            local, remote = devices[local_ip], devices[remote_ip]
+            interfaces = []
+            for side, device, peer in (
+                ('local', local, remote), ('remote', remote, local),
+            ):
+                identity = f'topology-interface:{device.ip}:{peer.ip}'
+                stable_key = f'demo-peer:{peer.ip}'
+                _assert_fixed_uuid_owner(
+                    NetworkTopologyInterface, identity,
+                    {'device_id': device.pk, 'stable_key': stable_key},
+                )
+                interface, _ = NetworkTopologyInterface.objects.update_or_create(
+                    pk=_demo_uuid(identity),
+                    defaults={
+                        'device': device, 'stable_key': stable_key,
+                        'if_index': index, 'name': f'XGE{index}/0/{1 if side == "local" else 2}',
+                        'description': f'演示上联至 {peer.device_name}',
+                        'admin_status': 'up', 'oper_status': 'up',
+                        'speed_bps': 10_000_000_000, 'vlan_ids': [10, 20, 30, 40],
+                        'first_seen_at': anchor, 'last_seen_at': anchor,
+                        'last_batch': None, 'is_stale': False,
+                    },
+                )
+                interfaces.append(interface)
+            identity = f'topology-link:{local.ip}:{remote.ip}'
+            stable_link_key = _demo_hash(identity)
+            _assert_fixed_uuid_owner(
+                NetworkTopologyLink, identity,
+                {'stable_link_key': stable_link_key},
+            )
+            existing_key = NetworkTopologyLink.objects.filter(
+                stable_link_key=stable_link_key,
+            ).exclude(pk=_demo_uuid(identity)).exists()
+            if existing_key:
+                raise CommandError(f'演示拓扑链路键冲突：{stable_link_key}')
+            NetworkTopologyLink.objects.update_or_create(
+                pk=_demo_uuid(identity),
+                defaults={
+                    'stable_link_key': stable_link_key,
+                    'local_interface': interfaces[0],
+                    'remote_device': remote,
+                    'remote_interface': interfaces[1],
+                    'remote_chassis_id': f'demo-{remote.pk}',
+                    'remote_port_id': interfaces[1].name,
+                    'remote_port_description': interfaces[1].description,
+                    'remote_system_name': remote.device_name or '',
+                    'remote_management_addresses': [remote.ip],
+                    'protocols': ['snmp_lldp'],
+                    'evidence_direction': 'bidirectional',
+                    'resolution_status': 'resolved', 'status': 'current',
+                    'speed_bps': 10_000_000_000, 'vlan_ids': [10, 20, 30, 40],
+                    'confidence': '0.95', 'first_seen_at': anchor,
+                    'last_seen_at': anchor, 'last_batch': None,
+                    'missing_complete_batches': 0,
+                },
+            )
+
     def _seed_servers(self, anchor):
         specs = (
             {
@@ -1089,6 +1213,17 @@ class Command(BaseCommand):
                 'architecture': 'x86_64', 'cpu_model': 'AMD EPYC 7232P',
                 'cpu_physical_core_count': 8, 'cpu_logical_processor_count': 16,
                 'memory_total_gb': 64, 'disk_total_gb': 8192,
+            },
+            {
+                'ip': '10.20.20.21', 'name': '演示-拓扑应用服务器',
+                'server_type': 'linux', 'os': 'Ubuntu Server 24.04 LTS',
+                'port': 22, 'username': 'demo-inspector', 'password': DEMO_SECRET,
+                'api_url': '', 'api_token': '', 'verify_ssl': True,
+                'os_version': '24.04', 'os_build': '6.8.0', 'system_installed_at': '2026-01-10',
+                'manufacturer': 'Dell', 'model': 'PowerEdge R650', 'serial_number': 'DEMO-TOPO-SRV',
+                'architecture': 'x86_64', 'cpu_model': 'Intel Xeon Silver 4314',
+                'cpu_physical_core_count': 16, 'cpu_logical_processor_count': 32,
+                'memory_total_gb': 64, 'disk_total_gb': 2048,
             },
         )
         servers = {
@@ -1153,6 +1288,7 @@ class Command(BaseCommand):
             ('203.0.113.33', '演示-仓库摄像机', '摄像机', 'Hikvision', 'DS-2CD2T46WDV3', 'camera-warehouse'),
             ('203.0.113.34', '演示-办公区门禁', '门禁', 'Hikvision', 'DS-K2604', 'access-office'),
             ('203.0.113.35', '演示-园区入口闸机', '闸机', 'Dahua', 'ASGB8XXY', 'gate-entrance'),
+            ('10.30.30.31', '演示-拓扑安防摄像机', '摄像机', 'Hikvision', 'DS-2CD3T47', 'camera-topology'),
         )
         monitors = {}
         for ip, name, device_type, vendor, model, host in specs:

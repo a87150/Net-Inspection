@@ -29,6 +29,8 @@ from net.models import (
     Monitor_Inspection,
     Network_Device,
     Network_Device_Inspection,
+    NetworkTopologyInterface,
+    NetworkTopologyLink,
     People,
     PeopleSyncSource,
     Server,
@@ -268,6 +270,18 @@ class DeterministicDemoSeedTests(TestCase):
                     )
                 ),
             },
+            'topology': {
+                'interfaces': tuple(
+                    NetworkTopologyInterface.objects.order_by('pk').values_list(
+                        'pk', 'device_id', 'stable_key',
+                    )
+                ),
+                'links': tuple(
+                    NetworkTopologyLink.objects.order_by('pk').values_list(
+                        'pk', 'stable_link_key', 'local_interface_id', 'remote_device_id',
+                    )
+                ),
+            },
         }
 
     @patch('requests.sessions.Session.request')
@@ -290,7 +304,7 @@ class DeterministicDemoSeedTests(TestCase):
         )
         self.assertEqual(
             [device.ip for device in devices],
-            ['192.0.2.11', '192.0.2.12', '192.0.2.13'],
+            sorted(device.ip for device in devices),
         )
         self.assertTrue(all(device.snmp_port == 161 for device in devices))
         snmp_devices = [
@@ -307,6 +321,29 @@ class DeterministicDemoSeedTests(TestCase):
                 device.snmp_priv_password,
             )
         ))
+
+    @patch('requests.sessions.Session.request')
+    def test_demo_seed_creates_enterprise_backbone_without_network_calls(self, request_mock):
+        call_command('seed_demo_data', reset=True, stdout=StringIO())
+
+        roles = set(Network_Device.objects.values_list('device_type', flat=True))
+
+        self.assertTrue({
+            'firewall', 'core switch', 'distribution switch',
+            'access switch', 'ac', 'ap',
+        } <= roles)
+        self.assertGreaterEqual(
+            NetworkTopologyLink.objects.filter(status='current').count(), 7,
+        )
+        self.assertTrue(Computer.objects.filter(ip_addresses__startswith='10.10.10.').exists())
+        self.assertTrue(Server.objects.filter(ip__startswith='10.20.20.').exists())
+        self.assertTrue(SecurityDevice.objects.filter(ip__startswith='10.30.30.').exists())
+        link_device_ids = set(
+            NetworkTopologyLink.objects.values_list('local_interface__device_id', flat=True)
+        ) | set(NetworkTopologyLink.objects.values_list('remote_device_id', flat=True))
+        self.assertFalse(None in link_device_ids)
+        self.assertTrue(link_device_ids <= set(Network_Device.objects.values_list('pk', flat=True)))
+        request_mock.assert_not_called()
 
     def test_reset_preserves_rows_outside_the_named_demo_scope(self):
         person = People.objects.create(name='真实人员', employee_id='REAL-001')
@@ -497,8 +534,8 @@ class DeterministicDemoSeedTests(TestCase):
         self.assertFalse(
             Monitor_Inspection.objects.filter(pk__in=legacy_record_ids).exists()
         )
-        self.assertEqual(Server.objects.count(), 3)
-        self.assertEqual(SecurityDevice.objects.count(), 5)
+        self.assertEqual(Server.objects.count(), 4)
+        self.assertEqual(SecurityDevice.objects.count(), 6)
         self.assertEqual(Error_Server.objects.count(), 2)
         self.assertEqual(Error_Monitor.objects.count(), 2)
 
@@ -646,7 +683,7 @@ class DeterministicDemoSeedTests(TestCase):
             with self.subTest(model=asset_model._meta.label):
                 self.assertEqual(
                     asset_model.objects.count(),
-                    5 if asset_model is SecurityDevice else 3,
+                    12 if asset_model is Network_Device else 6 if asset_model is SecurityDevice else 4,
                 )
                 self.assertEqual(record_model.objects.count(), 5 if asset_model is Network_Device else 4)
                 self.assertEqual(
