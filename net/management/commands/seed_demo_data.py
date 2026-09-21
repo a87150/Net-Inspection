@@ -511,6 +511,10 @@ class Command(BaseCommand):
                     People.objects.filter(pk=person.pk).update(sync_source=source)
 
     def _seed_tasks(self, anchor, networks):
+        task_networks = [
+            device for device in networks
+            if device.inspections.filter(status=RecordStatus.SUCCESS).exists()
+        ]
         profiles = {}
         for suffix, name, device_type, items in (
             ('network', '演示网络巡检', 'network_device', ['device_info', 'config_info']),
@@ -541,9 +545,9 @@ class Command(BaseCommand):
         })
         profile = profiles['network']
         for number, status in enumerate(TaskRun.Status.values):
-            selected = [networks[number % 3]]
+            selected = [task_networks[number % len(task_networks)]]
             if status == 'partial':
-                selected.append(networks[(number + 1) % 3])
+                selected.append(task_networks[(number + 1) % len(task_networks)])
             scope = {'target_type': 'network_device', 'target_ids': [str(asset.pk) for asset in selected]}
             terminal = status in TaskRun.TERMINAL_STATUSES
             finished = anchor - timedelta(minutes=60 + number)
