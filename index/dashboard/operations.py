@@ -1,21 +1,17 @@
 """Presentation-safe data for the network topology page."""
 
-import re
-from ipaddress import ip_interface
-
 from django.db import DatabaseError
 from django.http import JsonResponse
 from django.shortcuts import render
-from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 from net.models import Computer, Network_Device, SecurityDevice, Server
 from net.topology.read_model import current_topology_payload
+from index.dashboard.topology_presentation import build_enterprise_topology
 
 
 ASSET_NODE_LIMIT_PER_KIND = 80
-DEFAULT_PREFIX_LENGTH = {4: 24, 6: 64}
 
 
 def _safe_region(name, builder):
@@ -25,68 +21,23 @@ def _safe_region(name, builder):
         return {'error': f'{name}_unavailable'}
 
 
-def _node(node_id, kind, label, url='', parent_id=None, *, subtitle='', status='unknown',
-          asset_type=''):
-    return {
-        'id': node_id,
-        'kind': kind,
-        'label': label,
-        'subtitle': subtitle,
-        'status': status,
-        'url': url,
-        'parent_id': parent_id,
-        'asset_type': asset_type,
-    }
-
-
-def _network_segments(value):
-    segments = set()
-    for candidate in re.split(r'[,;|\s]+', str(value or '').strip()):
-        if not candidate:
-            continue
-        try:
-            interface = ip_interface(candidate)
-            if '/' not in candidate:
-                interface = ip_interface(f'{candidate}/{DEFAULT_PREFIX_LENGTH[interface.version]}')
-        except ValueError:
-            continue
-        segments.add(str(interface.network))
-    return sorted(segments)
-
-
 def _asset_sources():
     return (
         (
             'computers',
             Computer.objects.only('id', 'computer_name', 'ip_addresses', 'is_active'),
-            lambda row: row.computer_name,
-            lambda row: row.ip_addresses or '',
-            lambda row: reverse('asset_detail', args=['computers', row.pk]),
-            lambda row: 'normal' if row.is_active else 'disabled',
         ),
         (
             'networks',
             Network_Device.objects.only('id', 'device_name', 'ip'),
-            lambda row: row.device_name or row.ip,
-            lambda row: row.ip,
-            lambda row: reverse('asset_detail', args=['networks', row.pk]),
-            lambda row: 'unknown',
         ),
         (
             'servers',
             Server.objects.only('id', 'name', 'ip'),
-            lambda row: row.name or row.ip,
-            lambda row: row.ip,
-            lambda row: reverse('asset_detail', args=['servers', row.pk]),
-            lambda row: 'unknown',
         ),
         (
             'monitors',
             SecurityDevice.objects.only('id', 'device_name', 'ip'),
-            lambda row: row.device_name or row.ip,
-            lambda row: row.ip,
-            lambda row: reverse('asset_detail', args=['monitors', row.pk]),
-            lambda row: 'unknown',
         ),
     )
 
@@ -105,51 +56,16 @@ def _selected_rows(key, queryset, required_network_ids):
     return rows, max(0, total - len(rows))
 
 
-def _build_asset_nodes(required_network_ids=()):
-    nodes = []
-    edges = []
-    subnets = set()
+def _load_assets(required_network_ids=()):
+    selected = {}
     truncation = {}
     required_network_ids = {str(value) for value in required_network_ids if value}
-
-    for key, queryset, label, addresses, url, status in _asset_sources():
+    for key, queryset in _asset_sources():
         rows, omitted = _selected_rows(key, queryset, required_network_ids)
+        selected[key] = rows
         if omitted:
             truncation[key] = omitted
-        for row in rows:
-            node_id = f'{key}:{row.pk}'
-            segments = _network_segments(addresses(row)) or ['unassigned']
-            parent_id = f'subnet:{segments[0]}'
-            nodes.append(_node(
-                node_id,
-                'asset',
-                label(row),
-                url(row),
-                parent_id,
-                subtitle=addresses(row),
-                status=status(row),
-                asset_type=key,
-            ))
-            for segment in segments:
-                subnet_id = f'subnet:{segment}'
-                subnets.add(segment)
-                edges.append({
-                    'id': f'membership:{subnet_id}:{node_id}',
-                    'source': subnet_id,
-                    'target': node_id,
-                    'relationship': 'subnet_membership',
-                })
-
-    subnet_nodes = [
-        _node(
-            f'subnet:{segment}',
-            'subnet',
-            '未识别网段' if segment == 'unassigned' else segment,
-            subtitle='缺少有效 IP 地址' if segment == 'unassigned' else 'IP 网段',
-        )
-        for segment in sorted(subnets, key=lambda value: (value == 'unassigned', value))
-    ]
-    return subnet_nodes + nodes, edges, truncation
+    return selected, truncation
 
 
 def _build_topology():
@@ -161,21 +77,21 @@ def _build_topology():
         for value in (edge.get('local_device_id'), edge.get('remote_device_id'))
         if value
     }
-    nodes, membership_edges, truncation = _build_asset_nodes(required_network_ids)
-    return {
-        'mode': 'hybrid' if physical_edges else 'subnet',
-        'nodes': nodes,
-        'logical_edges': membership_edges,
-        'interfaces': physical['interfaces'],
-        'physical_edges': physical_edges,
-        'asset_truncation': truncation,
-    }
+    assets, truncation = _load_assets(required_network_ids)
+    return build_enterprise_topology(
+        network_devices=assets['networks'],
+        computers=assets['computers'],
+        servers=assets['servers'],
+        monitors=assets['monitors'],
+        physical=physical,
+        asset_truncation=truncation,
+    )
 
 
 def build_operations_snapshot(*, now=None):
     generated_at = now or timezone.now()
     return {
-        'schema_version': 2,
+        'schema_version': 3,
         'generated_at': generated_at.isoformat(),
         'topology': _safe_region('topology', _build_topology),
     }

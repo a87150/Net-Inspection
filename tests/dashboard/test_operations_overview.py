@@ -72,19 +72,34 @@ class OperationsSnapshotTests(TestCase):
 
         snapshot = build_operations_snapshot(now=self.now)
 
-        self.assertEqual(snapshot['schema_version'], 2)
+        self.assertEqual(snapshot['schema_version'], 3)
         self.assertEqual(snapshot['generated_at'], self.now.isoformat())
         self.assertEqual(set(snapshot), {'schema_version', 'generated_at', 'topology'})
 
-    def test_topology_groups_supported_devices_by_ip_subnet_and_excludes_domain_objects(self):
+    def test_network_roles_accept_chinese_english_and_keep_unknown_devices(self):
         from index.dashboard.operations import build_operations_snapshot
 
-        computer = Computer.objects.create(
-            computer_name='pc-a', ip_addresses='10.20.30.14, 2001:db8:20::14/64',
+        firewall = Network_Device.objects.create(
+            device_name='EDGE-FW-01', ip='10.0.0.1', device_type='防火墙',
         )
-        server = Server.objects.create(name='server-a', ip='10.20.30.22')
-        network = Network_Device.objects.create(device_name='switch-a', ip='10.20.31.130/25')
-        monitor = SecurityDevice.objects.create(device_name='camera-a', ip='not-an-ip')
+        core = Network_Device.objects.create(
+            device_name='CORE-SW-01', ip='10.0.0.2', device_type='core switch',
+        )
+        distribution = Network_Device.objects.create(
+            device_name='DIST-SW-01', ip='10.0.0.3', device_type='汇聚交换机',
+        )
+        access = Network_Device.objects.create(
+            device_name='ACCESS-SW-01', ip='10.0.0.4', device_type='access switch',
+        )
+        ac = Network_Device.objects.create(
+            device_name='WLAN-AC-01', ip='10.0.0.5', device_type='AC',
+        )
+        ap = Network_Device.objects.create(
+            device_name='AP-01', ip='10.0.0.6', device_type='AP',
+        )
+        unknown = Network_Device.objects.create(
+            device_name='MYSTERY-01', ip='10.0.0.7', device_type='',
+        )
         Domain_Account.objects.create(account_name='ignored', login_name='ignored-account')
         Domain_Computer.objects.create(computer_name='ignored-domain-pc')
         Domain_Group.objects.create(
@@ -93,21 +108,35 @@ class OperationsSnapshotTests(TestCase):
 
         topology = build_operations_snapshot(now=self.now)['topology']
         nodes = {node['id']: node for node in topology['nodes']}
-        edges = {(edge['source'], edge['target']) for edge in topology['logical_edges']}
+        roles = {
+            node_id: node['role'] for node_id, node in nodes.items()
+            if node['kind'] == 'backbone'
+        }
 
-        self.assertEqual(
-            {node['asset_type'] for node in nodes.values() if node['kind'] == 'asset'},
-            {'computers', 'servers', 'networks', 'monitors'},
-        )
-        self.assertIn('subnet:10.20.30.0/24', nodes)
-        self.assertIn('subnet:10.20.31.128/25', nodes)
-        self.assertIn('subnet:2001:db8:20::/64', nodes)
-        self.assertIn('subnet:unassigned', nodes)
-        self.assertIn(('subnet:10.20.30.0/24', f'computers:{computer.pk}'), edges)
-        self.assertIn(('subnet:10.20.30.0/24', f'servers:{server.pk}'), edges)
-        self.assertIn(('subnet:10.20.31.128/25', f'networks:{network.pk}'), edges)
-        self.assertIn(('subnet:unassigned', f'monitors:{monitor.pk}'), edges)
+        self.assertEqual(roles[f'networks:{firewall.pk}'], 'firewall')
+        self.assertEqual(nodes[f'networks:{firewall.pk}']['tier'], 0)
+        self.assertEqual(roles[f'networks:{core.pk}'], 'core_switch')
+        self.assertEqual(nodes[f'networks:{core.pk}']['tier'], 1)
+        self.assertEqual(roles[f'networks:{distribution.pk}'], 'distribution_switch')
+        self.assertEqual(nodes[f'networks:{distribution.pk}']['tier'], 2)
+        self.assertEqual(roles[f'networks:{access.pk}'], 'access_switch')
+        self.assertEqual(nodes[f'networks:{access.pk}']['tier'], 3)
+        self.assertEqual(roles[f'networks:{ac.pk}'], 'wireless_controller')
+        self.assertEqual(nodes[f'networks:{ac.pk}']['tier'], 3)
+        self.assertEqual(roles[f'networks:{unknown.pk}'], 'network_other')
+        self.assertEqual(nodes[f'networks:{ap.pk}']['kind'], 'endpoint')
+        self.assertEqual(nodes[f'networks:{ap.pk}']['role'], 'access_point')
         self.assertFalse(any(node_id.startswith('domain') for node_id in nodes))
+
+    def test_empty_inventory_has_honest_empty_backbone_payload(self):
+        from index.dashboard.operations import build_operations_snapshot
+
+        topology = build_operations_snapshot(now=self.now)['topology']
+
+        self.assertEqual(topology['nodes'], [])
+        self.assertEqual(topology['attachment_edges'], [])
+        self.assertFalse(topology['has_physical_links'])
+        self.assertEqual(topology['mode'], 'empty')
 
     def test_snapshot_includes_allowlisted_physical_topology(self):
         from index.dashboard.operations import build_operations_snapshot
@@ -224,7 +253,7 @@ class OperationsOverviewViewTests(TestCase):
         self.assertContains(page, 'id="operations-overview-app"')
         self.assertContains(page, 'id="operations-overview-bootstrap"')
         self.assertContains(page, 'data-snapshot-url="/operations/overview/data/"')
-        self.assertEqual(data.json()['schema_version'], 2)
+        self.assertEqual(data.json()['schema_version'], 3)
         cache_control = data.headers.get('Cache-Control', '')
         self.assertIn('no-cache', cache_control)
         self.assertIn('no-store', cache_control)
