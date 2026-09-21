@@ -1,6 +1,8 @@
 import { createApp } from '../../../vendor/vue/vue.esm-browser.prod.js';
 import { createRefreshController } from './state.js';
-import { normalizeTopology, layoutTopology } from './topology.js';
+import {
+  normalizeTopology, visibleTopology, reconcileExpandedIds, layoutTopology,
+} from './topology.js';
 import { createAmbientEffects } from './effects.js';
 
 const mountElement = document.querySelector('#operations-overview-app');
@@ -25,6 +27,7 @@ if (mountElement && bootstrapElement) {
         topologyWidth: 1100,
         topologyHeight: 620,
         selectedEdgeId: '',
+        expandedNodeIds: new Set(),
         liveStatus: '网络拓扑已就绪',
         controller: null,
         unsubscribe: null,
@@ -38,7 +41,8 @@ if (mountElement && bootstrapElement) {
         return this.formatTime(this.snapshot.generated_at);
       },
       topology() {
-        const graph = normalizeTopology(this.snapshot.topology || {});
+        const fullGraph = normalizeTopology(this.snapshot.topology || {});
+        const graph = visibleTopology(fullGraph, this.expandedNodeIds);
         if (this.filter !== 'all') {
           graph.physicalEdges = graph.physicalEdges.filter((edge) => (
             this.filter === 'unresolved'
@@ -56,7 +60,8 @@ if (mountElement && bootstrapElement) {
         return new Map(this.topology.nodes.map((node) => [node.id, node]));
       },
       selectedEdge() {
-        return this.topology.physicalEdges.find((edge) => edge.id === this.selectedEdgeId) || null;
+        return [...this.topology.physicalEdges, ...this.topology.attachmentEdges]
+          .find((edge) => edge.id === this.selectedEdgeId) || null;
       },
     },
     methods: {
@@ -76,6 +81,10 @@ if (mountElement && bootstrapElement) {
       syncControllerState(next) {
         const previousGeneratedAt = this.snapshot?.generated_at;
         this.snapshot = next.lastSnapshot;
+        this.expandedNodeIds = reconcileExpandedIds(
+          this.expandedNodeIds,
+          normalizeTopology(this.snapshot.topology || {}),
+        );
         this.refreshing = next.refreshing;
         this.stale = next.stale;
         this.error = next.error;
@@ -129,12 +138,20 @@ if (mountElement && bootstrapElement) {
         const source = this.topologyNodes.get(edge.source);
         const target = this.topologyNodes.get(edge.target);
         if (!source || !target) return '';
-        const curve = Math.max(30, Math.abs(target.x - source.x) * 0.45);
-        return `M ${source.x} ${source.y} C ${source.x + curve} ${source.y}, ${target.x - curve} ${target.y}, ${target.x} ${target.y}`;
+        const midpoint = source.y + ((target.y - source.y) * 0.5);
+        return `M ${source.x} ${source.y} C ${source.x} ${midpoint}, ${target.x} ${midpoint}, ${target.x} ${target.y}`;
       },
       selectEdge(edge) {
         this.selectedEdgeId = edge.id;
-        this.liveStatus = `已选择 ${edge.protocolLabel} 物理链路`;
+        this.liveStatus = `已选择 ${edge.protocolLabel}链路`;
+      },
+      toggleNode(node) {
+        if (node.kind !== 'backbone' || !node.childCount) return;
+        const next = new Set(this.expandedNodeIds);
+        next.has(node.id) ? next.delete(node.id) : next.add(node.id);
+        this.expandedNodeIds = next;
+        this.selectedEdgeId = '';
+        this.liveStatus = `${node.label}${next.has(node.id) ? '已展开' : '已收起'}，${node.childCount} 个终端`;
       },
       edgeAriaLabel(edge) {
         const source = this.topologyNodes.get(edge.source)?.label || '未知设备';
@@ -170,7 +187,7 @@ if (mountElement && bootstrapElement) {
         return value === 'resolved' ? '已解析设备' : '未解析邻居';
       },
       nodeKindLabel(value) {
-        return ({ subnet: 'IP 网段', asset: '设备节点', external: '未解析邻居' })[value] || '节点';
+        return ({ backbone: '主要网络设备', endpoint: '下联终端', external: '未解析邻居' })[value] || '节点';
       },
       nodeStatusLabel(value) {
         return ({ normal: '正常', abnormal: '异常', disabled: '停用', stale: '陈旧', unknown: '状态未知' })[value] || '状态未知';

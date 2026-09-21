@@ -1,4 +1,4 @@
-const NODE_KIND_ORDER = { subnet: 0, asset: 1, external: 2 };
+const NODE_KIND_ORDER = { backbone: 0, endpoint: 1, external: 2 };
 
 function text(value) {
   return String(value ?? '').trim();
@@ -43,45 +43,58 @@ function deviceNodeId(deviceId, nodeIds) {
 function mergePhysicalEdge(existing, incoming) {
   const protocols = [...new Set([...existing.protocols, ...incoming.protocols])].sort(compareText);
   const isReciprocal = existing.observationCount + incoming.observationCount > 1;
+  const status = existing.status === 'current' || incoming.status === 'current' ? 'current' : incoming.status;
   return {
     ...existing,
     protocols,
     protocolLabel: protocolLabel(protocols),
     evidenceDirection: isReciprocal || existing.evidenceDirection === 'bidirectional'
       || incoming.evidenceDirection === 'bidirectional' ? 'bidirectional' : incoming.evidenceDirection,
-    status: existing.status === 'current' || incoming.status === 'current' ? 'current' : incoming.status,
-    statusLabel: statusLabel(existing.status === 'current' || incoming.status === 'current' ? 'current' : incoming.status),
+    status,
+    statusLabel: statusLabel(status),
     confidence: Math.max(existing.confidence, incoming.confidence),
     lastSeenAt: [existing.lastSeenAt, incoming.lastSeenAt].filter(Boolean).sort().at(-1) || null,
     observationCount: existing.observationCount + incoming.observationCount,
   };
 }
 
+function nodeOrder(left, right) {
+  return (NODE_KIND_ORDER[left.kind] ?? 9) - (NODE_KIND_ORDER[right.kind] ?? 9)
+    || Number(left.tier ?? 99) - Number(right.tier ?? 99)
+    || compareText(left.label, right.label)
+    || compareText(left.id, right.id);
+}
+
 export function normalizeTopology(snapshot = {}) {
   const sourceNodes = Array.isArray(snapshot.nodes) ? snapshot.nodes : [];
   const baseNodes = sourceNodes
     .filter((node) => node && text(node.id))
-    .map((node) => ({ ...node, id: text(node.id), kind: text(node.kind) || 'asset' }));
-  baseNodes.sort((left, right) => (
-    (NODE_KIND_ORDER[left.kind] ?? 9) - (NODE_KIND_ORDER[right.kind] ?? 9)
-    || compareText(left.label, right.label)
-    || compareText(left.id, right.id)
-  ));
-  const nodeIds = new Set(baseNodes.map((node) => node.id));
-  const nodeIndex = new Map(baseNodes.map((node, index) => [node.id, index]));
-
-  const logicalEdges = (Array.isArray(snapshot.logical_edges) ? snapshot.logical_edges : [])
-    .filter((edge) => edge && nodeIds.has(text(edge.source)) && nodeIds.has(text(edge.target))
-      && text(edge.source) !== text(edge.target))
-    .map((edge) => ({
-      id: text(edge.id), source: text(edge.source), target: text(edge.target),
-      relationship: text(edge.relationship) || 'logical_membership',
+    .map((node) => ({
+      ...node,
+      id: text(node.id),
+      kind: text(node.kind) || 'endpoint',
+      role: text(node.role) || 'unknown',
+      tier: node.tier === null || node.tier === undefined ? null : Number(node.tier),
+      parentId: text(node.parent_id) || null,
+      attachmentSource: text(node.attachment_source),
+      childCount: Number(node.child_count || 0),
     }))
-    .sort((left, right) => (
-      nodeIndex.get(left.source) - nodeIndex.get(right.source)
-      || nodeIndex.get(left.target) - nodeIndex.get(right.target)
-      || compareText(left.id, right.id)
-    ));
+    .sort(nodeOrder);
+  const nodeIds = new Set(baseNodes.map((node) => node.id));
+
+  const attachmentEdges = (Array.isArray(snapshot.attachment_edges) ? snapshot.attachment_edges : [])
+    .filter((edge) => edge && nodeIds.has(text(edge.source)) && nodeIds.has(text(edge.target)))
+    .map((edge) => ({
+      id: text(edge.id),
+      kind: 'endpoint_attachment',
+      source: text(edge.source),
+      target: text(edge.target),
+      attachmentSource: text(edge.attachment_source),
+      protocolLabel: text(edge.attachment_source) === 'physical_discovered' ? '物理发现' : '网段推断',
+      status: 'current',
+      statusLabel: text(edge.attachment_source) === 'physical_discovered' ? '已发现' : '推断关系',
+    }))
+    .sort((left, right) => compareText(left.id, right.id));
 
   const interfaces = new Map(
     (Array.isArray(snapshot.interfaces) ? snapshot.interfaces : [])
@@ -104,11 +117,12 @@ export function normalizeTopology(snapshot = {}) {
         externalNodes.set(remoteNode, {
           id: remoteNode,
           kind: 'external',
+          role: 'unresolved_neighbor',
+          tier: 4,
           label: text(edge.remote_system_name) || text(edge.remote_chassis_id) || '未解析邻居',
           subtitle: text(edge.remote_port_id) || text(edge.remote_management_addresses?.[0]),
           status: edge.status === 'stale' ? 'stale' : 'unknown',
-          url: '',
-          parent_id: null,
+          url: '', parentId: null, attachmentSource: '', childCount: 0,
         });
       }
     }
@@ -124,9 +138,7 @@ export function normalizeTopology(snapshot = {}) {
     const currentStatus = text(edge.status) || 'unknown';
     const normalized = {
       id: `physical:${source}:${target}`,
-      kind: 'physical_discovered',
-      source,
-      target,
+      kind: 'physical_discovered', source, target,
       localInterfaceLabel: reverseResolved
         ? (text(remoteInterface?.name) || text(edge.remote_port_id))
         : (text(localInterface?.name) || text(localInterface?.stable_key)),
@@ -154,70 +166,89 @@ export function normalizeTopology(snapshot = {}) {
     );
   }
 
-  const nodes = [...baseNodes, ...externalNodes.values()].sort((left, right) => (
-    (NODE_KIND_ORDER[left.kind] ?? 9) - (NODE_KIND_ORDER[right.kind] ?? 9)
-    || compareText(left.label, right.label)
-    || compareText(left.id, right.id)
-  ));
+  const nodes = [...baseNodes, ...externalNodes.values()].sort(nodeOrder);
   const physicalEdges = [...physicalByEndpoints.values()]
     .map(({ observationCount, ...edge }) => edge)
     .sort((left, right) => compareText(left.id, right.id));
-  return { nodes, logicalEdges, physicalEdges };
+  return { nodes, attachmentEdges, physicalEdges };
+}
+
+export function reconcileExpandedIds(expandedIds, graph) {
+  const valid = new Set(
+    graph.nodes.filter((node) => node.kind === 'backbone').map((node) => node.id),
+  );
+  return new Set([...expandedIds].filter((id) => valid.has(id)));
+}
+
+export function visibleTopology(graph, expandedIds = new Set()) {
+  const nodes = graph.nodes.filter((node) => node.kind === 'backbone'
+    || node.kind === 'external'
+    || (node.kind === 'endpoint' && node.parentId && expandedIds.has(node.parentId)));
+  const ids = new Set(nodes.map((node) => node.id));
+  const attachmentEdges = graph.attachmentEdges.filter(
+    (edge) => ids.has(edge.source) && ids.has(edge.target),
+  );
+  const attachmentPairs = new Set(attachmentEdges.map((edge) => `${edge.source}|${edge.target}`));
+  const physicalEdges = graph.physicalEdges.filter((edge) => (
+    ids.has(edge.source) && ids.has(edge.target)
+    && !attachmentPairs.has(`${edge.source}|${edge.target}`)
+    && !attachmentPairs.has(`${edge.target}|${edge.source}`)
+  ));
+  return { ...graph, nodes, attachmentEdges, physicalEdges };
 }
 
 function clamp(value, minimum, maximum) {
   return Math.min(Math.max(value, minimum), maximum);
 }
 
-function distribute(nodes, x, minY, maxY) {
+function distribute(nodes, minX, maxX, y) {
   if (!nodes.length) return [];
-  const step = nodes.length === 1 ? 0 : (maxY - minY) / (nodes.length - 1);
-  return nodes.map((node, index) => ({ ...node, x, y: minY + (step * index) }));
-}
-
-function distributeAssetGrid(nodes, baseX, minY, maxY, width) {
-  const columnCount = width >= 900 && nodes.length > 4 ? 2 : 1;
-  if (columnCount === 1) return distribute(nodes, baseX, minY, maxY);
-  const columns = Array.from({ length: columnCount }, () => []);
-  nodes.forEach((node, index) => columns[index % columnCount].push(node));
-  return columns.flatMap((column, index) => (
-    distribute(column, baseX + (index * Math.min(120, width * 0.12)), minY, maxY)
-  ));
+  const step = nodes.length === 1 ? 0 : (maxX - minX) / (nodes.length - 1);
+  const start = nodes.length === 1 ? (minX + maxX) / 2 : minX;
+  return nodes.map((node, index) => ({ ...node, x: start + (step * index), y }));
 }
 
 export function layoutTopology(graph, viewport = {}) {
   const width = Math.max(320, Number(viewport.width) || 960);
-  const height = Math.max(320, Number(viewport.height) || 640);
-  const padding = width < 480 ? 20 : 32;
-  const minY = padding + 28;
-  const maxY = height - padding - 28;
-  const groups = {
-    subnet: graph.nodes.filter((node) => node.kind === 'subnet'),
-    asset: graph.nodes.filter((node) => node.kind === 'asset'),
-    external: graph.nodes.filter((node) => node.kind === 'external'),
-  };
-  const columns = {
-    subnet: clamp(width * 0.22, padding + 20, width - padding),
-    asset: clamp(width * 0.58, padding + 120, width - padding - 72),
-    external: width - padding - 20,
-  };
-  const positioned = [
-    ...distribute(groups.subnet, columns.subnet, minY, maxY),
-    ...distributeAssetGrid(groups.asset, columns.asset, minY, maxY, width),
-    ...distribute(groups.external, columns.external, minY, maxY),
-  ].map((node) => ({
-    ...node,
-    x: clamp(Math.round(node.x), padding, width - padding),
-    y: clamp(Math.round(node.y), padding, height - padding),
-  }));
+  const height = Math.max(620, Number(viewport.height) || 620);
+  const padding = width < 480 ? 48 : 72;
+  const backbone = graph.nodes.filter((node) => node.kind === 'backbone');
+  const endpoints = graph.nodes.filter((node) => node.kind === 'endpoint');
+  const external = graph.nodes.filter((node) => node.kind === 'external');
+  const tiers = [...new Set(backbone.map((node) => Number(node.tier ?? 3)))].sort((a, b) => a - b);
+  const tierTop = 70;
+  const tierGap = tiers.length > 1 ? Math.min(140, (height - 210) / (tiers.length - 1)) : 0;
+  const positionedBackbone = tiers.flatMap((tier, tierIndex) => distribute(
+    backbone.filter((node) => Number(node.tier ?? 3) === tier),
+    padding, width - padding, tierTop + (tierIndex * tierGap),
+  ));
+  const positions = new Map(positionedBackbone.map((node) => [node.id, node]));
+  const positionedEndpoints = [];
+  for (const parent of positionedBackbone) {
+    const children = endpoints.filter((node) => node.parentId === parent.id);
+    const childGap = Math.min(112, Math.max(74, (width - (padding * 2)) / Math.max(1, children.length)));
+    const totalWidth = (children.length - 1) * childGap;
+    children.forEach((node, index) => positionedEndpoints.push({
+      ...node,
+      x: clamp(parent.x - (totalWidth / 2) + (index * childGap), padding, width - padding),
+      y: clamp(parent.y + 88, padding, height - padding),
+    }));
+  }
+  const positionedExternal = distribute(external, padding, width - padding, height - padding);
+  const positioned = [...positionedBackbone, ...positionedEndpoints, ...positionedExternal]
+    .map((node) => ({
+      ...node,
+      x: Math.round(clamp(node.x, padding, width - padding)),
+      y: Math.round(clamp(node.y, padding, height - padding)),
+    }));
 
   return {
     nodes: positioned,
-    logicalEdges: graph.logicalEdges.map((edge) => ({ ...edge })),
+    attachmentEdges: graph.attachmentEdges.map((edge) => ({ ...edge })),
     physicalEdges: graph.physicalEdges.map((edge) => ({ ...edge })),
     legend: [
-      { kind: 'subnet', label: 'IP 网段归属' },
-      { kind: 'physical', label: 'LLDP/CDP 物理发现' },
+      { kind: 'physical', label: 'LLDP/CDP 物理链路' },
+      { kind: 'inferred', label: '网段推断终端' },
       { kind: 'external', label: '未解析邻居' },
     ],
     bounds: { minX: padding, minY: padding, maxX: width - padding, maxY: height - padding },
