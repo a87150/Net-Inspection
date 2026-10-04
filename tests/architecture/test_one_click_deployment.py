@@ -1,17 +1,17 @@
-"""Deployment checks run only against temporary files and an isolated SQLite database."""
-from contextlib import closing
+"""Deployment checks run only against temporary files and an isolated database."""
 import os
 from pathlib import Path
 import socket
-import sqlite3
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 from cryptography.fernet import Fernet
-from django.test import SimpleTestCase
+from django.conf import settings
+from django.test import TestCase
 from deploy import setup
 from deploy.service import role_lock
+from tests.databases import connect, credentials, isolated_database, scalars, subprocess_environment
 
 
 def configuration(root, **overrides):
@@ -32,7 +32,8 @@ def configuration(root, **overrides):
     return path
 
 
-class DeploymentSetupTests(SimpleTestCase):
+class DeploymentSetupTests(TestCase):
+    # TestCase 而非 SimpleTestCase：prepare 用例要直连隔离库做断言。
     def test_existing_configuration_is_never_regenerated(self):
         with TemporaryDirectory() as directory:
             path = Path(directory) / '.env'
@@ -107,10 +108,13 @@ class DeploymentSetupTests(SimpleTestCase):
                 pass
 
     def test_prepare_migrates_only_fixture_database_and_preserves_existing_records(self):
-        with TemporaryDirectory() as directory:
+        with TemporaryDirectory() as directory, isolated_database() as name:
             root = Path(directory)
-            env_path = configuration(root)
-            env = {**os.environ, 'NET_ENV_FILE': str(env_path), 'DB_ENGINE': 'sqlite'}
+            # setup.load_config 读 .env 文件并清掉环境变量里的 DB_*，所以引擎、库名和
+            # 凭证都得写进文件本身，光给子进程设环境变量没用。
+            engine = {**credentials(), 'DB_NAME': name}
+            env_path = configuration(root, **engine)
+            env = subprocess_environment(name, env_path)
             script = '''from pathlib import Path
 from deploy import setup
 setup.ROOT = Path(__import__('sys').argv[1])
@@ -119,20 +123,32 @@ try:
 except ValueError as exc:
     if 'No active administrator' not in str(exc): raise
 '''
-            result = subprocess.run([sys.executable, '-X', 'utf8', '-c', script, str(root)], cwd=setup.ROOT, env=env, capture_output=True, timeout=60)
+            command = [sys.executable, '-X', 'utf8', '-c', script, str(root)]
+            result = subprocess.run(command, cwd=settings.BASE_DIR, env=env, capture_output=True, timeout=600)
             self.assertEqual(result.returncode, 0, result.stderr.decode(errors='replace'))
-            with closing(sqlite3.connect(root / 'isolated.sqlite3')) as db, db:
+            database = connect(name)
+            try:
                 for table in ('net_people', 'net_network_device', 'net_taskrun'):
-                    self.assertEqual(db.execute(f'SELECT count(*) FROM {table}').fetchone()[0], 0)
-                db.execute("INSERT INTO auth_user (password,is_superuser,username,first_name,last_name,email,is_staff,is_active,date_joined) VALUES ('fixture-password-hash',1,'fixture-admin','','','',1,1,'2026-01-01')")
+                    self.assertEqual(scalars(database, 'SELECT count(*) FROM ' + table), [0])
+                with database.cursor() as cursor:
+                    # MariaDB 的 tinyint(1) 接受 1，PostgreSQL 的 boolean 只接受 TRUE。
+                    flag = 'TRUE' if database.vendor == 'postgresql' else '1'
+                    cursor.execute('INSERT INTO auth_user (password,is_superuser,username,'
+                                    'first_name,last_name,email,is_staff,is_active,date_joined)'
+                                    ' VALUES (%s,' + flag + ',%s,%s,%s,%s,' + flag + ',' + flag + ',now())',
+                                    ['!fixture', 'fixture', '', '', ''])
+            finally:
+                database.close()
             original = env_path.read_bytes()
-            result = subprocess.run([sys.executable, '-X', 'utf8', '-c', script, str(root)], cwd=setup.ROOT, env=env, capture_output=True, timeout=60)
+            result = subprocess.run(command, cwd=settings.BASE_DIR, env=env, capture_output=True, timeout=600)
             self.assertEqual(result.returncode, 0, result.stderr.decode(errors='replace'))
             self.assertEqual(env_path.read_bytes(), original)
             self.assertTrue((root / 'staticfiles/app/css/style.css').is_file())
-            with closing(sqlite3.connect(root / 'isolated.sqlite3')) as db:
-                self.assertEqual(db.execute('SELECT username FROM auth_user').fetchall(), [('fixture-admin',)])
-
+            database = connect(name)
+            try:
+                self.assertEqual(scalars(database, 'SELECT username FROM auth_user'), ['fixture'])
+            finally:
+                database.close()
 
     def test_invalid_environment_is_rejected_without_echoing_its_content(self):
         with TemporaryDirectory() as directory:
