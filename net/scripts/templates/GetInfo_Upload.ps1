@@ -34,7 +34,12 @@ function Publish-PCDaily {
                 $response=$request.GetResponse(); try { if ([int]$response.StatusCode -lt 200 -or [int]$response.StatusCode -ge 300) { throw 'unexpected API response' } } finally { $response.Dispose() }
                 Write-Output 'PC_UPLOAD_COMPLETE: latest.json was saved locally and accepted by the monitoring API.'; return
             } catch {
-                if ($attempt -eq 3) { throw 'PC_UPLOAD_FAILED: Monitoring API upload failed after 3 attempts; latest.json was retained locally.' }
+                # 保留原始原因：只抛固定文案会让人无从下手（401? 连不上? 500?）。
+                $reason = $_.Exception.Message
+                if ($attempt -eq 3) {
+                    throw ('PC_UPLOAD_FAILED: Monitoring API upload failed after 3 attempts (' + $reason + '); latest.json was retained locally. Endpoint=' + $Endpoint)
+                }
+                Write-Warning ('Upload attempt ' + $attempt + ' failed: ' + $reason)
                 Start-Sleep -Seconds $attempt
             }
         }
@@ -362,10 +367,12 @@ $payload['事件发现'] = Read-Optional -Section '事件发现' {
     $events = @()
     foreach ($log in @('System', 'Application')) {
         $queryErrors = @()
-        $rows = @(Get-WinEvent -FilterHashtable @{ LogName = $log; StartTime = (Get-Date).AddDays(-1); Level = @(1,2,3) } -MaxEvents 100 -ErrorAction SilentlyContinue -ErrorVariable queryErrors)
+        # 只收严重级别：Level 1=critical、2=error。Level 3(warning) 一台机器一天能出
+        # 上百条，全记下来只会把真正的错误淹掉，也把 16 MiB 上限吃光。
+        $rows = @(Get-WinEvent -FilterHashtable @{ LogName = $log; StartTime = (Get-Date).AddDays(-1); Level = @(1,2) } -MaxEvents 100 -ErrorAction SilentlyContinue -ErrorVariable queryErrors)
         if (@($queryErrors | Where-Object { $_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*' }).Count) { throw 'Event log unavailable' }
         $events += @($rows | ForEach-Object {
-            @{ '级别' = switch ($_.Level) { 1 { 'critical' }; 2 { 'error' }; 3 { 'warning' } }
+            @{ '级别' = switch ($_.Level) { 1 { 'critical' } default { 'error' } }
                '消息' = $_.Message; '事件ID' = $_.Id; '时间' = Format-PCDate $_.TimeCreated; '日志' = $log }
         })
     }
