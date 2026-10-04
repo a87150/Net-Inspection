@@ -279,8 +279,10 @@ def _enqueue_due_schedules(now):
         try:
             with transaction.atomic():
                 schedule = (
+                    # 这几个档案字段都是可空外键，select_related 会生成 LEFT JOIN，
+                    # PostgreSQL 不允许在可空侧 FOR UPDATE；锁住 schedule 本身即可，
+                    # profile 在同一事务里懒加载。
                     Schedule.objects.select_for_update()
-                    .select_related('inspection_profile', 'analysis_profile', 'people_source', 'domain_config')
                     .filter(pk=schedule_id)
                     .first()
                 )

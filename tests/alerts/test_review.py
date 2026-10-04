@@ -2,7 +2,7 @@ import uuid
 from datetime import timedelta
 
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase
 from django.utils import timezone
 
@@ -285,11 +285,12 @@ class AlertScopeAndConstraintTests(TestCase):
         policy.name = 'bulk-renamed'
         AlertPolicy.objects.bulk_update([policy], ['name'])
         policy.name = 'upsert-renamed'
-        # 不传 unique_fields：MySQL/MariaDB 的 ON DUPLICATE KEY UPDATE 本来就按任意
-        # 唯一键触发，Django 也只在支持 update-conflicts-with-target 的后端才需要它。
-        AlertPolicy.objects.bulk_create(
-            [policy], update_conflicts=True, update_fields=['name'],
-        )
+        # unique_fields 两个后端的要求正好相反：PostgreSQL/SQLite 必须显式给出触发
+        # upsert 的唯一键，MySQL/MariaDB 走 ON DUPLICATE KEY UPDATE，收到它反而不支持。
+        conflicts = {'update_conflicts': True, 'update_fields': ['name']}
+        if connection.features.supports_update_conflicts_with_target:
+            conflicts['unique_fields'] = ['pk']
+        AlertPolicy.objects.bulk_create([policy], **conflicts)
         policy.refresh_from_db()
         self.assertEqual(policy.name, 'upsert-renamed')
         self.assertEqual(policy.inspection_profile_id, self.profile.pk)

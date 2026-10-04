@@ -18,7 +18,33 @@
 | `my_command.py`、`table_filter.html`、`style.css` | 死代码，待清理 |
 | `sync_domain` / `policy_snapshot` | 仅被测试引用的函数 |
 | 拓扑批量删除 | 关联 PROTECT 保护缺失（D2），删除前需确认级联范围 |
-| PostgreSQL 阶段 1 | `DB_ENGINE` 已预留校验，但只接受 `mysql`/`sqlite`，尚未接通 PostgreSQL 后端 |
+| PostgreSQL 排序规则 | 库必须按 `LC_COLLATE 'C'` 建，locale 排序会让中文名先后与 MariaDB 相反 |
+
+## 1.0.0（2026-10-04）
+
+### MariaDB / PostgreSQL 双数据库
+
+`DB_ENGINE` 取 `mysql` 或 `postgresql`，正式环境和模拟环境共用同一份 `.env`，改一个值即可整体换库。
+两种后端跑同一套迁移、同一套测试。`psycopg[binary]==3.3.6` 进入 `requirements.txt` 与锁文件。
+
+为了让同一份代码在两个后端上行为一致，修掉了这些后端差异：
+
+- `JsonKeyType` 补齐 PostgreSQL（`JSONB_TYPEOF(JSONB_PATH_QUERY_FIRST)`）和 SQLite 分支。
+  用 `_FIRST` 是因为 `JSONB_PATH_QUERY` 是集合返回函数，放进 `CASE` 会报类型不匹配。
+- 去掉三处 `select_for_update()` + 可空外键 `select_related()` 的组合（`DomainOperation.task`、
+  `Schedule.people_source`、`Schedule` 的四个档案字段）。PostgreSQL 拒绝在外连接可空侧加锁。
+- 设备配置备份的文件名在落库前剔除 NUL：MariaDB 收得下，PostgreSQL 报 `DataError`，Windows 本身也不允许。
+- 告警策略的 upsert 按后端能力决定是否传 `unique_fields`。
+
+### 域控同步纳入告警
+
+域控同步失败此前不产生任何告警：告警白名单只认巡检和日志分析两种任务类型，而域控同步按 DC 配置分作用域，
+既没有档案也没有可映射的外键。现在 `result_type='domain_sync'` 会生成 `execution.failure` critical 告警，
+并在同步结果落库后立即评估，不用等 worker 下一轮。
+
+### 界面
+
+域控连接设置页的「启用定时同步」改用与右侧间隔输入框一致的开关卡片样式。
 
 ## 2026-10-03
 

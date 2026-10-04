@@ -1,10 +1,41 @@
 # 数据库、缓存与维护
 
+## 双数据库支持
+
+`DB_ENGINE` 决定使用哪个后端，取值 `mysql` / `postgresql` / `sqlite`。正式环境与模拟环境都用同一份 `.env`，
+切换 `DB_ENGINE` 即可整体换库，两种后端跑同一套迁移、同一套测试。
+
+| 关键项 | MariaDB / MySQL | PostgreSQL |
+| --- | --- | --- |
+| 驱动 | `mysqlclient` | `psycopg[binary]` |
+| 默认端口 | 3306 | 5432 |
+| 字符集 | `utf8mb4` / `utf8mb4_bin` | 库级 `ENCODING 'UTF8'` |
+| 排序规则 | `utf8mb4_bin`（字节序） | `LC_COLLATE 'C'`（字节序） |
+| 会话时区 | `init_command` 设 `time_zone` | 连接参数 `-c timezone=UTC` |
+
+**排序规则必须对齐。** MariaDB 的 `utf8mb4_bin` 和 PostgreSQL 的 `LC_COLLATE 'C'` 都按 UTF-8 字节序比较，
+中文名、DN 的大小写和先后在两个后端才一致。PostgreSQL 默认的 locale 排序（如 `en_US.UTF-8`）会按语言规则排，
+「甲」「乙」的先后正好与字节序相反，`deploy.demo` 建库时已经固定为 `C`。
+
+后端差异已在代码里逐个处理，不要在业务层判断 `vendor`：
+
+- `index/inspections/result_query.py` 的 `JsonKeyType` 三种后端各一套 SQL（MySQL `JSON_TYPE`、SQLite JSON1 `json_type`、
+  PostgreSQL `JSONB_TYPEOF(JSONB_PATH_QUERY_FIRST(...))`）。必须用 `_FIRST` 版本：`JSONB_PATH_QUERY` 是集合返回函数，
+  放进 `CASE` 参数里 PostgreSQL 会报「CASE/WHEN 参数类型无法匹配」。
+- `select_for_update()` 不能和指向可空外键的 `select_related()` 连用。MariaDB 不在意，PostgreSQL 会拒绝
+  （外连接可空侧不允许 `FOR UPDATE`）。做法是只锁主表行、关联对象在同一事务里懒加载。
+- 文本字段不能含 NUL。MariaDB 收得下，PostgreSQL 报 `DataError`；落库前统一剔除。
+- `bulk_create(update_conflicts=True)` 的 `unique_fields` 两个后端要求相反：PostgreSQL 必填，
+  MariaDB 收到反而不支持。按 `connection.features.supports_update_conflicts_with_target` 分支。
+- PostgreSQL 拒绝 DROP 仍被会话占用的测试库，测试被中断后会留下孤儿连接，下次建库直接失败。
+  跑测试前先清理 `pg_stat_activity` 里残留会话。
+
 ## 当前本机配置
 
 根目录 `.env` 是 Web、Worker、manage.py 的共享配置，已被 Git 忽略。进程变量优先；`NET_ENV_FILE` 可选择其他文件。
 
 - MariaDB：`127.0.0.1:3306/net_inspection`，utf8mb4_bin，专用 `net_app` 账号仅拥有本项目库权限。
+- PostgreSQL：`127.0.0.1:5432`，正式库 `net`、模拟库 `net-test`，均按 `C` 排序规则建库。
 - 密码：Windows 凭据管理器服务 `net-inspection-mariadb`、用户名 `net_app`。配置文件不保存数据库密码；root 仅用于建库授权。
 - PC API 令牌由 `PC_LOG_SOURCE_ENCRYPTION_KEY`（或同名 `_FILE`）加密，不能丢失或随意替换；更换后需重置令牌并重新部署采集包。
 - Windows Web/Worker 应由同一 Windows 账号运行；换服务账号需在该账号凭据管理器设置密码。Linux 可通过服务环境注入 `DB_PASSWORD`，不必依赖桌面凭据管理器。

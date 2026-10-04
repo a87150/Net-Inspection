@@ -28,11 +28,26 @@ class RuntimeEnvironmentTests(SimpleTestCase):
     def test_demo_forces_the_test_database_over_external_settings(self):
         # The shared .env must never point the demo at the production database.
         from deploy.demo import configure_environment
-        with patch.dict(os.environ, {'DB_ENGINE': 'sqlite', 'DB_NAME': 'net',
+        with patch.dict(os.environ, {'DB_ENGINE': 'postgresql', 'DB_NAME': 'net',
                                    'DJANGO_SECRET_KEY': 'existing'}, clear=True):
             configure_environment(Path('runtime'))
-            self.assertEqual(os.environ['DB_ENGINE'], 'mysql')
+            # 引擎跟随配置（MariaDB 或 PostgreSQL 都行），库名一律换成测试库。
+            self.assertEqual(os.environ['DB_ENGINE'], 'postgresql')
             self.assertEqual(os.environ['DB_NAME'], 'net-test')
             self.assertEqual(os.environ['DJANGO_SQLITE_PATH'], '')
             self.assertEqual(Path(os.environ['DJANGO_STATIC_ROOT']),
                              Path('runtime') / 'staticfiles')
+
+    def test_demo_refuses_to_run_on_sqlite(self):
+        # A file-backed SQLite demo is neither isolated nor shared with production.
+        from deploy.demo import configure_environment
+        with patch.dict(os.environ, {'DB_ENGINE': 'sqlite'}, clear=True):
+            with self.assertRaises(ValueError):
+                configure_environment(Path('runtime'))
+
+    def test_demo_honours_a_configured_database_name(self):
+        from deploy.demo import configure_environment
+        with patch.dict(os.environ, {'DB_ENGINE': 'mysql', 'DB_TEST_NAME': 'net-demo'},
+                        clear=True):
+            configure_environment(Path('runtime'))
+            self.assertEqual(os.environ['DB_NAME'], 'net-demo')

@@ -12,6 +12,7 @@ LATEST_STABLE_DIRECT_DEPENDENCIES = {
     "ldap3": "2.9.1",
     "cryptography": "50.0.1",
     "mysqlclient": "2.2.8",
+    "psycopg": "3.3.6",
     "requests": "2.34.2",
     "aiohttp": "3.14.3",
     "dnspython": "2.8.0",
@@ -43,7 +44,8 @@ def read_exact_requirements(path):
         name, separator, required_version = pin.strip().partition("==")
         if separator != "==":
             raise AssertionError(f"Dependency must use an exact pin: {line}")
-        requirements[name] = required_version
+        # psycopg[binary] 的发行名仍是 psycopg，去掉 extras 才能查到已安装版本。
+        requirements[name.partition("[")[0]] = required_version
     return requirements
 
 

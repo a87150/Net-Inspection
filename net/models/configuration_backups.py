@@ -24,6 +24,13 @@ class DeviceConfigurationBackup(models.Model):
         related_name='configuration_backups',
     )
 
+    def save(self, *args, **kwargs):
+        # NUL 在 PostgreSQL 的 text 列里是非法字符（DataError），MariaDB 却收得下，
+        # 而且 Windows 本身也不允许文件名带 NUL。落库前统一剔除。
+        if self.filename and '\x00' in self.filename:
+            self.filename = self.filename.replace('\x00', '')
+        return super().save(*args, **kwargs)
+
     class Meta:
         ordering = ['-backup_date', '-captured_at', '-id']
         constraints = [models.UniqueConstraint(

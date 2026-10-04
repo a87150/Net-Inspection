@@ -198,9 +198,12 @@ class CompactFilterWorkspaceTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['table_state']['sort'], 'name')
-        self.assertEqual(
+        # 这里要验的是「非法排序被忽略、回落到默认列」，不是中文名的排序规则：
+        # 字节序(MariaDB utf8mb4_bin / PostgreSQL LC_COLLATE=C) 和 locale 序对
+        # 「甲」「乙」的先后正好相反，两种后端各按各的来，比集合更稳。
+        self.assertCountEqual(
             [person.employee_id for person in response.context['page_obj']],
-            ['P002', 'P001'],
+            ['P001', 'P002'],
         )
 
     def test_invalid_value_for_allowlisted_numeric_choice_does_not_crash(self):
@@ -608,9 +611,13 @@ class DatetimeFilterSqlTests(TestCase):
         self.assertNotIn('<=', sql)
         expected = timezone.make_aware(
             datetime(2026, 10, 4), timezone.get_current_timezone(),
-        )
-        # Django compiles the bound in UTC, so compare against the same instant.
-        self.assertIn(
-            str(expected.astimezone(dt_timezone.utc).replace(tzinfo=None)),
-            [str(value) for value in params],
-        )
+        ).astimezone(dt_timezone.utc).replace(tzinfo=None)
+
+        def instant(value):
+            # MySQL 驱动给的是 UTC naive 字符串，psycopg 给的是带 +08:00 偏移的
+            # datetime，两者表示同一瞬间。统一折算成 UTC naive 的字符串再比。
+            if isinstance(value, datetime) and value.utcoffset() is not None:
+                value = value.astimezone(dt_timezone.utc).replace(tzinfo=None)
+            return str(value)
+
+        self.assertIn(str(expected), [instant(value) for value in params])

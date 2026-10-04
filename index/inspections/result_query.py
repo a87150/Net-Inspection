@@ -1,6 +1,6 @@
 """Lazy report queries. Payloads stay on detail views; rows are formatted after slicing."""
 from django.db.models import BooleanField, Case, CharField, Count, F, Func, IntegerField, OuterRef, Q, Subquery, Value, When
-from django.db.models.functions import Coalesce, Concat, Lower, NullIf
+from django.db.models.functions import Cast, Coalesce, Concat, Lower, NullIf
 from django.db.models.query import ModelIterable
 from django.db.models.fields.json import KeyTextTransform
 
@@ -15,6 +15,19 @@ class JsonKeyType(Func):
     def as_mysql(self, compiler, connection, **extra_context):
         return self.as_sql(compiler, connection,
                            template='JSON_TYPE(JSON_EXTRACT(%(expressions)s))', **extra_context)
+
+    def as_sqlite(self, compiler, connection, **extra_context):
+        # SQLite 的 JSON1 内置 json_type(X, P)，同样接受 JSON 路径。
+        return self.as_sql(compiler, connection,
+                           template='JSON_TYPE(%(expressions)s)', **extra_context)
+
+    def as_postgresql(self, compiler, connection, **extra_context):
+        # ->> 解出来是 text，jsonb_typeof 只接受 jsonb，所以要取原值。
+        # 只能用 _FIRST 后缀版本：JSONB_PATH_QUERY 是集合返回函数，塞进 CASE
+        # 的参数里 PostgreSQL 会报 CASE/WHEN 参数类型无法匹配。
+        return self.as_sql(compiler, connection,
+                           template='JSONB_TYPEOF(JSONB_PATH_QUERY_FIRST(%(expressions)s))',
+                           **extra_context)
 
 
 def report_queryset(model):
@@ -58,7 +71,9 @@ def computer_queryset():
         type_source = f'_report_enrichment_type_{key}'
         enrichment_types[type_source] = Lower(JsonKeyType(F('report_enrichment'), Value(f'$."{key}"')))
         enrichment[f'_report_enrichment_{key}'] = Case(
-            When(**{type_source: 'null'}, then=Value(None)),
+            # 必须显式 CAST：PostgreSQL 不会把 CASE 里的 NULL(unknown) 和 ELSE
+            # 分支的 text 自动对齐，报 CASE/WHEN 参数类型无法匹配。
+            When(**{type_source: 'null'}, then=Cast(Value(None), output_field=CharField())),
             default=KeyTextTransform(key, 'report_enrichment'), output_field=CharField(),
         )
     return report_queryset(ComputerAnalysis).select_related('computer').defer(

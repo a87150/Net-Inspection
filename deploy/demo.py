@@ -16,15 +16,30 @@ import sys
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def demo_engine():
+    """Which server the demo runs on: whatever .env says, minus SQLite."""
+    engine = os.getenv('DB_ENGINE', 'mysql').strip().lower()
+    if engine == 'sqlite':
+        raise ValueError('模拟环境需要一个真正的数据库服务，请在 .env 里设置 DB_ENGINE。')
+    return engine
+
+
+def demo_database():
+    """The demo never touches the production database, on any backend."""
+    return os.getenv('DB_TEST_NAME') or os.getenv('DB_DEMO_NAME') or 'net-test'
+
+
 def configure_environment(runtime):
     """Force the isolated demo environment; the shared .env must never win."""
     os.environ.update({
         'DJANGO_SETTINGS_MODULE': 'net.settings', 'DJANGO_DEBUG': 'false',
         'DJANGO_ALLOWED_HOSTS': '127.0.0.1,localhost',
         'DJANGO_SECRET_KEY': 'DEMO-ONLY-NOT-FOR-PRODUCTION-LOCAL-ISOLATED-DATABASE',
-        # DB_ENGINE/DB_NAME point demo at the test database; host/user/password still
+        # DB_NAME points demo at the test database; host/user/password still
         # come from .env, which load_environment() read before this ran.
-        'DB_ENGINE': 'mysql', 'DB_NAME': os.getenv('DB_TEST_NAME', 'net-test'),
+        # DB_ENGINE is inherited so a demo can run on MariaDB or PostgreSQL, but
+        # SQLite is refused: the demo has to be a real server, not a local file.
+        'DB_ENGINE': demo_engine(), 'DB_NAME': demo_database(),
         'DJANGO_SQLITE_PATH': '',
         'DJANGO_STATIC_ROOT': str(runtime / 'staticfiles'),
     })
@@ -67,17 +82,27 @@ def prepare(runtime):
     try:
         connection.ensure_connection()
     except OperationalError as exc:
-        # migrate cannot create the database itself; error 1049 means it is not there yet.
-        if '1049' not in str(exc):
+        # migrate cannot create the database itself. MariaDB says 1049 and
+        # PostgreSQL SQLSTATE 3D000; both mean the database is not there yet.
+        text = str(exc)
+        if '1049' not in text and '3D000' not in text:
             raise
         name = connection.settings_dict['NAME']
         connection.close()
         connection.settings_dict['NAME'] = ''
         with connection.cursor() as cursor:
-            cursor.execute(
-                'CREATE DATABASE `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_bin'
-                % name.replace('`', '``'),
-            )
+            if connection.vendor == 'postgresql':
+                # PostgreSQL 没有库级字符集，只能定排序规则。C collation 让中文名/DN
+                # 的比较顺序跟 MariaDB 的 utf8mb4_bin 一样按字节序，两边结果才对得上。
+                cursor.execute(
+                    'CREATE DATABASE "%s" TEMPLATE template0 ENCODING \'UTF8\' '
+                    "LC_COLLATE 'C' LC_CTYPE 'C'" % name.replace('"', '""'),
+                )
+            else:
+                cursor.execute(
+                    'CREATE DATABASE `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_bin'
+                    % name.replace('`', '``'),
+                )
         connection.settings_dict['NAME'] = name
         connection.close()
         print('Created database: ' + name, flush=True)

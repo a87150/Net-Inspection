@@ -327,10 +327,9 @@ def _enqueue_domain_operation_once(
 def retry_failed_domain_operation(operation_id, *, requested_by, password=None):
     """Requeue only failed target snapshots; password actions require a new secret."""
     with transaction.atomic():
-        operation = (
-            DomainOperation.objects.select_for_update().select_related('task')
-            .filter(pk=operation_id).first()
-        )
+        # 不要 select_related('task')：它是可空外键，会生成 LEFT JOIN，
+        # PostgreSQL 不允许在可空侧 FOR UPDATE。task 在同一事务里懒加载即可。
+        operation = DomainOperation.objects.select_for_update().filter(pk=operation_id).first()
         if operation is None or operation.task is None:
             raise ValidationError({'operation_id': '域控操作不存在。'})
         if operation.task.status not in TaskRun.AGGREGATED_TERMINAL_STATUSES:

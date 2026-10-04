@@ -173,9 +173,22 @@ elif DB_ENGINE == 'sqlite':
         }
     }
 elif DB_ENGINE == 'postgresql':
-    raise ImproperlyConfigured(
-        'PostgreSQL is recognised but not implemented yet; '
-        'see the pending items in docs/changelog.md.')
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('DB_NAME', 'net'),
+            'USER': os.getenv('DB_USER', 'postgres'),
+            'PASSWORD': os.getenv('DB_PASSWORD', ''),
+            'HOST': os.getenv('DB_HOST', '127.0.0.1'),
+            'PORT': os.getenv('DB_PORT', '5432'),
+            'CONN_MAX_AGE': 60,
+            'CONN_HEALTH_CHECKS': True,
+            # MySQL 那边的 sql_mode/time_zone 在这里是连接参数：PostgreSQL 的会话
+            # 时区决定 timestamp 怎么落盘，必须和 USE_TZ 一样锁在 UTC。
+            'OPTIONS': {'options': '-c timezone=UTC -c statement_timeout=30000'},
+            'TEST': {'NAME': os.getenv('DB_TEST_NAME', 'test_' + os.getenv('DB_NAME', 'net'))},
+        }
+    }
 else:
     # Refuse to fall through to SQLite: a mistyped engine would otherwise open a
     # different, empty database and read as if every record had vanished.

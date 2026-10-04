@@ -42,12 +42,16 @@ class SQLiteMaintenanceTests(SimpleTestCase):
                     runpy.run_path(settings_path)
                 self.assertIn('DB_ENGINE', str(caught.exception))
 
-    def test_settings_name_the_postgresql_backlog_instead_of_claiming_unknown_engine(self):
+    def test_settings_build_a_postgresql_backend_from_the_shared_keys(self):
         settings_path = str(Path(__file__).resolve().parents[2] / 'net' / 'settings.py')
-        with patch.dict(os.environ, {'DB_ENGINE': 'postgresql'}):
-            with self.assertRaises(ImproperlyConfigured) as caught:
-                runpy.run_path(settings_path)
-        self.assertIn('changelog.md', str(caught.exception))
+        with patch.dict(os.environ, {'DB_ENGINE': 'postgresql', 'DB_NAME': 'net', 'DB_PORT': '5432'}):
+            values = runpy.run_path(settings_path)
+        default = values['DATABASES']['default']
+        self.assertEqual(default['ENGINE'], 'django.db.backends.postgresql')
+        self.assertEqual(default['NAME'], 'net')
+        self.assertEqual(default['PORT'], '5432')
+        # 会话时区必须锁在 UTC，和 USE_TZ 对齐，否则 timestamp 落盘就偏了。
+        self.assertIn('timezone=UTC', default['OPTIONS']['options'])
 
     def test_settings_apply_timeout_without_changing_database_selection(self):
         with patch.dict(os.environ, {'DB_ENGINE': 'sqlite', 'DJANGO_SQLITE_PATH': 'chosen.sqlite3', 'NET_SQLITE_TIMEOUT': '12.5'}):

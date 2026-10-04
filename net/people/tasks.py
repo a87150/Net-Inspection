@@ -128,9 +128,9 @@ def enqueue_people_sync_task(schedule, *, available_at):
     """Create one immutable, non-browser scheduled directory synchronization."""
     try:
         with transaction.atomic():
-            locked_schedule = type(schedule).objects.select_for_update().select_related(
-                'people_source',
-            ).get(pk=schedule.pk)
+            # people_source 可空，select_related 会生成 LEFT JOIN，PostgreSQL 不允许
+            # 在可空侧 FOR UPDATE；同一个事务里懒加载即可。
+            locked_schedule = type(schedule).objects.select_for_update().get(pk=schedule.pk)
             source = PeopleSyncSource.objects.select_for_update().get(
                 pk=locked_schedule.people_source_id,
             )
