@@ -9,6 +9,9 @@ from django.db import models
 
 RETENTION_CHOICES = (('daily_latest', '每天仅保留最新版本（往日保留）'), ('all', '保留全部版本'))
 
+# 采集上传接口路径。urls.py 和配置校验共用一个常量，免得两边写岔。
+UPLOAD_PATH = '/api/pc/logs/'
+
 class PCUploadConfig(models.Model):
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     endpoint_url = models.URLField(max_length=1000)
@@ -57,3 +60,7 @@ class PCUploadConfig(models.Model):
         if (parsed.scheme not in ('http','https') or not parsed.hostname or parsed.username is not None
                 or parsed.password is not None or parsed.query or parsed.fragment):
             raise ValidationError({'endpoint_url': '请填写不含账号、密码或查询参数的 HTTP(S) 上报地址。'})
+        # 光有合法地址不够：endpoint_url 是采集脚本唯一的地址来源，写成站点根
+        # 地址不会报错，只会在终端上表现为 403 Forbidden，排查起来很绕。
+        if not parsed.path.rstrip('/').endswith(UPLOAD_PATH.rstrip('/')):
+            raise ValidationError({'endpoint_url': '上报地址必须指向上传接口 %s，只填站点根地址会 403。' % UPLOAD_PATH})

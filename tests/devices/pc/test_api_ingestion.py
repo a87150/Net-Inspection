@@ -1,5 +1,6 @@
 import json
 import base64
+from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from net.models import ComputerLogFile, PCUploadConfig, ComputerAnalysisProfile
@@ -12,6 +13,14 @@ class APIIngestionTests(TestCase):
         self.config = PCUploadConfig(endpoint_url='http://localhost/api/pc/logs/')
         self.config.set_token('test-token-with-at-least-thirty-two-characters')
         self.config.save()
+
+    def test_endpoint_must_point_at_the_upload_api(self):
+        # 只填站点根地址不报错，只在终端上表现为 403 Forbidden，必须存库前就挡住。
+        self.config.endpoint_url = 'http://localhost:8000'
+        with self.assertRaises(ValidationError):
+            self.config.full_clean()
+        self.config.endpoint_url = 'http://localhost:8000/api/pc/logs/'
+        self.config.full_clean()
 
     def raw(self, time='2026-09-16 10:00:00', name='PC-TEST'):
         return json.dumps({'platform':'windows','日志时间':time,'系统信息概览':{'计算机名':name},'已安装软件列表':[],'计算机硬件资源情况':{'CPU型号':'CPU TEST'},'日志文件元数据':[],'计算机和用户匹配情况':'旧客户端结果'}, ensure_ascii=False).encode()

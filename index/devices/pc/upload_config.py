@@ -20,7 +20,7 @@ class PCUploadConfigForm(forms.ModelForm):
         model = PCUploadConfig
         fields = ('endpoint_url', 'is_enabled', 'log_retention')
         labels = {'endpoint_url': '终端上报地址', 'is_enabled': '启用终端 API 上报', 'log_retention': '全局日志保留策略'}
-        help_texts = {'endpoint_url': '填写终端可访问的完整 HTTP(S) 地址。', 'log_retention': '每天仅保留每台 PC 最新日志，或保留全部版本。'}
+        help_texts = {'endpoint_url': '填写终端可访问的完整 HTTP(S) 地址，必须以 /api/pc/logs/ 结尾，例如 http://127.0.0.1:8000/api/pc/logs/。', 'log_retention': '每天仅保留每台 PC 最新日志，或保留全部版本。'}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
