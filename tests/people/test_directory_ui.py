@@ -384,6 +384,34 @@ class PeopleImportUITests(PeopleFlowMixin, TestCase):
 
 
 class PeopleQueueTests(PeopleFlowMixin, TestCase):
+    def test_failed_sync_raises_an_alert(self):
+        """人员自动同步失败必须报警，否则目录长期过期也没人知道。"""
+        from net.models import AlertEvent
+        from net.alerts.service import findings_for_target
+
+        from net.people.tasks import enqueue_people_sync_task
+
+        # 人员自动同步只能由定时计划入队，走真实入口而不是手工构造。
+        schedule = Schedule.objects.create(
+            people_source=self.source,
+            kind=Schedule.Kind.INTERVAL,
+            interval_value=30,
+            interval_unit=Schedule.IntervalUnit.MINUTES,
+            next_run_at=timezone.now(),
+        )
+        task = enqueue_people_sync_task(schedule, available_at=timezone.now())
+        self.factory = patch('net.people.executor.build_directory_adapter',
+                             side_effect=RuntimeError('目录接口不可达'))
+        target = self.execute(task)
+        self.assertEqual(target.status, 'failed')
+
+        target.refresh_from_db()
+        self.assertIsNotNone(target.alert_processed_at, target.alert_processing_error)
+        findings = findings_for_target(target)
+        self.assertEqual([finding.severity for finding in findings], ['critical'])
+        self.assertEqual(findings[0].key, 'execution.failure')
+        self.assertTrue(AlertEvent.objects.filter(target_run=target).exists())
+
     def test_test_connection_is_durable_nonsecret_and_has_no_personnel_write(self):
         task, url = self.enqueue('test', source=self.other)
         target = self.execute(task)

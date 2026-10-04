@@ -35,6 +35,9 @@ def alert_task_scope(task):
         return 'computer_analysis_profile', str(task.analysis_profile_id)
     if task.task_type == 'domain_sync':
         return 'domain_config', '1'
+    if task.task_type == 'people_sync':
+        # 人员同步也是按「同步源」分作用域的，一个源一条状态线。
+        return 'people_source', str(task.people_source_id)
     raise ValidationError({'task': '任务配置类型无效。'})
 
 

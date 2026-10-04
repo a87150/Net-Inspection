@@ -19,20 +19,32 @@ _PROBE = "Write-Output ok"
 
 
 @functools.lru_cache(maxsize=1)
+def _interpreter():
+    """PowerShell 7 first: Windows PowerShell 5.1 is often locked by execution policy."""
+    for candidate in ('pwsh', 'powershell'):
+        if shutil.which(candidate) is not None:
+            return candidate
+    return None
+
+
+@functools.lru_cache(maxsize=1)
 def powershell_runs_unsigned_scripts():
     """True when this host can execute the throwaway script the tests write.
 
     Probes inside tempfile.gettempdir() because that is where the tests put their
     script, so a host that only blocks some directories is judged accurately.
     """
-    if os.name != 'nt' or shutil.which('powershell') is None:
+    if os.name != 'nt':
+        return False
+    interpreter = _interpreter()
+    if interpreter is None:
         return False
     try:
         with tempfile.TemporaryDirectory() as directory:
             script = Path(directory) / 'probe.ps1'
             script.write_text(_PROBE, encoding='utf-8-sig')
             result = subprocess.run(
-                ['powershell', '-NoProfile', '-NonInteractive', '-File', str(script)],
+                [interpreter, '-NoProfile', '-NonInteractive', '-File', str(script)],
                 capture_output=True, timeout=60)
     except (OSError, subprocess.SubprocessError):
         return False
@@ -42,8 +54,8 @@ def powershell_runs_unsigned_scripts():
 def _reason():
     if os.name != 'nt':
         return 'Windows PowerShell required (host is not Windows)'
-    if shutil.which('powershell') is None:
-        return 'Windows PowerShell required (powershell.exe not on PATH)'
+    if _interpreter() is None:
+        return 'Windows PowerShell required (pwsh.exe and powershell.exe both missing)'
     return 'Windows PowerShell refused the unsigned test script (execution policy)'
 
 

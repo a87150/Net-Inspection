@@ -78,6 +78,16 @@ def _normalised_findings(findings):
     return [grouped[key] for key in sorted(grouped)]
 
 
+# 会产出告警的任务类型。巡检和日志分析有档案可挂；域控同步、人员自动同步没有
+# 档案，按各自配置分作用域，走通用失败兜底。
+ALERTED_TASK_TYPES = (
+    TaskRun.TaskType.INSPECTION,
+    TaskRun.TaskType.COMPUTER_ANALYSIS,
+    TaskRun.TaskType.DOMAIN_SYNC,
+    TaskRun.TaskType.PEOPLE_SYNC,
+)
+
+
 def _target_scope(target):
     task = target.task
     from net.models.alerts import alert_task_scope
@@ -436,9 +446,10 @@ def process_persisted_target(target_run):
         try:
             with transaction.atomic():
                 target = TaskTargetRun.objects.select_for_update().get(pk=target_id)
-                # 域控同步失败同样要报警：它的 result_type='domain_sync'，
-                # 走 findings_for_target 的通用失败兜底生成 execution.failure。
-                if target.task.task_type not in ('inspection', 'computer_analysis', 'domain_sync'):
+                # 域控同步、人员自动同步失败同样要报警：它们的 result_type 分别是
+                # 'domain_sync'/'people_sync'，走 findings_for_target 的通用失败兜底
+                # 生成 execution.failure。
+                if target.task.task_type not in ALERTED_TASK_TYPES:
                     return []
                 if target.status not in TaskRun.TERMINAL_STATUSES or target.alert_processed_at is not None:
                     return []
@@ -477,7 +488,7 @@ def reconcile_terminal_targets(*, limit=100):
     targets = list(TaskTargetRun.objects.filter(
         status__in=TaskRun.TERMINAL_STATUSES,
         alert_processed_at__isnull=True,
-        task__task_type__in=('inspection', 'computer_analysis', 'domain_sync'),
+        task__task_type__in=ALERTED_TASK_TYPES,
     ).order_by(
         F('alert_attempted_at').asc(nulls_first=True), 'finished_at', 'pk')[:limit])
     for target in targets:

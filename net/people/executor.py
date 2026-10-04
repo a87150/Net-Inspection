@@ -55,9 +55,15 @@ def _publish(started, worker_id, result, error='', lease_guard=None):
             # Operational metadata is not a configuration change and must not
             # invalidate a simultaneously generated preview's updated_at binding.
             PeopleSyncSource.objects.filter(pk=source.pk).update(last_tested_at=now)
-        return ExecutionOutcome(str(target.pk), target.status,
-                                result_type=target.result_type, result_id=target.result_id,
-                                error_message=error)
+        outcome = ExecutionOutcome(str(target.pk), target.status,
+                                    result_type=target.result_type, result_id=target.result_id,
+                                    error_message=error)
+    if not outcome.stale:
+        # 和巡检/日志分析/域控同步执行器一致：结果落库后立刻评估告警，不等 worker 下一轮。
+        from net.alerts.service import process_persisted_target
+
+        process_persisted_target(target.pk)
+    return outcome
 
 
 def execute_people_target(target_run, *, worker_id, lease_guard=None):

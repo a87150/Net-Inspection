@@ -1,11 +1,10 @@
 import json
-import os
 from pathlib import Path
 import subprocess
 import tempfile
 import hashlib
-from unittest import skipUnless
 from unittest import TestCase
+from tests.powershell import requires_powershell
 from net.scripts.sensors import sensor_bundle
 from net.scripts.executable import package_collector
 
@@ -25,7 +24,7 @@ class CollectorPackageTests(TestCase):
         self.assertIn(library, package)
 
 
-@skipUnless(os.name == 'nt', 'Windows PowerShell runtime required')
+@requires_powershell
 class ExecutableTests(TestCase):
     def run_host(self, path, *arguments):
         try:

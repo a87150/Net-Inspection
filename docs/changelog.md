@@ -19,6 +19,7 @@
 | `sync_domain` / `policy_snapshot` | 仅被测试引用的函数 |
 | 拓扑批量删除 | 关联 PROTECT 保护缺失（D2），删除前需确认级联范围 |
 | PostgreSQL 排序规则 | 库必须按 `LC_COLLATE 'C'` 建，locale 排序会让中文名先后与 MariaDB 相反 |
+| PC 采集宿主自测 | 3 个用例依赖预编译 `PCCollectorHost.exe`，它硬编码调用 Windows PowerShell 5.1；执行策略为 Restricted/AllSigned 的机器上会被拒 |
 
 ## 1.0.0（2026-10-04）
 
@@ -41,6 +42,11 @@
 域控同步失败此前不产生任何告警：告警白名单只认巡检和日志分析两种任务类型，而域控同步按 DC 配置分作用域，
 既没有档案也没有可映射的外键。现在 `result_type='domain_sync'` 会生成 `execution.failure` critical 告警，
 并在同步结果落库后立即评估，不用等 worker 下一轮。
+
+### 人员自动同步纳入告警
+
+和域控同步同样的漏网：`ALERTED_TASK_TYPES` 里没有 `people_sync`，人员自动同步失败不产生任何告警。
+现在按同步源分作用域（`people_source`），同步结果落库后立即评估，不用等 worker 下一轮。
 
 ### 界面
 

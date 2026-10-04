@@ -30,7 +30,8 @@ class IssueSettingsTests(RemoteRuleFixture, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '已保存')
         self.assertEqual(response.headers['X-Frame-Options'], 'SAMEORIGIN')
-        self.assertEqual(IssueSeverityPolicy.objects.get(pk=1).overrides['software'], 'critical')
+        # 不要写死 pk=1：同模块里别的测试先建过行，主键会被顶掉。
+        self.assertEqual(IssueSeverityPolicy.objects.get().overrides['software'], 'critical')
 
     def test_analysis_applies_override_before_errors_and_alerts(self):
         self.payloads['windows']['当前与域服务器通讯情况'] = '失败'
