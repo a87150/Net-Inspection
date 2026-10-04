@@ -17,11 +17,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def demo_engine():
-    """Which server the demo runs on: whatever .env says, minus SQLite."""
-    engine = os.getenv('DB_ENGINE', 'mysql').strip().lower()
-    if engine == 'sqlite':
-        raise ValueError('模拟环境需要一个真正的数据库服务，请在 .env 里设置 DB_ENGINE。')
-    return engine
+    """Which server the demo runs on: whatever .env says."""
+    return os.getenv('DB_ENGINE', 'mysql').strip().lower()
+
+
+def demo_sqlite_path(runtime):
+    """Where an SQLite demo keeps its database; the directory must already exist."""
+    path = Path(runtime) / 'demo.sqlite3'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return str(path)
 
 
 def demo_database():
@@ -40,7 +44,10 @@ def configure_environment(runtime):
         # DB_ENGINE is inherited so a demo can run on MariaDB or PostgreSQL, but
         # SQLite is refused: the demo has to be a real server, not a local file.
         'DB_ENGINE': demo_engine(), 'DB_NAME': demo_database(),
-        'DJANGO_SQLITE_PATH': '',
+        # 别再写死空串：DB_ENGINE 可能是 sqlite，空路径会变成 sqlite3.connect('')，
+        # 直接报 unable to open database file。默认落到隔离的 runtime 目录里；
+        # configure_environment 跑在 prepare() 建目录之前，所以父目录得先建出来。
+        'DJANGO_SQLITE_PATH': os.getenv('DJANGO_SQLITE_PATH') or demo_sqlite_path(runtime),
         'DJANGO_STATIC_ROOT': str(runtime / 'staticfiles'),
     })
 
