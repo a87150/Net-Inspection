@@ -11,6 +11,9 @@ import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 KEYS = ('DOMAIN_OPERATION_ENCRYPTION_KEY', 'PC_LOG_SOURCE_ENCRYPTION_KEY', 'DEVICE_BACKUP_ENCRYPTION_KEY')
+# 和 net/settings.py 的 DB_ENGINE 分支保持一致；漏了 postgresql 会让一键部署
+# 选了 PostgreSQL 却被自己挡下来。
+SUPPORTED_ENGINES = {'mysql', 'sqlite', 'postgresql'}
 
 
 def database_ready(host, port, name, user, password):
@@ -99,8 +102,8 @@ def load_config(path):
     values = dotenv_values(path, interpolate=False, encoding='utf-8-sig')
     if not values.get('DB_ENGINE'):
         raise ValueError('Set DB_ENGINE explicitly; refusing an implicit SQLite fallback.')
-    if values['DB_ENGINE'].lower() not in {'mysql', 'sqlite'}:
-        raise ValueError('DB_ENGINE must be mysql or sqlite.')
+    if values['DB_ENGINE'].lower() not in SUPPORTED_ENGINES:
+        raise ValueError('DB_ENGINE must be one of: ' + ', '.join(sorted(SUPPORTED_ENGINES)) + '.')
     # Service/maintenance commands use the selected file, not the invoking shell database.
     for name in list(os.environ):
         if name.startswith(('DB_', 'DJANGO_', 'NET_', 'DOMAIN_OPERATION_ENCRYPTION_KEY',
