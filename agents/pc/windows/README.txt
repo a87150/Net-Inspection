@@ -2,7 +2,9 @@ Windows PC 单文件 EXE 采集包
 
 包内 PCCollector.exe 已嵌入采集脚本、监控 API 配置和 LibreHardwareMonitorLib；不需要旁置 DLL 或监控界面。请完整解压 ZIP。
 
-在客户端管理员 Windows PowerShell 5.1 中执行：
+在客户端管理员 PowerShell 中执行。优先 PowerShell 7（采集器本身也优先 pwsh）：
+& "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -File .\Install-PCCollector.ps1
+没装 PowerShell 7 时用系统自带的 Windows PowerShell 5.1，脚本语法两边完全兼容：
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-PCCollector.ps1
 也可将此安装脚本作为域策略“计算机启动脚本”运行。普通用户登录脚本没有安装 SYSTEM 任务的权限。
 
