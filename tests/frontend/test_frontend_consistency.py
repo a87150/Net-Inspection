@@ -60,7 +60,6 @@ class FrontendConsistencyTests(SimpleTestCase):
     def test_operational_tables_do_not_duplicate_bootstrap_status_badges(self):
         root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
         paths = (
-            'devices/item_list.html',
             'inspections/results_table.html',
             'inspections/errors.html',
             'devices/pc/error_list.html',

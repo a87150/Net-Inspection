@@ -1,27 +1,13 @@
 """Regressions for the four Task 5 review findings."""
 
-import hashlib
-import json
-import os
-import subprocess
-import tempfile
-import threading
-from concurrent.futures import ThreadPoolExecutor
-from datetime import timedelta
-from pathlib import Path
-from unittest.mock import patch
 
-from django.core.exceptions import ValidationError
-from django.db import DatabaseError, IntegrityError, connections, transaction
-from django.db.models.query import QuerySet
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase
 from django.utils import timezone
 
 from tests.devices.pc.helpers import create_log_file
 
-from net.models import Computer, ComputerAnalysisProfile, ComputerLogFile, RecordStatus
+from net.models import Computer, RecordStatus
 from net.devices.pc.analysis import analyze_log
-from net.devices.pc import logs as computer_logs
 
 
 class SelectedItemSchemaTests(TestCase):

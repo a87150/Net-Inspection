@@ -66,6 +66,47 @@ class SharedInterfaceContractTests(TestCase):
         self.assertLess(action_position, include_position)
         self.assertLess(include_position, configuration_position)
 
+    def test_glass_surface_is_site_wide_and_not_dashboard_scoped(self):
+        """玻璃样式是全站统一的：.glass-card 不能被限定在 .dashboard-grid 里。
+
+        限定过一次，任务和告警页的 page-metric-card 因此全部渲染成扁平。
+        """
+        css_root = Path(__file__).resolve().parents[2] / 'static' / 'app' / 'css'
+        operations = (css_root / 'operations.css').read_text(encoding='utf-8')
+        foundation = (css_root / 'foundation.css').read_text(encoding='utf-8')
+
+        self.assertIn('\n.glass-card {', operations)
+        self.assertNotIn('.dashboard-grid .glass-card {', operations)
+        # .surface-card 与 .glass-card 必须是同一套参数，否则同一个站两副面孔。
+        self.assertIn('blur(18px) saturate(135%)', foundation)
+        self.assertIn('blur(18px) saturate(135%)', operations)
+
+    def test_task_and_alert_summary_blocks_use_the_glass_class(self):
+        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        for relative in ('inspections/task_list.html', 'alerts/list.html'):
+            source = (template_root / relative).read_text(encoding='utf-8')
+            blocks = re.findall(r'<article class="[^"]*page-metric-card[^"]*"', source)
+            self.assertTrue(blocks, relative + ' 没有总结方块')
+            for block in blocks:
+                self.assertIn('glass-card', block, relative + ': ' + block)
+
+    def test_every_referenced_css_variable_is_defined(self):
+        """var(--x) 引用了没定义的变量时，整条声明失效并退回初始值。
+
+        --radius-md 曾经没定义，.page-metric-card 的 border-radius 整个作废，
+        任务和告警页的方块渲染成直角。
+        """
+        css_root = Path(__file__).resolve().parents[2] / 'static' / 'app' / 'css'
+        defined, used = set(), {}
+        for path in css_root.rglob('*.css'):
+            source = path.read_text(encoding='utf-8')
+            defined |= set(re.findall(r'(--[A-Za-z0-9_-]+)\s*:', source))
+            for number, line in enumerate(source.splitlines(), 1):
+                for name in re.findall(r'var\((--[A-Za-z0-9_-]+)', line):
+                    used.setdefault(name, []).append(f'{path.name}:{number}')
+        missing = {name: places for name, places in used.items() if name not in defined}
+        self.assertEqual(missing, {}, 'CSS 引用了未定义的变量')
+
     def test_shared_brand_partial_renders_application_identity_and_destination(self):
         html = render_to_string('common/brand.html', {'brand_url': '/destination/'})
 
@@ -162,6 +203,19 @@ class SharedInterfaceContractTests(TestCase):
             with self.subTest(selector=selector):
                 self.assertIn(selector, combined)
 
+    def test_details_nested_in_a_section_card_stays_transparent(self):
+        """foundation.css 给裸 details 上了不透明的 #fafbfc；嵌在玻璃卡片里会变成白板。"""
+        entrypoint = Path(finders.find('app/css/style.css'))
+        foundation = (entrypoint.parent / 'foundation.css').read_text(encoding='utf-8')
+        modal_workflows = (entrypoint.parent / 'modal-workflows.css').read_text(encoding='utf-8')
+        self.assertIn('background: #fafbfc', foundation)
+        self.assertIn('.config-section-card > details', modal_workflows)
+        template = (Path(__file__).resolve().parents[2] / 'index' / 'templates'
+                    / 'devices' / 'add_modal.html').read_text(encoding='utf-8')
+        # 折叠区块确实是 details 套在 section.config-section-card 里。
+        self.assertIn('<section class="config-section-card mb-3"', template)
+        self.assertIn('{% if section.advanced %}<details', template)
+
     def test_page_specific_workflows_are_not_loaded_by_the_shared_shell(self):
         template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
         base = (template_root / 'common' / 'base.html').read_text(encoding='utf-8')
@@ -224,7 +278,7 @@ class SharedInterfaceContractTests(TestCase):
         self.assertContains(response, 'PC')
         self.assertContains(response, '网络设备')
         self.assertContains(response, '服务器')
-        self.assertContains(response, '安防设备')
+        self.assertContains(response, '弱电设备')
         self.assertContains(response, '域控管理')
         self.assertContains(response, '巡检任务栏')
 
@@ -259,8 +313,11 @@ class SharedInterfaceContractTests(TestCase):
         self.assertContains(response, '<caption class="visually-hidden">网络设备数据表</caption>', html=True)
         self.assertContains(response, 'data-active-filter-list')
         self.assertContains(response, 'scope="col"')
-        self.assertContains(response, 'for="networks-keyword-filter"')
-        self.assertContains(response, 'id="networks-keyword-filter"')
+        # The keyword box is gone: it OR-matched across search_fields while the column
+        # filters beside it matched one field exactly, so the two read as the same
+        # control with different results.
+        self.assertNotContains(response, 'networks-keyword-filter')
+        self.assertNotContains(response, 'data-filter-key="keyword"')
         self.assertContains(response, 'table-scroll-hint')
         self.assertContains(response, 'class="table data-table')
         self.assertContains(response, 'table-actions-column')

@@ -3,9 +3,16 @@
  <p class="small text-secondary">由后台 Worker 执行；与手动同步共用任务队列，已有同步任务时不会重复启动。</p>
  <div class="row g-3">
  {% for field in domain_schedule_form %}
+ {% if field.name == 'is_enabled' %}
+ <div class="col-md-4 d-flex align-items-center">
+ <div class="form-check config-toggle-card w-100">{{ field }}<label class="form-check-label" for="{{ field.id_for_label }}"><strong>{{ field.label }}</strong></label></div>
+ {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+ </div>
+ {% else %}
  <div class="col-md-4" {% if field.name == 'interval_value' or field.name == 'interval_unit' %}data-schedule-interval{% elif field.name == 'daily_time' %}data-schedule-daily{% endif %}>
  <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}
  </div>
+ {% endif %}
  {% endfor %}
  </div>
  <p class="small text-secondary mt-3">上次入队：{{ domain_schedule.last_enqueued_at|date:'Y-m-d H:i'|default:'暂无' }}；下次执行：{{ domain_schedule.next_run_at|date:'Y-m-d H:i'|default:'未启用' }}。{% if domain_schedule.last_schedule_status == 'blocked' %} 上次调度：等待活动任务结束。{% elif domain_schedule.last_schedule_status == 'error' %} 上次调度失败：{{ domain_schedule.last_schedule_error }}{% endif %}</p>

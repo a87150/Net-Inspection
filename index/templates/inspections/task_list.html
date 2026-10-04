@@ -8,8 +8,9 @@
         <h1 class="page-heading__title">任务执行中心 <span class="page-heading__subtitle">任务列表</span></h1>
         <p class="page-heading__description">手动和定时任务均由独立 Worker 执行；本页只展示进度与结果。</p>
     </div>
-    <div class="page-heading__actions"><a class="btn btn-outline-secondary" href="{% url 'index' %}">返回总览</a></div>
+    <div class="page-heading__actions">{% if can_administer %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#taskHistoryModal">保留设置</button>{% endif %}<a class="btn btn-outline-secondary" href="{% url 'index' %}">返回总览</a></div>
 </header>
+{% include 'inspections/task_history_modal.html' %}
 <section class="page-metric-grid" aria-label="当前筛选任务统计">
     <article class="page-metric-card glass-card"><span>任务总数</span><strong>{{ task_metrics.total }}</strong><small>当前筛选范围</small></article>
     <article class="page-metric-card glass-card"><span>等待</span><strong>{{ task_metrics.queued }}</strong><small>尚未开始执行</small></article>

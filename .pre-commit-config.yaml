@@ -1,0 +1,22 @@
+# Runs the same lint gate CI enforces, before the commit leaves the machine.
+# Install once with:  pre-commit install
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.10
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+        # Formatting is not enforced repo-wide; keep the hook available but
+        # non-blocking so history stays reviewable.
+        stages: [manual]
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=2048]
+      - id: end-of-file-fixer
+        exclude: ^(net/migrations/|agents/)
+      - id: trailing-whitespace
+        exclude: ^(net/migrations/|agents/|.*\.lock\.txt$)

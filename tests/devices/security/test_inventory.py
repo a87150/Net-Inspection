@@ -3,10 +3,10 @@ from django.test import TestCase
 from net import models
 
 
-class SecurityDeviceInventoryTests(TestCase):
+class WeakCurrentDeviceInventoryTests(TestCase):
     def test_security_inventory_uses_device_model_name(self):
-        self.assertTrue(hasattr(models, 'SecurityDevice'))
-        device = models.SecurityDevice.objects.create(
+        self.assertTrue(hasattr(models, 'WeakCurrentDevice'))
+        device = models.WeakCurrentDevice.objects.create(
             device_name='东门闸机',
             ip='192.0.2.130',
             device_type='闸机',

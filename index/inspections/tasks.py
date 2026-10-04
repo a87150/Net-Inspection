@@ -31,15 +31,17 @@ from index.devices.pc.software_policy import (
     store_software_policy_upload,
 )
 from net.models import (
+    TASK_HISTORY_RETENTION_CHOICES,
+    TASK_HISTORY_RETENTION_DAYS,
+    TaskHistoryConfig,
     ComputerAnalysisProfile,
     ComputerLogFile,
     InspectionProfile,
-    SecurityDevice,
+    WeakCurrentDevice,
     Network_Device,
     Schedule,
     Server,
     TaskRun,
-    TaskTargetRun,
 )
 from net.inspections.executor import _database_guard
 from net.inspections.queue import cancel_task, enqueue_task, is_sqlite_busy
@@ -49,7 +51,7 @@ from net.devices.pc.analysis_scope import enqueue_latest_analysis
 PROJECTS = {
     'networks': (InspectionProfile.DeviceType.NETWORK_DEVICE, Network_Device, 'networks'),
     'servers': (InspectionProfile.DeviceType.SERVER, Server, 'servers'),
-    'monitors': (InspectionProfile.DeviceType.MONITOR, SecurityDevice, 'monitors'),
+    'weakcurrent': (InspectionProfile.DeviceType.WEAK_CURRENT, WeakCurrentDevice, 'weakcurrent'),
 }
 
 
@@ -112,7 +114,7 @@ def task_modal_context(request, project_kind, *, allow_target_selection=False, t
         (key, value)
         for key, values in request.GET.lists()
         for value in values
-        if key in ('q', 'target') or key.startswith('filter_')
+        if key == 'target' or key.startswith('filter_')
     ]
     pc_upload_config = pc_upload_config_form = pc_analysis_form = None
     if project_kind == 'computers':
@@ -242,7 +244,7 @@ def _target_ids_from_request(post_data, profile, target_mode):
             source = source.objects.all()
         target_ids = list(source.order_by('pk').values_list('pk', flat=True))
     elif target_mode == 'filtered':
-        if not state['filters'] and not state['q']:
+        if not state['filters']:
             raise ValidationError({'target_mode': '当前没有有效筛选条件，请选择全部资产。'})
         target_ids = list(filtered.values_list('pk', flat=True))
     elif target_mode == 'selected':
@@ -485,6 +487,25 @@ def _computer_analysis_profile_configure(request):
     return redirect(next_url)
 
 
+@require_POST
+def task_history_settings(request):
+    """Save the global task-history retention window from the tasks page."""
+    if not is_admin(request.user):
+        raise PermissionDenied
+    days = request.POST.get('retention_days', '')
+    if days not in TASK_HISTORY_RETENTION_DAYS:
+        messages.error(request, '任务保留天数无效。')
+    else:
+        TaskHistoryConfig.objects.update_or_create(
+            pk=1, defaults={'retention_days': days})
+        messages.success(request, f'任务保留设置已保存：保留 {days} 天。')
+    target = request.POST.get('next') or ''
+    if target and url_has_allowed_host_and_scheme(
+            target, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        return redirect(target)
+    return redirect(reverse('task_list'))
+
+
 def task_list(request):
     definition = get_table_definition('task_runs')
     tasks, table_state = apply_table_filters(
@@ -511,6 +532,9 @@ def task_list(request):
         'page_sizes': PAGE_SIZES,
         'table_export_path': reverse('table_export', args=['task_runs']),
         'pagination_query': query_without_page(request),
+        'can_administer': is_admin(request.user),
+        'task_history_retention': getattr(TaskHistoryConfig.load(), 'retention_days', '') or '90',
+        'task_history_choices': TASK_HISTORY_RETENTION_CHOICES,
     })
 
 
@@ -552,7 +576,7 @@ def _target_result_url(target):
         'computer_analysis': ('computer_analysis_detail', (target.result_id,)),
         'network_device_inspection': ('record_detail', ('networks', target.result_id)),
         'server_inspection': ('record_detail', ('servers', target.result_id)),
-        'monitor_inspection': ('record_detail', ('monitors', target.result_id)),
+        'monitor_inspection': ('record_detail', ('weakcurrent', target.result_id)),
     }
     try:
         route, args = route_map[target.result_type]

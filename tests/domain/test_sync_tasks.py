@@ -89,6 +89,25 @@ class DomainSyncTaskTests(TestCase):
         self.assertEqual(outcome.status, 'failed')
         self.assertFalse(Domain_Account.objects.exists())
 
+    def test_failed_sync_raises_an_alert(self):
+        """域控同步失败必须报警，否则目录长期过期也没人知道。"""
+        from net.models import AlertEvent
+        from net.alerts.service import findings_for_target
+
+        enqueue_domain_sync()
+        claimed = claim_next_task('domain-fixture', 60)
+        with patch('net.domain.sync_tasks.fetch_domain_snapshot',
+                   side_effect=RuntimeError('LDAP 不可达')):
+            outcome = execute_domain_sync_target(claimed.target_runs.get(), worker_id='domain-fixture')
+        self.assertEqual(outcome.status, 'failed')
+
+        target = claimed.target_runs.get()
+        self.assertIsNotNone(target.alert_processed_at, target.alert_processing_error)
+        findings = findings_for_target(target)
+        self.assertEqual([finding.severity for finding in findings], ['critical'])
+        self.assertEqual(findings[0].key, 'execution.failure')
+        self.assertTrue(AlertEvent.objects.filter(target_run=target).exists())
+
     def test_non_admin_cannot_queue_or_schedule(self):
         from tests.auth import login_reader
         login_reader(self.client)

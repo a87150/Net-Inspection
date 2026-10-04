@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 
 from django.contrib import messages
@@ -120,7 +121,7 @@ def _domain_controller_settings_mutation(request):
     form_fields = DomainControllerConfigForm.base_fields
     if action == 'sync' and not any(field in request.POST for field in form_fields):
         try:
-            task = enqueue_domain_sync()
+            enqueue_domain_sync()
             messages.success(
                 request,
                 '域控同步任务已加入后台队列，可在下方同步任务列表查看进度。',
@@ -136,7 +137,7 @@ def _domain_controller_settings_mutation(request):
             if action == 'test':
                 messages.success(request, test_domain_connection(config))
             elif action == 'sync':
-                task = enqueue_domain_sync()
+                enqueue_domain_sync()
                 messages.success(
                     request,
                     '域控同步任务已加入后台队列，可在同步任务列表查看进度。',
@@ -144,7 +145,12 @@ def _domain_controller_settings_mutation(request):
             else:
                 messages.success(request, '域控配置已保存。')
         except Exception:
-            messages.error(request, '域控操作失败。')
+            # This wraps a real LDAP connect/bind and the enqueue call, so every TLS,
+            # port, base_dn, permission and programming error used to surface as the
+            # same one-liner with the exception discarded.
+            logging.getLogger(__name__).exception(
+                '域控配置操作失败 action=%s config=%s', action, config.pk)
+            messages.error(request, '域控操作失败，请查看服务端日志。')
         return redirect(reverse('domain_controller_settings') + '?modal=1')
 
     return _render_domain_settings(request, config, form, open_domain_modal=True)

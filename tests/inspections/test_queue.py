@@ -9,7 +9,6 @@ from tests.devices.pc.helpers import create_log_file
 
 from net.models import (
     ComputerAnalysisProfile,
-    ComputerLogFile,
     InspectionProfile,
     Network_Device,
     Server,

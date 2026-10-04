@@ -13,6 +13,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from net.domain.tasks import enqueue_domain_operation
+from net.infrastructure.xml_safe import safe_fromstring
 from net.domain.validation import _parse_rdn_components, validate_dn_within_base
 from net.models import DomainOperation, Domain_Account, Domain_Controller_Config
 
@@ -107,7 +108,7 @@ def parse_xlsx_accounts(upload) -> list[dict]:
                 raise ValidationError('Excel 文件解压后过大。')
             shared_strings = []
             if 'xl/sharedStrings.xml' in archive.namelist():
-                shared_root = ElementTree.fromstring(archive.read('xl/sharedStrings.xml'))
+                shared_root = safe_fromstring(archive.read('xl/sharedStrings.xml'))
                 shared_strings = [
                     ''.join(node.text or '' for node in item.findall('.//x:t', namespace))
                     for item in shared_root.findall('x:si', namespace)
@@ -118,7 +119,7 @@ def parse_xlsx_accounts(upload) -> list[dict]:
             )
             if not worksheets:
                 raise ValidationError('Excel 文件中没有工作表。')
-            sheet_root = ElementTree.fromstring(archive.read(worksheets[0]))
+            sheet_root = safe_fromstring(archive.read(worksheets[0]))
             values = []
             for row_node in sheet_root.findall('.//x:sheetData/x:row', namespace):
                 row = []

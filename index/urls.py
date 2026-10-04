@@ -12,6 +12,7 @@ from index.inspections.analysis_summary import analysis_problem_list
 from index.devices.pc import upload_config as pc_upload_views
 from index.devices.server.scripts import windows_server_script_download
 from index.devices.create import asset_create, asset_edit
+from index.devices.views import asset_toggle_enabled
 from index.alerts.templates import alert_template_settings
 from index.devices.backups import configuration_backup_list, configuration_backup_download
 from index.devices.pc.bulk_analysis import computer_logs_analyze_bulk
@@ -43,6 +44,7 @@ urlpatterns = [
     path('computers/upload-config/reset-token/', pc_upload_views.pc_upload_config_reset_token, name='pc_upload_config_reset_token'),
     path('', views.index, name='index'),
     path('assets/<str:kind>/', views.asset_list, name='asset_list'),
+    path('assets/<str:kind>/toggle-enabled/', asset_toggle_enabled, name='asset_toggle_enabled'),
     path('assets/<str:kind>/add/', asset_create, name='asset_create'),
     path('assets/<str:kind>/<uuid:pk>/edit/', asset_edit, name='asset_edit'),
     path('assets/<str:kind>/configurations.zip', views.configuration_zip, name='configuration_zip'),
@@ -63,6 +65,7 @@ urlpatterns = [
     path('computers_errors/', views.computer_error_list, name='computer_error_list'),
     path('actions/run-infrastructure-inspection/', views.run_infrastructure_inspection, name='run_infrastructure_inspection'),
     path('tasks/', views.task_list, name='task_list'),
+    path('tasks/history-retention/', views.task_history_settings, name='task_history_settings'),
     path('assets/<str:kind>/<uuid:pk>/inspect/', single_device_task_create, name='single_device_task_create'),
     path('tasks/manual/', views.manual_task_create, name='manual_task_create'),
     path('tasks/<uuid:pk>/cancel/', views.task_cancel, name='task_cancel'),

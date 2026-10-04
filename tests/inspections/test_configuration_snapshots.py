@@ -1,7 +1,6 @@
 from unittest.mock import patch
 import hashlib
 from html.parser import HTMLParser
-from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
 from django.test import TestCase

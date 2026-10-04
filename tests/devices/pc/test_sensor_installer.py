@@ -2,11 +2,19 @@
 import subprocess
 import tempfile
 from pathlib import Path
+
+from django.conf import settings
 from django.test import SimpleTestCase
 
+from tests.powershell import requires_powershell
+
+
+@requires_powershell
 class SensorInstallerTests(SimpleTestCase):
     def test_install_is_verified_idempotent_and_failures_do_not_claim_success(self):
-        source=Path('net/scripts/templates/Install-PCCollector.ps1').read_text(encoding='utf-8-sig')
+        # BASE_DIR rather than a relative path: the tests must run from any CWD.
+        template = Path(settings.BASE_DIR) / 'net' / 'scripts' / 'templates' / 'Install-PCCollector.ps1'
+        source=template.read_text(encoding='utf-8-sig')
         functions=source[source.index('function Get-PCPawnIOVersion'):source.index('function Install-PCCollector {')]
         body=r"""
 $ErrorActionPreference='Stop'

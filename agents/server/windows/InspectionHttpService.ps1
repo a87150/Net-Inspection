@@ -8,14 +8,27 @@
 
 $ErrorActionPreference = 'Stop'
 
-function Invoke-InspectionWindowsPowerShell {
+function Get-InspectionShellPath {
+    # 优先 PowerShell 7；目标机没装 pwsh 时回退到系统自带的 Windows PowerShell 5.1，
+    # 这样 Agent 在没预装 pwsh 的服务器上依然零依赖可用。脚本语法两边都兼容。
+    foreach ($candidate in @(
+            (Join-Path ${env:ProgramFiles} 'PowerShell\7\pwsh.exe'),
+            (Join-Path ${env:ProgramFiles(x86)} 'PowerShell\7\pwsh.exe'))) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) { return $candidate }
+    }
+    $systemDirectory = if ([Environment]::Is64BitOperatingSystem -and -not [Environment]::Is64BitProcess) { 'Sysnative' } else { 'System32' }
+    $inbox = Join-Path ([Environment]::GetFolderPath('Windows')) "$systemDirectory\WindowsPowerShell\v1.0\powershell.exe"
+    if (Test-Path -LiteralPath $inbox) { return $inbox }
+    throw 'Neither PowerShell 7 nor Windows PowerShell 5.1 is installed.'
+}
+
+function Invoke-InspectionPowerShell {
     param([string]$ScriptPath, [System.Collections.IDictionary]$Parameters)
     if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
         throw 'This inspection agent requires Windows.'
     }
-    $systemDirectory = if ([Environment]::Is64BitOperatingSystem -and -not [Environment]::Is64BitProcess) { 'Sysnative' } else { 'System32' }
-    $engine = Join-Path ([Environment]::GetFolderPath('Windows')) "$systemDirectory\WindowsPowerShell\v1.0\powershell.exe"
-    if (-not (Test-Path -LiteralPath $engine)) { throw 'Windows PowerShell is not installed; enable Windows PowerShell 5.1 and retry.' }
+    $engine = Get-InspectionShellPath
+    $isCore = $engine -notlike '*WindowsPowerShell*'
     $arguments = @{}
     foreach ($name in $Parameters.Keys) {
         if ($name -notin @('Port', 'Token', 'Install', 'Console', 'RunService')) { throw 'Unsupported agent argument.' }
@@ -43,10 +56,16 @@ try {
 '@
     $info = New-Object System.Diagnostics.ProcessStartInfo
     $info.FileName = $engine
-    $info.Arguments = '-NoLogo -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
-    # Process.Start does not apply PowerShell's native-command module-path cleanup.
-    # This agent needs Windows inbox modules only; do not inherit Core/user modules.
-    $info.EnvironmentVariables['PSModulePath'] = Join-Path ([Environment]::GetFolderPath('Windows')) 'System32\WindowsPowerShell\v1.0\Modules'
+    # -OutputFormat 是 Windows PowerShell 独有的参数，pwsh 会直接拒绝启动。
+    $outputFormat = if ($isCore) { '' } else { '-OutputFormat Text ' }
+    $info.Arguments = '-NoLogo -NoProfile -NonInteractive ' + $outputFormat + '-ExecutionPolicy Bypass -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+    if (-not $isCore) {
+        # Process.Start does not apply PowerShell's native-command module-path cleanup.
+        # The 5.1 child needs Windows inbox modules only; do not inherit Core/user modules.
+        # A pwsh child keeps its own default path, which already includes the 5.1 inbox
+        # modules it needs (CimCmdlets) alongside its own built-ins.
+        $info.EnvironmentVariables['PSModulePath'] = Join-Path ([Environment]::GetFolderPath('Windows')) 'System32\WindowsPowerShell\v1.0\Modules'
+    }
     $info.UseShellExecute = $false
     $info.CreateNoWindow = $true
     $info.RedirectStandardInput = $true
@@ -54,8 +73,13 @@ try {
     $info.StandardErrorEncoding = [Text.Encoding]::UTF8
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $info
+    # .NET Framework 没有 ProcessStartInfo.StandardInputEncoding，Process.StandardInput 改用
+    # Console.InputEncoding 编码；控制台被重定向时它可能是 UTF-16，base64 载荷会带 NUL，
+    # 子进程解码直接抛异常。载荷本身是 ASCII base64，固定成 ASCII 后还原即可。
+    $previousInputEncoding = [Console]::InputEncoding
     try {
-        if (-not $process.Start()) { throw 'Cannot start Windows PowerShell.' }
+        [Console]::InputEncoding = [System.Text.Encoding]::ASCII
+        if (-not $process.Start()) { throw 'Cannot start the inspection PowerShell host.' }
         # Drain stderr concurrently so a verbose failure cannot fill the pipe and block the child.
         $errorRead = $process.StandardError.ReadToEndAsync()
         $process.StandardInput.Write([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($payload)))
@@ -67,18 +91,26 @@ try {
                 if ($secret) { $errorText = $errorText.Replace($secret, '[REDACTED]') }
             }
             if (-not $errorText) { $errorText = 'Child process returned no error details; check the agent service.log.' }
-            throw ("Windows PowerShell failed (exit {0}): {1}" -f $process.ExitCode, $errorText)
+            throw ("The inspection PowerShell host failed (exit {0}): {1}" -f $process.ExitCode, $errorText)
         }
         return $process.ExitCode
-    } finally { $process.Dispose() }
+    } finally {
+        [Console]::InputEncoding = $previousInputEncoding
+        $process.Dispose()
+    }
 }
 
-if ($PSVersionTable.PSEdition -ne 'Desktop') {
-    Write-Host 'Switching to Windows PowerShell for the inspection agent...'
-    $childExitCode = Invoke-InspectionWindowsPowerShell -ScriptPath $PSCommandPath -Parameters $PSBoundParameters
-    if ($childExitCode -ne 0) { throw "Windows PowerShell could not complete the operation (exit $childExitCode)." }
-    return
+if ($PSVersionTable.PSEdition -eq 'Desktop') {
+    $preferred = Get-InspectionShellPath
+    if ($preferred -notlike '*WindowsPowerShell*') {
+        Write-Host 'Switching to PowerShell 7 for the inspection agent...'
+        $childExitCode = Invoke-InspectionPowerShell -ScriptPath $PSCommandPath -Parameters $PSBoundParameters
+        if ($childExitCode -ne 0) { throw "PowerShell 7 could not complete the operation (exit $childExitCode)." }
+        return
+    }
 }
+# 两个引擎都要固定 UTF-8 输出，否则子进程回显的中文在控制台代码页下会变乱码。
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 
 
 function Get-InspectionServiceHostSource {
@@ -173,9 +205,8 @@ function Set-InspectionDirectoryAccess {
 function Assert-InspectionAdministrator {
     $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
     if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        throw 'Please run Windows PowerShell as administrator to install this service.'
+        throw 'Please run PowerShell as administrator to install this service.'
     }
-    if ($PSVersionTable.PSEdition -ne 'Desktop') { throw 'Run this script with Windows PowerShell 5.1 (powershell.exe).' }
 }
 
 function Invoke-InspectionServiceControl {
@@ -324,6 +355,26 @@ if ($RunService) {
     Install-InspectionService -Source $PSCommandPath -Directory $installDirectory -ListenPort $Port -AgentToken $Token
     return
 }
+
+function Test-AgentToken {
+    param([string]$Presented, [string]$Expected)
+    # 逐字节异或、不提前返回，避免按前缀猜出令牌。
+    # 不能用 CryptographicOperations::FixedTimeEquals —— 本脚本刻意跑在 Windows
+    # PowerShell 5.1 上，而该类型自 .NET Core 2.1 才提供，5.1 直接解析失败。
+    $a = [System.Text.Encoding]::UTF8.GetBytes($Presented)
+    $b = [System.Text.Encoding]::UTF8.GetBytes($Expected)
+    $diff = if ($a.Length -eq $b.Length) { 0 } else { 1 }
+    for ($i = 0; $i -lt [Math]::Max($a.Length, $b.Length); $i++) {
+        $left = if ($i -lt $a.Length) { $a[$i] } else { 0 }
+        $right = if ($i -lt $b.Length) { $b[$i] } else { 0 }
+        $diff = $diff -bor ($left -bxor $right)
+    }
+    return $diff -eq 0
+}
+
+# 没有任何模式可以无认证地监听：-Console 排障模式不读 settings.json，$Token 可能为空，
+# 而下面的鉴权分支在空值时会整体跳过。
+if (-not $Token) { throw 'A bearer token is required. Pass -Token or set NET_INSPECTION_AGENT_TOKEN.' }
 
 $listener = [System.Net.HttpListener]::new()
 $listener.Prefixes.Add("http://+:$Port/")
@@ -477,12 +528,11 @@ try {
                 $context.Response.StatusCode = 404
                 continue
             }
-            if ($Token) {
-                $expected = "Bearer $Token"
-                if ($context.Request.Headers['Authorization'] -ne $expected) {
-                    $context.Response.StatusCode = 401
-                    continue
-                }
+            $expected = "Bearer $Token"
+            $presented = [string]$context.Request.Headers['Authorization']
+            if (-not (Test-AgentToken $presented $expected)) {
+                $context.Response.StatusCode = 401
+                continue
             }
             $fieldSelection = $context.Request.QueryString['fields']
             if ($null -eq $fieldSelection) {

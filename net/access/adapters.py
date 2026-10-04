@@ -83,8 +83,10 @@ class ZKTecoV6600V6000CompatibilityAdapter(AccessPlatformAdapter):
         event_id = str(payload.get('id') or '').strip()
         if not event_id:
             raise ValidationError('平台事件记录缺少稳定事件 ID。')
-        event_name = str(payload.get('eventName') or '')
-        normalized = event_name.casefold()
+        # NOTE: payload['eventName'] used to be read and casefolded here, but the
+        # result was never applied, so direction/result below are hardcoded. Deriving
+        # them needs the V6600 event-name vocabulary; until then every access record
+        # reports 'unknown' for both. Tracked in docs/changelog.md.
         return AccessEvent(
             event_id=event_id, occurred_at=cls._time(payload.get('eventTime')),
             employee_number=str(payload.get('pin') or ''), person_name=str(payload.get('name') or ''),

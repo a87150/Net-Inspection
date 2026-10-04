@@ -11,11 +11,10 @@ from django.utils import timezone
 from net.models import (
     Computer,
     ComputerAnalysis,
-    ComputerLogFile,
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
-    SecurityDevice,
+    WeakCurrentDevice,
     Monitor_Inspection,
     Network_Device,
     Network_Device_Inspection,
@@ -206,7 +205,7 @@ class DashboardSummaryTests(TestCase):
 
     def test_monitor_success_with_linked_error_is_abnormal(self):
         """Security device health must include linked inspection errors."""
-        monitor = SecurityDevice.objects.create(device_name='CAMERA-ERROR', ip='192.0.2.16')
+        monitor = WeakCurrentDevice.objects.create(device_name='CAMERA-ERROR', ip='192.0.2.16')
         inspection = Monitor_Inspection.objects.create(
             monitor=monitor,
             status=RecordStatus.SUCCESS,
@@ -219,7 +218,7 @@ class DashboardSummaryTests(TestCase):
 
         summary = next(
             item for item in build_asset_card_summaries()
-            if item['key'] == 'monitors'
+            if item['key'] == 'weakcurrent'
         )
 
         self.assertEqual(summary['normal'], 0)
@@ -239,15 +238,15 @@ class DashboardSummaryTests(TestCase):
         Server.objects.create(name='SERVER-WAITING', ip='192.0.2.24')
         Server_Inspection.objects.create(server=server, status=RecordStatus.SUCCESS)
 
-        monitor = SecurityDevice.objects.create(device_name='CAMERA-CHECKED', ip='192.0.2.25')
-        SecurityDevice.objects.create(device_name='CAMERA-WAITING', ip='192.0.2.26')
+        monitor = WeakCurrentDevice.objects.create(device_name='CAMERA-CHECKED', ip='192.0.2.25')
+        WeakCurrentDevice.objects.create(device_name='CAMERA-WAITING', ip='192.0.2.26')
         Monitor_Inspection.objects.create(monitor=monitor, status=RecordStatus.SUCCESS)
 
         response = self.client.get(reverse('index'))
         items = {item['key']: item for item in response.context['items']}
 
         self.assertEqual(items['computers']['note'], '等待首次分析 1 台')
-        for key in ('networks', 'servers', 'monitors'):
+        for key in ('networks', 'servers', 'weakcurrent'):
             self.assertEqual(items[key]['note'], '等待首次巡检 1 台')
         self.assertContains(response, '等待首次分析 1 台', count=1)
         self.assertContains(response, '等待首次巡检 1 台', count=3)
@@ -287,7 +286,7 @@ class DashboardSummaryTests(TestCase):
             {summary['key'] for summary in summaries},
             {
                 'people', 'domain_accounts', 'domain_computers', 'domain_groups', 'computers',
-                'networks', 'servers', 'monitors',
+                'networks', 'servers', 'weakcurrent',
             },
         )
 

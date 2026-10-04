@@ -43,7 +43,7 @@ class ReaderControlsTests(TestCase):
     def test_reader_lists_keep_tables_and_exports_without_operation_forms(self):
         self.client.force_login(self.reader)
         urls = [reverse('asset_list', args=[kind]) for kind in
-                ('people', 'computers', 'networks', 'servers', 'monitors')]
+                ('people', 'computers', 'networks', 'servers', 'weakcurrent')]
         urls += [reverse('alert_list'), reverse('computer_log_list'),
                  reverse('computer_analysis_list'), reverse('domain_account_list'),
                  reverse('task_list'), reverse('operations_overview')]

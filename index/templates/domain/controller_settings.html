@@ -4,7 +4,7 @@
 {% block content %}{% if can_administer %}
 <header class="page-heading">
     <div class="page-heading__copy"><p class="page-heading__eyebrow">目录服务</p><h1 class="page-heading__title">域控管理</h1><p class="page-heading__description">统一配置 Active Directory，并同步查看域账号、域计算机和域分组。</p></div>
-    {% if can_administer and can_manage_domain %}<div class="page-heading__actions"><button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#domainStatisticsModal">未登录天数设置</button>{% if can_administer %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#domainConfigModal">域控连接设置</button>{% endif %}</div>{% endif %}
+    {% if can_administer and can_manage_domain %}<div class="page-heading__actions"><button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#domainStatisticsModal">未登录天数设置</button>{% if can_administer %}<button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#domainConfigModal">域控连接设置</button>{% endif %}</div>{% endif %}
 </header>
 
 <div class="row g-3 mb-4">

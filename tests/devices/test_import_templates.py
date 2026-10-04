@@ -8,7 +8,7 @@ from tests.auth import login_admin
 
 from net.data_exchange.inventory_csv import export_csv, export_xlsx_template, import_file
 from net.data_exchange.xlsx import read_xlsx_rows
-from net.models import Network_Device, SecurityDevice, Server
+from net.models import Network_Device, WeakCurrentDevice, Server
 
 
 EXPECTED_TEMPLATE_HEADERS = {
@@ -23,7 +23,7 @@ EXPECTED_TEMPLATE_HEADERS = {
         '服务器名称', 'IP地址', '服务器类型', '管理端口', 'SSH账号', 'SSH密码',
         'Windows API地址', 'API令牌', '校验HTTPS证书', '系统版本',
     ],
-    'monitors': [
+    'weakcurrent': [
         '设备名称', 'IP地址', '设备类型', '厂商', 'API地址', 'API账号',
         'API密码', 'API令牌', '校验HTTPS证书',
     ],
@@ -85,17 +85,17 @@ class DeviceImportTemplateTests(TestCase):
         self.assertTrue(windows.api_url and windows.api_token)
 
     def test_security_template_covers_password_and_token_authentication(self):
-        rows = self._csv_rows('monitors')
+        rows = self._csv_rows('weakcurrent')
         self.assertEqual(len(rows), 3)
 
-        created, updated = import_file('monitors', SimpleUploadedFile(
-            'security-template.csv', export_csv('monitors', template_only=True).encode('utf-8'),
+        created, updated = import_file('weakcurrent', SimpleUploadedFile(
+            'security-template.csv', export_csv('weakcurrent', template_only=True).encode('utf-8'),
             content_type='text/csv',
         ))
 
         self.assertEqual((created, updated), (2, 0))
-        self.assertTrue(SecurityDevice.objects.exclude(api_password='').exists())
-        self.assertTrue(SecurityDevice.objects.exclude(api_token='').exists())
+        self.assertTrue(WeakCurrentDevice.objects.exclude(api_password='').exists())
+        self.assertTrue(WeakCurrentDevice.objects.exclude(api_token='').exists())
 
     def test_excel_and_csv_templates_expose_the_same_scenarios(self):
         for entity in EXPECTED_TEMPLATE_HEADERS:

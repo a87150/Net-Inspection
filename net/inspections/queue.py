@@ -18,7 +18,7 @@ from net.models import (
     ComputerAnalysisProfile,
     ComputerLogFile,
     InspectionProfile,
-    SecurityDevice,
+    WeakCurrentDevice,
     Network_Device,
     Server,
     TaskRun,
@@ -51,8 +51,8 @@ _ASSET_SPECS = {
         Server,
         ('name', 'ip', 'server_type', 'os', 'port', 'api_url', 'verify_ssl'),
     ),
-    TaskTargetRun.TargetType.MONITOR: (
-        SecurityDevice,
+    TaskTargetRun.TargetType.WEAK_CURRENT: (
+        WeakCurrentDevice,
         (
             'device_name', 'ip', 'device_type', 'model', 'vendor',
             'api_url', 'verify_ssl',
@@ -105,6 +105,7 @@ def _task_context_for_profile(profile):
                 'target_selector': profile.target_selector,
                 'timeout_seconds': profile.timeout_seconds,
                 'concurrent_workers': profile.concurrent_workers,
+                'record_retention': profile.record_retention,
                 'alert_policy_mode': routing['mode'],
                 'alert_routing': routing,
                 'issue_severity_overrides': issue_policy,
@@ -605,7 +606,9 @@ def _cancel_task_once(normalized_task_id, *, now):
         })
 
         if task.task_type == TaskRun.TaskType.DOMAIN_OPERATION:
-            from net.models import DomainOperation, DomainOperationSecret
+            # DomainOperationSecret is not re-exported by net.models; this import
+            # used to raise ImportError on every domain-operation path.
+            from net.models.domain import DomainOperation, DomainOperationSecret
 
             operation = DomainOperation.objects.select_for_update().filter(
                 task_id=task.pk,

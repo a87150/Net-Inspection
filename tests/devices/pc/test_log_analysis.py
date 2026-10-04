@@ -1,8 +1,6 @@
 """API-ingested computer log analysis contracts."""
 
 import json
-import os
-import shutil
 import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -22,7 +20,6 @@ from net.models import (
     ComputerAnalysisProfile,
     ComputerLogFile,
     RecordStatus,
-    Schedule,
     TaskRun,
 )
 from net.devices.pc.analysis import analyze_log
@@ -30,7 +27,6 @@ from tests.devices.pc.helpers import import_fixture_path
 from net.inspections.queue import enqueue_task
 from net.devices.pc.executor import execute_computer_target
 from net.inspections.queue import claim_next_task
-from net.inspections.schedules import enqueue_due_schedules
 from net.inspections.worker import TaskWorker
 
 

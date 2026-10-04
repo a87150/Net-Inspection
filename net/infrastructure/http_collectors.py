@@ -1,4 +1,4 @@
-import xml.etree.ElementTree as ET
+from xml.etree import ElementTree
 from ipaddress import ip_address
 from time import monotonic
 from urllib.parse import unquote_plus, urlsplit, urlunsplit
@@ -9,6 +9,7 @@ from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 from net.devices.security.payload import normalize_security_payload, collect_native_configuration
 from net.infrastructure.collection import CollectionResult, Timer
 from net.infrastructure.sanitization import sanitize
+from net.infrastructure.xml_safe import safe_fromstring
 from net.inspections.selection import SECURITY_FIELDS, WINDOWS_FIELDS, selected_fields
 
 
@@ -32,7 +33,7 @@ def _response_data(response, *, structured_xml=False):
     except ValueError:
         pass
     if text.startswith('<'):
-        root = ET.fromstring(text)
+        root = safe_fromstring(text)
         if structured_xml:
             return _xml_fields(root)
         return {node.tag.split('}')[-1]: node.text for node in root.iter() if len(node) == 0}
@@ -60,7 +61,7 @@ def _request(url, token='', username='', password='', verify_ssl=True, timeout=1
         if error_body:
             try:
                 detail = _response_data(response, structured_xml=structured_xml).get('error')
-            except (ValueError, ET.ParseError, AttributeError):
+            except (ValueError, ElementTree.ParseError, AttributeError):
                 detail = None
             if isinstance(detail, str) and detail.strip():
                 raise requests.HTTPError('Windows agent error: ' + detail.strip(), response=response) from None
@@ -169,7 +170,7 @@ def collect_windows_http(server, timeout=12, selected_items=None):
             payload['collection_errors'] = field_errors
         return CollectionResult(True, status, message,
                                 data=data, raw=payload, duration_ms=timer.duration_ms)
-    except (requests.RequestException, ValueError, ET.ParseError) as exc:
+    except (requests.RequestException, ValueError, ElementTree.ParseError) as exc:
         return CollectionResult(False, 'failed', 'Windows HTTP 采集失败：' + sanitize(str(exc), secrets=(server.api_token or '',)), duration_ms=getattr(timer, 'duration_ms', 0))
 
 
@@ -212,7 +213,7 @@ def collect_security_api(device, timeout=12, selected_items=None):
         status, message = 'success', ''
         if missing or (selected_items is None and not data):
             status = 'partial' if data else 'failed'
-            message = '安防设备 API 无法映射请求的巡检项：' + ', '.join(missing or ['status_data'])
+            message = '弱电设备 API 无法映射请求的巡检项：' + ', '.join(missing or ['status_data'])
         return CollectionResult(True, status, message, data=data, raw=raw, duration_ms=timer.duration_ms)
-    except (requests.RequestException, ValueError, ET.ParseError) as exc:
-        return CollectionResult(False, 'failed', f'安防设备 API 采集失败：{exc}', duration_ms=getattr(timer, 'duration_ms', 0))
+    except (requests.RequestException, ValueError, ElementTree.ParseError) as exc:
+        return CollectionResult(False, 'failed', f'弱电设备 API 采集失败：{exc}', duration_ms=getattr(timer, 'duration_ms', 0))

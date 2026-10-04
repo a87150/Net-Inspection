@@ -1,10 +1,18 @@
 """Admin registrations for editable inventory and directory configuration."""
 
 from django import forms
+from django.db.models import Q
 from net.secret_masks import MASKED_SECRET, MaskedSecretInput
 from django.contrib import admin
 
-from net.models import Computer, Domain_Account, Domain_Computer, Domain_Group, Domain_Controller_Config, Network_Device, People, SecurityDevice, Server
+from net.models.topology import (
+    NetworkTopologyInterface,
+    NetworkTopologyLink,
+    NetworkTopologyObservation,
+    TopologyDiscoveryBatch,
+)
+
+from net.models import Computer, Domain_Account, Domain_Computer, Domain_Group, Domain_Controller_Config, Network_Device, People, WeakCurrentDevice, Server
 
 
 
@@ -81,11 +89,11 @@ class ServerAdminForm(SecretPreservingModelForm):
         fields = '__all__'
 
 
-class MonitorAdminForm(SecretPreservingModelForm):
+class WeakCurrentAdminForm(SecretPreservingModelForm):
     secret_fields = ('api_password', 'api_token')
 
     class Meta:
-        model = SecurityDevice
+        model = WeakCurrentDevice
         fields = '__all__'
 
 
@@ -129,31 +137,70 @@ class ComputerAdmin(admin.ModelAdmin):
     date_hierarchy = 'last_report_at'
 
 
+class DeleteSelectedMixin:
+    """Let the built-in bulk delete work on devices that topology still references.
+
+    NetworkTopologyInterface.device, NetworkTopologyObservation.local_device and
+    TopologyDiscoveryBatch.device are all PROTECT, so Django's stock action would
+    abort on any device that has ever been discovered. Discovery data belongs to
+    the device, so drop it in dependency order first; inspection records are
+    already CASCADE and go with the device.
+    """
+
+    actions = ('delete_selected',)
+
+    def delete_queryset(self, request, queryset):
+        device_ids = list(queryset.values_list('pk', flat=True))
+        interface_ids = list(
+            NetworkTopologyInterface.objects
+            .filter(device_id__in=device_ids)
+            .values_list('pk', flat=True)
+        )
+        NetworkTopologyObservation.objects.filter(
+            Q(local_device_id__in=device_ids) | Q(local_interface_id__in=interface_ids)
+        ).delete()
+        NetworkTopologyLink.objects.filter(
+            Q(local_interface_id__in=interface_ids) | Q(remote_interface_id__in=interface_ids)
+        ).delete()
+        NetworkTopologyInterface.objects.filter(pk__in=interface_ids).delete()
+        TopologyDiscoveryBatch.objects.filter(device_id__in=device_ids).delete()
+        super().delete_queryset(request, queryset)
+
+
 @admin.register(Network_Device)
-class NetworkDeviceAdmin(admin.ModelAdmin):
+class NetworkDeviceAdmin(DeleteSelectedMixin, admin.ModelAdmin):
     form = NetworkDeviceAdminForm
     list_display = (
         'device_name', 'ip', 'device_type', 'vendor', 'model',
-        'connection_type', 'snmp_version', 'snmp_port', 'port',
+        'connection_type', 'snmp_version', 'snmp_port', 'port', 'is_enabled',
     )
-    list_filter = ('device_type', 'vendor', 'connection_type', 'snmp_version')
+    list_filter = ('device_type', 'vendor', 'connection_type', 'snmp_version', 'is_enabled')
     search_fields = ('device_name', 'ip', 'device_type', 'vendor', 'model', 'connection_type')
 
 
 @admin.register(Server)
-class ServerAdmin(admin.ModelAdmin):
+class ServerAdmin(DeleteSelectedMixin, admin.ModelAdmin):
     form = ServerAdminForm
-    list_display = ('name', 'ip', 'server_type', 'os', 'port', 'verify_ssl')
-    list_filter = ('server_type', 'os', 'verify_ssl')
+    list_display = ('name', 'ip', 'server_type', 'os', 'port', 'verify_ssl', 'is_enabled')
+    list_filter = ('server_type', 'os', 'verify_ssl', 'is_enabled')
     search_fields = ('name', 'ip', 'server_type', 'os')
 
 
-@admin.register(SecurityDevice)
-class MonitorAdmin(admin.ModelAdmin):
-    form = MonitorAdminForm
-    list_display = ('device_name', 'ip', 'device_type', 'vendor', 'model', 'verify_ssl')
-    list_filter = ('device_type', 'vendor', 'verify_ssl')
+@admin.register(WeakCurrentDevice)
+class WeakCurrentAdmin(DeleteSelectedMixin, admin.ModelAdmin):
+    form = WeakCurrentAdminForm
+    list_display = ('device_name', 'ip', 'device_type', 'vendor', 'model', 'verify_ssl', 'is_enabled')
+    list_filter = ('device_type', 'vendor', 'verify_ssl', 'is_enabled')
     search_fields = ('device_name', 'ip', 'device_type', 'vendor', 'model')
+    actions = ('delete_selected', 'mark_disabled', 'mark_enabled')
+
+    @admin.action(description='停用选中的弱电设备')
+    def mark_disabled(self, request, queryset):
+        queryset.update(is_enabled=False)
+
+    @admin.action(description='启用选中的弱电设备')
+    def mark_enabled(self, request, queryset):
+        queryset.update(is_enabled=True)
 
 
 @admin.register(Domain_Controller_Config)

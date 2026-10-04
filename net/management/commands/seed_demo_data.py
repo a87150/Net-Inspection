@@ -20,7 +20,7 @@ from net.models import (
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
-    SecurityDevice,
+    WeakCurrentDevice,
     Monitor_Inspection,
     Network_Device,
     Network_Device_Inspection,
@@ -226,7 +226,7 @@ FIXED_ASSET_OWNERS = (
       for name in DEMO_COMPUTER_NAMES[:3]),
     *((Network_Device, f'network:{ip}', {'ip': ip}) for ip in DEMO_NETWORK_IPS),
     *((Server, f'server:{ip}', {'ip': ip}) for ip in DEMO_SERVER_IPS),
-    *((SecurityDevice, f'monitor:{ip}', {'ip': ip}) for ip in DEMO_MONITOR_IPS),
+    *((WeakCurrentDevice, f'monitor:{ip}', {'ip': ip}) for ip in DEMO_MONITOR_IPS),
     *((Domain_Account, f'domain-account:{login}', {'login_name': login})
       for login in DEMO_DOMAIN_LOGINS),
     *((Domain_Computer, f'domain-computer:{name}', {'computer_name': name})
@@ -326,6 +326,26 @@ def _assert_fixed_uuid_owner(model, identity, owner_lookup):
     return existing
 
 
+def _upsert_keeping_legacy_pk(model, identity, natural_lookup, owner_lookup, defaults):
+    """Reuse a row an older seed version created instead of colliding on its unique key.
+
+    The adopted row keeps its pk on purpose: other rows may already point at it
+    (all seeded people reference their PeopleSyncSource), so renumbering it would
+    orphan them. Only the demo's own fields are overwritten.
+    """
+    expected_pk = _demo_uuid(identity)
+    existing = _assert_fixed_uuid_owner(model, identity, owner_lookup)
+    if existing is not None:
+        return model.objects.update_or_create(pk=expected_pk, defaults=defaults)[0]
+    adopted = model.objects.filter(**natural_lookup).exclude(pk=expected_pk).first()
+    if adopted is None:
+        return model.objects.update_or_create(pk=expected_pk, defaults=defaults)[0]
+    for field, value in defaults.items():
+        setattr(adopted, field, value)
+    adopted.save()
+    return adopted
+
+
 def _assert_current_log_owner(content_hash):
     hash_owner = ComputerLogFile.objects.filter(content_hash=content_hash).first()
     expected_computer = CURRENT_LOG_COMPUTERS.get(content_hash)
@@ -406,7 +426,7 @@ class Command(BaseCommand):
         networks = self._seed_networks(anchor)
         self._seed_enterprise_topology(anchor, networks)
         servers = self._seed_servers(anchor)
-        monitors = self._seed_monitors(anchor)
+        weak_current = self._seed_monitors(anchor)
         domain_accounts, domain_computers, domain_groups = self._seed_domain(anchor)
         self._seed_domain_operations(anchor, domain_accounts, domain_computers)
         self._seed_alerts(anchor, servers)
@@ -419,7 +439,7 @@ class Command(BaseCommand):
             '演示数据已就绪：'
             f'人员 {len(people)}、计算机 {len(computers)}、'
             f'网络设备 {len(networks)}、服务器 {len(servers)}、'
-            f'安防设备 {len(monitors)}、域账号 {len(domain_accounts)}、'
+            f'弱电设备 {len(weak_current)}、域账号 {len(domain_accounts)}、'
             f'域计算机 {len(domain_computers)}、域分组 {len(domain_groups)}、'
             '目录来源 2、计划 2（停用）、'
             f'任务 10（含域操作 2）、分析 4、告警事件 2、投递结果 3、可下载配置 {backup_count}。',
@@ -496,8 +516,9 @@ class Command(BaseCommand):
     def _seed_sources(self, anchor, people):
         for provider in ('feishu', 'dingtalk'):
             credential_key = 'app_id' if provider == 'feishu' else 'app_key'
-            source, _ = PeopleSyncSource.objects.update_or_create(
-                pk=_demo_uuid(f'people-source-{provider}'), defaults={
+            natural = {'source_key': f'people-provider-{provider}'}
+            source = _upsert_keeping_legacy_pk(
+                PeopleSyncSource, f'people-source-{provider}', natural, natural, {
                     'name': '飞书' if provider == 'feishu' else '钉钉',
                     'source_key': f'people-provider-{provider}',
                     'source_type': provider, 'is_enabled': False,
@@ -624,11 +645,13 @@ class Command(BaseCommand):
             }),
         )
         channels = {}
-        for identity, name, channel_type, settings in specs:
+        # Named channel_settings, not settings: the module-level Django settings is
+        # used later in this command and shadowing it is a trap.
+        for identity, name, channel_type, channel_settings in specs:
             _assert_fixed_uuid_owner(AlertChannel, identity, {'name': name})
             channels[identity], _ = AlertChannel.objects.update_or_create(
                 pk=_demo_uuid(identity), defaults={
-                    'name': name, 'channel_type': channel_type, 'settings': settings, 'is_enabled': False,
+                    'name': name, 'channel_type': channel_type, 'settings': channel_settings, 'is_enabled': False,
                 },
             )
         profile_id = _demo_uuid('alert-profile-server')
@@ -763,7 +786,7 @@ class Command(BaseCommand):
                 server.delete()
 
         for spec in LEGACY_MONITOR_SPECS:
-            monitor = SecurityDevice.objects.filter(
+            monitor = WeakCurrentDevice.objects.filter(
                 ip=spec['ip'], device_name=spec['name'],
             ).first()
             if monitor is None:
@@ -923,7 +946,7 @@ class Command(BaseCommand):
             exceptions = []
             if error:
                 exceptions.append({'问题类型': error[0], '详细问题': error[1]})
-            analysis = _upsert_record(
+            _upsert_record(
                 ComputerAnalysis,
                 f'computer-analysis-{index}',
                 {
@@ -1294,10 +1317,10 @@ class Command(BaseCommand):
             ('203.0.113.35', '演示-园区入口闸机', '闸机', 'Dahua', 'ASGB8XXY', 'gate-entrance'),
             ('10.30.30.31', '演示-拓扑安防摄像机', '摄像机', 'Hikvision', 'DS-2CD3T47', 'camera-topology'),
         )
-        monitors = {}
+        weak_current = {}
         for ip, name, device_type, vendor, model, host in specs:
-            monitors[ip] = _upsert_asset(
-                SecurityDevice,
+            weak_current[ip] = _upsert_asset(
+                WeakCurrentDevice,
                 {'ip': ip},
                 {
                     'device_name': name,
@@ -1327,7 +1350,7 @@ class Command(BaseCommand):
                 Monitor_Inspection,
                 f'monitor-inspection-{index}',
                 {
-                    'monitor': monitors[ip],
+                    'monitor': weak_current[ip],
                     'status': status,
                     'started_at': event_time - timedelta(seconds=11),
                     'finished_at': event_time,
@@ -1340,7 +1363,7 @@ class Command(BaseCommand):
                         }} if index == 3 else {'config_info': {
                             'status': 'unsupported', 'message': '演示：不支持该厂商的配置导出。',
                         }} if index in (1, 2) else {}),
-                        'device_info': {'型号': monitors[ip].model, '厂商': monitors[ip].vendor},
+                        'device_info': {'型号': weak_current[ip].model, '厂商': weak_current[ip].vendor},
                         'channel_status': [{'channel': 1, 'online': reachable}],
                         'storage_status': [{
                             'status': 'warning' if error_type else 'normal',
@@ -1349,7 +1372,7 @@ class Command(BaseCommand):
                     },
                     'is_reachable': reachable,
                     'duration_ms': 930 + index * 120,
-                    'raw_output': {'demo': True, 'provider_api': monitors[ip].vendor},
+                    'raw_output': {'demo': True, 'provider_api': weak_current[ip].vendor},
                 },
                 event_time,
             )
@@ -1362,7 +1385,7 @@ class Command(BaseCommand):
                         'error_message': {error_type: summary},
                     },
                 )
-        return list(monitors.values())
+        return list(weak_current.values())
 
     def _seed_domain(self, anchor):
         config = Domain_Controller_Config.objects.filter(pk=1).first()

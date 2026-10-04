@@ -15,7 +15,7 @@ from django.utils import timezone
 from index.common.table_query import apply_table_filters
 from index.common.table_registry import project_record_definition
 from index.inspections.records import _computer_analysis_records
-from net.models import Computer, ComputerAnalysis, ComputerAnalysisProfile, ComputerLogFile, TaskRun, TaskTargetRun
+from net.models import Computer, ComputerAnalysis, ComputerAnalysisProfile, TaskRun, TaskTargetRun
 
 
 class PeopleResultPaginationTests(TestCase):
@@ -53,11 +53,15 @@ class PeopleResultPaginationTests(TestCase):
             actual = list(page)
         self.assertEqual(page.paginator.count, 66)
         self.assertEqual([r.pk for r in actual], sorted(r.pk for r in self.records[:44])[20:40])
-        row_queries = [q['sql'] for q in queries if '"log_file_id"' in q['sql']]
+        # 列名的引号随后端而变，用 connection.ops 引一遍再断言。
+        def quoted(name):
+            return connection.ops.quote_name(name)
+
+        row_queries = [q['sql'] for q in queries if quoted('log_file_id') in q['sql']]
         self.assertEqual(len(row_queries), 1)
         self.assertIn('LIMIT 20 OFFSET 20', row_queries[0])
-        for payload in ('"details"', '"exceptions"', '"payload"'):
-            self.assertNotIn(payload, row_queries[0])
+        for payload in ('details', 'exceptions', 'payload'):
+            self.assertNotIn(quoted(payload), row_queries[0])
         self.assertEqual(len(state['field_options']['employee_number']), 23)
 
     def test_page_boundary_merges_placeholders_and_multiple_logs(self):

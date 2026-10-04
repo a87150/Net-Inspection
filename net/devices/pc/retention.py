@@ -2,6 +2,7 @@
 from django.db import transaction
 from django.db.models import Exists, OuterRef, CharField, Q
 from django.db.models.functions import Cast
+from net.infrastructure.retention import alert_processing_complete
 from net.models import Computer, ComputerLogFile, TaskTargetRun, TaskRun
 
 def cleanup_logs_for_computer(computer_id):
@@ -24,19 +25,9 @@ def cleanup_retained_logs(limit=20):
             count += cleanup_logs_for_computer(identity)
     return count + cleanup_analysis_results(limit=limit * 10)
 
-def _notification_complete(query):
-    return query.filter(
-        Q(task_target__isnull=True)
-        | Q(
-            task_target__alert_processed_at__isnull=False,
-            task_target__task__alert_summary_processed_at__isnull=False,
-        )
-    )
-
-
 def remove_analysis_results(query):
     """Expire results only after target and task alert processing has finished."""
-    rows = list(_notification_complete(query).values('pk', 'task_target_id')[:200])
+    rows = list(alert_processing_complete(query).values('pk', 'task_target_id')[:200])
     target_ids = [row['task_target_id'] for row in rows if row['task_target_id']]
     for target in TaskTargetRun.objects.filter(pk__in=target_ids):
         snapshot = dict(target.result_snapshot or {})
@@ -67,7 +58,7 @@ def cleanup_analysis_results(limit=200):
         superseded=Exists(newer),
     ).filter(superseded=True)
     computer_ids = list(
-        _notification_complete(candidates)
+        alert_processing_complete(candidates)
         .order_by('computer_id')
         .values_list('computer_id', flat=True)
         .distinct()[:limit]

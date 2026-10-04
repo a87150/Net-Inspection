@@ -27,7 +27,7 @@ from net.models import (
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
-    SecurityDevice,
+    WeakCurrentDevice,
     Monitor_Inspection,
     Network_Device,
     Network_Device_Inspection,
@@ -50,7 +50,7 @@ REQUIRED_ADMIN_MODELS = (
     Computer,
     Network_Device,
     Server,
-    SecurityDevice,
+    WeakCurrentDevice,
     Domain_Controller_Config,
     DomainOperation,
     ComputerLogFile,
@@ -122,7 +122,7 @@ class AdminRegistryTests(TestCase):
                 'snmp_auth_password', 'snmp_priv_password',
             },
             Server: {'username', 'password', 'api_token'},
-            SecurityDevice: {'api_username', 'api_password', 'api_token'},
+            WeakCurrentDevice: {'api_username', 'api_password', 'api_token'},
         }
         for model, forbidden in credential_fields.items():
             with self.subTest(model=model.__name__):
@@ -218,7 +218,7 @@ class AdminSecretFormTests(TestCase):
                 },
             ),
             (
-                SecurityDevice.objects.create(
+                WeakCurrentDevice.objects.create(
                     device_name='admin-monitor', ip='192.0.2.43', api_username='monitor-user',
                     api_password='monitor-password-private', api_token='monitor-token-private',
                 ),

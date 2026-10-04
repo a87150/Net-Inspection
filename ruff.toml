@@ -1,0 +1,28 @@
+# Ruff configuration: the lint gate CI enforces.
+#
+# Scope is deliberately pyflakes-only (F). It catches unused imports and variables,
+# which is where this codebase actually regressed, without demanding a repo-wide
+# reformat or import reorder that would bury real changes in churn.
+target-version = "py312"
+
+exclude = [
+    ".venv",
+    ".git",
+    ".superpowers",
+    ".task6-artifacts",
+    ".worktrees",
+    "artifacts",
+    "demo-runtime",
+    "runtime",
+    "node_modules",
+    "agents",
+    "net/migrations",   # frozen history; never churn applied migrations
+]
+
+[lint]
+select = ["F"]
+
+[lint.per-file-ignores]
+# Test bodies assign locals for readability (task = create_task()) where the call
+# carries the intent and the name is documentation. Enforcing F841 there is noise.
+"tests/**" = ["F841"]

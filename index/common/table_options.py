@@ -81,6 +81,10 @@ def build_field_option_context(source, definition):
         options[field.key] = tuple(
             _option(value) for value in (values if definition.complete_options else values[:field.option_limit])
         )
+        # The mode stays as declared even when the column is currently empty: an
+        # unpopulated os_version is "no data yet", not "no candidate list wanted",
+        # and it must start offering candidates as soon as values arrive. The empty
+        # dropdown is suppressed in the template instead.
         modes[field.key] = 'suggest' if mode == 'suggest' or overflow else 'distinct'
 
     return options, modes

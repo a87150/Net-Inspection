@@ -64,8 +64,11 @@ class TaskAggregationTests(TestCase):
         with CaptureQueriesContext(connection) as captured:
             import_module('net.migrations.0036_record_report_fields').backfill_reports(
                 apps, SimpleNamespace(connection=connection))
+        # 标识符引号随后端而变（SQLite/PostgreSQL 用双引号，MySQL 用反引号），
+        # 所以交给 connection.ops 去引，否则断言只在 SQLite 上成立。
+        table = connection.ops.quote_name(Network_Device_Inspection._meta.db_table)
         selects = [q['sql'] for q in captured if q['sql'].startswith('SELECT')
-                   and 'FROM "net_network_device_inspection"' in q['sql']]
+                   and ('FROM ' + table) in q['sql']]
         self.assertEqual(len(selects), 3)
         self.assertTrue(all('LIMIT 200' in sql for sql in selects))
         self.assertEqual(Network_Device_Inspection.objects.filter(report_metrics='CPU 12%').count(), 205)

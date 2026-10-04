@@ -1,4 +1,4 @@
-# 架构与数据库结构
+﻿# 架构与数据库结构
 
 [返回项目首页](../README.md#架构与技术栈)
 
@@ -27,7 +27,7 @@
 | PC 台账 | `Computer` → `net_computer` | `computer_name` 唯一，保存基本资料和最近采集到的硬件信息 |
 | 网络台账 | `Network_Device` → `net_network_device` | IP 唯一，厂商/类型、SSH/SNMP 连接参数和硬件资料 |
 | 服务器台账 | `Server` → `net_server` | IP 唯一，Linux/Windows 类型、SSH 或 HTTP 参数、系统和硬件资料 |
-| 安防台账 | `SecurityDevice` → `net_securitydevice` | IP 唯一，摄像头/录像机/门禁类型、厂商和连接参数 |
+| 弱电台账 | `WeakCurrentDevice` → `net_weakcurrentdevice` | IP 唯一，摄像机/录像机/门禁/对讲/广播/打印机/温湿度计类型、厂商和连接参数 |
 | 配置模板 | `DeviceCollectionTemplate` → `net_devicecollectiontemplate` | `kind + vendor + subtype + version_match` 唯一；`parent` 显式继承；`settings` 保存项目方法、命令、解析和报警规则 |
 | 设备模板绑定 | `DeviceCollectionBinding` → `net_devicecollectionbinding` | `kind + target_id` 唯一；关联指定模板，保存 `overrides` 及加密协议凭据 |
 | 巡检配置 | `InspectionProfile` → `net_inspectionprofile` | 设备类别、所选项目、目标选择器、超时/并发等；同类别配置名称唯一 |
@@ -44,7 +44,7 @@
 | AD 本地对象 | `Domain_Account` / `Domain_Computer` / `Domain_Group` → `net_domain_account` / `net_domain_computer` / `net_domain_group` | AD object GUID 唯一，保存账号、计算机、分组及 DN 等本地快照 |
 | AD 成员与 OU | `DomainMembership` / `DomainOU` → `net_domainmembership` / `net_domainou` | 成员关联分组和一个账户或计算机，区分主组；OU 保存包括空 OU 的可选目录。账户/计算机的分组名称缓存用于数据库筛选、排序和导出 |
 | AD 配置与写操作 | `Domain_Controller_Config` / `DomainOperation` / `DomainOperationSecret` → `net_domain_controller_config` / `net_domainoperation` / `net_domainoperationsecret` | 目录连接设置；操作记录关联申请账号和任务；密码载荷单独加密存储 |
-| 门禁平台与记录 | `AccessRecordSource` / `AccessRecord` → `net_accessrecordsource` / `net_accessrecord` | 来源可关联安防设备；平台游标、加密令牌；`source + source_event_id` 唯一，保存时间/人员/门点/方向/结果 |
+| 门禁平台与记录 | `AccessRecordSource` / `AccessRecord` → `net_accessrecordsource` / `net_accessrecord` | 来源可关联弱电设备；平台游标、加密令牌；`source + source_event_id` 唯一，保存时间/人员/门点/方向/结果 |
 | 项目等级 | `IssueSeverityPolicy` → `net_issueseveritypolicy` | 按项目保存等级覆盖；设备模板可进一步提供项目阈值和等级 |
 | 告警配置 | `AlertChannel` / `AlertPolicy` / `AlertNotificationTemplate` → `net_alertchannel` / `net_alertpolicy` / `net_alertnotificationtemplate` | 渠道、默认/项目路由策略与任务总结样式；策略与渠道为多对多 |
 | 告警状态与事件 | `AlertState` / `AlertEvent` → `net_alertstate` / `net_alertevent` | 按配置、目标和问题键追踪异常/恢复；事件关联任务/目标；每任务总结由唯一 `summary_task` 保证 |
@@ -79,3 +79,46 @@ flowchart TD
 **MariaDB 特别说明**：模型声明的条件唯一约束不等于数据库一定直接支持。`0040_mariadb_active_target_scope` 为目标执行范围添加了生成列 `net_active_execution_scope` 和唯一索引 `net_target_active_scope_mysql`，补足 MariaDB/MySQL 上的对应约束；不要只因 `models.W036` 就认定没有防重，也不要只屏蔽警告而忽略迁移。域分组 DN 的长字段唯一性会触发 `mysql.W003`，须在目标数据库核实索引能力和迁移结果，不能擅自截断 DN 或重置表。
 
 维护时应备份数据库、环境配置和独立密钥。`migrate` 更新结构；`makemigrations --check --dry-run` 只检查模型漂移；`showmigrations` 检查应用状态。不要把 ORM 模型自动序列化结果当成包含全部凭据及原始证据的完整备份。
+
+---
+
+本项目保留两个 Django 应用：`net` 负责数据、业务和外部连接，`index`
+负责页面、表单、模板与 URL。业务代码只使用下列规范路径，不再维护旧模块别名。
+
+## 后端
+
+- `net/models/`：人员、域控、设备、记录、任务、报警和集成配置模型。
+- `net/people/`：人员导入、目录适配、同步和后台执行。
+- `net/domain/`：域控连接、同步、密钥、批量操作和任务执行。
+- `net/devices/`：PC、服务器、网络设备和弱电设备的采集与解析。
+- `net/inspections/`：任务队列、调度、Worker、巡检执行和记录汇总。
+- `net/alerts/`：报警策略、消息、飞书、钉钉和邮件发送。
+- `net/data_exchange/`：CSV 与设备配置导入导出。
+- `net/infrastructure/`：通用 SSH、HTTP、采集结果和脱敏工具。
+- `net/devices/pc/`：PC API 上报、日志入库、留存、分析及终端数据解析。
+- `net/scripts/`：页面下载的 Windows/macOS PC 采集脚本模板与生成器。
+
+## 页面与静态资源
+
+`index/` 按 `dashboard`、`people`、`domain`、`devices`、`inspections`、
+`alerts` 和 `common` 分类。模板使用相同目录名。业务静态资源位于
+`static/app/`，Bootstrap 位于 `static/vendor/bootstrap/`；`staticfiles/`
+是 `collectstatic` 生成目录，不应手工编辑或提交。
+
+## 采集端、部署和测试
+
+- `agents/pc/windows/`：PC 信息采集脚本及其 DLL。
+- `agents/server/windows/`：Windows 服务器巡检 HTTP 服务与安装脚本。
+- `deploy/windows/`：Windows Web/Worker 服务示例。
+- `deploy/linux/systemd/`：Linux systemd 双服务示例。
+- `tests/`：按业务域组织的 Django、前端和 PowerShell 测试。
+- `config/examples/`：不含凭据的配置格式示例。
+- `tools/`：不参与 Django 启动的独立运维客户端。
+
+新增设备采集器时放入对应 `net/devices/<类型>/`，通用协议能力放入
+`net/infrastructure/`；新增页面放入对应 `index/<类型>/` 并在
+`index/urls.py` 注册；新增后台任务放入 `net/inspections/`；新增测试放入
+匹配的 `tests/<类型>/`；新增终端脚本放入 `agents/` 的对应平台目录。
+
+运行数据库、终端本地日志、生成配置、`demo-runtime/`、`.venv/`、
+`.worktrees/` 和 `staticfiles/` 都是运行或生成数据，不参与源码整理。

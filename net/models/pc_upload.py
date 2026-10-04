@@ -1,5 +1,4 @@
 """Terminal write-only API configuration (independent of analysis profiles)."""
-import base64
 import hashlib
 import hmac
 from urllib.parse import urlsplit

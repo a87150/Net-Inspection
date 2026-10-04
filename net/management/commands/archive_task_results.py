@@ -228,9 +228,12 @@ class Command(BaseCommand):
         finally:
             if archive is not None:
                 archive.close()
+        # This count was previously discarded, so an operator saw neither how many
+        # topology observations were pruned nor that the database had in fact changed.
         topology_observations = prune_topology_observations(retention_days=options['topology_evidence_days'], batch_size=options['batch_size'], apply=options['apply'])
         mode = ('archive_then_compact' if options['compact'] else 'archive') if options['apply'] else 'preview'
         self.stdout.write(encoded({'kind': 'summary', 'mode': mode,
                                    'count': count, 'compacted': compacted, 'next_cursor': last_cursor,
-                                   'database_changed': bool(compacted)}).decode().rstrip('\n'))
+                                   'topology_observations': topology_observations,
+                                   'database_changed': bool(compacted or topology_observations)}).decode().rstrip('\n'))
 

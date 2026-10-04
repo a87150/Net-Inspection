@@ -18,7 +18,7 @@ from django.urls import include, path
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
-from net.models import Network_Device, SecurityDevice
+from net.models import Network_Device, WeakCurrentDevice
 
 
 def unused_route(request, **kwargs):
@@ -78,7 +78,7 @@ class BackupAccessTests(SimpleTestCase):
 class BackupHistoryTests(TestCase):
     def setUp(self):
         self.asset = Network_Device.objects.create(ip='192.0.2.10', device_name='edge')
-        self.monitor = SecurityDevice.objects.create(ip='192.0.2.11')
+        self.monitor = WeakCurrentDevice.objects.create(ip='192.0.2.11')
         self.request = RequestFactory().get('/')
         self.request.user = SimpleNamespace(is_authenticated=True, is_active=True,
                                             is_staff=True, is_superuser=False)
@@ -120,7 +120,7 @@ class BackupHistoryTests(TestCase):
             self.assertContains(response, value)
 
     def test_empty_security_history_explains_partial_snapshots(self):
-        response = self.call_list([], 'monitors', self.monitor.pk)
+        response = self.call_list([], 'weakcurrent', self.monitor.pk)
         self.assertContains(response, '暂无')
         self.assertContains(response, '配置节')
 
@@ -137,14 +137,14 @@ class BackupHistoryTests(TestCase):
 
     def test_detail_button_is_only_for_admin_networks_and_monitors(self):
         for admin in (True, False):
-            for kind in ('networks', 'monitors', 'servers', 'computers'):
+            for kind in ('networks', 'weakcurrent', 'servers', 'computers'):
                 with self.subTest(admin=admin, kind=kind):
                     html = render_to_string('devices/detail.html', {
                         'can_administer': admin, 'item_key': kind,
                         'asset': self.asset, 'back_url': '/',
                     })
                     self.assertEqual('配置备份历史' in html,
-                                     admin and kind in ('networks', 'monitors'))
+                                     admin and kind in ('networks', 'weakcurrent'))
 
 
 @override_settings(ROOT_URLCONF=__name__)
@@ -156,7 +156,7 @@ class BackupDownloadTests(TestCase):
         self.addCleanup(self.key_settings.disable)
         self.asset = Network_Device.objects.create(ip='192.0.2.20')
         self.other = Network_Device.objects.create(ip='192.0.2.21')
-        self.monitor = SecurityDevice.objects.create(pk=self.asset.pk, ip='192.0.2.22')
+        self.monitor = WeakCurrentDevice.objects.create(pk=self.asset.pk, ip='192.0.2.22')
         self.request = RequestFactory().get('/')
         self.request.user = SimpleNamespace(is_authenticated=True, is_active=True,
                                             is_staff=True, is_superuser=False)
@@ -191,7 +191,7 @@ class BackupDownloadTests(TestCase):
     def test_wrong_device_type_device_id_and_missing_versions_are_404(self):
         for kind, pk, backup_id in (
             ('networks', self.other.pk, self.backup.pk),
-            ('monitors', self.monitor.pk, self.backup.pk),
+            ('weakcurrent', self.monitor.pk, self.backup.pk),
             ('servers', self.asset.pk, self.backup.pk),
             ('networks', uuid4(), self.backup.pk),
             ('networks', self.asset.pk, uuid4()),

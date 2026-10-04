@@ -65,7 +65,7 @@ HOME_TASK_TYPES = (
 PROJECT_DEVICE_TYPES = {
     'networks': 'network_device',
     'servers': 'server',
-    'monitors': 'monitor',
+    'weakcurrent': 'monitor',
 }
 
 

@@ -71,6 +71,20 @@
 </div>
 {% endif %}
 </div>
+{% if task_project_kind != 'computers' %}
+<div class="row g-3 mt-0">
+<div class="col-md-6">
+<label class="form-label">保存记录</label>
+<select class="form-select" name="record_retention">
+<option value="none"{% if task_default_profile.record_retention == 'none' %} selected{% endif %}>不保留历史（仅保留每台设备最新一条）</option>
+<option value="30"{% if task_default_profile.record_retention == '30' %} selected{% endif %}>保留 30 天</option>
+<option value="90"{% if task_default_profile.record_retention == '90' %} selected{% endif %}>保留 90 天</option>
+<option value="180"{% if not task_default_profile or task_default_profile.record_retention == '180' %} selected{% endif %}>保留 180 天</option>
+</select>
+<div class="form-text">超期记录由后台自动清理；每台设备的最新一条始终保留，否则资产列表的巡检状态会全部变成「未巡检」。</div>
+</div>
+</div>
+{% endif %}
 </section>
           {% if target_rule_form %}
 <section class="inspection-config-block inspection-config-section--targets" data-config-step="targets">
@@ -84,7 +98,7 @@
 <input type="hidden" name="target_rule_mode" value="all" data-target-device-mode>
 <span class="form-label" id="target-device-picker-label">{{ target_rule_form.target_rule_ids.label }}</span>
 <div class="target-device-picker" data-target-device-picker role="group" aria-labelledby="target-device-picker-label">
-<div class="target-device-picker__toolbar">
+<div class="target-device-picker__toolbar{% if task_project_kind == 'servers' %} target-device-picker__toolbar--no-vendor{% endif %}">
 <input class="form-control form-control-sm" type="search" placeholder="按设备名称或 IP 筛选" aria-label="筛选指定设备" data-target-device-search>
 {% if task_project_kind != 'servers' %}
 <select class="form-select form-select-sm" aria-label="按厂商筛选设备" data-target-device-vendor>
@@ -115,7 +129,7 @@
 <div class="target-device-picker__choices">
 {% with selected_target_ids=target_rule_form.target_rule_ids.value|default_if_none:'' %}
 {% for option in target_rule_form.target_device_options %}
-<label class="target-device-picker__option" data-target-device-option data-target-device-label="{{ option.label }}" data-target-device-vendor="{{ option.vendor }}" data-target-device-type="{{ option.device_type }}" data-target-device-items="{{ option.items|join:',' }}">
+<label class="target-device-picker__option" data-target-device-option data-target-device-label="{{ option.label }}" data-target-device-vendor="{{ option.vendor }}" data-target-device-type="{{ option.device_type }}" data-target-device-items="{{ option.items|join:',' }}" data-target-device-methods="{{ option.methods }}">
 <input class="form-check-input" type="checkbox" name="{{ target_rule_form.target_rule_ids.html_name }}" value="{{ option.id }}"{% if option.id in selected_target_ids %} checked{% endif %}>
 <span>{{ option.label }}</span>
 <small>
@@ -135,7 +149,7 @@
 <h3 class="h6 mb-1">
 {% if task_project_kind == 'computers' %}分析项目{% else %}巡检项目{% endif %}
 </h3>
-<p class="mb-0">根据所选设备显示可用项目；混合选择时显示合并项目，每台设备只执行其适用项目。未指定设备时按全部设备。</p>
+<p class="mb-0">先选择设备，再勾选它能执行的巡检项目；混合选择时显示合并项目，每台设备只执行其适用项目。一台没选时不显示任何项目。</p>
 </div>
 </div>
 <fieldset data-bulk-choice-group>
@@ -152,7 +166,7 @@
 {% for key, label in task_item_choices %}
 <label class="col form-check">
 <input class="form-check-input" type="checkbox" data-bulk-choice name="{% if task_project_kind == 'computers' %}analysis_items{% else %}selected_items{% endif %}" value="{{ key }}"{% if key in task_default_items %} checked{% endif %}>
-<span class="form-check-label">{{ label }}</span>
+<span class="form-check-label">{{ label }}<span class="item-method-note" data-item-method="{{ key }}"></span></span>
 </label>
 {% endfor %}
 </div>
@@ -184,11 +198,12 @@
 <div class="col-md-3" data-schedule-interval>
 <label class="form-label">间隔</label>
 <input class="form-control" type="number" min="1" name="interval_value" value="{{ task_default_schedule.interval_value|default:30 }}">
-<div class="form-text">示例：2，单位选小时表示每 2 小时执行。</div>
+<div class="form-text">示例：2，单位选小时表示每 2 小时执行。最小实际间隔约 5 秒：后台按固定间隔轮询计划，且单次采集必须能在该间隔内结束。</div>
 </div>
 <div class="col-md-3" data-schedule-interval>
 <label class="form-label">单位</label>
 <select class="form-select" name="interval_unit">
+<option value="seconds"{% if task_default_schedule and task_default_schedule.interval_unit == 'seconds' %} selected{% endif %}>秒</option>
 <option value="minutes"{% if not task_default_schedule or task_default_schedule.interval_unit == 'minutes' %} selected{% endif %}>分钟</option>
 <option value="hours"{% if task_default_schedule and task_default_schedule.interval_unit == 'hours' %} selected{% endif %}>小时</option>
 </select>

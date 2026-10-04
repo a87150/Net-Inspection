@@ -12,9 +12,24 @@ import uuid
 from concurrent.futures import FIRST_COMPLETED, CancelledError, ThreadPoolExecutor, wait
 
 from django.core.exceptions import ValidationError
-from django.db import OperationalError, close_old_connections, connections
+from django.db import OperationalError, connection, connections
 
-from net.models import TaskRun
+from net.models import TaskHistoryConfig, TaskRun
+
+
+def close_stale_connections():
+    """Drop idle pooled connections, but never one an open transaction is using.
+
+    Django's close_old_connections() also closes whenever the live connection's
+    autocommit differs from the setting, which is exactly the state inside an
+    atomic block. Closing there silently discards the open transaction, so the next
+    query fails with TransactionManagementError instead of doing its job.
+    """
+    for alias in connections:
+        connection = connections[alias]
+        if connection.in_atomic_block:
+            continue
+        connection.close_if_unusable_or_obsolete()
 
 from net.devices.pc.executor import execute_computer_target, persist_computer_execution_failure
 from net.domain.executor import (
@@ -36,6 +51,7 @@ from .queue import (
     renew_lease,
     is_sqlite_busy,
 )
+from .retention import cleanup_inspection_records, cleanup_task_history
 from .schedules import enqueue_due_schedules
 from net.devices.pc.retention import cleanup_retained_logs
 
@@ -91,7 +107,7 @@ class TaskWorker:
     def _run_target(self, target, task_type, lease_guard, domain_context=None):
         """Each pool invocation owns and closes only its thread-local connections."""
         try:
-            close_old_connections()
+            close_stale_connections()
             if lease_guard.is_set():
                 return
             try:
@@ -126,6 +142,14 @@ class TaskWorker:
                         'task=%s target=%s: %s\n%s', target.task_id, target.pk,
                         database_message, ''.join(traceback.format_tb(exc.__traceback__)),
                     )
+                else:
+                    # A non-database failure here is a code defect (TypeError, KeyError, ...).
+                    # It used to be persisted as a task message and never logged, so one
+                    # mistyped field silently failed every target with no traceback.
+                    logging.getLogger(__name__).exception(
+                        'task=%s target=%s raised %s while executing', target.task_id,
+                        target.pk, type(exc).__name__,
+                    )
                 if not lease_guard.is_set():
                     try:
                         if task_type == TaskRun.TaskType.DOMAIN_OPERATION:
@@ -154,9 +178,10 @@ class TaskWorker:
                         return None
         finally:
             try:
-                close_old_connections()
+                close_stale_connections()
             finally:
-                connections.close_all()
+                if not connection.in_atomic_block:
+                    connections.close_all()
 
     def _execute_claimed_task(self, task, stop_event):
         target_runs = list(
@@ -300,6 +325,9 @@ class TaskWorker:
         if schedule:
             with _database_guard():
                 cleanup_retained_logs(limit=self.threads * 4)
+                cleanup_inspection_records(limit=self.threads * 10)
+                cleanup_task_history(TaskHistoryConfig.current_days(),
+                                     limit=self.threads * 10)
                 if self._stopped(stop_event, maintenance_stop):
                     return False
                 enqueue_due_schedules()
@@ -320,21 +348,21 @@ class TaskWorker:
         try:
             while not self._stopped(stop_event, maintenance_stop):
                 try:
-                    close_old_connections()
+                    close_stale_connections()
                     self._maintenance_cycle(stop_event, maintenance_stop)
                 except OperationalError as exc:
                     if not is_sqlite_busy(exc):
-                        logging.getLogger(__name__).error('Worker maintenance database operation failed.')
+                        logging.getLogger(__name__).exception('Worker maintenance database operation failed.')
                 except Exception:
-                    logging.getLogger(__name__).error('Worker maintenance operation failed.')
+                    logging.getLogger(__name__).exception('Worker maintenance operation failed.')
                 finally:
-                    close_old_connections()
-                    connections.close_all()
+                    if not connection.in_atomic_block:
+                        connections.close_all()
                 if maintenance_stop.wait(self.poll_seconds):
                     break
         finally:
-            close_old_connections()
-            connections.close_all()
+            if not connection.in_atomic_block:
+                connections.close_all()
 
     def run_once(self, stop_event=None):
         """Claim at most one task while servicing schedules and alerts."""
@@ -344,12 +372,15 @@ class TaskWorker:
         handoffs = []
         task = None
         try:
-            close_old_connections()
+            close_stale_connections()
             if stop_event.is_set():
                 return False
             with _database_guard():
                 recover_expired_tasks()
                 handoffs = cleanup_retained_logs(limit=self.threads * 4)
+                cleanup_inspection_records(limit=self.threads * 10)
+                cleanup_task_history(TaskHistoryConfig.current_days(),
+                                     limit=self.threads * 10)
                 if stop_event.is_set():
                     return False
                 enqueue_due_schedules()
@@ -377,9 +408,12 @@ class TaskWorker:
                     self._maintenance_cycle(stop_event, schedule=False)
             finally:
                 try:
-                    close_old_connections()
+                    close_stale_connections()
                 finally:
-                    connections.close_all()
+                    # 同 close_stale_connections：事务进行中关连接会丢保存点，
+                    # 之后每条查询都会变成 TransactionManagementError。
+                    if not connection.in_atomic_block:
+                        connections.close_all()
 
     def run_forever(self, stop_event=None):
         """Poll until the optional event is set; portable to Windows and Linux."""

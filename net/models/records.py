@@ -2,7 +2,7 @@ import uuid
 
 from django.db import models
 
-from .devices import Computer, Network_Device, SecurityDevice, Server
+from .devices import Computer, Network_Device, WeakCurrentDevice, Server
 
 
 class RecordStatus(models.TextChoices):
@@ -285,6 +285,10 @@ class ComputerAnalysis(DynamicRecord):
 
     class Meta:
         ordering = ['-created_at']
+        # Record tables are the only ones that grow with (devices x days), and
+        # -created_at is their default sort, so every page was a filesort plus a
+        # full COUNT over an unindexed column.
+        indexes = [models.Index(fields=['-created_at'], name='net_pcanalysis_created_idx')]
 
 
 class InfrastructureRecord(DynamicRecord):
@@ -305,6 +309,7 @@ class Network_Device_Inspection(InfrastructureRecord):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [models.Index(fields=['-created_at'], name='net_netdevinsp_created_idx')]
 
 
 class Server_Inspection(InfrastructureRecord):
@@ -316,17 +321,19 @@ class Server_Inspection(InfrastructureRecord):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [models.Index(fields=['-created_at'], name='net_serverinsp_created_idx')]
 
 
 class Monitor_Inspection(InfrastructureRecord):
     monitor = models.ForeignKey(
-        SecurityDevice,
+        WeakCurrentDevice,
         on_delete=models.CASCADE,
         related_name='inspections',
     )
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [models.Index(fields=['-created_at'], name='net_monitorinsp_created_idx')]
 
 
 class Error_Network_Device(models.Model):

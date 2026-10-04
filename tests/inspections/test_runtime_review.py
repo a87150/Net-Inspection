@@ -1,21 +1,16 @@
 """Regression contracts for the six Task 6 review findings."""
 from concurrent.futures import ThreadPoolExecutor
-from datetime import time, timedelta
+from datetime import time
 from threading import Barrier
-from unittest.mock import patch
 
 from django.db import IntegrityError, connections, transaction
 from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 from tests.auth import login_admin
-from django.utils import timezone
 
-from tests.devices.pc.helpers import create_log_file
 
-from net.models import (ComputerAnalysisProfile, ComputerLogFile, InspectionProfile,
+from net.models import (ComputerAnalysisProfile, InspectionProfile,
                         Schedule, Server, Server_Inspection, TaskRun)
-from net.inspections.queue import claim_next_task
-from net.inspections.executor import _begin_target
 
 
 class ReviewUiTests(TestCase):

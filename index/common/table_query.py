@@ -1,10 +1,9 @@
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from dataclasses import replace
 from urllib.parse import urlencode
 
 from django.core.exceptions import FieldError, ValidationError
-from django.db.models import CharField, F, Q, Value
-from django.db.models.functions import Coalesce, Concat
+from django.db.models import F, Q
 from django.db.models.query import QuerySet
 from django.utils.dateparse import parse_date
 from django.utils import timezone
@@ -55,13 +54,11 @@ def _page_size(value, default):
 
 
 def _table_state(request, definition, prefix, filters, sort, order, *, include_legacy_status=True):
-    q = request.GET.get(_parameter(prefix, 'q'), '').strip()
     page_size = _page_size(
         request.GET.get(_parameter(prefix, 'page_size')),
         definition.default_page_size,
     )
     state = {
-        'q': q,
         'filters': filters,
         'sort': sort,
         'order': order,
@@ -72,7 +69,7 @@ def _table_state(request, definition, prefix, filters, sort, order, *, include_l
         'prefix': prefix,
         'parameter_names': {
             name: _parameter(prefix, name)
-            for name in ('q', 'sort', 'order', 'page_size')
+            for name in ('sort', 'order', 'page_size')
         },
     }
     state['active_filter_keys'] = tuple(filters)
@@ -124,6 +121,8 @@ def _requested_filters(request, definition, prefix):
         if field.kind == 'boolean' and _parse_boolean(value) is None:
             continue
         filters[field.key] = value
+    for key, value in definition.default_filters:
+        filters.setdefault(key, value)
     return filters
 
 
@@ -157,19 +156,27 @@ def _filter_queryset(queryset, definition, filters):
             elif field.kind in {'date', 'datetime'}:
                 from_value = value['_from_date']
                 to_value = value['_to_date']
-                lookup_source = (
-                    f'{field.source}__date'
-                    if field.kind == 'datetime'
-                    else field.source
-                )
-                if from_value:
-                    queryset = queryset.filter(
-                        **{f'{lookup_source}__gte': from_value},
-                    )
-                if to_value:
-                    queryset = queryset.filter(
-                        **{f'{lookup_source}__lte': to_value},
-                    )
+                if field.kind == 'datetime':
+                    # 半开区间，不用 __date。__date 让 MariaDB 先对列做 CONVERT_TZ 再截断成日期，
+                    # 列上的索引直接用不上；而本机 mysql.time_zone_name 为空时 CONVERT_TZ 返回 NULL，
+                    # 整列筛选静默失效。USE_TZ=True 下传入的 naive 时间按 TIME_ZONE 解读。
+                    if from_value:
+                        queryset = queryset.filter(
+                            **{f'{field.source}__gte': datetime.combine(from_value, time.min)},
+                        )
+                    if to_value:
+                        queryset = queryset.filter(
+                            **{f'{field.source}__lt': datetime.combine(to_value + timedelta(days=1), time.min)},
+                        )
+                else:
+                    if from_value:
+                        queryset = queryset.filter(
+                            **{f'{field.source}__gte': from_value},
+                        )
+                    if to_value:
+                        queryset = queryset.filter(
+                            **{f'{field.source}__lte': to_value},
+                        )
         except (FieldError, TypeError, ValidationError, ValueError):
             invalid_keys.append(key)
     for key in invalid_keys:
@@ -186,24 +193,6 @@ def apply_table_query(request, queryset, definition: TableDefinition, *, prefix=
     include_active_filter_options(
         field_options, field_option_modes, filters,
     )
-
-    q = request.GET.get(_parameter(prefix, 'q'), '').strip()
-    if q:
-        fields = {field.key: field for field in definition.fields}
-        condition = Q()
-        for field_key in definition.search_fields:
-            field = fields[field_key]
-            condition |= Q(**{f'{field.query_source or field.source}__icontains': q})
-        if definition.record_semantics and len(definition.search_fields) > 1:
-            parts = []
-            for field_key in definition.search_fields:
-                if parts:
-                    parts.append(Value(' '))
-                field = fields[field_key]
-                parts.append(Coalesce(F(field.query_source or field.source), Value(''), output_field=CharField()))
-            queryset = queryset.alias(_table_search=Concat(*parts, output_field=CharField())).filter(_table_search__icontains=q)
-        else:
-            queryset = queryset.filter(condition)
 
     sort_field, sort, order = _requested_sort(request, definition, prefix)
     source = sort_field.query_source or sort_field.source
@@ -249,7 +238,7 @@ def _legacy_definition(search_fields, default_sort, model_name):
         (('name', 'employee_id', 'department', 'email', 'leader'), 'name', 'People'): 'people',
         (('computer_name', 'os', 'user_name'), 'computer_name', 'Computer'): 'computers',
         (('device_name', 'ip', 'device_type', 'vendor'), 'device_name', 'Network_Device'): 'networks',
-        (('device_name', 'ip', 'device_type', 'vendor'), 'device_name', 'SecurityDevice'): 'monitors',
+        (('device_name', 'ip', 'device_type', 'vendor'), 'device_name', 'WeakCurrentDevice'): 'weakcurrent',
         (('name', 'ip', 'server_type', 'os'), 'name', 'Server'): 'servers',
         (('account_name', 'login_name', 'ou', 'allowed_workstations'), 'login_name', 'Domain_Account'): 'domain_accounts',
         (('computer_name', 'os', 'ou'), 'computer_name', 'Domain_Computer'): 'domain_computers',
@@ -353,22 +342,19 @@ def apply_record_table(request, records, definition, *, prefix=''):
         if all(_record_matches(record, fields[key], value) for key, value in filters.items())
     ]
 
-    q = request.GET.get(_parameter(prefix, 'q'), '').strip().lower()
-    if q:
-        filtered = [
-            record for record in filtered
-            if q in ' '.join(str(_record_value(record, fields[source]) or '') for source in definition.search_fields).lower()
-        ]
-
     category = request.GET.get(_parameter(prefix, 'category'), '').strip()
     if category:
         from net.data_exchange.table_csv import _raw_value
         filtered = [record for record in filtered if _raw_value(record, 'category') == category]
     sort_field, sort, order = _requested_sort(request, definition, prefix)
-    filtered.sort(
-        key=lambda record: (_record_value(record, sort_field) is None, _record_value(record, sort_field)),
-        reverse=order == 'desc',
-    )
+    # Empty values always sort last, in both directions. A single reverse= on a
+    # (is_none, value) key would also flip the marker and put empties first.
+    def sort_value(record):
+        return _record_value(record, sort_field)
+    present = [record for record in filtered if sort_value(record) is not None]
+    missing = [record for record in filtered if sort_value(record) is None]
+    present.sort(key=sort_value, reverse=order == 'desc')
+    filtered = present + missing
     state = _table_state(
         request, definition, prefix, filters, sort, order,
         include_legacy_status=False,

@@ -12,6 +12,9 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 import os
 from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
+
 from net.infrastructure.environment import load_environment
 
 load_environment()
@@ -45,13 +48,34 @@ SECRET_KEY = os.getenv(
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DJANGO_DEBUG', 'true').lower() in {'1', 'true', 'yes'}
+# Defaulting to 'false' makes an unconfigured deployment fail loudly at the secret-key
+# gate below instead of silently serving tracebacks. A developer who wants tracebacks
+# opts in with DJANGO_DEBUG=true.
+DEBUG = os.getenv('DJANGO_DEBUG', 'false').lower() in {'1', 'true', 'yes'}
 
 ALLOWED_HOSTS = [
     host.strip()
     for host in os.getenv('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
     if host.strip()
 ]
+
+# Startup gate. deploy/setup.py checks the same rules while installing, but that runs
+# once; without this a .env that is missing, moved or typo'd starts the service silently
+# with DEBUG and a publicly known SECRET_KEY, which leaks tracebacks and lets anyone
+# forge session cookies and password-reset tokens.
+_INSECURE_SECRET_KEYS = frozenset({
+    'django-insecure-local-development-only-change-me',
+    'changeme',
+    'change-me',
+    'replace-with-random-secret',
+})
+if not DEBUG:
+    if SECRET_KEY in _INSECURE_SECRET_KEYS or len(SECRET_KEY) < 32:
+        raise ImproperlyConfigured(
+            'DJANGO_SECRET_KEY must be an explicit 32+ character secret when DJANGO_DEBUG is off. '
+            'A known key lets anyone forge sessions and password-reset tokens. '
+            'Restore the key from your .env, or re-run deploy/setup.py to generate one.'
+        )
 
 
 # Application definition
@@ -114,7 +138,12 @@ LOGOUT_REDIRECT_URL = '/'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-if os.getenv('DB_ENGINE', 'sqlite').lower() == 'mysql':
+# Imported for its connection_created receiver, not for sqlite_timeout below.
+import net.infrastructure.database  # noqa: F401
+
+DB_ENGINE = os.getenv('DB_ENGINE', 'sqlite').strip().lower()
+
+if DB_ENGINE == 'mysql':
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.mysql',
@@ -127,9 +156,12 @@ if os.getenv('DB_ENGINE', 'sqlite').lower() == 'mysql':
             'CONN_HEALTH_CHECKS': True,
             'OPTIONS': {'charset': 'utf8mb4', 'isolation_level': 'read committed',
                         'init_command': "SET sql_mode='STRICT_TRANS_TABLES', time_zone='+00:00'", 'connect_timeout': 5},
+            # 保持 Django 默认的 test_<库名>：单元测试每次重建、用完即弃，不能碰 net 或 net-test。
+            # net-test 是 demo 的常驻库（deploy.demo 用它），里面可能存着真实迁移数据。
+            'TEST': {'NAME': os.getenv('DB_TEST_NAME', 'test_' + os.getenv('DB_NAME', 'net'))},
         }
     }
-else:
+elif DB_ENGINE == 'sqlite':
     from net.infrastructure.database import sqlite_timeout
 
     sqlite_database_path = os.getenv('DJANGO_SQLITE_PATH', '').strip()
@@ -140,6 +172,16 @@ else:
             'OPTIONS': {'timeout': sqlite_timeout(os.getenv('NET_SQLITE_TIMEOUT', '5'))},
         }
     }
+elif DB_ENGINE == 'postgresql':
+    raise ImproperlyConfigured(
+        'PostgreSQL is recognised but not implemented yet; '
+        'see the pending items in docs/changelog.md.')
+else:
+    # Refuse to fall through to SQLite: a mistyped engine would otherwise open a
+    # different, empty database and read as if every record had vanished.
+    raise ImproperlyConfigured(
+        f'DB_ENGINE must be "mysql", "sqlite" or "postgresql"; got {DB_ENGINE!r}.')
+
 
 # Permission for the explicit sqlite_wal maintenance command, not a startup hook.
 NET_PAGE_CACHE_ENABLED = os.getenv('NET_PAGE_CACHE_ENABLED', 'false').lower() in {'1', 'true', 'yes'}
@@ -200,3 +242,34 @@ STATIC_ROOT = Path(os.getenv('DJANGO_STATIC_ROOT', str(BASE_DIR / 'staticfiles')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 SESSION_COOKIE_AGE = 36000
+
+
+# Logging. Without this the project-wide logger calls fall through to Python's
+# lastResort handler (stderr, WARNING+, no format), so level and destination could
+# not be configured per environment. deploy/service.py already captures the Worker
+# streams, so console is the right default for both roles.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {'format': '{asctime} {levelname} {name} {message}', 'style': '{'},
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'standard',
+        },
+    },
+    'loggers': {
+        'net': {
+            'handlers': ['console'],
+            'level': os.getenv('NET_LOG_LEVEL', 'INFO' if not DEBUG else 'DEBUG'),
+            'propagate': False,
+        },
+        'index': {
+            'handlers': ['console'],
+            'level': os.getenv('NET_LOG_LEVEL', 'INFO' if not DEBUG else 'DEBUG'),
+            'propagate': False,
+        },
+    },
+}

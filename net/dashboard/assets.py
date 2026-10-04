@@ -26,7 +26,7 @@ from net.models import (
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
-    SecurityDevice,
+    WeakCurrentDevice,
     Monitor_Inspection,
     Network_Device,
     Network_Device_Inspection,
@@ -189,9 +189,9 @@ def build_asset_card_summaries() -> list[dict]:
             ),
         ),
         _safe_summary(
-            'monitors',
+            'weakcurrent',
             lambda: _infrastructure_summary(
-                SecurityDevice, Monitor_Inspection, 'monitor', 'monitors',
+                WeakCurrentDevice, Monitor_Inspection, 'monitor', 'weakcurrent',
             ),
         ),
     ]

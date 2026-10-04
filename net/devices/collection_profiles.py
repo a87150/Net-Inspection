@@ -7,12 +7,11 @@ import re
 from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db.models import Q
 
 VENDORS = {
     'networks': [('', '全部厂商'), ('huawei', '华为'), ('h3c', '华三'),
                  ('ruijie', '锐捷'), ('sangfor', '深信服'), ('cisco', '思科'), ('generic', '其他')],
-    'monitors': [('', '全部厂商'), ('hikvision', '海康威视'), ('dahua', '大华'),
+    'weakcurrent': [('', '全部厂商'), ('hikvision', '海康威视'), ('dahua', '大华'),
                  ('uniview', '宇视'), ('tiandy', '天地伟业'), ('zkteco', '中控智慧'), ('generic', '其他')],
     'servers': [],
 }
@@ -27,11 +26,24 @@ def vendor_choices(kind, current=''):
 
 SUBTYPES = {
  'networks': [('','全部类型'),('router','路由器'),('switch','交换机'),('ac','无线控制器 AC'),('ac_gateway','上网行为管理 / 安全网关 AC'),('ap','无线 AP'),('firewall','防火墙'),('other','其他')],
- 'monitors': [('','全部类型'),('nvr','录像机'),('camera','监控摄像头'),('access','门禁'),('other','其他')],
+ 'weakcurrent': [('','全部类型'),('nvr','录像机'),('camera','监控摄像头'),('access','门禁'),('intercom','对讲'),('broadcast','广播'),('printer','打印机'),('environment','温湿度计'),('other','其他')],
  'servers': [('','全部类型'),('linux','Linux'),('windows','Windows')],
 }
+def device_type_label(kind, value):
+    """台账里存的是代码（switch/camera）或历史自由文本，这里统一翻成中文。
+
+    认不出来的原样返回 —— 台账允许自由文本，不能因为没有标签就显示空白。
+    新增设备类型只需要改 SUBTYPES 一处，表格、筛选、设备选择器都会跟着变。
+
+    空值直接放行：SUBTYPES 的第一项是表单专用的「全部类型」，不是设备类型。
+    """
+    if not value:
+        return value
+    return dict(SUBTYPES.get(kind, ())).get(str(value), value)
+
+
 ALIASES = {'华为':'huawei','华三':'h3c','锐捷':'ruijie','深信服':'sangfor','思科':'cisco','海康':'hikvision','海康威视':'hikvision','大华':'dahua','其它':'generic','宇视':'uniview','天地伟业':'tiandy','中控':'zkteco','中控智慧':'zkteco'}
-TYPE_ALIASES = {'路由':'router','路由器':'router','交换':'switch','交换机':'switch','无线控制器':'ac','上网行为管理':'ac_gateway','安全网关':'ac_gateway','无线ap':'ap','防火墙':'firewall','录像机':'nvr','dvr':'nvr','监控':'camera','摄像头':'camera','摄像机':'camera','门禁':'access','门禁控制器':'access'}
+TYPE_ALIASES = {'路由':'router','路由器':'router','交换':'switch','交换机':'switch','无线控制器':'ac','上网行为管理':'ac_gateway','安全网关':'ac_gateway','无线ap':'ap','防火墙':'firewall','录像机':'nvr','dvr':'nvr','监控':'camera','摄像头':'camera','摄像机':'camera','门禁':'access','门禁控制器':'access','对讲':'intercom','广播':'broadcast','打印机':'printer','温湿度计':'environment','温湿度传感器':'environment','闸机':'access','门禁闸机':'access'}
 SECRET_FIELDS = ('snmp_community','snmp_auth_password','snmp_priv_password')
 SNMP_FIELDS = ('snmp_version','snmp_port','snmp_security_level','snmp_username','snmp_auth_protocol','snmp_priv_protocol','snmp_context_name','snmp_retries')
 NETWORK_KEYS = {'version','vendor','subtype','commands','parsers','snmp_oids','mib_modules','snmp_transforms'}
@@ -100,6 +112,30 @@ def collection_method_choices(kind, item):
     return choices
 
 
+def item_transports(kind, asset, effective):
+    """这台设备每个巡检项目实际会走的采集方式，形如 {'cpu': 'SNMP/SSH'}。
+
+    口径跟着采集器走：网络用 _network_item_plan，服务器按 server_type，
+    弱电按 _collect_auto 的 SNMP -> HTTP API -> Ping 首选。
+    所以界面上写的备注就是真会用的那条路，而不是「理论上可以怎么采」。
+    """
+    items = supported_collection_items(kind, asset, effective)
+    if kind == 'servers':
+        label = 'HTTP' if str(getattr(asset, 'server_type', '')).lower() == 'windows' else 'SSH'
+        return {item: label for item in items}
+    if kind == 'networks':
+        connection = getattr(asset, 'connection_type', '')
+        if connection == 'sangfor_api':
+            return {item: 'HTTP API' for item in items}
+        from net.devices.network.collector import _network_item_plan
+        snmp_items, ssh_items, _ = _network_item_plan(connection, items, effective.get('item_methods'))
+        return {item: '/'.join(label for label, group in (('SNMP', snmp_items), ('SSH', ssh_items))
+                               if item in group) for item in items}
+    has_snmp = bool(effective.get('snmp'))
+    label = 'SNMP' if has_snmp else ('HTTP API' if getattr(asset, 'api_url', '') else 'Ping 在线检查')
+    return {item: label for item in items}
+
+
 def validate_settings(kind, value):
     from net.inspections.issues import PROJECT_RULES, METRIC_DEFAULTS
     if kind not in SUBTYPES or not isinstance(value, dict):
@@ -140,7 +176,7 @@ def validate_settings(kind, value):
         Network_Device._meta.get_field(key).clean(item, None)
     if value.get('protocol','auto') not in {'auto','api','snmp','ping'}:
         raise ValidationError('安防采集协议无效。')
-    if kind != 'monitors' and ('protocol' in value or 'snmp' in value):
+    if kind != 'weakcurrent' and ('protocol' in value or 'snmp' in value):
         raise ValidationError('网络设备 SNMP 连接参数请在设备基本配置中填写。')
     if any(key in value for key in ('commands','parsers','snmp_oids','mib_modules','snmp_transforms')):
         from net.devices.network.templates import validate_collection_settings
@@ -276,11 +312,11 @@ def resolve_collection_settings(kind, asset, *, templates=None, bindings=None):
             if isinstance(values,dict):
                 for key in values:sources[section+'.'+key] = '本设备'
         result['_credentials_identity'] = hashlib.sha256(binding.encrypted_credentials.encode()).hexdigest()
-    if kind == 'monitors':
+    if kind == 'weakcurrent':
         result.setdefault('_credentials_identity', hashlib.sha256(b'').hexdigest())
     result.pop('selected_items',None)
     result.pop('alert_items',None)
-    if kind=='monitors' or (kind=='networks' and getattr(asset,'connection_type','')=='snmp') or result.get('item_enabled'):
+    if kind=='weakcurrent' or (kind=='networks' and getattr(asset,'connection_type','')=='snmp') or result.get('item_enabled'):
         result['selected_items'] = supported_collection_items(kind,asset,result)
     return result
 
@@ -288,7 +324,7 @@ def resolve_collection_settings(kind, asset, *, templates=None, bindings=None):
 def attach_live_credentials(kind, target_id, effective):
     from net.models import DeviceCollectionBinding
     result = deepcopy(effective)
-    if kind != 'monitors':
+    if kind != 'weakcurrent':
         return result
     row = DeviceCollectionBinding.objects.filter(kind=kind,target_id=target_id).first()
     identity = hashlib.sha256((row.encrypted_credentials if row else '').encode()).hexdigest()
@@ -296,4 +332,3 @@ def attach_live_credentials(kind, target_id, effective):
         raise ValidationError('SNMP 凭据在任务入队后已变更，请重新创建巡检任务。')
     result['snmp'] = {**result.get('snmp',{}), **decrypt_credentials(row)}
     return result
-

@@ -54,11 +54,66 @@ class AlertPolicyMode(models.TextChoices):
     OVERRIDE = 'override', '使用项目告警策略'
 
 
+# Inspection records are the only tables that grow with (devices x runs), and the
+# worker has no other way to reclaim them. "none" keeps the newest record per device
+# rather than deleting everything, because the asset list derives its 上次巡检状态
+# (normal/abnormal/unchecked) from that latest row.
+RECORD_RETENTION_CHOICES = (
+    ('none', '不保留历史（仅保留每台设备最新一条）'),
+    ('30', '保留 30 天'),
+    ('90', '保留 90 天'),
+    ('180', '保留 180 天'),
+)
+RECORD_RETENTION_DAYS = {'none': 0, '30': 30, '90': 90, '180': 180}
+
+# Task history is a separate, global setting: every task of every type accumulates
+# TaskRun + TaskTargetRun rows, and those rows are what the record retention above
+# cannot reclaim. There is deliberately no "keep nothing" option here -- unlike an
+# inspection record, a task row is the audit trail for an action someone triggered.
+TASK_HISTORY_RETENTION_CHOICES = (
+    ('30', '保留 30 天'),
+    ('90', '保留 90 天'),
+    ('180', '保留 180 天'),
+)
+TASK_HISTORY_RETENTION_DAYS = {'30': 30, '90': 90, '180': 180}
+
+
+class TaskHistoryConfig(models.Model):
+    """Singleton: how long finished background tasks are kept."""
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    retention_days = models.CharField(
+        max_length=8,
+        choices=TASK_HISTORY_RETENTION_CHOICES,
+        default='90',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=models.Q(id=1),
+                                   name='net_task_history_singleton_ck'),
+        ]
+
+    @classmethod
+    def load(cls):
+        return cls.objects.filter(pk=1).first()
+
+    @classmethod
+    def current_days(cls):
+        config = cls.load()
+        return TASK_HISTORY_RETENTION_DAYS.get(
+            getattr(config, 'retention_days', '') or '90', 90)
+
+    def __str__(self):
+        return f'任务保留 {self.retention_days} 天'
+
+
 class InspectionProfile(models.Model):
     class DeviceType(models.TextChoices):
         NETWORK_DEVICE = 'network_device', '网络设备'
         SERVER = 'server', '服务器'
-        MONITOR = 'monitor', '安防设备'
+        WEAK_CURRENT = 'monitor', '弱电设备'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
@@ -86,6 +141,11 @@ class InspectionProfile(models.Model):
         max_length=16,
         choices=AlertPolicyMode.choices,
         default=AlertPolicyMode.INHERIT,
+    )
+    record_retention = models.CharField(
+        max_length=8,
+        choices=RECORD_RETENTION_CHOICES,
+        default='180',
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -198,6 +258,7 @@ class Schedule(models.Model):
         DAILY = 'daily', '每天执行'
 
     class IntervalUnit(models.TextChoices):
+        SECONDS = 'seconds', '秒'
         MINUTES = 'minutes', '分钟'
         HOURS = 'hours', '小时'
 
@@ -278,7 +339,7 @@ class Schedule(models.Model):
                         kind='interval',
                         interval_value__isnull=False,
                         interval_value__gt=0,
-                        interval_unit__in=('minutes', 'hours'),
+                        interval_unit__in=('seconds', 'minutes', 'hours'),
                         daily_time__isnull=True,
                     )
                     | models.Q(
@@ -311,7 +372,7 @@ class Schedule(models.Model):
             if self.interval_value is None:
                 errors['interval_value'] = '间隔计划必须设置间隔数值。'
             if not self.interval_unit:
-                errors['interval_unit'] = '间隔计划必须设置分钟或小时。'
+                errors['interval_unit'] = '间隔计划必须设置秒、分钟或小时。'
             if self.daily_time is not None:
                 errors['daily_time'] = '间隔计划不能设置每日时间。'
         elif self.kind == self.Kind.DAILY:
@@ -830,7 +891,7 @@ class TaskTargetRun(models.Model):
         DOMAIN_CONFIG = 'domain_config', '域控目录'
         NETWORK_DEVICE = 'network_device', '网络设备'
         SERVER = 'server', '服务器'
-        MONITOR = 'monitor', '安防设备'
+        WEAK_CURRENT = 'monitor', '弱电设备'
         COMPUTER_LOG = 'computer_log', '计算机日志'
         PEOPLE_SOURCE = 'people_source', '人员目录来源'
         DOMAIN_ACCOUNT = 'domain_account', '域账号'

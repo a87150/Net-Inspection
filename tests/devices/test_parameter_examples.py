@@ -31,7 +31,7 @@ class DeviceParameterExamplesTests(TestCase):
                 self.assertFalse(clear.save().os_version)
 
     def test_device_text_inputs_have_examples_but_choice_controls_do_not(self):
-        for kind in ('networks', 'servers', 'monitors'):
+        for kind in ('networks', 'servers', 'weakcurrent'):
             form = device_form(kind)
             for name, field in form.fields.items():
                 with self.subTest(kind=kind, field=name):
@@ -42,11 +42,11 @@ class DeviceParameterExamplesTests(TestCase):
                         self.assertIn('示例', field.help_text)
             self.assertFalse(form['ip'].value())
         self.assertIn('Ubuntu', device_form('servers').fields['os_version'].help_text)
-        self.assertNotIn('huawei', device_form('monitors').fields['vendor'].help_text)
+        self.assertNotIn('huawei', device_form('weakcurrent').fields['vendor'].help_text)
 
     def test_import_dialog_includes_category_guidance_for_all_importable_devices(self):
         login_admin(self.client)
-        for kind in ('networks', 'servers', 'monitors'):
+        for kind in ('networks', 'servers', 'weakcurrent'):
             response = self.client.get(reverse('asset_list', args=[kind]))
             self.assertContains(response, '字段填写示例')
             self.assertContains(response, 'CHANGE-ME')
@@ -78,15 +78,15 @@ class DeviceParameterExamplesTests(TestCase):
         from index.devices.collection_profiles import CollectionSettingsForm
         import re
         login_admin(self.client)
-        for kind in ('networks', 'servers', 'monitors'):
+        for kind in ('networks', 'servers', 'weakcurrent'):
             response = self.client.get(reverse('collection_templates', args=[kind]))
             self.assertEqual(response.status_code, 200)
             self.assertIn('示例：', response.content.decode(), kind)
-            if kind != 'monitors':
+            if kind != 'weakcurrent':
                 self.assertTrue('示例：80' in response.content.decode(), kind)
             if kind == 'servers':
                 self.assertNotContains(response, 'display cpu-usage')
-            if kind == 'monitors':
+            if kind == 'weakcurrent':
                 self.assertContains(response, 'snmp-reader')
         form = CollectionSettingsForm(kind='networks')
         pattern = form.fields['template_cpu'].widget.attrs['placeholder']

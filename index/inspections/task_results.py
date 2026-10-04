@@ -15,7 +15,7 @@ def task_result_context(request, task):
     elif task.task_type == 'inspection':
         device_type = (task.inspection_profile.device_type if task.inspection_profile_id
                        else task.profile_snapshot.get('device_type'))
-        kind = {'network_device': 'networks', 'server': 'servers', 'monitor': 'monitors'}.get(device_type)
+        kind = {'network_device': 'networks', 'server': 'servers', 'monitor': 'weakcurrent'}.get(device_type)
         if not kind:
             return {}
         rows = _infrastructure_records(kind, task=task)

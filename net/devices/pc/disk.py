@@ -19,13 +19,13 @@ def volumes(payload):
     value = bitlocker.get('磁盘卷信息') if isinstance(bitlocker, dict) else None
     if not isinstance(value, list):
         return None
-    from net.devices.pc.snapshot import _gib
+    from net.devices.pc.snapshot import _optional_gib
     result = []
     for row in value:
         if not isinstance(row, dict):
             result.append({})
             continue
-        size = _gib(row.get('大小'))
+        size = _optional_gib(row.get('大小'))
         result.append({'device': row.get('卷'), 'total_bytes': int(size * 1024**3) if size is not None else None})
     return result
 
@@ -47,14 +47,14 @@ def _summary_volumes(summary):
             continue
         row = {'device': match['device'].strip()}
         for field in ('total', 'free'):
-            value = number(match[field].replace(',', ''))
+            value = _size_bytes(match[field].replace(',', ''))
             factor = 1 if match[field + '_unit'].upper() == 'B' else 1024**3
             row[field + '_bytes'] = int((value * factor).to_integral_value()) if value is not None else None
         result.append(row)
     return result
 
 
-def number(value):
+def _size_bytes(value):
     if isinstance(value, bool):
         return None
     try:
@@ -73,7 +73,7 @@ def total_gib(payload):
         if not isinstance(row, dict):
             return None
         device = str(row.get('device') or '').strip().rstrip(':').casefold()
-        size = number(row.get('total_bytes'))
+        size = _size_bytes(row.get('total_bytes'))
         if not device or device in seen or size is None or size <= 0:
             return None
         seen.add(device)
@@ -92,7 +92,7 @@ def check_disk(payload, issues, maximum):
             continue
         device = str(row.get('device') or '').strip()
         key = device.rstrip(':').casefold()
-        total, free = number(row.get('total_bytes')), number(row.get('free_bytes'))
+        total, free = _size_bytes(row.get('total_bytes')), _size_bytes(row.get('free_bytes'))
         if not key or key in seen or total is None or total <= 0 or free is None or free > total:
             missing = True
             continue

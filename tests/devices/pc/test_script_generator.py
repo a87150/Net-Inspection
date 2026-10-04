@@ -7,7 +7,9 @@ import tempfile
 import threading
 from types import SimpleNamespace
 from unittest import TestCase
+
 from net.scripts.generator import generate_pc_script
+from tests.powershell import requires_powershell
 def config_of(script):
     return json.loads(base64.b64decode(script.content.split('# PC_CONFIG: ', 1)[1].splitlines()[0]))
 class CaptureServer:
@@ -45,6 +47,7 @@ class PcScriptGeneratorTests(TestCase):
     def test_rejects_invalid_api_config(self):
         for source in (SimpleNamespace(_state=SimpleNamespace(adding=True),pk=None,endpoint_url='https://ok.test/',get_token=lambda:'x'*32),SimpleNamespace(_state=SimpleNamespace(adding=False),pk=1,endpoint_url='bad',get_token=lambda:'x'*32),SimpleNamespace(_state=SimpleNamespace(adding=False),pk=1,endpoint_url='https://ok.test/',get_token=lambda:''),):
             with self.assertRaises(ValueError): generate_pc_script(self.profile,source,'windows')
+    @requires_powershell
     def test_windows_posts_exact_local_bytes_and_retries(self):
         functions=generate_pc_script(self.profile,self.source,'windows').content.split('# Collection entry point',1)[0]
         with CaptureServer([500,500,201]) as server,tempfile.TemporaryDirectory() as directory:

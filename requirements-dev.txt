@@ -1,0 +1,6 @@
+# Development-only tooling. Never install this for a deployment: it ships
+# nothing the running service needs, and requirements.lock.txt is the
+# production lock that deploy/setup.py installs.
+-r requirements.txt
+ruff==0.16.10
+pre-commit==4.5.0

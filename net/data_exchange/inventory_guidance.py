@@ -41,10 +41,10 @@ DEVICE_EXAMPLES = {
         'api_url': ('http://192.0.2.21:9180/inspection', '仅 Windows；通常留空，自动使用设备 IP 与 9180。改过脚本地址才填此项。'),
         'api_token': ('CHANGE-ME', '仅 Windows；替换为 InspectionHttpService.ps1 的 Token，Linux 留空。'),
     },
-    'monitors': {
+    'weakcurrent': {
         'device_name': ('前门摄像机', '方便辨认设备的名称，如机房录像机、前门门禁。'),
         'ip': ('192.0.2.30', '设备管理 IP，也用于 Ping 在线检查。'),
-        'device_type': ('camera', 'camera 摄像机、nvr 录像机、access 门禁、other 其他。'),
+        'device_type': ('camera', 'camera 摄像机、nvr 录像机、access 门禁、intercom 对讲、broadcast 广播、printer 打印机、environment 温湿度计、other 其他。'),
         'vendor': ('hikvision', 'hikvision 海康、dahua 大华、uniview 宇视、tiandy 天地伟业、zkteco 中控、generic 其他。'),
         'api_url': ('https://192.0.2.30/api/status', '仅演示地址格式，并非厂商通用接口；请按实际接口填写。无 API 可留空，在巡检设置中选择 SNMP 或 Ping。'),
         'api_username': ('readonly', '使用账号密码认证时填写实际只读账号；仅令牌认证时留空。'),

@@ -91,6 +91,12 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 12px 32px -30px rgba(24, 38, 68, .9);
 }
 
+/* 「SNMP 高级参数」这类折叠区块是 details 套在卡片里的。foundation.css 给所有
+   details 上了不透明的 #fafbfc 底色，嵌进玻璃卡片就变成一块白板。 */
+.config-section-card > details {
+    background: transparent;
+}
+
 .config-section-heading {
     display: flex;
     align-items: flex-start;

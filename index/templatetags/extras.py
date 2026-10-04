@@ -44,6 +44,11 @@ def format_table_value(value, kind):
 
 @register.filter
 def format_table_field(value, field):
+    # choice 字段存的是代码（camera/nvr），筛选用的是中文标签；表格要跟筛选一致。
+    # CSV 导出（data_exchange/table_csv.py）一直是这么映射的，这里补齐 HTML 侧。
+    labels = dict(field.choices or ())
+    if field.kind == 'choice' and value in labels:
+        value = labels[value]
     formatted = format_table_value(value, field.kind)
     if formatted != '-' and field.key in {'memory_total_gb', 'disk_total_gb'}:
         return f'{formatted} GB'

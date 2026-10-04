@@ -3,7 +3,7 @@ import uuid
 from django.core.exceptions import ValidationError
 from django.db import models
 
-KINDS = [('networks', '网络设备'), ('servers', '服务器'), ('monitors', '安防设备')]
+KINDS = [('networks', '网络设备'), ('servers', '服务器'), ('weakcurrent', '弱电设备')]
 
 class DeviceCollectionTemplate(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

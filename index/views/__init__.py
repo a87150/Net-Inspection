@@ -7,7 +7,10 @@ from index.devices.views import (
     people_statistics,
     run_infrastructure_inspection,
 )
-from index.dashboard.views import index, with_latest_status
+# with_latest_status comes from its definition site: index.dashboard.views only
+# re-exported it, which a linter correctly flags and removes.
+from index.dashboard.views import index
+from net.dashboard.assets import with_latest_status
 from index.dashboard.operations import operations_overview, operations_overview_data
 from index.domain.views import (
     domain_account_detail,
@@ -41,6 +44,7 @@ from index.inspections.tasks import (
     manual_task_create,
     task_cancel,
     task_detail,
+    task_history_settings,
     task_list,
     task_modal_context,
 )
@@ -97,6 +101,10 @@ __all__ = [
     'configuration_download',
     'configuration_zip',
     'pc_script_download',
+    # Re-exported for index.urls, which reaches them as views.computer_log_*.
+    # Without this entry a linter cannot see the use and removes them.
+    'computer_log_list',
+    'computer_log_detail',
     'people_provider_save',
     'people_schedule_save',
     'people_test',
@@ -112,6 +120,7 @@ __all__ = [
     'alert_policy_save',
     'alert_test_send',
     'task_detail',
+    'task_history_settings',
     'task_list',
     'task_modal_context',
     'manual_task_create',

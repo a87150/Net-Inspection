@@ -1,16 +1,15 @@
 from tests import response_body
 
-import json
 from datetime import datetime, time, timezone as dt_timezone
 from unittest.mock import patch
-from django.test import TestCase, Client
+from django.test import TestCase
 from django.urls import reverse
 from tests.auth import login_admin, login_reader
 from django.utils import timezone
 from tests.devices.pc.helpers import create_log_file, analysis_task_url
 
-from net.models import (Computer, ComputerAnalysisProfile, ComputerLogFile, InspectionProfile,
-                        People, Schedule, Server, Server_Inspection, TaskRun)
+from net.models import (Computer, InspectionProfile,
+                        People, Schedule, Server, Server_Inspection)
 from net.inspections.schedules import enqueue_due_schedules
 
 
@@ -45,6 +44,7 @@ class FinalOperatorTests(TestCase):
         schedule = Schedule.objects.create(inspection_profile=self.profile, kind='daily', daily_time=time(9),
                                            next_run_at=self.now)
         cases = [({'daily_time': '07:00'}, self.now.replace(day=2, hour=23)-timezone.timedelta(days=1)),
+                 ({'schedule_kind': 'interval', 'interval_value': 30, 'interval_unit': 'seconds'}, self.now+timezone.timedelta(seconds=30)),
                  ({'schedule_kind': 'interval', 'interval_value': 45, 'interval_unit': 'minutes'}, self.now.replace(minute=45)),
                  ({'schedule_kind': 'interval', 'interval_value': 2, 'interval_unit': 'hours'}, self.now.replace(hour=2))]
         for changes, expected in cases:
@@ -57,6 +57,32 @@ class FinalOperatorTests(TestCase):
             self.save_profile()
         schedule.refresh_from_db()
         self.assertEqual(schedule.next_run_at, self.now.replace(hour=7))
+
+    def test_seconds_interval_is_accepted_and_scheduled(self):
+        """A seconds interval schedules literally, unlike the coarser units.
+
+        Note this only proves the schedule computes the right next_run_at. Real
+        second-level cadence additionally needs WORKER_POLL_SECONDS lowered, and
+        a collection that finishes inside the interval; see
+        docs/changelog.md.
+        """
+        from net.inspections.schedules import next_run_at
+
+        schedule = Schedule.objects.create(
+            inspection_profile=self.profile, kind='interval',
+            interval_value=5, interval_unit='seconds', next_run_at=self.now,
+        )
+        self.assertEqual(next_run_at(schedule, self.now),
+                         self.now + timezone.timedelta(seconds=5))
+        # The database constraint must accept the new unit...
+        schedule.refresh_from_db()
+        self.assertEqual(schedule.interval_unit, 'seconds')
+        # ...and still reject a unit that was never declared.
+        with self.assertRaises(Exception):
+            Schedule.objects.create(
+                inspection_profile=self.profile, kind='interval',
+                interval_value=5, interval_unit='fortnights',
+            )
 
     def test_foreign_deleted_and_malformed_selected_ids_do_not_change_rule(self):
         from net.models import Network_Device

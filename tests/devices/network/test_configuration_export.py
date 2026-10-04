@@ -17,7 +17,7 @@ from django.utils import timezone
 
 from index.inspections.forms import inspection_item_choices
 from net.models import (AlertChannel, Domain_Controller_Config, InspectionProfile,
-                        SecurityDevice, Network_Device, PeopleSyncSource, Server)
+                        WeakCurrentDevice, Network_Device, PeopleSyncSource, Server)
 from net.infrastructure.http_collectors import collect_security_api
 from net.devices.security.payload import collect_native_configuration
 from net.infrastructure.ssh_collectors import collect_network_ssh
@@ -129,7 +129,7 @@ class ConfigurationTests(TestCase):
         self.device = Network_Device.objects.create(
             ip='192.0.2.10', device_name='edge', vendor='Cisco',
             username='ssh-user-private', password='ssh-pass-private')
-        self.camera = SecurityDevice.objects.create(
+        self.camera = WeakCurrentDevice.objects.create(
             ip='192.0.2.20', device_name='camera', vendor='大华',
             api_url='https://192.0.2.20/status?token=URL-token-private',
             api_username='api-user-private', api_password='api-pass-private',
@@ -288,10 +288,10 @@ class ConfigurationTests(TestCase):
         self.assertFalse(call.kwargs['allow_redirects'])
         self.http.side_effect = AssertionError('download must be offline')
         self.native_http.side_effect = AssertionError('download must be offline')
-        result = self.single(self.camera, 'monitors')
+        result = self.single(self.camera, 'weakcurrent')
         self.assertEqual(result.status_code, 404)
         self.assertIn('完整备份'.encode(), result.content)
-        archive = self.client.get('/assets/monitors/configurations.zip')
+        archive = self.client.get('/assets/weakcurrent/configurations.zip')
         with ZipFile(BytesIO(archive.content)) as bundle:
             self.assertEqual(bundle.namelist(), ['manifest.csv'])
 
@@ -349,7 +349,7 @@ class ConfigurationTests(TestCase):
         result = self.exports().latest_configuration(self.camera)
         self.assertEqual(result.status, 'missing')
         self.assertIn('完整备份', result.message)
-        other = SecurityDevice.objects.create(ip='192.0.2.30', vendor='unknown')
+        other = WeakCurrentDevice.objects.create(ip='192.0.2.30', vendor='unknown')
         other.inspections.create(details={'config_info': snapshot({'status': 'online'}, vendor='unknown', fmt='json')})
         self.assertEqual(self.exports().latest_configuration(other).status, 'missing')
 
@@ -468,7 +468,7 @@ class ConfigurationTests(TestCase):
                 self.assertNotIn('..', name)
 
     def test_ui_exposes_scoped_downloads_without_changing_other_asset_actions(self):
-        for kind, asset in (('networks', self.device), ('monitors', self.camera)):
+        for kind, asset in (('networks', self.device), ('weakcurrent', self.camera)):
             result = self.client.get(f'/assets/{kind}/', {'filter_vendor': asset.vendor})
             html = result.content.decode()
             self.assertContains(result, f'href="/assets/{kind}/configurations.zip"')
@@ -500,7 +500,7 @@ class ConfigurationTests(TestCase):
             header.index('data-column-key'),
         )
         self.assertLess(html.index('data-device-select-all'), html.index('data-selected-config-export'))
-        for kind in ('servers', 'monitors'):
+        for kind in ('servers', 'weakcurrent'):
             with self.subTest(kind=kind):
                 page = self.client.get(f'/assets/{kind}/')
                 self.assertContains(page, 'data-device-selection-column')
@@ -637,7 +637,10 @@ class ConfigurationTests(TestCase):
         self.assertNotIn(b'ok=1', content)  # All opaque query values are omitted.
 
     def test_empty_zip_has_manifest_and_views_reject_post(self):
-        result = self.client.get('/assets/networks/configurations.zip', {'q': 'no matching assets'})
+        # A filter matching nothing, so the archive carries only its manifest. This
+        # used to be the keyword box; that is gone, so filter a real column instead.
+        result = self.client.get('/assets/networks/configurations.zip',
+                                 {'filter_device_name': 'no matching assets'})
         self.assertEqual(result.status_code, 200)
         with ZipFile(BytesIO(result.content)) as bundle:
             self.assertEqual(bundle.namelist(), ['manifest.csv'])

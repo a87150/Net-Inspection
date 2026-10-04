@@ -1,12 +1,7 @@
-import json
 import runpy
-import tempfile
-from datetime import timedelta
-from pathlib import Path
 from unittest.mock import patch
 from django.conf import settings
 from django.test import TestCase
-from django.utils import timezone
 from net.models import ComputerAnalysisProfile
 
 

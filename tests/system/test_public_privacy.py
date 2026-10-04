@@ -8,8 +8,8 @@ from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from net.models import (Computer, ComputerLogFile, Network_Device, People,
-                        SecurityDevice, Server, Server_Inspection, TaskRun)
+from net.models import (Computer, Network_Device, People,
+                        WeakCurrentDevice, Server, Server_Inspection, TaskRun)
 
 
 class PublicPrivacyTests(TestCase):
@@ -27,7 +27,7 @@ class PublicPrivacyTests(TestCase):
                                       snmp_community='SECRET-COMMUNITY')
         server = Server.objects.create(name='Public Server', ip='192.0.2.3',
                               api_token='SECRET-TOKEN', os='SECRET-SERVER-OS')
-        SecurityDevice.objects.create(device_name='Public Camera', ip='192.0.2.4',
+        WeakCurrentDevice.objects.create(device_name='Public Camera', ip='192.0.2.4',
                                       api_password='SECRET-CAMERA')
         create_log_file(computer=computer, source_path='SECRET-PATH',
                                        modified_at=timezone.now(), collected_date=timezone.localdate(),
@@ -53,7 +53,7 @@ class PublicPrivacyTests(TestCase):
             'computers': {'name', 'ip', 'type', 'manufacturer'},
             'networks': {'name', 'ip', 'type', 'manufacturer'},
             'servers': {'name', 'ip', 'type', 'manufacturer'},
-            'monitors': {'name', 'ip', 'type', 'manufacturer'},
+            'weakcurrent': {'name', 'ip', 'type', 'manufacturer'},
         }
         for kind, fields in expected.items():
             with self.subTest(kind=kind):
@@ -71,7 +71,7 @@ class PublicPrivacyTests(TestCase):
                   'sort': 'SECRET-SORT', 'order': 'SECRET-ORDER',
                   'columns': 'SECRET-COLUMNS', 'q_private': 'SECRET-QUERY',
                   'page': 'SECRET-PAGE', 'page_size': 'SECRET-SIZE'}
-        for kind in ('people', 'computers', 'networks', 'servers', 'monitors'):
+        for kind in ('people', 'computers', 'networks', 'servers', 'weakcurrent'):
             with self.subTest(kind=kind):
                 baseline = self.response(kwargs={'kind': kind})
                 attacked = self.response(kwargs={'kind': kind}, params=attack)
@@ -116,7 +116,7 @@ class PublicPrivacyTests(TestCase):
     def test_http_guest_dispatch(self):
         for view, kwargs in [('index', {}), ('people_statistics', {})] + [
             (view, {key: kind}) for view, key in [('asset_list', 'kind'), ('item_list', 'item')]
-            for kind in ('people', 'computers', 'networks', 'servers', 'monitors')
+            for kind in ('people', 'computers', 'networks', 'servers', 'weakcurrent')
         ]:
             with self.subTest(view=view, kwargs=kwargs):
                 response = self.client.get(reverse(view, kwargs=kwargs),

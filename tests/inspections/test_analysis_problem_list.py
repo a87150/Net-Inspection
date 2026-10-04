@@ -53,11 +53,13 @@ class AnalysisProblemListTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['page_obj'].paginator.count, 21)
         self.assertEqual(len(response.context['rows']), 1)
-        detail_queries = [q['sql'] for q in queries if '"exceptions"' in q['sql']]
+        # 列名的引号随后端而变，用 connection.ops 引一遍再断言。
+        quoted = connection.ops.quote_name
+        detail_queries = [q['sql'] for q in queries if quoted('exceptions') in q['sql']]
         self.assertEqual(len(detail_queries), 1)
         self.assertIn('LIMIT 1 OFFSET 20', detail_queries[0])
-        self.assertNotIn('"payload"', detail_queries[0])
-        self.assertNotIn('"details"', detail_queries[0])
+        self.assertNotIn(quoted('payload'), detail_queries[0])
+        self.assertNotIn(quoted('details'), detail_queries[0])
 
     def test_untrusted_issue_content_is_escaped(self):
         self.analysis(self.run, [{'analysis_item': 'software', '详细问题': '<script>alert(1)</script>'}])

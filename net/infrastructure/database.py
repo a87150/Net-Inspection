@@ -1,4 +1,4 @@
-"""SQLite tuning without opening connections during application startup."""
+"""Database tuning without opening connections during application startup."""
 import math
 import sys
 from contextlib import closing
@@ -7,6 +7,21 @@ from pathlib import Path
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management.base import CommandError
+from django.db.backends.signals import connection_created
+
+
+def use_portable_uuid_storage(sender, connection, **kwargs):
+    """Store UUIDs as char(32) so every backend sorts and indexes them the same.
+
+    MariaDB 10.7+ has a native UUID type, and Django uses it automatically. Native
+    UUIDs sort in their internal byte order, which is neither the canonical string
+    order nor Python's UUID order, so a `.order_by('pk')` tiebreak returns a
+    different order than SQLite and than sorted() in Python. Pagination only stays
+    correct while the tiebreak agrees with the canonical order, so pin the portable
+    column type everywhere instead of CAST-ing every UUID sort.
+    """
+    if connection.vendor in {'mysql', 'postgresql'}:
+        connection.features.__dict__['has_native_uuid_field'] = False
 
 
 def sqlite_timeout(value):
@@ -45,3 +60,8 @@ def initialize_sqlite_wal(connection, *, apply=False):
             if mode != 'wal':
                 raise CommandError(f'SQLite refused WAL; journal_mode remains {mode}.')
     return {'status': 'applied' if apply else 'preview', 'journal_mode': mode}
+
+
+# dispatch_uid 让重复 import 也不会重复注册。
+connection_created.connect(
+    use_portable_uuid_storage, dispatch_uid='net.portable_uuid_storage')

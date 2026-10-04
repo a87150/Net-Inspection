@@ -1,11 +1,11 @@
-# Windows Server / Linux 一键部署
+﻿# Windows Server / Linux 一键部署
 
 适用于单台主机上的正式 Web + Worker。脚本安装项目依赖、配置环境、迁移数据库、收集静态文件、创建首个管理员，并设置开机启动。**不执行 `seed_demo_data`，不重置数据库，不自动创建数据库实例，不修改防火墙。**
 
 ## 先准备
 
 1. 把代码放到固定目录，例如 Windows 的 `C:\NetInspection`、Linux 的 `/opt/net-inspection`。不要从临时解压目录运行，也不要把其他机器的 `.venv` 复制过来。
-2. 准备可连接的 MariaDB/MySQL、UTF-8（utf8mb4）数据库和该库的专用账号。迁移需要这个库的建表/改表权限。账号密码在首次引导中填写，不要写到命令行。
+2. 准备可连接的 MariaDB/MySQL 服务。**库和专用账号不用提前建**：若首次引导填写的库/账号已能连接就直接使用；连不上时，准备检查阶段会问你要不要用管理员账号建出来（默认回车即创建），该管理员密码只用于这一次，不会写入任何文件。迁移已有库时仍需该库的建表/改表权限。库和账号的密码在首次引导中填写，不要写到命令行。
 3. Windows 安装 **64 位 Python 3.12+（为所有用户安装）**，需要“计划任务”服务；Linux 需要 systemd、root/sudo。Ubuntu 24.04+/Debian 13+ 可使用发行版 Python；支持提供 Python 3.12 软件包的 dnf 系统，其他环境可预装依赖后加 `--skip-system-packages --python /path/to/python3.12`。
 4. 安装依赖需要访问 Python 包源和 Linux 软件源。使用内部软件源时先配置 pip/系统包管理器。Windows 若 mysqlclient 没有当前 Python 版本的轮子，请安装 MariaDB Connector/C 与 C++ 编译工具，或选用锁文件支持的 Python 3.12 环境。
 
@@ -29,11 +29,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\deploy\windows\Install
 首次没有 `.env` 时按提示填写：
 
 - 访问域名/IP：如 `inspection.example.invalid,192.0.2.10,localhost,127.0.0.1`，不要写协议或端口；替换为真实地址。
-- 数据库主机、端口、库名、账号、密码。
+- 数据库主机、端口、库名、账号、密码。直接回车即用默认值（`127.0.0.1`、`3306`、`net_inspection`）。
 - Web 监听地址：默认 `0.0.0.0:8000`；已有反向代理时可填 `127.0.0.1:8000`。
 - 迁移完成后创建网站管理员；已有活跃超级管理员时不会改密码。
 
 Django 密钥和三个独立 Fernet 密钥只在首次新建配置时生成。密码隐藏输入；`.env` 限制管理员、SYSTEM 和指定运行账号访问。现有 `.env` 原样复用，不自动修改数据库、密钥、静态目录或缓存配置；不合格配置会报错停止。已有配置需要明确写 `DJANGO_DEBUG=false`、有效稳定密钥和 `DB_ENGINE`；已有 SQLite 环境还必须明确填写原库的 `DJANGO_SQLITE_PATH`，不会自动改用演示库或根目录库。
+
+`DB_ENGINE` 只接受 `mysql` 和 `sqlite`（不区分大小写），**任何其他取值一律报错停止，不会回退到 SQLite**。这是刻意的：引擎名拼错时若静默回退，会连上根目录或演示库的 SQLite 空库，看起来像「数据全没了」。`postgresql` 会被单独识别并提示「尚未实现」而不是当成拼写错误，方案见 `docs/changelog.md`。
+
+**配置步骤不碰网络**：写 `.env` 时只收集参数并落盘，不连接数据库。建库、建账号在随后的**准备检查**阶段才发生——先尝试连接，配好的库/账号能连上就直接用，连不上才询问是否创建。`--non-interactive` 或 `prepare` 的无人值守调用不会询问，连接失败直接报错停止。
 
 使用系统自带计划任务，无需 NSSM/WinSW：
 
@@ -49,6 +53,17 @@ Django 密钥和三个独立 Fernet 密钥只在首次新建配置时生成。�
 该账号需要批处理登录权限、读取项目/Python/密钥文件以及写入实际静态目录和部署日志目录的权限。脚本只自动授权自身 `runtime\deployment` 目录，已有自定义目录须按实际路径授权。PC 日志由终端直传 API，不需要给 Web/Worker 配置共享盘、SMB 或 FTP 收集权限。
 
 查看/停用：
+
+```powershell
+.\deploy\windows\Manage-NetInspection.ps1 status          # 两个角色的状态
+.\deploy\windows\Manage-NetInspection.ps1 restart         # 停 Worker -> 停 Web -> 起 Web -> 起 Worker
+.\deploy\windows\Manage-NetInspection.ps1 start           # 也可用 stop / enable / disable
+.\deploy\windows\Manage-NetInspection.ps1 restart worker  # 只重启某个角色
+.\deploy\windows\Manage-NetInspection.ps1 probe           # HTTP 健康检查（不触发任何任务）
+.\deploy\windows\Manage-NetInspection.ps1 logs web 80     # web.log 或 worker.log 末尾 N 行
+```
+
+等价的原始命令：
 
 ```powershell
 Get-ScheduledTask -TaskName NetInspectionWeb,NetInspectionWorker
@@ -78,6 +93,17 @@ sudo bash deploy/linux/install.sh
 首次引导与 Windows 相同。两个服务共用同一 `.env`，以真实服务账号执行准备检查，避免 root 能连接而服务不能连接：
 
 ```bash
+sudo bash deploy/linux/manage.sh status          # 两个 unit 的 active/enabled 状态
+sudo bash deploy/linux/manage.sh restart         # 停 Worker -> 停 Web -> 起 Web -> 起 Worker
+sudo bash deploy/linux/manage.sh start           # 也可用 stop / enable / disable
+sudo bash deploy/linux/manage.sh restart worker  # 只重启某个角色
+sudo bash deploy/linux/manage.sh probe           # HTTP 健康检查（不触发任何任务）
+sudo bash deploy/linux/manage.sh logs web 80     # web.log 或 worker.log 末尾 N 行
+```
+
+等价的原始命令：
+
+```bash
 sudo systemctl status network-inspection-web network-inspection-worker
 sudo journalctl -u network-inspection-web -n 50 --no-pager
 sudo tail -n 50 runtime/deployment/logs/worker.log
@@ -100,7 +126,7 @@ sudo systemctl disable --now network-inspection-worker network-inspection-web
 - `-EnvFile C:\path\.env` / `--env-file /path/.env` 使用其他受限配置文件。
 - `-NonInteractive` / `--non-interactive` 要求配置和活跃管理员已存在。
 - `-PrepareOnly` / `--prepare-only` **不是只读演练**：仍停止已有受管进程、安装依赖、迁移和收集静态文件，只是不注册/启动新任务或服务。
-- 空库需要默认网络模板时，使用同一配置执行 `python manage.py create_network_templates`；它不覆盖已有模板。服务器及安防模板可从设备列表创建。PC API 升级后还需重新下载并部署终端采集包，旧共享盘/FTP 脚本应停止分发。迁移已有项目以数据库备份中的模板为准。
+- 空库需要默认模板时，使用同一配置执行 `python manage.py create_network_templates`；它一次创建 20 个网络模板和 9 个弱电设备模板，不覆盖已有模板。服务器模板可从设备列表创建。PC API 升级后还需重新下载并部署终端采集包，旧共享盘/FTP 脚本应停止分发。迁移已有项目以数据库备份中的模板为准。
 
 验证范围：脚本语法、配置/密钥保留、重复进程锁和临时 SQLite 的迁移/静态文件流程可在开发机隔离测试；Windows 计划任务注册、Linux 包安装/systemd、目标 MariaDB 与真实外部设备仍须在目标机验证。
 

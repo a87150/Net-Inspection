@@ -1,7 +1,7 @@
 """Final demo contract: deterministic, offline, ownership-safe and exportable."""
 from collections import Counter
 from contextlib import ExitStack
-from datetime import date, time
+from datetime import time
 from io import BytesIO, StringIO
 from unittest.mock import patch
 from zipfile import ZipFile
@@ -14,7 +14,7 @@ from net.data_exchange.configuration import build_configuration_zip, latest_conf
 from net.models.domain import DomainOperationSecret
 from net.management.commands.seed_demo_data import _demo_uuid
 from net.models import (AlertDelivery, AlertEvent, ComputerAnalysis,
-                        ComputerAnalysisProfile, InspectionProfile, SecurityDevice,
+                        ComputerAnalysisProfile, InspectionProfile, WeakCurrentDevice,
                         Network_Device, People, PeopleSyncSource, Schedule,
                         Network_Device_Inspection, DomainOperation, TaskRun,
                         TaskTargetRun)
@@ -132,9 +132,9 @@ class FinalDemoTests(TestCase):
             (Network_Device, '192.0.2.11', 'missing', b''),
             (Network_Device, '192.0.2.12', 'success', b'return'),
             (Network_Device, '192.0.2.13', 'success', b'end'),
-            (SecurityDevice, '203.0.113.31', 'missing', b''),
-            (SecurityDevice, '203.0.113.32', 'missing', b''),
-            (SecurityDevice, '203.0.113.33', 'missing', b''),
+            (WeakCurrentDevice, '203.0.113.31', 'missing', b''),
+            (WeakCurrentDevice, '203.0.113.32', 'missing', b''),
+            (WeakCurrentDevice, '203.0.113.33', 'missing', b''),
         ):
             with self.subTest(ip=ip):
                 result = latest_configuration(model.objects.get(ip=ip))

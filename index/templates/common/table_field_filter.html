@@ -25,10 +25,17 @@
     {% elif option_mode == 'distinct' or option_mode == 'suggest' %}
     <div class="input-group">
         <input class="form-control" id="{{ table_definition.key }}-{{ field.key }}-filter-input" name="{{ filter_name }}" value="{{ filter_value|default:'' }}" autocomplete="off">
+        {% comment %}
+        只有确实有可选值时才渲染候选下拉。字段的 option_mode 仍是 suggest——
+        列暂时没数据（例如尚未采集过 os_version）只是"还没值"，不是"不要候选"，
+        有值以后下拉会自动出现；而空下拉只有"候选"二字，是纯噪音。
+        {% endcomment %}
+        {% if field_options %}
         <select class="form-select table-filter-suggestion-select" data-filter-suggestion-select data-filter-input="{{ table_definition.key }}-{{ field.key }}-filter-input" aria-label="选择{{ field.label }}候选值">
             <option value="">候选</option>
             {% for value, label in field_options %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
         </select>
+        {% endif %}
     </div>
     {% else %}
     <input class="form-control" id="{{ table_definition.key }}-{{ field.key }}-filter" name="{{ filter_name }}" value="{{ filter_value|default:'' }}">

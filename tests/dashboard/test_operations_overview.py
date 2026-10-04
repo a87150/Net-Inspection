@@ -16,8 +16,7 @@ from net.models import (
     Network_Device,
     NetworkTopologyInterface,
     NetworkTopologyLink,
-    SecurityDevice,
-    Server,
+    WeakCurrentDevice,
     TaskRun,
     TaskTargetRun,
     TopologyDiscoveryBatch,
@@ -168,13 +167,13 @@ class OperationsSnapshotTests(TestCase):
         Network_Device.objects.create(
             device_name='ACCESS', ip='10.30.0.3', device_type='access switch',
         )
-        camera = SecurityDevice.objects.create(
+        camera = WeakCurrentDevice.objects.create(
             device_name='CAM-01', ip='not-an-ip', device_type='摄像机',
         )
 
         topology = build_operations_snapshot(now=self.now)['topology']
         camera_node = next(
-            node for node in topology['nodes'] if node['id'] == f'monitors:{camera.pk}'
+            node for node in topology['nodes'] if node['id'] == f'weakcurrent:{camera.pk}'
         )
 
         self.assertIsNone(camera_node['parent_id'])

@@ -39,8 +39,8 @@ class AccessRecordSource(models.Model):
     event_path = models.CharField(max_length=500, blank=True)
     authentication_mode = models.CharField(max_length=32, choices=AuthenticationMode.choices, default=AuthenticationMode.QUERY_TOKEN)
     authentication_name = models.CharField(max_length=128, default='access_token')
-    security_device = models.ForeignKey(
-        'net.SecurityDevice', null=True, blank=True, on_delete=models.SET_NULL,
+    weak_current_device = models.ForeignKey(
+        'net.WeakCurrentDevice', null=True, blank=True, on_delete=models.SET_NULL,
         related_name='access_record_sources',
     )
     username = models.CharField(max_length=255, blank=True)
@@ -98,7 +98,7 @@ class AccessRecordSource(models.Model):
             'id': str(self.pk), 'name': self.name, 'platform': self.platform,
             'api_version': self.api_version, 'base_url': self.base_url, 'event_path': self.event_path,
             'authentication_mode': self.authentication_mode, 'authentication_name': self.authentication_name,
-            'security_device_id': str(self.security_device_id) if self.security_device_id else '',
+            'weak_current_device_id': str(self.weak_current_device_id) if self.weak_current_device_id else '',
             'verify_ssl': self.verify_ssl, 'is_enabled': self.is_enabled,
         }
 

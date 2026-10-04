@@ -15,7 +15,7 @@ from net.models import (
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
-    SecurityDevice,
+    WeakCurrentDevice,
     Monitor_Inspection,
     Network_Device,
     Network_Device_Inspection,
@@ -112,8 +112,8 @@ def _asset_context(target):
         )
     elif target_type == TaskTargetRun.TargetType.SERVER:
         model, secret_fields = Server, ('username', 'password', 'api_token')
-    elif target_type == TaskTargetRun.TargetType.MONITOR:
-        model, secret_fields = SecurityDevice, ('api_username', 'api_password', 'api_token')
+    elif target_type == TaskTargetRun.TargetType.WEAK_CURRENT:
+        model, secret_fields = WeakCurrentDevice, ('api_username', 'api_password', 'api_token')
     else:
         raise ValueError(f'当前 Worker 不支持目标类型：{target_type}')
 
@@ -124,7 +124,7 @@ def _asset_context(target):
             'snmp_priv_protocol', 'snmp_context_name', 'snmp_retries',
         ),
         TaskTargetRun.TargetType.SERVER: ('ip', 'port', 'server_type', 'api_url', 'verify_ssl'),
-        TaskTargetRun.TargetType.MONITOR: ('ip', 'vendor', 'device_type', 'api_url', 'verify_ssl'),
+        TaskTargetRun.TargetType.WEAK_CURRENT: ('ip', 'vendor', 'device_type', 'api_url', 'verify_ssl'),
     }[target_type]
     # Fetch endpoint and credentials together: an enqueue/edit race must not
     # send newly saved credentials to the old endpoint in a frozen snapshot.
@@ -139,7 +139,7 @@ def _asset_context(target):
         from net.inspections.issues import DEVICE_PROJECTS
         effective = attach_live_credentials(DEVICE_PROJECTS[target_type], target.target_id, snapshot['collection_settings'])
         snapshot['collection_settings'] = effective
-        if target_type == TaskTargetRun.TargetType.MONITOR:
+        if target_type == TaskTargetRun.TargetType.WEAK_CURRENT:
             snapshot.update(effective.get('snmp', {}))
     return SimpleNamespace(**snapshot)
 
@@ -205,7 +205,7 @@ def _collect(target, task, asset):
         if not getattr(asset, 'username', '') or not getattr(asset, 'password', ''):
             return _missing_configuration('未配置 Linux SSH 账号和密码')
         return collect_linux_ssh(asset, timeout, **selection)
-    if target.target_type == TaskTargetRun.TargetType.MONITOR:
+    if target.target_type == TaskTargetRun.TargetType.WEAK_CURRENT:
         from net.devices.security.collector import collect_security
         return collect_security(asset, timeout, api_collector=collect_security_api, **selection)
     return _missing_configuration(f'当前 Worker 不支持目标类型：{target.target_type}')
@@ -228,7 +228,7 @@ def _persist_configuration_backup(target, collection, now):
     metadata = None
     if item.get('status') == 'success' and 'content' in item:
         model = {TaskTargetRun.TargetType.NETWORK_DEVICE: Network_Device,
-                 TaskTargetRun.TargetType.MONITOR: SecurityDevice}.get(target.target_type)
+                 TaskTargetRun.TargetType.WEAK_CURRENT: WeakCurrentDevice}.get(target.target_type)
         if model is not None:
             try:
                 with transaction.atomic():
@@ -285,7 +285,7 @@ def _record_spec(target):
         )
     if target.target_type == TaskTargetRun.TargetType.SERVER:
         return Server_Inspection, Error_Server, 'server_inspection', 'server_id'
-    if target.target_type == TaskTargetRun.TargetType.MONITOR:
+    if target.target_type == TaskTargetRun.TargetType.WEAK_CURRENT:
         return Monitor_Inspection, Error_Monitor, 'monitor_inspection', 'monitor_id'
     raise ValueError(f'当前 Worker 不支持目标类型：{target.target_type}')
 
@@ -318,7 +318,7 @@ def _selected_raw(target, task, raw):
                 and key.partition(':')[2] in allowed
             )
         }
-    elif target.target_type == TaskTargetRun.TargetType.MONITOR:
+    elif target.target_type == TaskTargetRun.TargetType.WEAK_CURRENT:
         aliases = SECURITY_FIELDS
     elif target.target_snapshot.get('server_type') == 'windows':
         result = selected_fields(raw, task.selected_items_snapshot, WINDOWS_FIELDS)
@@ -454,7 +454,7 @@ def _persist_collection(target_run_id, worker_id, collection, lease_guard=None, 
                 asset_model = {
                     TaskTargetRun.TargetType.NETWORK_DEVICE: Network_Device,
                     TaskTargetRun.TargetType.SERVER: Server,
-                    TaskTargetRun.TargetType.MONITOR: SecurityDevice,
+                    TaskTargetRun.TargetType.WEAK_CURRENT: WeakCurrentDevice,
                 }.get(target.target_type)
                 if asset_model is not None:
                     asset = asset_model.objects.select_for_update().filter(pk=target.target_id).first()

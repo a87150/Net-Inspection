@@ -2,11 +2,19 @@
 import subprocess
 import tempfile
 from pathlib import Path
+
+from django.conf import settings
 from django.test import SimpleTestCase
 
+from tests.powershell import requires_powershell
+
+
+@requires_powershell
 class TemperatureTests(SimpleTestCase):
     def run_script(self, body):
-        source = Path('net/scripts/templates/GetInfo_Upload.ps1').read_text(encoding='utf-8-sig')
+        # BASE_DIR rather than a relative path: the tests must run from any CWD.
+        template = Path(settings.BASE_DIR) / 'net' / 'scripts' / 'templates' / 'GetInfo_Upload.ps1'
+        source = template.read_text(encoding='utf-8-sig')
         functions = source[source.index('function Publish-PCDaily'):source.index('# Collection entry point')]
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'sensors.ps1'

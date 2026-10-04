@@ -3,18 +3,17 @@ import json
 from django import forms
 from django.core.exceptions import ValidationError
 from django.db import transaction, IntegrityError
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from index.common.access import admin_required
-from net.models import DeviceCollectionTemplate, DeviceCollectionBinding, Network_Device, Server, SecurityDevice
+from net.models import DeviceCollectionTemplate, DeviceCollectionBinding, Network_Device, Server, WeakCurrentDevice
 from net.devices.collection_profiles import (
-    vendor_choices, SUBTYPES, SECRET_FIELDS, SNMP_FIELDS, normalize_vendor, normalize_subtype,
-    resolve_collection_settings, validate_settings, encrypt_credentials, decrypt_credentials, collection_method_choices, template_settings, merge,
+    vendor_choices, SUBTYPES, SECRET_FIELDS, SNMP_FIELDS, resolve_collection_settings, validate_settings, encrypt_credentials, decrypt_credentials, collection_method_choices, template_settings, merge,
 )
 from net.inspections.issues import PROJECT_RULES, METRIC_DEFAULTS, PROJECT_LABELS
 from net.devices.pc.severity import LEVELS
 
-MODELS = {'networks':Network_Device,'servers':Server,'monitors':SecurityDevice}
+MODELS = {'networks':Network_Device,'servers':Server,'weakcurrent':WeakCurrentDevice}
 
 class CollectionSettingsForm(forms.Form):
     version = forms.CharField(required=False, widget=forms.HiddenInput)
@@ -79,9 +78,10 @@ class CollectionSettingsForm(forms.Form):
             for key in ('commands','parsers'):self.fields.pop(key)
         if kind=='servers':
             for key in ('snmp_oids','mib_modules','mib_file'):self.fields.pop(key)
-        if kind=='monitors':
+        if kind=='weakcurrent':
             self.fields['protocol']=forms.ChoiceField(label='采集方式',choices=[('','继承 / 自动'),('auto','自动：SNMP → 厂商 API → Ping'),('api','API'),('snmp','SNMP'),('ping','仅 Ping 在线检查')],required=False,initial=saved.get('protocol',''))
-            choices={'snmp_version':Network_Device.SNMP_VERSION_CHOICES,'snmp_security_level':Network_Device.SNMP_SECURITY_LEVEL_CHOICES,'snmp_auth_protocol':[('','未设置'),*Network_Device.SNMP_AUTH_PROTOCOL_CHOICES],'snmp_priv_protocol':[('','未设置'),*Network_Device.SNMP_PRIV_PROTOCOL_CHOICES]}
+            # field.formfield() already carries the model's choices, so no local
+            # choices table is needed here.
             for key in SNMP_FIELDS:
                 field=Network_Device._meta.get_field(key).formfield(required=False)
                 field.label={'snmp_username':'SNMPv3 用户名','snmp_context_name':'SNMP 上下文','snmp_retries':'SNMP 重试次数'}.get(key,key)
@@ -173,7 +173,7 @@ class CollectionSettingsForm(forms.Form):
                         empty=d.get('empty_'+key)
                         if empty:result['parsers'][key]['empty_pattern']=empty
                     else:result.get('parsers',{}).pop(key,None)
-        if self.kind=='monitors':
+        if self.kind=='weakcurrent':
             if d.get('protocol'):result['protocol']=d['protocol']
             snmp={key:d[key] for key in SNMP_FIELDS if d.get(key) not in (None,'')}
             if snmp:result['snmp']=snmp
@@ -226,6 +226,29 @@ def _preview_template(form, item):
     except (ValueError,TimeoutError):raise ValidationError('解析失败或超时，请检查模板与回显格式。') from None
     form.preview_result=json.dumps({'匹配结果':parsed,'归一化指标':_template_network_data({item:parsed})},ensure_ascii=False,indent=2)
     form.preview_item=item
+
+
+def _preview_json_reply(request, form):
+    """JSON reply for an XHR 测试回显 request, else None so the caller keeps its old path.
+
+    The two collection views (template-level and device-level) share this so the
+    inline preview stays identical in both, and the no-JS full-page submit still works.
+    """
+    if (request.method != 'POST'
+            or request.headers.get('X-Requested-With') != 'XMLHttpRequest'
+            or not request.POST.get('preview_item')):
+        return None
+    if not form.is_valid():
+        # 整页提交时会带着字段错误重绘；就地预览没有那次重绘，所以把错误一并带回去。
+        details = '；'.join(f'{name}：{"、".join(errors)}'
+                            for name, errors in form.errors.items())
+        return JsonResponse(
+            {'message': f'表单未通过校验，请先补全必填项：{details[:200]}'}, status=400)
+    try:
+        _preview_template(form, request.POST['preview_item'])
+    except ValidationError as exc:
+        return JsonResponse({'message': '；'.join(exc.messages)}, status=400)
+    return JsonResponse({'result': form.preview_result})
 
 
 def _bind_form(kind,data,files,saved,version,*,api_mode=False):
@@ -284,6 +307,8 @@ def collection_templates(request,kind):
         for name in ('name','vendor'):
             if name in form.fields:form.fields[name].required=False
     saved=False
+    preview_reply=_preview_json_reply(request,form)
+    if preview_reply is not None:return preview_reply
     if request.method=='POST' and form.is_valid() and request.POST.get('preview_inheritance'):
         pass
     elif request.method=='POST' and form.is_valid() and request.POST.get('preview_item'):
@@ -311,7 +336,7 @@ def collection_templates(request,kind):
     from index.common.form_examples import apply_field_examples
     from net.data_exchange.inventory_guidance import SNMP_EXAMPLES
     apply_field_examples(form, {
-        'name': ('Linux 基础巡检' if kind == 'servers' else '门禁基础巡检' if kind == 'monitors' else '华为交换机巡检', '按用途命名模板。'),
+        'name': ('Linux 基础巡检' if kind == 'servers' else '门禁基础巡检' if kind == 'weakcurrent' else '华为交换机巡检', '按用途命名模板。'),
         'version_match': ('V200R019', '匹配设备版本中的关键字，留空不按版本细分。'),
         **{key: SNMP_EXAMPLES[key] for key in SECRET_FIELDS},
     })
@@ -330,9 +355,11 @@ def device_collection_settings(request,kind,pk):
     try:selected=DeviceCollectionTemplate.objects.filter(kind=kind,is_enabled=True,pk=selected_id).first() if selected_id else None
     except (ValidationError,ValueError):selected=None
     form.inherited_settings=template_settings(selected) if selected else resolve_collection_settings(kind,asset,bindings={})
-    if kind=='monitors':
+    if kind=='weakcurrent':
         for key in SECRET_FIELDS:form.fields[key]=forms.CharField(label={'snmp_community':'SNMP Community','snmp_auth_password':'SNMPv3 认证密码','snmp_priv_password':'SNMPv3 加密密码'}[key],required=False,widget=forms.PasswordInput(attrs={'class':'form-control','autocomplete':'new-password'}),help_text='留空保留已有凭据；凭据加密保存。')
     saved=False
+    preview_reply=_preview_json_reply(request,form)
+    if preview_reply is not None:return preview_reply
     if request.method=='POST' and form.is_valid() and request.POST.get('preview_inheritance'):
         pass
     elif request.method=='POST' and form.is_valid() and request.POST.get('preview_item'):
@@ -348,8 +375,7 @@ def device_collection_settings(request,kind,pk):
                 credentials=decrypt_credentials(row)
                 for key in SECRET_FIELDS:
                     if form.cleaned_data.get(key):credentials[key]=form.cleaned_data[key]
-                if credentials and kind=='monitors':
-                    from types import SimpleNamespace
+                if credentials and kind=='weakcurrent':
                     selected_template=form.cleaned_data.get('template')
                     inherited=form.inherited_settings.get('snmp',{})
                     inherited={**inherited, **(selected_template.settings.get('snmp',{}) if selected_template else {})}
@@ -366,7 +392,7 @@ def device_collection_settings(request,kind,pk):
     from index.common.form_examples import apply_field_examples
     from net.data_exchange.inventory_guidance import SNMP_EXAMPLES
     apply_field_examples(form, {
-        'name': ('Linux 基础巡检' if kind == 'servers' else '门禁基础巡检' if kind == 'monitors' else '华为交换机巡检', '按用途命名模板。'),
+        'name': ('Linux 基础巡检' if kind == 'servers' else '门禁基础巡检' if kind == 'weakcurrent' else '华为交换机巡检', '按用途命名模板。'),
         'version_match': ('V200R019', '匹配设备版本中的关键字，留空不按版本细分。'),
         **{key: SNMP_EXAMPLES[key] for key in SECRET_FIELDS},
     })

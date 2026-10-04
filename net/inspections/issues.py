@@ -15,8 +15,8 @@ RULES = {
 }
 
 
-PROJECT_LABELS = {'computers': 'PC 日志分析', 'networks': '网络设备巡检', 'servers': '服务器巡检', 'monitors': '安防设备巡检'}
-DEVICE_PROJECTS = {'network_device': 'networks', 'server': 'servers', 'monitor': 'monitors'}
+PROJECT_LABELS = {'computers': 'PC 日志分析', 'networks': '网络设备巡检', 'servers': '服务器巡检', 'weakcurrent': '弱电设备巡检'}
+DEVICE_PROJECTS = {'network_device': 'networks', 'server': 'servers', 'monitor': 'weakcurrent'}
 PROJECT_RULES = {
     'computers': {key: value for key, value in RULES.items() if key != 'inspection_collection'},
     'networks': {key: (label, label) for key, label in (
@@ -31,7 +31,7 @@ PROJECT_RULES = {
         ('cpu', 'CPU'), ('memory', '内存'), ('storage_status', '磁盘存储'), ('network_info', '网络'),
         ('services', '服务'), ('logs', '系统日志'), ('system_info', '操作系统'),
         ('computer_name', '设备名称'), ('inspection_collection', '采集连接'))},
-    'monitors': {key: (label, label) for key, label in (
+    'weakcurrent': {key: (label, label) for key, label in (
         ('device_info', '设备信息'), ('status_data', '设备运行状态'),
         ('channel_status', '视频通道/门禁闸机通道'), ('storage_status', '录像/存储'),
         ('config_info', '设备配置'), ('inspection_collection', '采集连接'))},

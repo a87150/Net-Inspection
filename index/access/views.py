@@ -18,7 +18,7 @@ from net.models.access import AccessRecord, AccessRecordSource
 def access_record_list(request):
     definition = get_table_definition('access_records')
     records, table_state = apply_table_filters(
-        request, AccessRecord.objects.select_related('source', 'source__security_device'), definition,
+        request, AccessRecord.objects.select_related('source', 'source__weak_current_device'), definition,
         include_legacy_status=False,
     )
     return render(request, 'access/record_list.html', {

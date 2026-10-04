@@ -7,7 +7,7 @@ import re
 from django.conf import settings
 from django.db.models import Q
 
-from net.models import Computer, Domain_Account, Domain_Computer, People
+from net.models import Computer, Domain_Account, Domain_Computer
 
 
 def normalize_login(value):

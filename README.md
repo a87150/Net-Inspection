@@ -9,13 +9,12 @@ PC 日志由 Windows/macOS 采集器每两小时本地覆盖 `latest.json`，再
 | 内容 | 文档 |
 | --- | --- |
 | Windows Server / Linux 安装、升级、启停 | [一键部署](deploy/README.md) |
-| 任务数据流、数据库表与关系、并发约束 | [架构与数据库](docs/architecture.md) |
-| PC 来源、EXE、域下发、人员匹配、磁盘与温度 | [PC 采集与分析](docs/pc-collection.md) |
-| 网络/服务器/安防连接、模板继承、命令解析、门禁 | [设备巡检](docs/device-inspection.md) |
-| 飞书/钉钉同步、域控管理、BitLocker | [人员与域控](docs/identity-management.md) |
-| Windows 内部 CA 导出、导入及 636 排障 | [LDAPS 证书指南](docs/ldaps-ca.md) |
-| 设备原始配置备份与恢复边界 | [配置备份](docs/device-configuration-backups.md) |
-| 数据库/缓存、历史归档及代码维护 | [MariaDB/Redis](docs/mariadb-redis.md) · [维护命令](docs/backend-maintenance.md) · [代码目录](docs/project-layout.md) |
+| 任务数据流、数据库表与关系、代码目录 | [架构与数据库](docs/architecture.md) |
+| 网络/服务器/弱电巡检、模板继承、门禁、配置备份、演示拓扑 | [设备巡检](docs/device-inspection.md) |
+| PC 采集器、EXE、域下发、日志接收与分析合同 | [PC 采集与分析](docs/pc-collection.md) |
+| 飞书/钉钉人员同步、域控管理、BitLocker、LDAPS 排障 | [人员与域控](docs/operations.md) |
+| 数据库/Redis 缓存、历史归档、迁移与查询优化 | [数据库与维护](docs/database.md) |
+| 版本变更与已知问题 | [更新记录](docs/changelog.md) |
 
 ## 部署与启动
 
@@ -61,7 +60,7 @@ Linux 将解释器换成 `python3.12` / `./.venv/bin/python`。已有虚拟环�
 
 | 配置 | 用途 |
 | --- | --- |
-| `DB_ENGINE`、`DB_*` | 数据库类型与连接；SQLite 需注意 `DJANGO_SQLITE_PATH` 的实际位置 |
+| `DB_ENGINE`、`DB_*` | 数据库类型与连接，取值只认 `mysql` / `sqlite`；拼错直接启动失败（**不会**回退到 SQLite）；SQLite 需注意 `DJANGO_SQLITE_PATH` 的实际位置 |
 | `DJANGO_DEBUG`、`DJANGO_SECRET_KEY`、`DJANGO_ALLOWED_HOSTS` | 正式环境关闭调试，设置稳定签名密钥和允许访问的主机 |
 | `PC_LOG_SOURCE_ENCRYPTION_KEY` | PC 来源凭据加密 |
 | `DEVICE_BACKUP_ENCRYPTION_KEY` | 设备备份、门禁令牌等加密 |
@@ -185,14 +184,16 @@ Worker 同时承担到期计划检查、任务领取、租约续期和告警处�
 | 关掉窗口仍能访问 | 浏览器关闭不停止服务；按计划任务/systemd/原启动器停止 Web 和 Worker |
 | PC 没新日志 | 查终端任务、本地 latest.json、collector.log、终端到 endpoint_url 的连通性及令牌；手动分析不会远程催采 |
 | PC 软件/温度缺失 | 查“采集诊断”；不完整软件清单不判必装缺失，温度不可用不以主板/GPU 数值替代 |
-| PC API 上报失败 | 查 is_enabled、Bearer 令牌、Content-Type: application/json、16 MiB 限制和时间；重置令牌后重新下载部署采集包 |\n| PC 原始日志不可用 | 日志按独立策略清理；分析结果与普通 log_id 标识保留，详情只能按需读取尚未清理的原始日志 |
+| PC API 上报失败 | 查 is_enabled、Bearer 令牌、Content-Type: application/json、16 MiB 限制和时间；重置令牌后重新下载部署采集包 |
+| PC 原始日志不可用 | 日志按独立策略清理；分析结果与普通 log_id 标识保留，详情只能按需读取尚未清理的原始日志 |
 | 服务器 HTTP 500 / 服务数据不足 | 更新目标服务器 HTTP 脚本，查 `%ProgramData%\NetworkInspectionAgent` 日志和令牌；管理员身份不保证每个服务可读 |
 | 网络 Ping 通但部分失败 | 按项目查 SNMP 视图/OID、SSH 命令/解析；在模板窗口用实际回显预览 |
 | 深信服吞吐量 401 | 查 Worker 出口白名单、开放接口和共享密钥，确保 Worker 已更新；吞吐量使用 POST JSON 签名 |
 | 配置下载为空或无法解密 | 先看备份支持范围/成功版本，再核对原备份密钥；下载不会即时连接设备 |
 | 拓扑没有链路 | 确认巡检配置勾选“拓扑发现（LLDP/CDP）”，设备启用 LLDP/CDP，SNMP 可读 LLDP-MIB 或 SSH 模板能解析回显；Ping、ARP、MAC 表和名称相似不会生成物理链路 |
-| 域控 636 / BitLocker 失败 | 按 [CA 指南](docs/ldaps-ca.md) 查 DNS、证书链、端口及目录权限；项目 BitLocker 读取要求 LDAPS |
+| 域控 636 / BitLocker 失败 | 按 [CA 指南](docs/operations.md#windows-内部-ca-与-ldaps-排障) 查 DNS、证书链、端口及目录权限；项目 BitLocker 读取要求 LDAPS |
 | MariaDB W003 / W036 | 核对实际迁移和索引；目标范围有专用唯一索引，不截断 DN、不重置表，详见[数据库说明](docs/architecture.md) |
+| 启动报 `DB_ENGINE must be ...` | 配置里的引擎值拼错了。**这是刻意的**：早前拼错会静默连上根目录的 SQLite 空库，看起来像数据全没了。改回 `mysql` 或 `sqlite` 即可 |
 | 告警未收到 | 整批是否结束、目标处理是否完成，再查总结生成错误、渠道状态与投递详情 |
 | 静态文件仍旧 | 确认运行代码、`collectstatic` 输出目录和浏览器缓存；更新 Python 后还需重启对应进程 |
 

@@ -4,7 +4,7 @@ from django.test import TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from net.models import ComputerAnalysisProfile, TaskRun
+from net.models import ComputerAnalysisProfile
 from net.inspections.queue import cancel_task, claim_next_task, enqueue_task, renew_lease
 from net.inspections.state import save_target
 from tests.auth import login_admin

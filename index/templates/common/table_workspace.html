@@ -5,10 +5,12 @@
     {% for name, value in table_state.preserved_parameters.items %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
 
     <div class="table-filter-bar">
-        <div class="table-filter-field table-filter-field--keyword" data-active-filter-source data-filter-key="keyword" data-filter-label="关键字" data-filter-parameters="{{ table_state.parameter_names.q }}"{% if table_state.q %} data-filter-active{% endif %}>
-            <label class="form-label small text-secondary" for="{{ table_definition.key }}-keyword-filter">关键字</label>
-            <input class="form-control" id="{{ table_definition.key }}-keyword-filter" name="{{ table_state.parameter_names.q }}" value="{{ table_state.q }}" placeholder="名称、地址或其他关键字">
-        </div>
+        {% comment %}
+        关键字框已移除：它对 definition.search_fields 做 OR icontains（记录表还会把多个字段
+        拼成一个字符串再匹配），而同一行的列筛选是单字段精确匹配。两个长得一样、语义不同的
+        框放在一起，配出来的结果是交集，很难说清到底筛了什么。
+        公共门户 (public/list.html) 的"搜索名称"是另一套独立实现，未受影响。
+        {% endcomment %}
         {% if status_options %}
         <div class="table-filter-field" data-active-filter-source data-filter-key="status" data-filter-label="状态" data-filter-parameters="{{ table_state.parameter_names.status }}"{% if table_state.status %} data-filter-active{% endif %}>
             <label class="form-label small text-secondary" for="{{ table_definition.key }}-status-filter">状态</label>

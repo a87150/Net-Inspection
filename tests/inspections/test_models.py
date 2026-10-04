@@ -1,4 +1,4 @@
-from datetime import date, time, timedelta
+from datetime import time, timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction

@@ -5,10 +5,8 @@ import csv
 from tests import response_body
 from datetime import time
 from io import StringIO
-from pathlib import Path
 from urllib.parse import urlsplit
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -17,14 +15,12 @@ from django.utils import timezone
 
 from net.models import (
     ComputerAnalysisProfile,
-    ComputerLogFile,
     InspectionProfile,
     Schedule,
     Server,
     TaskRun,
 )
 from net.inspections.queue import enqueue_task
-from tests.devices.pc.test_config_layout import ConfigMarkup
 
 
 class TaskUiTestCase(TestCase):
@@ -54,7 +50,7 @@ class TaskUiTestCase(TestCase):
 
     def test_infrastructure_pages_place_configuration_beside_manual_inspection(self):
         """Removing modal entrypoints would leave manual inspection unconfigurable."""
-        for kind in ('networks', 'servers', 'monitors'):
+        for kind in ('networks', 'servers', 'weakcurrent'):
             with self.subTest(kind=kind):
                 response = self.client.get(reverse('asset_list', args=[kind]))
 

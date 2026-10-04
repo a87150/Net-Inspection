@@ -11,7 +11,7 @@ from django.http import Http404
 from django.template.response import TemplateResponse
 from django.urls import reverse
 
-from net.models import Computer, Network_Device, People, SecurityDevice, Server
+from net.models import Computer, Network_Device, People, WeakCurrentDevice, Server
 
 
 PAGE_SIZES = (20, 50, 100, 200, 500)
@@ -33,7 +33,7 @@ PUBLIC_INVENTORIES = {
         ('name', 'name', '设备名称'), ('ip', 'ip', 'IP'),
         ('type', 'server_type', '类型'), ('manufacturer', 'manufacturer', '厂商'),
     )),
-    'monitors': (SecurityDevice, '安防设备', (
+    'weakcurrent': (WeakCurrentDevice, '弱电设备', (
         ('name', 'device_name', '设备名称'), ('ip', 'ip', 'IP'),
         ('type', 'device_type', '类型'), ('manufacturer', 'vendor', '厂商'),
     )),

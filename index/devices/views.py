@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from io import StringIO
 
@@ -6,6 +7,7 @@ from index.common.access import is_admin
 from django.core.management import call_command
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
+from django.core.exceptions import PermissionDenied
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -14,7 +16,7 @@ from django.views.decorators.http import require_POST
 
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition
-from net.models import Computer, Network_Device, People, SecurityDevice, Server
+from net.models import Computer, Network_Device, People, WeakCurrentDevice, Server
 from net.data_exchange.inventory_csv import IMPORTABLE_ENTITIES, inventory_import_guide
 from index.alerts.views import alert_modal_context
 from index.inspections.tasks import task_modal_context
@@ -46,11 +48,11 @@ ASSET_PAGES = {
         'servers',
         'Linux 服务器通过 SSH 采集；Windows 服务器访问专用 HTTP JSON 服务。',
     ),
-    'monitors': AssetPage(
-        SecurityDevice,
-        'monitors',
-        '安防设备',
-        'monitors',
+    'weakcurrent': AssetPage(
+        WeakCurrentDevice,
+        'weakcurrent',
+        '弱电设备',
+        'weakcurrent',
         '通过设备自带 API 采集；海康和大华设备支持 Digest 认证。',
     ),
 }
@@ -78,7 +80,7 @@ def _display_value(obj, field):
 def _history_url(kind, asset):
     if kind == 'computers':
         return f"{reverse('computer_analysis_list')}?target={asset.pk}"
-    if kind in {'networks', 'servers', 'monitors'}:
+    if kind in {'networks', 'servers', 'weakcurrent'}:
         return f"{reverse('record_list', args=[kind])}?target={asset.pk}"
     return ''
 
@@ -99,6 +101,7 @@ def asset_list(request, kind, *, integration_context=None, creation_form=None, e
         'inventory_import_guide': inventory_import_guide(kind) if is_admin(request.user) else [],
         'item_key': kind,
         'item_name': page.title,
+        'switchable_kind': kind in SWITCHABLE_KINDS,
         'table_definition': table_definition,
         'page_obj': page_obj,
         'table_state': table_state,
@@ -106,7 +109,7 @@ def asset_list(request, kind, *, integration_context=None, creation_form=None, e
         'table_export_path': reverse('table_export', args=[page.table_key]),
         'configuration_selection_path': (
             reverse('configuration_zip', args=[kind])
-            if is_admin(request.user) and kind in {'networks', 'monitors'} else ''
+            if is_admin(request.user) and kind in {'networks', 'weakcurrent'} else ''
         ),
         'pagination_query': query_without_page(request),
         'inspection_type': page.inspection_kind,
@@ -122,6 +125,8 @@ def asset_list(request, kind, *, integration_context=None, creation_form=None, e
         ),
     }
     from .forms import DEVICE_KINDS, device_form, device_form_sections
+    from index.common.workspace_actions import workspace_action_context
+    context.update(workspace_action_context(kind))
     if kind in DEVICE_KINDS and is_admin(request.user):
         form = creation_form if creation_form is not None else device_form(kind, instance=edit_device)
         context.update(device_form=form, device_form_sections=device_form_sections(form),
@@ -134,14 +139,34 @@ def asset_list(request, kind, *, integration_context=None, creation_form=None, e
         modal_context = integration_context if integration_context is not None else people_modal_context(request)
         modal_context['open_import_modal'] = modal_context.get('open_import_modal') or context['open_import_modal']
         context.update(modal_context)
-    if kind in {'computers', 'networks', 'servers', 'monitors'}:
+    if kind in {'computers', 'networks', 'servers', 'weakcurrent'}:
         context.update(task_modal_context(
-            request, kind, allow_target_selection=kind in {'networks', 'servers', 'monitors'},
+            request, kind, allow_target_selection=kind in {'networks', 'servers', 'weakcurrent'},
         ))
         context.update(alert_modal_context(
             request, profile=context['task_default_profile'],
         ))
     return render(request, 'devices/list.html', context)
+
+
+SWITCHABLE_KINDS = frozenset({'networks', 'servers', 'weakcurrent'})
+
+
+@require_POST
+def asset_toggle_enabled(request, kind):
+    """Switch a device on or off; switching off keeps it out of inspection."""
+    page = _asset_page(kind)
+    if kind not in SWITCHABLE_KINDS:
+        raise Http404('该资产类型不支持停用')
+    if not is_admin(request.user):
+        raise PermissionDenied('只有管理员可以停用设备')
+    asset = get_object_or_404(page.model, pk=request.POST.get('pk'))
+    asset.is_enabled = not asset.is_enabled
+    asset.save(update_fields=['is_enabled'])
+    messages.success(request, ('%s 已启用' if asset.is_enabled else '%s 已停用') % asset)
+    return redirect(query_without_page(request) and
+                    '%s?%s' % (reverse('asset_list', args=[kind]), query_without_page(request))
+                    or reverse('asset_list', args=[kind]))
 
 
 def asset_detail(request, kind, pk):
@@ -162,7 +187,7 @@ def asset_detail(request, kind, pk):
         latest = asset.analyses.order_by('-created_at', '-pk').first()
         if latest:
             latest_url = reverse('computer_analysis_detail', args=[latest.pk])
-    elif kind in ('servers', 'networks', 'monitors'):
+    elif kind in ('servers', 'networks', 'weakcurrent'):
         latest = asset.inspections.order_by('-created_at', '-pk').first()
         if latest:
             latest_url = reverse('record_detail', args=[kind, latest.pk])
@@ -264,7 +289,7 @@ def item_list(request, item):
 @require_POST
 def run_infrastructure_inspection(request):
     asset_type = request.POST.get('asset_type', 'all')
-    if asset_type not in {'all', 'networks', 'servers', 'monitors'}:
+    if asset_type not in {'all', 'networks', 'servers', 'weakcurrent'}:
         raise Http404('未知的巡检类型')
     asset_id = request.POST.get('asset_id') or None
     output = StringIO()
@@ -277,8 +302,12 @@ def run_infrastructure_inspection(request):
             stdout=output,
         )
         messages.success(request, output.getvalue().strip() or '巡检完成。')
-    except Exception as exc:
-        messages.error(request, f'巡检失败：{exc}')
+    except Exception:
+        # Command output above is the operator's result summary, but a raw exception
+        # can carry SQL fragments, absolute paths and internal hostnames.
+        logging.getLogger(__name__).exception(
+            '巡检命令失败 asset_type=%s asset_id=%s', asset_type, asset_id)
+        messages.error(request, '巡检失败，请查看服务端日志。')
 
     if asset_type == 'all':
         return redirect('index')

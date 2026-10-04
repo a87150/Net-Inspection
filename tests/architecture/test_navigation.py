@@ -113,11 +113,11 @@ class NavigationDropdownTests(TestCase):
                         ('巡检记录', '/records/servers/'),
                     ],
                 },
-                'monitors': {
-                    'toggle': '安防设备',
+                'weakcurrent': {
+                    'toggle': '弱电设备',
                     'links': [
-                        ('安防设备列表', '/assets/monitors/'),
-                        ('巡检记录', '/records/monitors/'),
+                        ('弱电设备列表', '/assets/weakcurrent/'),
+                        ('巡检记录', '/records/weakcurrent/'),
                         ('门禁记录', '/access/records/'),
                     ],
                 },

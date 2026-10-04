@@ -190,7 +190,7 @@ def collect_security(device, timeout=12, selected_items=None, *, api_collector=N
     if mode == 'snmp':
         _prepare_snmp(device, settings)
         if not _has_snmp_credentials(device):
-            return CollectionResult(False, 'failed', '未配置安防设备 SNMP 凭据')
+            return CollectionResult(False, 'failed', '未配置弱电设备 SNMP 凭据')
         requested = _requested(selected_items)
         return _convert_snmp(collect_network_snmp(device, timeout,
                              selected_items=_snmp_selection(requested)), requested)

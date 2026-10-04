@@ -15,13 +15,10 @@ from net.models import (
     Computer,
     ComputerAnalysis,
     ComputerAnalysisProfile,
-    ComputerLogFile,
     InspectionProfile,
     Network_Device,
     Network_Device_Inspection,
     RecordStatus,
-    Server,
-    Server_Inspection,
     TaskRun,
     TaskTargetRun,
 )

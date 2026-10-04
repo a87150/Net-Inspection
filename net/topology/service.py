@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Q
@@ -11,7 +10,7 @@ from django.utils import timezone
 
 from net.infrastructure.sanitization import sanitize
 from net.models import (
-    Network_Device, NetworkTopologyInterface, NetworkTopologyLink,
+    NetworkTopologyInterface, NetworkTopologyLink,
     NetworkTopologyObservation, TaskTargetRun, TopologyDiscoveryBatch,
 )
 from net.topology.discovery import stable_interface_key

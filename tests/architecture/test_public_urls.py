@@ -10,7 +10,7 @@ from tests.auth import login_reader
 
 from index.common.table_options import build_field_options
 from index.common.table_registry import get_table_definition
-from net.models import InspectionProfile, SecurityDevice, Server, TaskRun
+from net.models import InspectionProfile, WeakCurrentDevice, Server, TaskRun
 from net.inspections.queue import enqueue_task
 
 
@@ -20,7 +20,7 @@ class PublicURLTests(TestCase):
         self.raw = 'https://private-user:private-pass@device.demo.invalid:9443/inspection?token=query-secret&x=opaque-secret#fragment-secret'
         self.safe = 'https://device.demo.invalid:9443/inspection'
         self.assets = [('servers', Server.objects.create(ip='192.0.2.70', name='Fixture', api_url=self.raw)),
-                       ('monitors', SecurityDevice.objects.create(ip='192.0.2.71', device_name='Fixture', api_url=self.raw))]
+                       ('weakcurrent', WeakCurrentDevice.objects.create(ip='192.0.2.71', device_name='Fixture', api_url=self.raw))]
 
     def assert_private_absent(self, value):
         for secret in ('private-user', 'private-pass', 'query-secret', 'opaque-secret', 'fragment-secret'):

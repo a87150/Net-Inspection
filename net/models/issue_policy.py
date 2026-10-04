@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 class IssueSeverityPolicy(models.Model):
     id = models.BigAutoField(primary_key=True)
     project = models.CharField(max_length=16, unique=True, default='computers', choices=(
-        ('computers', 'PC 日志分析'), ('networks', '网络设备巡检'), ('servers', '服务器巡检'), ('monitors', '安防设备巡检')))
+        ('computers', 'PC 日志分析'), ('networks', '网络设备巡检'), ('servers', '服务器巡检'), ('weakcurrent', '弱电设备巡检')))
     overrides = models.JSONField(default=dict, blank=True)
     thresholds = models.JSONField(default=dict, blank=True)
     updated_at = models.DateTimeField(auto_now=True)

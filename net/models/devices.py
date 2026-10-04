@@ -113,6 +113,7 @@ class Network_Device(models.Model):
     disk_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     port_count = models.PositiveIntegerField(null=True, blank=True)
     vlan_count = models.PositiveIntegerField(null=True, blank=True)
+    is_enabled = models.BooleanField(default=True, db_index=True)
 
     @property
     def effective_connection_type(self):
@@ -199,6 +200,7 @@ class Server(models.Model):
     cpu_logical_processor_count = models.PositiveIntegerField(null=True, blank=True)
     memory_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     disk_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    is_enabled = models.BooleanField(default=True, db_index=True)
 
     @property
     def public_api_url(self):
@@ -208,7 +210,14 @@ class Server(models.Model):
         return f'{self.name or self.get_server_type_display()} ({self.ip})'
 
 
-class SecurityDevice(models.Model):
+class WeakCurrentDevice(models.Model):
+    """弱电设备：监控、门禁、广播、打印、环境监测等低电压系统设备。
+
+    device_type 保持自由文本，台账里既有代码（camera）也有中文（摄像机）；
+    归一化走 net.devices.collection_profiles.normalize_subtype / SUBTYPES，
+    这里是唯一的事实来源，不要再在模型上挂一份重复的 choices。
+    """
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     device_name = models.CharField(max_length=255, blank=True, null=True)
     ip = models.CharField(max_length=255, unique=True)
@@ -223,10 +232,16 @@ class SecurityDevice(models.Model):
     cpu_model = models.CharField(max_length=255, blank=True, null=True)
     memory_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     disk_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    is_enabled = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        db_table = 'net_weakcurrentdevice'
+        verbose_name = '弱电设备'
+        verbose_name_plural = '弱电设备'
 
     @property
     def public_api_url(self):
         return public_connection_url(self.api_url)
 
     def __str__(self):
-        return f'{self.device_name or "安防设备"} ({self.ip})'
+        return f'{self.device_name or "弱电设备"} ({self.ip})'

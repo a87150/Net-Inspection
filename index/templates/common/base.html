@@ -47,9 +47,9 @@
                         <button class="nav-link dropdown-toggle" id="navServersToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navServersMenu">服务器</button>
                         <ul class="dropdown-menu app-navbar__dropdown-menu" id="navServersMenu" aria-labelledby="navServersToggle"><li><a class="dropdown-item" href="{% url 'asset_list' 'servers' %}">服务器列表</a></li><li><a class="dropdown-item" href="{% url 'record_list' 'servers' %}">巡检记录</a></li></ul>
                     </li>
-                    <li class="nav-item dropdown" data-nav-menu="monitors">
-                        <button class="nav-link dropdown-toggle" id="navMonitorsToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navMonitorsMenu">安防设备</button>
-                        <ul class="dropdown-menu app-navbar__dropdown-menu" id="navMonitorsMenu" aria-labelledby="navMonitorsToggle"><li><a class="dropdown-item" href="{% url 'asset_list' 'monitors' %}">安防设备列表</a></li><li><a class="dropdown-item" href="{% url 'record_list' 'monitors' %}">巡检记录</a></li>{% if can_view_private %}<li><a class="dropdown-item" href="{% url 'access_record_list' %}">门禁记录</a></li>{% endif %}</ul>
+                    <li class="nav-item dropdown" data-nav-menu="weakcurrent">
+                        <button class="nav-link dropdown-toggle" id="navMonitorsToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navMonitorsMenu">弱电设备</button>
+                        <ul class="dropdown-menu app-navbar__dropdown-menu" id="navMonitorsMenu" aria-labelledby="navMonitorsToggle"><li><a class="dropdown-item" href="{% url 'asset_list' 'weakcurrent' %}">弱电设备列表</a></li><li><a class="dropdown-item" href="{% url 'record_list' 'weakcurrent' %}">巡检记录</a></li>{% if can_view_private %}<li><a class="dropdown-item" href="{% url 'access_record_list' %}">门禁记录</a></li>{% endif %}</ul>
                     </li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'task_list' %}">后台任务</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'alert_list' %}">告警记录</a></li>

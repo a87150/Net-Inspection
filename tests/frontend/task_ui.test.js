@@ -92,6 +92,9 @@ test('device item choices follow selected capabilities, independent of search vi
     assert.deepEqual(Array.from(ui.applicableTargetItems(choices)),['status_data']);
     choices[1].input.checked=true;
     assert.deepEqual(Array.from(ui.applicableTargetItems(choices)).sort(),['channel_status','status_data']);
+    // 一台没选就没有可执行项目，不能退回全部设备的并集。
+    choices[0].input.checked=false; choices[1].input.checked=false;
+    assert.deepEqual(Array.from(ui.applicableTargetItems(choices)),[]);
 });
 
 test('inherited inspection rules stay closed and custom rules show only the selected protocol', () => {
@@ -192,4 +195,22 @@ test('alert inheritance displays default channels without submitting override ch
     assert.equal(inherited.hidden, true);
     mode.value = 'inherit'; events['modal-draft-restored']();
     assert.equal(editor.disabled, true);
+});
+test('method notes follow the selected devices, not every possible device', () => {
+    const ssh = {input:{checked:true}, methods:{cpu:'SSH', traffic:'SNMP'}};
+    const snmp = {input:{checked:false}, methods:{cpu:'SNMP', traffic:'SNMP'}};
+    // 只选 SSH 设备：备注就是这台设备的方式，看不到没选那台的。
+    assert.deepEqual(Array.from(ui.applicableMethodNotes([ssh, snmp]).get('cpu')), ['SSH']);
+    // 换选 SNMP 设备，备注跟着变 —— 这就是「动态」。
+    ssh.input.checked = false; snmp.input.checked = true;
+    assert.deepEqual(Array.from(ui.applicableMethodNotes([ssh, snmp]).get('cpu')), ['SNMP']);
+    // 两台都选且方式不同，按斜杠并列，这就是「实时接口流量（SNMP/SSH）」那种形态。
+    ssh.input.checked = true;
+    assert.deepEqual(Array.from(ui.applicableMethodNotes([ssh, snmp]).get('cpu')), ['SSH', 'SNMP']);
+    // 单台设备本身就带两种方式时原样保留。
+    assert.deepEqual(Array.from(ui.applicableMethodNotes([{input:{checked:true}, methods:{lldp_neighbors:'SNMP/SSH'}}])
+        .get('lldp_neighbors')), ['SNMP', 'SSH']);
+    // 一台没选就没有备注，和项目隐藏是同一个前提。
+    ssh.input.checked = false; snmp.input.checked = false;
+    assert.equal(ui.applicableMethodNotes([ssh, snmp]).size, 0);
 });

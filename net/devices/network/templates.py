@@ -5,7 +5,6 @@ validated at the device boundary and may only describe read-only commands,
 bounded text parsing, and numeric SNMP object identifiers.
 """
 import re
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
 from django.core.exceptions import ValidationError
 from net.inspections.selection import NETWORK_FUNCTION_ITEMS

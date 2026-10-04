@@ -6,7 +6,7 @@ from django.urls import reverse
 
 from index.devices.forms import device_form, preserve_empty_secrets
 from net.admin.domain import AlertChannelAdminForm
-from net.models import AlertChannel, Network_Device, PeopleSyncSource, SecurityDevice, Server
+from net.models import AlertChannel, Network_Device, PeopleSyncSource, WeakCurrentDevice, Server
 
 
 MASK = '••••••••'
@@ -50,8 +50,8 @@ class AllSavedSecretMaskTests(TestCase):
                 {'ip': '192.0.2.81', 'name': '应用服务器', 'server_type': 'linux'},
             ),
             (
-                'monitors',
-                SecurityDevice.objects.create(
+                'weakcurrent',
+                WeakCurrentDevice.objects.create(
                     ip='192.0.2.82', device_name='前门门禁',
                     api_password='api-password-private', api_token='api-token-private',
                 ),

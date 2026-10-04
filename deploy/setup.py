@@ -4,12 +4,46 @@ import base64
 import getpass
 import os
 from pathlib import Path
+import re
 import secrets
 import socket
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 KEYS = ('DOMAIN_OPERATION_ENCRYPTION_KEY', 'PC_LOG_SOURCE_ENCRYPTION_KEY', 'DEVICE_BACKUP_ENCRYPTION_KEY')
+
+
+def database_ready(host, port, name, user, password):
+    """True when that database and user already work, so nothing needs creating."""
+    import MySQLdb
+    try:
+        connection = MySQLdb.connect(host=host, port=int(port), user=user,
+                                     passwd=password, db=name, charset='utf8mb4')
+    except MySQLdb.Error:
+        return False
+    connection.close()
+    return True
+
+
+def provision_database(host, port, name, user, password, admin_user, admin_password):
+    """Create the database and a least-privilege application user; the admin password is never stored."""
+    for label, value in (('database name', name), ('database user', user)):
+        if not re.fullmatch(r'[A-Za-z0-9_$-]{1,64}', value):
+            raise ValueError(f'Unsafe {label}: use letters, digits, underscore, hyphen or $ only.')
+    import MySQLdb
+    connection = MySQLdb.connect(host=host, port=int(port), user=admin_user,
+                                 passwd=admin_password, charset='utf8mb4')
+    try:
+        cursor = connection.cursor()
+        cursor.execute(f'CREATE DATABASE IF NOT EXISTS `{name}` '
+                       'CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci')
+        cursor.execute(f"CREATE USER IF NOT EXISTS `{user}`@'%%' IDENTIFIED BY %s", [password])
+        cursor.execute(f"ALTER USER `{user}`@'%%' IDENTIFIED BY %s", [password])
+        cursor.execute(f"GRANT ALL PRIVILEGES ON `{name}`.* TO `{user}`@'%'")
+        cursor.execute('FLUSH PRIVILEGES')
+    finally:
+        connection.close()
+    print(f"Created database {name!r} and user {user!r} on {host}:{port} with rights on that database only.")
 
 
 def configure(path, *, interactive=True):
@@ -21,21 +55,24 @@ def configure(path, *, interactive=True):
     def ask(label, default):
         return input(f'{label} [{default}]: ').strip() or default
     hosts = ask('Allowed website host/IP (comma separated, no http:// or port)', f'{socket.gethostname()},127.0.0.1,localhost')
+    db_host = ask('MySQL/MariaDB host', '127.0.0.1')
+    db_port = ask('Database port', '3306')
+    db_name = ask('Database name', 'net_inspection')
+    db_user = ask('Application database user', 'net_inspection')
+    db_password = getpass.getpass('Application database password (hidden): ')
+    if not db_password:
+        raise ValueError('Database password cannot be empty. No configuration was written.')
     values = {
         'DJANGO_SECRET_KEY': secrets.token_urlsafe(64), 'DJANGO_DEBUG': 'false',
         'DJANGO_ALLOWED_HOSTS': hosts, 'DB_ENGINE': 'mysql',
-        'DB_HOST': ask('Existing MySQL/MariaDB host', '127.0.0.1'),
-        'DB_PORT': ask('Database port', '3306'), 'DB_NAME': ask('Existing database name', 'net_inspection'),
-        'DB_USER': ask('Database user', 'net_inspection'),
-        'DB_PASSWORD': getpass.getpass('Database password (hidden): '),
+        'DB_HOST': db_host, 'DB_PORT': db_port, 'DB_NAME': db_name,
+        'DB_USER': db_user, 'DB_PASSWORD': db_password,
         'NET_PAGE_CACHE_ENABLED': 'false', 'NET_TRUST_PROXY_HEADERS': 'false',
         'WEB_LISTEN': ask('Web listen address', '0.0.0.0:8000'), 'WEB_THREADS': '4',
         'WORKER_THREADS': '4', 'WORKER_POLL_SECONDS': '5', 'WORKER_LEASE_SECONDS': '60',
         'DJANGO_STATIC_ROOT': str(ROOT / 'runtime' / 'deployment' / 'staticfiles'),
         **{key: base64.urlsafe_b64encode(secrets.token_bytes(32)).decode() for key in KEYS},
     }
-    if not values['DB_PASSWORD']:
-        raise ValueError('Database password cannot be empty. No configuration was written.')
     lines = []
     for key, value in values.items():
         value = str(value).replace('\\', '\\\\').replace("'", "\\'")
@@ -129,6 +166,24 @@ def preflight(path):
     print(f'Configuration and listen port validated; environment: {path}')
 
 
+def ensure_database_interactively(database):
+    """Offer to create the configured database and application user. True once it is reachable."""
+    if database['ENGINE'] != 'django.db.backends.mysql':
+        return False
+    host, port = database['HOST'] or '127.0.0.1', int(database['PORT'] or 3306)
+    name, user, password = database['NAME'], database['USER'], database['PASSWORD']
+    if database_ready(host, port, name, user, password):
+        print(f"Using the existing database {name!r} and user {user!r}.")
+        return True
+    print(f"Database {name!r} or user {user!r} is not usable yet.")
+    if input(f"Create database {name!r} and user {user!r} now? [Y/n]: ").strip().lower() in ('n', 'no'):
+        return False
+    provision_database(host, port, name, user, password,
+                       input('Database admin account (used once, never stored) [root]: ').strip() or 'root',
+                       getpass.getpass('Database admin password (hidden, never stored): '))
+    return True
+
+
 def prepare(path, *, interactive=True):
     load_config(path)
     import django
@@ -141,7 +196,10 @@ def prepare(path, *, interactive=True):
     try:
         connection.ensure_connection()
     except Exception:
-        raise ValueError('Database connection failed. Verify the database exists, credentials, network and service-account access; no reset was attempted.') from None
+        if interactive and ensure_database_interactively(database):
+            connection.ensure_connection()
+        else:
+            raise ValueError('Database connection failed. Verify the database exists, credentials, network and service-account access; no reset was attempted.') from None
     call_command('check')
     call_command('migrate', interactive=False)
     call_command('collectstatic', interactive=False, verbosity=0)

@@ -16,7 +16,7 @@ class ProjectIssueSettingsTests(TestCase):
         server = self.client.get(url, {'project': 'servers'})
         self.assertContains(server, 'name="rule_services"')
         self.assertNotContains(server, 'name="rule_vlan_status"')
-        security = self.client.get(url, {'project': 'monitors'})
+        security = self.client.get(url, {'project': 'weakcurrent'})
         self.assertContains(security, 'name="rule_channel_status"')
         self.assertNotContains(security, 'name="rule_software"')
 
@@ -59,9 +59,9 @@ class ProjectIssueSettingsTests(TestCase):
         self.assertNotIn('traffic', normal)
 
     def test_setting_windows_on_record_pages_target_correct_projects(self):
-        for project in ('networks', 'servers', 'monitors'):
+        for project in ('networks', 'servers', 'weakcurrent'):
             response = self.client.get(reverse('record_list', args=[project]))
-            self.assertNotContains(response, reverse('collection_templates', args=[project]))
+            self.assertContains(response, reverse('collection_templates', args=[project]))
             self.assertNotContains(response, 'id="issueSeverityModal"')
             choices = response.context['table_state']['field_options']['problem_types']
             self.assertNotIn(('杀毒', '杀毒'), choices)

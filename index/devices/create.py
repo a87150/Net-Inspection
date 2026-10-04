@@ -1,6 +1,5 @@
 from django.contrib import messages
 from index.common.access import admin_required
-from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError, transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
@@ -32,12 +31,12 @@ def asset_create(request, kind):
 _CONNECTION_FIELDS = {
     'networks': {'vendor', 'ip', 'connection_type', 'port', 'username', 'password', 'snmp_version', 'snmp_port', 'snmp_community', 'snmp_security_level', 'snmp_username', 'snmp_auth_protocol', 'snmp_auth_password', 'snmp_priv_protocol', 'snmp_priv_password', 'snmp_context_name', 'snmp_retries'},
     'servers': {'server_type', 'ip', 'port', 'username', 'password', 'api_url', 'api_token', 'verify_ssl'},
-    'monitors': {'vendor', 'device_type', 'ip', 'api_url', 'api_username', 'api_password', 'api_token', 'verify_ssl'},
+    'weakcurrent': {'vendor', 'device_type', 'ip', 'api_url', 'api_username', 'api_password', 'api_token', 'verify_ssl'},
 }
 _TARGET_TYPES = {
     'networks': TaskTargetRun.TargetType.NETWORK_DEVICE,
     'servers': TaskTargetRun.TargetType.SERVER,
-    'monitors': TaskTargetRun.TargetType.MONITOR,
+    'weakcurrent': TaskTargetRun.TargetType.WEAK_CURRENT,
 }
 
 

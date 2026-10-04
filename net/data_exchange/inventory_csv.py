@@ -8,11 +8,12 @@ from datetime import datetime
 from django.core.exceptions import ValidationError
 from django.db import DatabaseError, transaction
 
-from net.models import Computer, Domain_Account, Domain_Computer, Network_Device, People, SecurityDevice, Server
+from net.models import Computer, Domain_Account, Domain_Computer, Network_Device, People, WeakCurrentDevice, Server
 from net.data_exchange.xlsx import build_xlsx, read_xlsx_rows
+from net.data_exchange.table_csv import _spreadsheet_safe
 
 
-IMPORTABLE_ENTITIES = {'people', 'networks', 'servers', 'monitors'}
+IMPORTABLE_ENTITIES = {'people', 'networks', 'servers', 'weakcurrent'}
 MAX_CSV_UPLOAD_BYTES = 2 * 1024 * 1024
 MAX_CSV_ROWS = 5000
 MAX_CSV_COLUMNS = 64
@@ -227,9 +228,9 @@ ENTITY_SPECS = {
         ),
         'sample': ('应用服务器', '192.0.2.20', 'Linux', 'Ubuntu 24.04', '22', 'readonly', 'CHANGE-ME', '', '', '否', '24.04', '', '2026-01-15', 'Example', 'Rack Server', 'DEMO-SRV-001', 'x86_64', 'Xeon', '32', '8', '16', '512'),
     },
-    'monitors': {
-        'name': '安防设备',
-        'model': SecurityDevice,
+    'weakcurrent': {
+        'name': '弱电设备',
+        'model': WeakCurrentDevice,
         'key': 'ip',
         'columns': [
             ('设备名称', 'device_name', _text), ('IP地址', 'ip', _ip),
@@ -308,7 +309,7 @@ def export_csv(entity, template_only=False):
                 value = getattr(obj, field, '')
                 if isinstance(value, bool):
                     value = '是' if value else '否'
-                row.append(value if value is not None else '')
+                row.append(_spreadsheet_safe(value) if value is not None else '')
             writer.writerow(row)
     return '\ufeff' + stream.getvalue()
 

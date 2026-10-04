@@ -71,7 +71,13 @@ def _publish(started, worker_id, snapshot=None, error='', lease_guard=None):
         target.result_type = 'domain_sync'
         target.result_id = str(task.pk)
         save_target(target, {'status', 'finished_at', 'result_snapshot', 'error_message', 'result_type', 'result_id'})
-        return ExecutionOutcome(str(target.pk), target.status, error_message=error)
+        outcome = ExecutionOutcome(str(target.pk), target.status, error_message=error)
+    if not outcome.stale:
+        # 和巡检/日志分析执行器一致：结果落库后立刻评估告警，不等 worker 下一轮。
+        from net.alerts.service import process_persisted_target
+
+        process_persisted_target(target.pk)
+    return outcome
 
 
 def execute_domain_sync_target(target_run, *, worker_id, lease_guard=None):

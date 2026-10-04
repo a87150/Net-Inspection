@@ -6,7 +6,7 @@ from net.devices.network.snmp import SNMP_ITEMS, collect_network_snmp
 from net.devices.network.ssh import collect_network_ssh
 from net.devices.network.sangfor import collect_sangfor_ac
 from net.infrastructure.collection import CollectionResult
-from net.inspections.selection import NETWORK_FIELDS, NETWORK_FUNCTION_ITEMS
+from net.inspections.selection import NETWORK_FUNCTION_ITEMS
 
 
 SSH_ONLY_ITEMS = frozenset({'logs', 'config_info'}) | frozenset(NETWORK_FUNCTION_ITEMS)

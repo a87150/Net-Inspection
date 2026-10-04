@@ -14,8 +14,7 @@ from django.utils import timezone
 from index.common.table_query import apply_table_filters
 from index.common.table_registry import get_table_definition, project_record_definition
 from index.inspections.records import _computer_analysis_records, _error_records, _infrastructure_records
-from net.models import (Computer, ComputerAnalysis, ComputerLogFile,
-                        Network_Device, Network_Device_Inspection, Server,
+from net.models import (Computer, ComputerAnalysis, Network_Device, Network_Device_Inspection, Server,
                         Server_Inspection)
 
 
@@ -85,11 +84,15 @@ class ResultPaginationTests(TestCase):
         self.assertIn(('PC', 'PC'), state['field_options']['category'])
 
     def test_network_filters_and_pages_in_sql_without_payloads(self):
-        device = Network_Device.objects.create(device_name='Edge', ip='192.0.2.10')
+        # One device per row so the asset column (a candidate field on record tables)
+        # has as many options as rows; summary is long free text and offers none.
+        devices = Network_Device.objects.bulk_create([
+            Network_Device(device_name=f'Edge {i:03}', ip=f'192.0.2.{i + 1}') for i in range(105)
+        ])
         Network_Device_Inspection.objects.bulk_create([
             Network_Device_Inspection(device=device, summary=f'row {i:03}',
                                       details={'cpu': {'usage_percent': i}, 'large': 'x' * 10000})
-            for i in range(105)
+            for i, device in enumerate(devices)
         ])
         with CaptureQueriesContext(connection) as queries:
             source = _infrastructure_records('networks', latest_only=False)
@@ -100,7 +103,7 @@ class ResultPaginationTests(TestCase):
             result = list(page)
         self.assertEqual(page.paginator.count, 105)
         self.assertEqual(len(result), 20)
-        self.assertEqual(len(state['field_options']['summary']), 105)
+        self.assertEqual(len(state['field_options']['asset']), 105)
         selects = [q['sql'] for q in queries if 'LIMIT 20 OFFSET 20' in q['sql']]
         self.assertEqual(len(selects), 1)
         self.assertNotIn('"details"', selects[0])
@@ -146,15 +149,25 @@ class ResultPaginationTests(TestCase):
         self.assertEqual(len(rows), 25)
         self.assertTrue(all('include' in row['摘要'] for row in rows))
 
-    def test_legacy_category_and_search_across_display_columns_are_preserved(self):
+    def test_legacy_category_parameter_is_ignored(self):
         device = Network_Device.objects.create(device_name='Edge', ip='192.0.2.12')
-        record = Network_Device_Inspection.objects.create(device=device, summary='hello')
+        Network_Device_Inspection.objects.create(device=device, summary='hello')
         source = _infrastructure_records('networks', latest_only=False)
         definition = project_record_definition('networks')
         rows, _ = apply_table_filters(self.factory.get('/', {'category': '服务器'}), source, definition)
         self.assertEqual(list(rows), [])
-        rows, _ = apply_table_filters(self.factory.get('/', {'q': '(192.0.2.12) hello'}), source, definition)
-        self.assertEqual([row['pk'] for row in rows], [record.pk])
+
+    def test_keyword_parameter_no_longer_filters(self):
+        # The keyword box is gone on purpose, so an old ?q= must be inert rather than
+        # quietly narrowing the list through a path nobody can see in the UI.
+        device = Network_Device.objects.create(device_name='Edge', ip='192.0.2.12')
+        other = Network_Device.objects.create(device_name='Core', ip='192.0.2.13')
+        Network_Device_Inspection.objects.create(device=device, summary='hello')
+        Network_Device_Inspection.objects.create(device=other, summary='unrelated')
+        source = _infrastructure_records('networks', latest_only=False)
+        definition = project_record_definition('networks')
+        rows, _ = apply_table_filters(self.factory.get('/', {'q': 'nothing-matches'}), source, definition)
+        self.assertEqual(len(list(rows)), 2)
 
     def test_pc_nullable_sort_keeps_missing_values_last_when_ascending(self):
         computer = Computer.objects.create(computer_name='PC-SORT')

@@ -3,7 +3,7 @@
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand
 
-from net.models import InspectionProfile, Network_Device, SecurityDevice, Server, TaskRun
+from net.models import InspectionProfile, Network_Device, WeakCurrentDevice, Server, TaskRun
 from net.inspections.queue import enqueue_task
 
 
@@ -20,11 +20,11 @@ _ASSET_TYPES = {
         ['computer_name', 'system_info', 'cpu', 'memory', 'storage_status', 'network_info', 'services', 'logs'],
         '命令行服务器巡检',
     ),
-    'monitors': (
-        InspectionProfile.DeviceType.MONITOR,
-        SecurityDevice,
+    'weakcurrent': (
+        InspectionProfile.DeviceType.WEAK_CURRENT,
+        WeakCurrentDevice,
         ['device_info', 'status_data', 'channel_status', 'storage_status'],
-        '命令行安防设备巡检',
+        '命令行弱电设备巡检',
     ),
 }
 
@@ -43,12 +43,12 @@ def _command_profile(device_type, selected_items, name):
 
 
 class Command(BaseCommand):
-    help = '创建网络设备、服务器和安防设备的后台巡检任务'
+    help = '创建网络设备、服务器和弱电设备的后台巡检任务'
 
     def add_arguments(self, parser):
         parser.add_argument(
             '--asset-type',
-            choices=['all', 'networks', 'servers', 'monitors'],
+            choices=['all', 'networks', 'servers', 'weakcurrent'],
             default='all',
         )
         parser.add_argument('--asset-id', help='只为指定 UUID 资产创建巡检任务')

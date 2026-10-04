@@ -7,7 +7,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from django.core.exceptions import ImproperlyConfigured
 
-from net.models import Network_Device, SecurityDevice
+from net.models import Network_Device, WeakCurrentDevice
 from net.infrastructure.sanitization import configuration_secrets, sanitize_configuration
 from net.devices import configuration_backups
 from net.data_exchange.table_csv import _spreadsheet_safe
@@ -38,12 +38,12 @@ def _safe_name(value):
 
 
 def _latest_configuration(asset, secrets):
-    if not isinstance(asset, (Network_Device, SecurityDevice)):
+    if not isinstance(asset, (Network_Device, WeakCurrentDevice)):
         return ConfigurationResult('unsupported', message=MESSAGES['unsupported'])
     backup = configuration_backups.latest_configuration_backup(asset)
     if backup is None:
-        message = ('没有可下载的安防设备完整备份；局部配置和旧脱敏记录不能用于完整恢复。'
-                   if isinstance(asset, SecurityDevice) else MESSAGES['missing'])
+        message = ('没有可下载的弱电设备完整备份；局部配置和旧脱敏记录不能用于完整恢复。'
+                   if isinstance(asset, WeakCurrentDevice) else MESSAGES['missing'])
         return ConfigurationResult('missing', message=message)
     try:
         content = configuration_backups.read_configuration_backup(backup)

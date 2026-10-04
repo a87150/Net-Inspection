@@ -216,13 +216,22 @@ export function layoutTopology(graph, viewport = {}) {
   const endpoints = graph.nodes.filter((node) => node.kind === 'endpoint');
   const external = graph.nodes.filter((node) => node.kind === 'external');
   const tiers = [...new Set(backbone.map((node) => Number(node.tier ?? 3)))].sort((a, b) => a - b);
-  const tierTop = 70;
-  const tierGap = tiers.length > 1 ? Math.min(140, (height - 210) / (tiers.length - 1)) : 0;
-  const positionedBackbone = tiers.flatMap((tier, tierIndex) => distribute(
-    backbone.filter((node) => Number(node.tier ?? 3) === tier),
-    padding, width - padding, tierTop + (tierIndex * tierGap),
-  ));
-  const positions = new Map(positionedBackbone.map((node) => [node.id, node]));
+  const maxColumns = width < 480
+    ? 2
+    : Math.max(2, Math.floor((width - (padding * 2)) / 190) + 1);
+  const positionedBackbone = [];
+  let tierY = 70;
+  for (const tier of tiers) {
+    const members = backbone.filter((node) => Number(node.tier ?? 3) === tier);
+    for (let index = 0; index < members.length; index += maxColumns) {
+      positionedBackbone.push(...distribute(
+        members.slice(index, index + maxColumns),
+        padding, width - padding, tierY,
+      ));
+      tierY += 110;
+    }
+    tierY += 35;
+  }
   const positionedEndpoints = [];
   for (const parent of positionedBackbone) {
     const children = endpoints.filter((node) => node.parentId === parent.id);

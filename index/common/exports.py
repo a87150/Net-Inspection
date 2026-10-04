@@ -10,7 +10,7 @@ from net.models import (
     Domain_Account,
     Domain_Computer,
     Domain_Group,
-    SecurityDevice,
+    WeakCurrentDevice,
     Network_Device,
     People,
     Server,
@@ -34,7 +34,7 @@ MODEL_TABLES = {
     'computers': Computer,
     'networks': Network_Device,
     'servers': Server,
-    'monitors': SecurityDevice,
+    'weakcurrent': WeakCurrentDevice,
     'domain_accounts': Domain_Account,
     'domain_computers': Domain_Computer,
     'domain_groups': Domain_Group,
@@ -78,7 +78,7 @@ def _table_source(request, table_key, scope):
                 raise Http404('未知的巡检类型')
             task = None
             if request.GET.get('task'):
-                device_type = {'networks': 'network_device', 'servers': 'server', 'monitors': 'monitor'}[scope]
+                device_type = {'networks': 'network_device', 'servers': 'server', 'weakcurrent': 'monitor'}[scope]
                 try:
                     task = get_object_or_404(TaskRun, pk=request.GET['task'], task_type='inspection',
                                              inspection_profile__device_type=device_type)

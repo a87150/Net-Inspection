@@ -5,6 +5,8 @@ from xml.etree import ElementTree
 from xml.sax.saxutils import escape
 from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile
 
+from net.infrastructure.xml_safe import safe_fromstring
+
 
 SPREADSHEET_NAMESPACE = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
 
@@ -76,7 +78,7 @@ def read_xlsx_rows(upload, *, max_rows, max_columns, max_cell_chars):
             )
             if not worksheets:
                 raise ValueError('Excel 文件中没有工作表')
-            sheet_root = ElementTree.fromstring(archive.read(worksheets[0]))
+            sheet_root = safe_fromstring(archive.read(worksheets[0]))
             rows = []
             for row_node in sheet_root.findall('.//x:sheetData/x:row', namespace):
                 if len(rows) >= max_rows:
@@ -98,7 +100,7 @@ def read_xlsx_rows(upload, *, max_rows, max_columns, max_cell_chars):
             return rows
     except ValueError:
         raise
-    except (BadZipFile, ElementTree.ParseError, IndexError, KeyError, TypeError):
+    except (BadZipFile, ElementTree.ParseError, IndexError, KeyError, TypeError, ValueError):
         raise ValueError('Excel 文件无法解析') from None
 
 
@@ -121,7 +123,7 @@ def _column_index(reference):
 def _shared_strings(archive, namespace):
     if 'xl/sharedStrings.xml' not in archive.namelist():
         return []
-    root = ElementTree.fromstring(archive.read('xl/sharedStrings.xml'))
+    root = safe_fromstring(archive.read('xl/sharedStrings.xml'))
     return [
         ''.join(node.text or '' for node in item.findall('.//x:t', namespace))
         for item in root.findall('x:si', namespace)

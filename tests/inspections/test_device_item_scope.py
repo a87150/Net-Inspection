@@ -1,5 +1,5 @@
 from django.test import TestCase
-from net.models import SecurityDevice, InspectionProfile, TaskRun
+from net.models import WeakCurrentDevice, InspectionProfile, TaskRun
 from net.devices.collection_profiles import resolve_collection_settings, supported_collection_items
 from net.inspections.queue import enqueue_task
 from index.inspections.forms import InspectionProfileConfigForm
@@ -7,15 +7,15 @@ from index.inspections.forms import InspectionProfileConfigForm
 
 class DeviceItemScopeTests(TestCase):
     def setUp(self):
-        self.ping=SecurityDevice.objects.create(ip='192.0.2.10',device_type='camera')
-        self.nvr=SecurityDevice.objects.create(ip='192.0.2.11',device_type='nvr',api_url='https://192.0.2.11/status')
-        self.access=SecurityDevice.objects.create(ip='192.0.2.12',device_type='access',api_url='https://192.0.2.12/status')
+        self.ping=WeakCurrentDevice.objects.create(ip='192.0.2.10',device_type='camera')
+        self.nvr=WeakCurrentDevice.objects.create(ip='192.0.2.11',device_type='nvr',api_url='https://192.0.2.11/status')
+        self.access=WeakCurrentDevice.objects.create(ip='192.0.2.12',device_type='access',api_url='https://192.0.2.12/status')
 
     def test_scope_distinguishes_ping_access_and_recorder(self):
         for asset, expected in [(self.ping,{'status_data'}),(self.access,{'device_info','status_data','config_info'})]:
-            effective=resolve_collection_settings('monitors',asset)
-            self.assertEqual(set(supported_collection_items('monitors',asset,effective)),expected)
-        self.assertIn('channel_status',resolve_collection_settings('monitors',self.nvr)['selected_items'])
+            effective=resolve_collection_settings('weakcurrent',asset)
+            self.assertEqual(set(supported_collection_items('weakcurrent',asset,effective)),expected)
+        self.assertIn('channel_status',resolve_collection_settings('weakcurrent',self.nvr)['selected_items'])
 
     def test_profile_rejects_items_unavailable_on_selected_device(self):
         form=InspectionProfileConfigForm({'name':'bad','timeout_seconds':'60','concurrent_workers':'1',

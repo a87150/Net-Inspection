@@ -146,7 +146,6 @@ def _parse_linux(raw):
 
 
 def collect_linux_ssh(server, timeout=10, selected_items=None):
-    template_data = {}
     timer = Timer()
     try:
         with timer:
@@ -181,26 +180,6 @@ def collect_linux_ssh(server, timeout=10, selected_items=None):
                                 data=data, raw={**raw, **({'command_errors': failures} if failures else {})}, duration_ms=timer.duration_ms)
     except Exception as exc:
         return CollectionResult(False, 'failed', f'SSH 采集失败：{exc}', duration_ms=getattr(timer, 'duration_ms', 0))
-
-
-def _read_channel(channel, timeout, quiet=1.5):
-    deadline = time.monotonic() + timeout
-    chunks = []
-    last_data = time.monotonic()
-    while time.monotonic() < deadline:
-        if channel.recv_ready():
-            chunks.append(channel.recv(65535).decode('utf-8', errors='replace'))
-            last_data = time.monotonic()
-        elif chunks:
-            idle = time.monotonic() - last_data
-            combined_tail = ''.join(chunks)[-300:]
-            if idle >= 0.2 and re.search(r'(?m)[^\r\n]{0,100}[>#]\s*$', combined_tail):
-                break
-            if idle >= quiet:
-                break
-        else:
-            time.sleep(0.05)
-    return ''.join(chunks)
 
 
 def _network_data(raw, vendor):

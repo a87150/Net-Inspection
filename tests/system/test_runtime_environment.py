@@ -25,12 +25,14 @@ class RuntimeEnvironmentTests(SimpleTestCase):
                 self.assertEqual(os.environ['DB_ENGINE'], 'mysql')
                 self.assertEqual(os.environ['DB_PORT'], '3307')
 
-    def test_demo_preserves_explicit_mariadb_settings(self):
+    def test_demo_forces_the_test_database_over_external_settings(self):
+        # The shared .env must never point the demo at the production database.
         from deploy.demo import configure_environment
-        with patch.dict(os.environ, {'DB_ENGINE': 'mysql', 'DB_NAME': 'example',
+        with patch.dict(os.environ, {'DB_ENGINE': 'sqlite', 'DB_NAME': 'net',
                                    'DJANGO_SECRET_KEY': 'existing'}, clear=True):
             configure_environment(Path('runtime'))
             self.assertEqual(os.environ['DB_ENGINE'], 'mysql')
-            self.assertEqual(os.environ['DB_NAME'], 'example')
-            self.assertEqual(os.environ['DJANGO_SECRET_KEY'], 'existing')
-            self.assertNotIn('DJANGO_SQLITE_PATH', os.environ)
+            self.assertEqual(os.environ['DB_NAME'], 'net-test')
+            self.assertEqual(os.environ['DJANGO_SQLITE_PATH'], '')
+            self.assertEqual(Path(os.environ['DJANGO_STATIC_ROOT']),
+                             Path('runtime') / 'staticfiles')

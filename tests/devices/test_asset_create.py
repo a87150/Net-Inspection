@@ -1,7 +1,7 @@
 from tests.auth import login_admin, login_reader
 from django.test import TestCase
 from django.urls import reverse
-from net.models import InspectionProfile, Network_Device, Server, SecurityDevice, TaskRun
+from net.models import InspectionProfile, Network_Device, Server, WeakCurrentDevice, TaskRun
 from net.inspections.queue import enqueue_task
 
 
@@ -13,7 +13,7 @@ class AssetCreateTests(TestCase):
         for kind, model, fields in (
             ('networks', Network_Device, {'device_name': '新交换机'}),
             ('servers', Server, {'name': '新服务器', 'server_type': 'windows', 'api_url': 'http://192.0.2.5:9180/'}),
-            ('monitors', SecurityDevice, {'device_name': '前门闸机', 'device_type': '门禁闸机'}),
+            ('weakcurrent', WeakCurrentDevice, {'device_name': '前门闸机', 'device_type': '门禁闸机'}),
         ):
             with self.subTest(kind=kind):
                 page = self.client.get(reverse('asset_list', args=[kind]))
@@ -52,7 +52,7 @@ class AssetCreateTests(TestCase):
         self.assertFalse(Server.objects.exists())
 
     def test_discovered_configuration_is_not_editable_during_creation(self):
-        for kind, model in (('servers', Server), ('networks', Network_Device), ('monitors', SecurityDevice)):
+        for kind, model in (('servers', Server), ('networks', Network_Device), ('weakcurrent', WeakCurrentDevice)):
             with self.subTest(kind=kind):
                 response = self.client.get(reverse('asset_list', args=[kind]))
                 form = response.context['device_form']

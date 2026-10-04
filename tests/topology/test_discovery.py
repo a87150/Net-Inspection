@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from django.test import SimpleTestCase
 
 from net.topology.discovery import (
-    InterfaceCandidate, NeighborCandidate, build_discovery_payload,
+    InterfaceCandidate, build_discovery_payload,
     stable_interface_key, stable_link_key,
 )
 

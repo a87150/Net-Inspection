@@ -30,7 +30,7 @@ class SeverityTests(RemoteRuleFixture, TestCase):
         self.assertEqual(result.exceptions[0]['severity'], 'warning')
 
     def test_unknown_does_not_recover_real_alert_and_critical_counts_as_abnormal(self):
-        from net.models import ComputerAnalysisProfile, AlertEvent, TaskRun
+        from net.models import ComputerAnalysisProfile, TaskRun
         from net.inspections.queue import enqueue_task, claim_next_task, finish_task
         from net.devices.pc.executor import execute_computer_target
         from net.inspections.task_summary import summarize_task

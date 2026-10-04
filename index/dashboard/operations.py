@@ -6,7 +6,7 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
-from net.models import Computer, Network_Device, SecurityDevice, Server
+from net.models import Computer, Network_Device, WeakCurrentDevice, Server
 from net.topology.read_model import current_topology_payload
 from index.dashboard.topology_presentation import build_enterprise_topology
 
@@ -36,8 +36,8 @@ def _asset_sources():
             Server.objects.only('id', 'name', 'ip'),
         ),
         (
-            'monitors',
-            SecurityDevice.objects.only('id', 'device_name', 'ip'),
+            'weakcurrent',
+            WeakCurrentDevice.objects.only('id', 'device_name', 'ip'),
         ),
     )
 
@@ -82,7 +82,7 @@ def _build_topology():
         network_devices=assets['networks'],
         computers=assets['computers'],
         servers=assets['servers'],
-        monitors=assets['monitors'],
+        weak_current=assets['weakcurrent'],
         physical=physical,
         asset_truncation=truncation,
     )

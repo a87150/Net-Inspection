@@ -15,7 +15,7 @@ from django.db import close_old_connections, connections
 from django.core.management import call_command
 from django.utils import timezone
 
-from net.models import InspectionProfile, SecurityDevice, Network_Device, Server, Error_Server, TaskRun, Server_Inspection
+from net.models import InspectionProfile, WeakCurrentDevice, Network_Device, Server, Error_Server, Server_Inspection
 from net.inspections.queue import enqueue_task, claim_next_task, finish_task, recover_expired_tasks
 from net.inspections.executor import execute_target
 from net.infrastructure.collection import CollectionResult
@@ -74,9 +74,8 @@ class WorkerLifecycleTests(TransactionTestCase):
 
     def test_maintenance_can_block_on_delivery_without_stopping_task_lease_heartbeats(self):
         task = self.make_task(count=1)
-        claimed = claim_next_task('maintenance-heartbeat', 1)
         entered, release = threading.Event(), threading.Event()
-        stop, maintenance_stop = threading.Event(), threading.Event()
+        delivered, stop, maintenance_stop = threading.Event(), threading.Event(), threading.Event()
         renewals = []
         worker = TaskWorker(worker_id='maintenance-heartbeat', threads=1, lease_seconds=1, poll_seconds=0.01)
 
@@ -85,9 +84,14 @@ class WorkerLifecycleTests(TransactionTestCase):
             release.wait(3)
 
         def blocking_delivery(**_kwargs):
-            entered.set()
+            delivered.set()
             release.wait(3)
             return []
+
+        def claim_and_run():
+            # 认领和执行放在同一个线程里，和生产 run_once 一致：跨线程认领会让
+            # 新连接拿到比入队更早的读视图，看不到刚入队、状态仍为 queued 的目标。
+            worker._execute_claimed_task(claim_next_task('maintenance-heartbeat', 1), stop)
 
         with patch('net.inspections.worker.execute_target', side_effect=blocking_target), \
                 patch('net.inspections.worker.enqueue_due_schedules', return_value=[]), \
@@ -95,10 +99,14 @@ class WorkerLifecycleTests(TransactionTestCase):
                 patch('net.alerts.task_summaries.reconcile_terminal_tasks'), \
                 patch('net.alerts.service.deliver_due_alerts', side_effect=blocking_delivery), \
                 patch('net.inspections.worker.renew_lease', side_effect=lambda *_args: renewals.append(1) or True):
-            maintainer = threading.Thread(target=worker._maintenance_loop, args=(stop, maintenance_stop))
-            runner = threading.Thread(target=worker._execute_claimed_task, args=(claimed, stop))
+            # 守护线程：用例故意留下被阻塞的采集线程，非守护会让进程退出时一直等下去。
+            maintainer = threading.Thread(target=worker._maintenance_loop, args=(stop, maintenance_stop),
+                                           daemon=True)
+            runner = threading.Thread(target=claim_and_run, daemon=True)
             maintainer.start()
             runner.start()
+            # 等目标线程真正进入执行，而不是维护线程的告警投递——两者共用一个事件时，
+            # 维护线程可能抢先置位，断言会在目标循环启动前就开始等而误判失败。
             self.assertTrue(entered.wait(2))
             # The delivery remains blocked; the target wait loop must still renew.
             self.assertTrue(_wait_for(lambda: bool(renewals), timeout=2))
@@ -132,7 +140,7 @@ class WorkerLifecycleTests(TransactionTestCase):
 
         with patch('net.inspections.worker.execute_target', side_effect=execution), \
                 patch('net.inspections.executor.collect_linux_ssh', return_value=CollectionResult(True, 'success')), \
-                patch('net.inspections.worker.close_old_connections', side_effect=old_connections, create=True), \
+                patch('net.inspections.worker.close_stale_connections', side_effect=old_connections), \
                 patch.object(connections, 'close_all', side_effect=close_connections):
             TaskWorker(threads=1).run_once()
         task.refresh_from_db()
@@ -189,7 +197,7 @@ class WorkerLifecycleTests(TransactionTestCase):
         with patch('net.inspections.executor.collect_linux_ssh', side_effect=blocking), \
                 patch('net.management.commands.run_task_worker.Event', return_value=stop, create=True), \
                 patch('net.inspections.worker.ThreadPoolExecutor', side_effect=constrained_pool):
-            thread = threading.Thread(target=run, name='test-worker-main')
+            thread = threading.Thread(target=run, name='test-worker-main', daemon=True)
             thread.start()
             try:
                 self.assertTrue(entered.wait(3), errors)
@@ -424,7 +432,7 @@ class SelectedCollectionTests(TestCase):
             'storage': [{'status': 'normal'}], 'channels': ['PRIVATE CHANNEL'], 'logs': ['PRIVATE LOG'],
         }
         get.return_value = response
-        asset = SecurityDevice.objects.create(ip='192.0.2.204', api_url='http://192.0.2.204/status')
+        asset = WeakCurrentDevice.objects.create(ip='192.0.2.204', api_url='http://192.0.2.204/status')
         record = self.execute(asset, 'monitor', ['storage_status'])
         self.assertEqual(get.call_args.kwargs.get('params'), {'fields': 'storage_status'})
         self.assertEqual(record.raw_output, {'storage': [{'status': 'normal'}]})

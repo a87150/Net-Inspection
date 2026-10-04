@@ -19,7 +19,7 @@ from net.models import (
     Domain_Computer,
     Network_Device,
     People,
-    SecurityDevice,
+    WeakCurrentDevice,
     Server,
 )
 from net.data_exchange.inventory_csv import import_csv
@@ -70,7 +70,7 @@ class FilteredExportContractTests(TestCase):
             ('people', People, '工号', 'H10001', 'employee_id', 1),
             ('networks', Network_Device, 'IP地址', '192.0.2.10', 'ip', 4),
             ('servers', Server, 'IP地址', '192.0.2.20', 'ip', 2),
-            ('monitors', SecurityDevice, 'IP地址', '192.0.2.30', 'ip', 2),
+            ('weakcurrent', WeakCurrentDevice, 'IP地址', '192.0.2.30', 'ip', 2),
         )
 
         for entity, model, column, sample_value, model_field, sample_count in cases:
@@ -192,7 +192,7 @@ class FilteredExportContractTests(TestCase):
             ('people', 'people'),
             ('networks', 'networks'),
             ('servers', 'servers'),
-            ('monitors', 'monitors'),
+            ('weakcurrent', 'weakcurrent'),
         )
         for kind, entity in cases:
             with self.subTest(kind=kind):
@@ -224,7 +224,7 @@ class FilteredExportContractTests(TestCase):
                     f'href="{reverse("table_export", args=[entity])}', document,
                 )
 
-                for other_entity in {'people', 'networks', 'servers', 'monitors'} - {entity}:
+                for other_entity in {'people', 'networks', 'servers', 'weakcurrent'} - {entity}:
                     self.assertNotIn(
                         reverse('import_inventory', args=[other_entity]), modal,
                     )

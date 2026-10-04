@@ -10,11 +10,11 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 
 from index.common.access import admin_required
-from net.models import Network_Device, SecurityDevice
+from net.models import Network_Device, WeakCurrentDevice
 
 
 def _asset(kind, pk):
-    models = {'networks': Network_Device, 'monitors': SecurityDevice}
+    models = {'networks': Network_Device, 'weakcurrent': WeakCurrentDevice}
     if kind not in models:
         raise Http404('此资产类型不支持配置备份')
     return get_object_or_404(models[kind], pk=pk)

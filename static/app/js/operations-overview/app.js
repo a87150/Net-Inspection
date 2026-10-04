@@ -100,7 +100,7 @@ if (mountElement && bootstrapElement) {
         const shell = mountElement.querySelector('.topology-canvas-shell');
         const width = shell?.clientWidth || window.innerWidth;
         this.topologyWidth = Math.max(320, Math.min(1400, width));
-        this.topologyHeight = window.innerWidth < 768 ? 520 : 620;
+        this.topologyHeight = window.innerWidth < 768 ? 1100 : 720;
       },
       zoomBy(delta) {
         const scale = Math.min(2.2, Math.max(0.6, this.viewport.scale + delta));
@@ -164,7 +164,7 @@ if (mountElement && bootstrapElement) {
           distribution_switch: '汇聚交换机', access_switch: '接入交换机',
           wireless_controller: '无线 AC', network_other: '网络设备',
           access_point: 'AP', computer: 'PC', server: '服务器',
-          security_device: node.subtitle || '安防设备', unresolved_neighbor: '未解析邻居',
+          weak_current_device: node.subtitle || '弱电设备', unresolved_neighbor: '未解析邻居',
         })[node.role] || '终端';
       },
       truncate(value, length) {

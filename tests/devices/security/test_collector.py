@@ -20,7 +20,7 @@ class SecurityCollectorTests(SimpleTestCase):
     def test_auto_api_failure_keeps_failure_and_adds_ping_evidence(self):
         from net.devices.security.collector import collect_security
 
-        failed_api = CollectionResult(False, 'failed', '安防设备 API 采集失败：403')
+        failed_api = CollectionResult(False, 'failed', '弱电设备 API 采集失败：403')
         target = device(api_url='https://192.0.2.45/status')
         with patch('net.devices.security.collector.collect_security_api', return_value=failed_api), patch(
             'net.devices.security.collector.ping_host', return_value=(True, 'ICMP reply')

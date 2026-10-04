@@ -6,7 +6,6 @@ from django.utils import timezone
 from net.dashboard.assets import (
     DASHBOARD_SUMMARY_ERROR_MESSAGE,
     build_asset_card_summaries,
-    with_latest_status,
 )
 from net.inspections.task_summary import inspection_task_queryset, summarize_tasks
 
@@ -63,7 +62,7 @@ def _with_card_actions(item):
         secondary.append({'label': item['log_label'], 'url': item['log_url']})
     if item.get('record_url'):
         secondary.append({'label': item['record_label'], 'url': item['record_url']})
-    if item.get('key') == 'monitors':
+    if item.get('key') == 'weakcurrent':
         secondary.append({'label': '门禁记录', 'url': reverse('access_record_list')})
     if item.get('detail_url'):
         secondary.append({'label': item['detail_label'], 'url': item['detail_url']})
@@ -152,10 +151,10 @@ def index(request):
             'record_label': '巡检记录',
         },
         {
-            'key': 'monitors',
-            'name': '安防设备',
+            'key': 'weakcurrent',
+            'name': '弱电设备',
             **_card_summary_values(
-                summaries['monitors'], waiting_label='等待首次巡检',
+                summaries['weakcurrent'], waiting_label='等待首次巡检',
             ),
             'manual_action_label': '手动执行巡检',
             'normal_label': '巡检正常',
@@ -164,8 +163,8 @@ def index(request):
             'last_run_label': '上次巡检日期',
             'checked_label': '已巡检设备',
             'bad_label': '巡检异常',
-            'list_url': reverse('asset_list', args=['monitors']),
-            'record_url': reverse('record_list', args=['monitors']),
+            'list_url': reverse('asset_list', args=['weakcurrent']),
+            'record_url': reverse('record_list', args=['weakcurrent']),
             'record_label': '巡检记录',
         },
     ]

@@ -21,15 +21,13 @@ from tests.devices.pc.helpers import analysis_task_url
 from net.models import (
     Computer,
     ComputerAnalysis,
-    ComputerAnalysisProfile,
-    ComputerLogFile,
     Domain_Account,
     Domain_Computer,
     Domain_Controller_Config,
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
-    SecurityDevice,
+    WeakCurrentDevice,
     Monitor_Inspection,
     Network_Device,
     Network_Device_Inspection,
@@ -43,7 +41,6 @@ from net.devices.pc.checks import check_activation, check_system_version
 from net.domain.sync import sync_domain
 from net.devices.security.api import collect_security_api
 from net.devices.server.windows_http import collect_windows_http
-from net.infrastructure.collection import CollectionResult
 from net.devices.pc.snapshot import extract_computer_snapshot
 from index.domain.connection_form import DomainControllerConfigForm
 
@@ -226,7 +223,7 @@ class DashboardTests(TestCase):
         response = self.client.get(reverse('index'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '后台任务')
-        self.assertContains(response, '安防设备')
+        self.assertContains(response, '弱电设备')
         self.assertEqual(self.client.get(reverse('computer_analysis_list')).status_code, 200)
 
     def test_multiple_errors_count_as_one_abnormal_computer(self):
@@ -268,7 +265,7 @@ class NetworkCheckCommandTests(TestCase):
     def test_command_enqueues_all_asset_types_without_collecting(self):
         Network_Device.objects.create(device_name='SW-1', ip='192.0.2.1')
         Server.objects.create(ip='192.0.2.2')
-        SecurityDevice.objects.create(device_name='CAM-1', ip='192.0.2.3')
+        WeakCurrentDevice.objects.create(device_name='CAM-1', ip='192.0.2.3')
 
         output = StringIO()
         call_command('run_network_checks', stdout=output)
@@ -336,7 +333,7 @@ class ProtocolCollectorTests(TestCase):
         }
         response.raise_for_status.return_value = None
         get_mock.return_value = response
-        device = SecurityDevice(ip='192.0.2.50', vendor='generic', api_url='http://192.0.2.50/api/status')
+        device = WeakCurrentDevice(ip='192.0.2.50', vendor='generic', api_url='http://192.0.2.50/api/status')
         result = collect_security_api(device)
         self.assertEqual(result.status, 'success')
         self.assertTrue(result.data['channel_status'][0]['online'])
@@ -699,7 +696,7 @@ class TableFilteringAndSortingTests(TestCase):
         People.objects.create(name='王五', employee_id='H300', department='技术部', is_active=True)
 
         response = self.client.get(reverse('item_list', args=['people']), {
-            'q': '技术部', 'filter_is_active': 'true',
+            'filter_is_active': 'true',
             'sort': 'employee_id', 'order': 'desc',
         })
         self.assertEqual(response.status_code, 200)
@@ -724,7 +721,7 @@ class TableFilteringAndSortingTests(TestCase):
                 'name', '192.0.2.81',
             ),
             (
-                'monitors', SecurityDevice, Monitor_Inspection, 'monitor',
+                'weakcurrent', WeakCurrentDevice, Monitor_Inspection, 'monitor',
                 'device_name', '192.0.2.91',
             ),
         )
@@ -779,10 +776,10 @@ class TableFilteringAndSortingTests(TestCase):
         Domain_Computer.objects.create(computer_name='PC-A', os='Windows 10', is_active=False)
 
         account_response = self.client.get(reverse('domain_account_list'), {
-            'q': '测试', 'filter_is_active': 'false',
+            'filter_is_active': 'false',
         })
         computer_response = self.client.get(reverse('domain_computer_list'), {
-            'q': 'PC', 'sort': 'computer_name', 'order': 'desc',
+            'sort': 'computer_name', 'order': 'desc',
         })
         self.assertEqual([obj.login_name for obj in account_response.context['page_obj'].object_list], ['user.a'])
         self.assertEqual(
@@ -797,7 +794,7 @@ class TableFilteringAndSortingTests(TestCase):
             created_at=timezone.now() - timedelta(days=1),
         )
         response = self.client.get(reverse('inspection_records'), {
-            'q': 'PC', 'category': 'PC 分析', 'sort': 'asset', 'order': 'asc',
+            'category': 'PC 分析', 'sort': 'asset', 'order': 'asc',
         })
         assets = [record['asset'] for record in response.context['page_obj'].object_list]
         self.assertEqual(assets, ['PC-NEW', 'PC-OLD'])
@@ -853,7 +850,7 @@ class TableRegistryTests(TestCase):
         self.assertNotIn('login_account', fields)
 
     def test_infrastructure_registry_contains_only_static_asset_fields(self):
-        for item in ('networks', 'servers', 'monitors'):
+        for item in ('networks', 'servers', 'weakcurrent'):
             with self.subTest(item=item):
                 response = self.client.get(reverse('item_list', args=[item]))
                 document = parse_response_html(response)
@@ -1377,10 +1374,10 @@ class DynamicTableQueryTests(TestCase):
         )
 
     def test_monitor_verify_ssl_is_visible_and_filters_as_boolean(self):
-        secure = SecurityDevice.objects.create(device_name='安全监控', ip='192.0.2.203', verify_ssl=True)
-        SecurityDevice.objects.create(device_name='非安全监控', ip='192.0.2.204', verify_ssl=False)
+        secure = WeakCurrentDevice.objects.create(device_name='安全监控', ip='192.0.2.203', verify_ssl=True)
+        WeakCurrentDevice.objects.create(device_name='非安全监控', ip='192.0.2.204', verify_ssl=False)
 
-        response = self.client.get(reverse('item_list', args=['monitors']), {
+        response = self.client.get(reverse('item_list', args=['weakcurrent']), {
             'filter_verify_ssl': 'true',
         })
 
@@ -1463,7 +1460,9 @@ class TablePaginationTests(TestCase):
 
         self.assertEqual(len(response.context['page_obj'].object_list), 50)
 
-    def test_aggregate_inspection_search_includes_record_older_than_100_boundary(self):
+    def test_aggregate_inspection_filter_includes_record_older_than_100_boundary(self):
+        # Was a keyword search; now a column filter, but the boundary it guards is the
+        # same: the UNION projections must not only consider the newest 100 rows.
         target = create_computer_analysis('BOUNDARY-INSPECTION')
         [
             create_computer_analysis(f'NEW-PC-{number:03d}')
@@ -1474,7 +1473,7 @@ class TablePaginationTests(TestCase):
         )
 
         response = self.client.get(reverse('inspection_records'), {
-            'q': 'BOUNDARY-INSPECTION',
+            'filter_asset': 'BOUNDARY-INSPECTION',
         })
 
         self.assertEqual(
@@ -1482,7 +1481,7 @@ class TablePaginationTests(TestCase):
             ['BOUNDARY-INSPECTION'],
         )
 
-    def test_aggregate_error_search_includes_record_older_than_100_boundary(self):
+    def test_aggregate_error_filter_includes_record_older_than_100_boundary(self):
         target = create_computer_analysis('BOUNDARY-ERROR')
         add_analysis_issue(target, '边界异常', '目标历史异常')
         newer = [
@@ -1495,7 +1494,7 @@ class TablePaginationTests(TestCase):
         )
 
         response = self.client.get(reverse('error_records'), {
-            'q': 'BOUNDARY-ERROR',
+            'filter_asset': 'BOUNDARY-ERROR',
         })
 
         self.assertEqual(
@@ -1639,6 +1638,8 @@ class RecordWorkspaceTests(TestCase):
         with patch('index.inspections.records._inspection_records', return_value=records):
             response = self.client.get(reverse('inspection_records'), {
                 'filter_status': 'not-a-supported-status',
+                # The view defaults to ('time', 'desc'); state the expected order explicitly.
+                'order': 'asc',
             })
 
         self.assertEqual(
@@ -1741,14 +1742,16 @@ class RecordWorkspaceTests(TestCase):
         self.assertEqual(list(response.context['page_obj'].object_list), [abnormal])
         self.assertNotIn(normal, response.context['page_obj'].object_list)
 
-    def test_computer_error_workspace_searches_registered_field_sources(self):
+    def test_computer_error_workspace_filters_by_registered_field_source(self):
         matching = create_computer_analysis('PC-SEARCH-MATCH')
         other = create_computer_analysis('PC-SEARCH-OTHER')
         matching_error = add_analysis_issue(matching, '磁盘异常', '空间不足')
         add_analysis_issue(other, '网络异常', '连接超时')
 
         self.client.raise_request_exception = False
-        response = self.client.get(reverse('computer_error_list'), {'q': 'MATCH'})
+        response = self.client.get(reverse('computer_error_list'), {
+            'filter_computer_name': 'PC-SEARCH-MATCH',
+        })
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(list(response.context['page_obj'].object_list), [matching_error])
@@ -1835,13 +1838,13 @@ class DemoDataCommandTests(TestCase):
         first_counts = {
             'people': People.objects.count(), 'computers': Computer.objects.count(),
             'networks': Network_Device.objects.count(), 'servers': Server.objects.count(),
-            'monitors': SecurityDevice.objects.count(),
+            'weakcurrent': WeakCurrentDevice.objects.count(),
         }
         call_command('seed_demo_data', stdout=StringIO())
         second_counts = {
             'people': People.objects.count(), 'computers': Computer.objects.count(),
             'networks': Network_Device.objects.count(), 'servers': Server.objects.count(),
-            'monitors': SecurityDevice.objects.count(),
+            'weakcurrent': WeakCurrentDevice.objects.count(),
         }
         self.assertEqual(first_counts, second_counts)
         self.assertEqual(People.objects.get(pk=existing.pk).name, '真实人员')

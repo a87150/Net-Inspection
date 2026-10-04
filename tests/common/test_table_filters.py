@@ -1,4 +1,5 @@
 import csv
+from datetime import datetime, timezone as dt_timezone
 
 from tests import response_body
 from html.parser import HTMLParser
@@ -13,12 +14,16 @@ from django.utils import timezone
 
 from index.common.table_options import build_field_option_context, build_field_options
 from index.common.table_query import apply_table_filters
-from index.common.table_registry import TABLE_DEFINITIONS, get_table_definition
+from index.common.table_registry import (
+    TABLE_DEFINITIONS,
+    TableDefinition,
+    TableField,
+    get_table_definition,
+)
 from net.models import (
     Computer,
     ComputerAnalysis,
     ComputerAnalysisProfile,
-    ComputerLogFile,
     Network_Device,
     Network_Device_Inspection,
     People,
@@ -111,24 +116,21 @@ class CompactFilterWorkspaceTests(TestCase):
             ),
         ])
 
-    def test_workspace_renders_editable_filters_with_stable_option_selects(self):
+    def test_workspace_renders_free_text_filters_without_a_candidate_list(self):
         response = self.client.get(reverse('asset_list', args=['people']))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'class="table-filter-bar"')
         self.assertContains(response, '<summary>更多筛选</summary>', html=True)
         self.assertContains(response, '<summary>自定义表格</summary>', html=True)
+        # 自由文本字段渲染普通输入框，不给候选下拉：否则会列出全部 77 个设备名/IP，
+        # 以及 os_version 这种尚未采集、只能给出空下拉的列。
         self.assertContains(
             response,
-            '<input class="form-control" id="people-name-filter-input" name="filter_name" value="" autocomplete="off">',
+            '<input class="form-control" id="people-name-filter" name="filter_name" value="">',
             html=True,
         )
-        self.assertContains(
-            response,
-            'data-filter-suggestion-select data-filter-input="people-name-filter-input"',
-        )
-        self.assertContains(response, '<option value="张三">张三</option>', html=True)
-        self.assertContains(response, '<option value="李四">李四</option>', html=True)
+        self.assertNotContains(response, 'data-filter-input="people-name-filter-input"')
         self.assertNotContains(response, 'list="people-name-options"')
         self.assertContains(response, '<option value="研发部">研发部</option>', html=True)
         self.assertContains(response, '<option value="运维部">运维部</option>', html=True)
@@ -159,14 +161,17 @@ class CompactFilterWorkspaceTests(TestCase):
         self.assertContains(response, 'page-pagination__links')
         self.assertContains(response, 'aria-current="page"')
 
-    def test_selected_text_option_does_not_hide_other_candidates(self):
+    def test_free_text_filter_keeps_the_typed_value_and_still_filters(self):
         response = self.client.get(reverse('asset_list', args=['people']), {
             'filter_name': '张三',
         })
 
         self.assertContains(response, 'name="filter_name" value="张三"')
-        self.assertContains(response, '<option value="张三">张三</option>', html=True)
-        self.assertContains(response, '<option value="李四">李四</option>', html=True)
+        self.assertNotContains(response, 'data-filter-input="people-name-filter-input"')
+        self.assertEqual(
+            [person.employee_id for person in response.context['page_obj']],
+            ['P001'],
+        )
 
     def test_non_default_filter_still_uses_allowlisted_backend_filter(self):
         definition = get_table_definition('people')
@@ -329,8 +334,8 @@ class CompactFilterWorkspaceTests(TestCase):
                 'inspection_records-servers',
             ),
             (
-                reverse('record_list', args=['monitors']),
-                'inspection_records-monitors',
+                reverse('record_list', args=['weakcurrent']),
+                'inspection_records-weakcurrent',
             ),
         )
         observed = []
@@ -574,3 +579,38 @@ class PaginationWindowTests(TestCase):
         page = Paginator(list(range(200)), 10).page(1)
 
         self.assertEqual(page_window(page, radius=2), (2, 3))
+
+
+class DatetimeFilterSqlTests(TestCase):
+    # P0-1: datetime 筛选必须留在原始列上做半开区间，不能用 __date。
+    # 两层结果一样，差别在 SQL：__date 让 MariaDB 走 CONVERT_TZ(...)+DATE()，列索引失效；
+    # mysql.time_zone_name 为空时 CONVERT_TZ 返回 NULL，整列筛选静默失效且不报错。
+    definition = TableDefinition(
+        'datetime_probe', '时间筛选探针',
+        (TableField('at', '时间', 'started_at', 'datetime', True, True, True, False),),
+        'at', 'desc', (), 25,
+    )
+
+    def test_datetime_range_compares_the_column_without_a_date_cast(self):
+        request = RequestFactory().get('/', {
+            'filter_at_from': '2026-10-01', 'filter_at_to': '2026-10-03',
+        })
+        queryset, _ = apply_table_filters(request, TaskRun.objects.all(), self.definition)
+        sql = str(queryset.query).upper()
+        self.assertNotIn('CONVERT_TZ', sql)
+        self.assertNotIn('DATE(', sql)
+        self.assertIn('>=', sql)
+
+    def test_the_to_bound_is_exclusive_at_the_next_local_midnight(self):
+        request = RequestFactory().get('/', {'filter_at_to': '2026-10-03'})
+        queryset, _ = apply_table_filters(request, TaskRun.objects.all(), self.definition)
+        sql, params = queryset.query.get_compiler(using='default').as_sql()
+        self.assertNotIn('<=', sql)
+        expected = timezone.make_aware(
+            datetime(2026, 10, 4), timezone.get_current_timezone(),
+        )
+        # Django compiles the bound in UTC, so compare against the same instant.
+        self.assertIn(
+            str(expected.astimezone(dt_timezone.utc).replace(tzinfo=None)),
+            [str(value) for value in params],
+        )

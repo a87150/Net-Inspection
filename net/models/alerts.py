@@ -22,6 +22,22 @@ _SMTP_HOST_RE = re.compile(r'^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$')
 ALERT_SCOPE_FIELDS = ('profile_type', 'profile_id', 'target_type', 'target_id')
 
 
+def alert_task_scope(task):
+    """Return the (profile_type, profile_id) that alert state rows are keyed by.
+
+    Domain sync has no profile at all, so it keys on the single DC config instead.
+    A stable scope is what lets one failure alert recover when a later sync
+    succeeds, so it must not vary from run to run.
+    """
+    if task.task_type == 'inspection' and task.inspection_profile_id:
+        return 'inspection_profile', str(task.inspection_profile_id)
+    if task.task_type == 'computer_analysis' and task.analysis_profile_id:
+        return 'computer_analysis_profile', str(task.analysis_profile_id)
+    if task.task_type == 'domain_sync':
+        return 'domain_config', '1'
+    raise ValidationError({'task': '任务配置类型无效。'})
+
+
 class _ScopedHistoryQuerySet(models.QuerySet):
     def update(self, **kwargs):
         if set(kwargs).intersection(self.model.SCOPE_WRITE_FIELDS):
@@ -92,7 +108,7 @@ def _optional_text(value, field_name):
 
 def _validate_email_settings(settings):
     required = {'smtp_host', 'smtp_port', 'use_tls', 'use_ssl', 'from_email', 'recipients'}
-    if missing := required.difference(settings):
+    if required.difference(settings):
         raise ValidationError('邮件渠道缺少必要配置。')
     allowed = required | {'username', 'password'}
     if set(settings).difference(allowed):
@@ -523,12 +539,7 @@ class AlertEvent(models.Model):
             if target is None or self.task_id != target.task_id:
                 raise ValidationError({'target_run': '告警目标必须存在且属于关联任务。'})
             task = target.task
-        if task.task_type == 'inspection' and task.inspection_profile_id and not task.analysis_profile_id:
-            profile_type, profile_id = 'inspection_profile', str(task.inspection_profile_id)
-        elif task.task_type == 'computer_analysis' and task.analysis_profile_id and not task.inspection_profile_id:
-            profile_type, profile_id = 'computer_analysis_profile', str(task.analysis_profile_id)
-        else:
-            raise ValidationError({'task': '任务配置类型无效。'})
+        profile_type, profile_id = alert_task_scope(task)
         snapshot_id = task.profile_snapshot.get('id')
         if snapshot_id is not None and str(snapshot_id) != profile_id:
             raise ValidationError({'task': '任务配置快照与关联配置不一致。'})

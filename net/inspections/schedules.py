@@ -15,7 +15,7 @@ from net.models import (
     InspectionProfile,
     PeopleSyncSource,
     Domain_Controller_Config,
-    SecurityDevice,
+    WeakCurrentDevice,
     Network_Device,
     Schedule,
     Server,
@@ -30,7 +30,7 @@ from net.infrastructure.sanitization import sanitize
 _ASSET_MODELS = {
     InspectionProfile.DeviceType.NETWORK_DEVICE: Network_Device,
     InspectionProfile.DeviceType.SERVER: Server,
-    InspectionProfile.DeviceType.MONITOR: SecurityDevice,
+    InspectionProfile.DeviceType.WEAK_CURRENT: WeakCurrentDevice,
 }
 
 # SQLite has no row-level ``SELECT ... FOR UPDATE`` semantics and concurrent
@@ -43,7 +43,7 @@ _SQLITE_SCHEDULE_POLL_LOCK = Lock()
 def target_rule_fields(device_type):
     """Only public registry fields that map directly to non-secret model fields."""
     from index.common.table_registry import get_table_definition
-    key = {'server': 'servers', 'network_device': 'networks', 'monitor': 'monitors'}[device_type]
+    key = {'server': 'servers', 'network_device': 'networks', 'monitor': 'weakcurrent'}[device_type]
     model = _ASSET_MODELS[device_type]
     concrete = {field.name: field for field in model._meta.concrete_fields}
     return {field.source: (concrete[field.source], field.label)
@@ -65,10 +65,13 @@ def next_run_at(schedule, after):
 
     if schedule.kind == Schedule.Kind.INTERVAL:
         if not schedule.interval_value or schedule.interval_unit not in {
+            Schedule.IntervalUnit.SECONDS,
             Schedule.IntervalUnit.MINUTES,
             Schedule.IntervalUnit.HOURS,
         }:
             raise ValidationError({'schedule': '间隔计划配置无效。'})
+        if schedule.interval_unit == Schedule.IntervalUnit.SECONDS:
+            return after + timedelta(seconds=schedule.interval_value)
         if schedule.interval_unit == Schedule.IntervalUnit.MINUTES:
             return after + timedelta(minutes=schedule.interval_value)
         return after + timedelta(hours=schedule.interval_value)
@@ -117,7 +120,9 @@ def _selected_target_ids(profile):
         raise ValidationError({'target_selector': '目标范围必须是 JSON 对象。'})
     selector = dict(selector)
     mode = selector.get('mode', 'all')
-    queryset = model.objects.all()
+    # Switched-off devices stay out of inspection whatever the selector says;
+    # re-enabling puts them straight back in scope.
+    queryset = model.objects.filter(is_enabled=True)
 
     if mode == 'all':
         if set(selector) - {'mode'}:

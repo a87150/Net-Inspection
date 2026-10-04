@@ -118,7 +118,8 @@ class PeopleScheduleForm(forms.Form):
         super().__init__(data=data, initial=initial, auto_id=f'{source.source_type}_schedule_%s')
         self.source = source
         self.schedule = schedule
-        stored = source.credentials if source else {}
+        # (PeopleScheduleForm has no credential fields, so unlike PeopleProviderForm
+        # there is nothing to prefill from source.credentials.)
         for name, field in self.fields.items():
             field.widget.attrs['class'] = (
                 'form-check-input' if name == 'is_enabled' else 'form-control form-control-sm'
@@ -131,7 +132,7 @@ class PeopleScheduleForm(forms.Form):
             if data.get('interval_value') is None:
                 self.add_error('interval_value', '间隔执行必须填写间隔。')
             if data.get('interval_unit') not in Schedule.IntervalUnit.values:
-                self.add_error('interval_unit', '间隔执行必须选择分钟或小时。')
+                self.add_error('interval_unit', '间隔执行必须选择秒、分钟或小时。')
         elif data.get('kind') == Schedule.Kind.DAILY:
             data['interval_value'] = None
             data['interval_unit'] = ''

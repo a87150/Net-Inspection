@@ -285,8 +285,10 @@ class AlertScopeAndConstraintTests(TestCase):
         policy.name = 'bulk-renamed'
         AlertPolicy.objects.bulk_update([policy], ['name'])
         policy.name = 'upsert-renamed'
+        # 不传 unique_fields：MySQL/MariaDB 的 ON DUPLICATE KEY UPDATE 本来就按任意
+        # 唯一键触发，Django 也只在支持 update-conflicts-with-target 的后端才需要它。
         AlertPolicy.objects.bulk_create(
-            [policy], update_conflicts=True, update_fields=['name'], unique_fields=['pk'],
+            [policy], update_conflicts=True, update_fields=['name'],
         )
         policy.refresh_from_db()
         self.assertEqual(policy.name, 'upsert-renamed')

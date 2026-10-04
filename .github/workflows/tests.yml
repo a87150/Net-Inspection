@@ -1,0 +1,81 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # MariaDB, not SQLite: the app runs on MySQL/MariaDB in production, and SQLite
+    # hides collation, lock and NULL-ordering differences that only show up there.
+    services:
+      mariadb:
+        image: mariadb:12
+        env:
+          MARIADB_ROOT_PASSWORD: ci-only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DB_ENGINE: mysql
+      DB_NAME: net
+      DB_USER: root
+      DB_PASSWORD: ci-only
+      DB_HOST: 127.0.0.1
+      DB_PORT: '3306'
+      DJANGO_DEBUG: 'false'
+      # Production is Asia/Shanghai; pin the runner clock so date-boundary tests
+      # behave the same locally and in CI.
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.lock.txt
+      - name: Generate test-only secrets
+        run: |
+          python - <<'PY'
+          import os, secrets
+          from cryptography.fernet import Fernet
+          names = ('PC_LOG_SOURCE_ENCRYPTION_KEY', 'DOMAIN_OPERATION_ENCRYPTION_KEY',
+                   'DEVICE_BACKUP_ENCRYPTION_KEY')
+          with open(os.environ['GITHUB_ENV'], 'a') as handle:
+              for name in names:
+                  handle.write(f'{name}={Fernet.generate_key().decode()}\n')
+              # DJANGO_DEBUG=false makes settings.py reject the placeholder key, which
+              # is the production startup gate doing its job.
+              handle.write('DJANGO_SECRET_KEY=' + secrets.token_urlsafe(48) + '\n')
+          PY
+      - name: Install lint tooling
+        run: python -m pip install ruff==0.16.10
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Check Django configuration
+        run: python manage.py check
+      - name: Check for missing migrations
+        run: python manage.py makemigrations --check --dry-run
+      - name: Run test suite
+        run: python manage.py test --verbosity 1
+      # tests/browser/*.test.cjs needs a Playwright install that CI does not do, so the
+      # glob stays scoped to the framework-free suites under tests/frontend.
+      - name: Run JavaScript tests
+        run: node --test "tests/frontend/**/*.test.js"
+      # A separate step: a multi-line run inherits the job's bash -e, so a failing
+      # node --test above would abort the script before this check ever ran.
+      - name: Syntax-check application JavaScript
+        run: find static/app/js -name '*.js' -print0 | xargs -0 -n1 node --check

@@ -4,7 +4,7 @@ from net.inspections.issues import PROJECT_RULES, METRIC_DEFAULTS
 from net.devices.pc.severity import grade_issue
 
 
-def number(value):
+def _metric_value(value):
     if isinstance(value, bool):
         return None
     try:
@@ -21,10 +21,10 @@ def metric_values(item, evidence):
         return []
     if item == 'temperature':
         raw = evidence.get('values_celsius', [])
-        return [value for raw_value in raw if (value := number(raw_value)) is not None and -273.15 <= value <= 1000] if isinstance(raw, list) else []
-    value = number(evidence.get('usage_percent', evidence.get('used_percent', evidence.get('usage'))))
+        return [value for raw_value in raw if (value := _metric_value(raw_value)) is not None and -273.15 <= value <= 1000] if isinstance(raw, list) else []
+    value = _metric_value(evidence.get('usage_percent', evidence.get('used_percent', evidence.get('usage'))))
     if value is None and item == 'memory':
-        total, used = number(evidence.get('total_bytes')), number(evidence.get('used_bytes'))
+        total, used = _metric_value(evidence.get('total_bytes')), _metric_value(evidence.get('used_bytes'))
         if total is not None and total > 0 and used is not None:
             value = used * 100 / total
     return [value] if value is not None and 0 <= value <= 100 else []
@@ -70,7 +70,7 @@ def evaluate_device_issues(project, selected, data, *, reachable, status, overri
         if item == 'traffic':
             interfaces = evidence.get('interfaces', []) if isinstance(evidence, dict) else []
             valid = [row for row in interfaces if isinstance(row, dict) and row.get('data_state') == 'known']
-            utilizations = [value for row in valid if (value := number(row.get('utilization_percent'))) is not None]
+            utilizations = [value for row in valid if (value := _metric_value(row.get('utilization_percent'))) is not None]
             if not interfaces or len(valid) != len(interfaces) or len(utilizations) != len(valid):
                 issue(item, '部分接口缺少有效速率采样或端口带宽，无法完整判断带宽使用率。', True)
             if utilizations and max(utilizations) > limits[item]:

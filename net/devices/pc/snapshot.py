@@ -47,7 +47,7 @@ def _first_text(source, *keys) -> str:
     return ''
 
 
-def _non_negative_integer(value: object):
+def _optional_integer(value: object):
     text = _text(value)
     if not text:
         return None
@@ -58,7 +58,7 @@ def _non_negative_integer(value: object):
     return number if number >= 0 else None
 
 
-def _gib(value: object):
+def _optional_gib(value: object):
     text = _text(value).lower().replace(' ', '')
     if re.fullmatch(r'[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?(?:tib|tb|gib|gb)?', text):
         text = text.replace(',', '')
@@ -105,19 +105,19 @@ def extract_computer_snapshot(
         'serial_number': _first_text(system, '序列号', 'BIOS序列号', 'serial_number') or _first_text(hardware, '序列号', 'serial_number'),
         'architecture': _first_text(system, '系统架构', 'architecture') or _first_text(hardware, '系统架构', 'architecture'),
         'cpu_model': _first_text(hardware, 'CPU型号', 'CPU 型号', 'cpu_model'),
-        'cpu_physical_core_count': _non_negative_integer(_first_text(
+        'cpu_physical_core_count': _optional_integer(_first_text(
             hardware,
             'CPU物理核心数', 'CPU 物理核心数', '物理核心数',
             'cpu_physical_core_count', 'physical_core_count',
             'CPU核心数', 'CPU 核心数', 'cpu_core_count',
         )),
-        'cpu_logical_processor_count': _non_negative_integer(_first_text(
+        'cpu_logical_processor_count': _optional_integer(_first_text(
             hardware,
             'CPU逻辑处理器数', 'CPU 逻辑处理器数', '逻辑处理器数',
             'cpu_logical_processor_count', 'logical_processor_count',
         )),
-        'memory_total_gb': _gib(_first_text(hardware, '当前内存容量', '内存总量', 'memory_total_gb')),
-        'disk_total_gb': _gib(_first_text(hardware, '磁盘总量', '磁盘总容量', 'disk_total_gb')),
+        'memory_total_gb': _optional_gib(_first_text(hardware, '当前内存容量', '内存总量', 'memory_total_gb')),
+        'disk_total_gb': _optional_gib(_first_text(hardware, '磁盘总量', '磁盘总容量', 'disk_total_gb')),
     }
     if inventory['disk_total_gb'] is None and isinstance(disk_payload, dict):
         from net.devices.pc.disk import total_gib

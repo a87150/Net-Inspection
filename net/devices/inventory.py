@@ -3,7 +3,7 @@
 from decimal import Decimal, InvalidOperation
 import re
 
-from net.models import Computer, Network_Device, SecurityDevice, Server
+from net.models import Computer, Network_Device, WeakCurrentDevice, Server
 
 
 _SOURCE_FIELD_ALLOWLIST = {
@@ -23,7 +23,7 @@ _SOURCE_FIELD_ALLOWLIST = {
         'cpu_physical_core_count', 'cpu_logical_processor_count',
         'memory_total_gb', 'disk_total_gb',
     ),
-    SecurityDevice: ('cpu_model', 'memory_total_gb', 'disk_total_gb'),
+    WeakCurrentDevice: ('cpu_model', 'memory_total_gb', 'disk_total_gb'),
 }
 _COUNT_FIELDS = {
     'cpu_physical_core_count', 'cpu_logical_processor_count',

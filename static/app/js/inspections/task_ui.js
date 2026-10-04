@@ -64,8 +64,22 @@ function updateCheckboxSelection(inputs, action) {
 }
 
 function applicableTargetItems(choices) {
-    const selected = choices.filter(choice => choice.input.checked);
-    return new Set((selected.length ? selected : choices).flatMap(choice => choice.items || []));
+    // 一台没选就没有「能执行的项目」，所以这里是空集；不要退回全部设备的并集。
+    return new Set(choices.filter(choice => choice.input.checked).flatMap(choice => choice.items || []));
+}
+
+function applicableMethodNotes(choices) {
+    // Map<项目, 该项目在所选设备上会用到的采集方式>；一台没选就是空 Map。
+    const notes = new Map();
+    choices.filter(choice => choice.input.checked).forEach(choice => {
+        Object.entries(choice.methods).forEach(([item, note]) => {
+            if (!notes.has(item)) notes.set(item, []);
+            note.split('/').forEach(part => {
+                if (!notes.get(item).includes(part)) notes.get(item).push(part);
+            });
+        });
+    });
+    return notes;
 }
 
 function bindTargetDevicePicker(picker) {
@@ -82,6 +96,11 @@ function bindTargetDevicePicker(picker) {
         vendor: option.dataset.targetDeviceVendor || '',
         deviceType: option.dataset.targetDeviceType || '',
         items: (option.dataset.targetDeviceItems || '').split(',').filter(Boolean),
+        methods: (option.dataset.targetDeviceMethods || '').split(';').filter(Boolean)
+            .map(pair => pair.split('=')).reduce((all, [item, note]) => {
+                if (item && note) all[item] = note;
+                return all;
+            }, {}),
         input: option.querySelector('input[type="checkbox"]'),
     }));
     const refresh = () => {
@@ -90,9 +109,16 @@ function bindTargetDevicePicker(picker) {
         mode.value = selectedCount ? 'selected' : 'all';
         count.textContent = `已选 ${selectedCount} / ${choices.length} 台`;
         const allowed = applicableTargetItems(choices);
-        if (choices.length) picker.closest('form').querySelectorAll('[name="selected_items"]').forEach(input => {
+        const form = picker.closest('form');
+        if (choices.length) form.querySelectorAll('[name="selected_items"]').forEach(input => {
             input.disabled = !allowed.has(input.value);
             input.closest('label').hidden = input.disabled;
+        });
+        // 备注跟着所选设备走：多台设备用到的不同方式按斜杠并列，一台没选则清空。
+        const notes = applicableMethodNotes(choices);
+        form.querySelectorAll('[data-item-method]').forEach(span => {
+            const parts = notes.get(span.dataset.itemMethod);
+            span.textContent = parts && parts.length ? `（${parts.join('/')}）` : '';
         });
     };
     search.addEventListener('input', refresh);
@@ -117,7 +143,7 @@ function bindBulkChoiceGroup(group) {
     group.querySelector('[data-bulk-invert]').addEventListener('click', () => updateCheckboxSelection(inputs(), 'invert'));
 }
 
-if (typeof module !== 'undefined') module.exports = {bindAlertPolicy,applicableTargetItems, switchProfile, selectRow, clearRowTarget, filterTargetDeviceChoices, updateTargetDeviceSelection, updateCheckboxSelection};
+if (typeof module !== 'undefined') module.exports = {bindAlertPolicy,applicableTargetItems,applicableMethodNotes, switchProfile, selectRow, clearRowTarget, filterTargetDeviceChoices, updateTargetDeviceSelection, updateCheckboxSelection};
 
 const boundTaskControls = new WeakSet();
 function bindInspectionRuleFilter(container) {

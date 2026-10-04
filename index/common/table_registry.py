@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from net.devices.collection_profiles import SUBTYPES
 from net.inspections.issues import RULES
 
 PROBLEM_TYPE_CHOICES = tuple((label, label) for label in dict.fromkeys(
@@ -34,6 +35,9 @@ class TableDefinition:
     default_page_size: int
     complete_options: bool = False
     record_semantics: bool = False
+    # Applied only when the request does not name that filter, so a switched-off
+    # device is hidden by default yet still reachable through the filter panel.
+    default_filters: tuple[tuple[str, str], ...] = ()
 
 
 def _field(
@@ -48,7 +52,13 @@ def _field(
         elif kind == 'choice':
             option_mode = 'distinct'
         elif kind == 'text':
-            option_mode = 'suggest'
+            # Free text renders as a plain input. A candidate list is only useful
+            # when the values come from a small repeating vocabulary, so fields that
+            # have one opt in with suggest= (see _suggest). Defaulting every text
+            # field to candidates offered a dropdown of all 77 device names, a
+            # dropdown of all 77 IPs, and empty dropdowns for populated-on-demand
+            # columns such as os_version.
+            option_mode = 'none'
         else:
             option_mode = 'none'
     if default_filter is None:
@@ -78,7 +88,7 @@ TABLE_DEFINITIONS = {
             _field('department', '部门', 'choice'),
             _field('email', '邮箱', default_filter=False),
             _field('phone', '手机号', default_filter=False),
-            _field('leader', '上级', default_filter=False),
+            _field('leader', '上级', default_filter=False, option_mode='suggest'),
             _field('is_active', '是否启用', 'boolean', default_filter=False),
             _field('hire_date', '入职日期', 'date', default_filter=False),
             _field('departure_date', '离职日期', 'date', default_filter=False),
@@ -91,18 +101,18 @@ TABLE_DEFINITIONS = {
         'computers', 'PC', (
             _field('computer_name', 'PC 名称'),
             _field('ip_addresses', 'IP 地址'),
-            _field('os', '操作系统'),
+            _field('os', '操作系统', option_mode='suggest'),
             _field('user_name', '当前用户', default_filter=False),
             _field('last_report_at', '最后上报时间', 'datetime', default_filter=False),
             _field('mac_addresses', 'MAC 地址', visible=False, default_filter=False),
-            _field('os_version', '系统版本', visible=False, default_filter=False),
-            _field('os_build', '系统构建号', visible=False, default_filter=False),
+            _field('os_version', '系统版本', visible=False, default_filter=False, option_mode='suggest'),
+            _field('os_build', '系统构建号', visible=False, default_filter=False, option_mode='suggest'),
             _field('system_installed_at', '系统安装时间', visible=False, default_filter=False),
-            _field('manufacturer', '制造商', visible=False, default_filter=False),
-            _field('model', '型号', visible=False, default_filter=False),
+            _field('manufacturer', '制造商', visible=False, default_filter=False, option_mode='suggest'),
+            _field('model', '型号', visible=False, default_filter=False, option_mode='suggest'),
             _field('serial_number', '序列号', visible=False, default_filter=False),
-            _field('architecture', '系统架构', visible=False, default_filter=False),
-            _field('cpu_model', 'CPU 型号', visible=False, default_filter=False),
+            _field('architecture', '系统架构', visible=False, default_filter=False, option_mode='suggest'),
+            _field('cpu_model', 'CPU 型号', visible=False, default_filter=False, option_mode='suggest'),
             _field('cpu_physical_core_count', 'CPU 物理核心数', 'number', visible=False, default_filter=False),
             _field('cpu_logical_processor_count', 'CPU 逻辑处理器数', 'number', visible=False, default_filter=False),
             _field('memory_total_gb', '内存总量', 'number', visible=False, default_filter=False),
@@ -113,57 +123,64 @@ TABLE_DEFINITIONS = {
         'networks', '网络设备', (
             _field('device_name', '设备名称'), _field('ip', 'IP 地址'),
             _field('device_type', '设备类型', 'choice'), _field('vendor', '厂商', 'choice'),
-            _field('os_version', '系统版本', visible=False, default_filter=False),
-            _field('model', '型号', default_filter=False),
+            _field('os_version', '系统版本', visible=False, default_filter=False, option_mode='suggest'),
+            _field('model', '型号', default_filter=False, option_mode='suggest'),
             _field('connection_type', '连接方式', 'choice', default_filter=False),
             _field('port', '管理端口', 'choice', default_filter=False),
             _field('snmp_version', 'SNMP 版本', 'choice', visible=False, default_filter=False),
             _field('snmp_port', 'SNMP 端口', 'number', visible=False, default_filter=False),
-            _field('cpu_model', 'CPU 型号', default_filter=False),
+            _field('cpu_model', 'CPU 型号', default_filter=False, option_mode='suggest'),
             _field('memory_total_gb', '内存总量', 'number', default_filter=False),
             _field('disk_total_gb', '磁盘总量', 'number', default_filter=False),
             _field('port_count', '端口总数', 'number', default_filter=False),
             _field('vlan_count', 'VLAN 数量', 'number', default_filter=False),
+            _field('is_enabled', '启用', 'boolean', default_filter=False),
         ), 'device_name', 'asc', ('device_name', 'ip', 'device_type', 'vendor', 'model', 'os_version'), 20,
+        default_filters=(('is_enabled', 'true'),),
     ),
     'servers': TableDefinition(
         'servers', '服务器', (
             _field('name', '名称'), _field('ip', 'IP 地址'),
             _field('server_type', '服务器类型', 'choice', choices=(('linux', 'Linux'), ('windows', 'Windows'))),
-            _field('os', '操作系统', default_filter=False),
+            _field('os', '操作系统', default_filter=False, option_mode='suggest'),
             _field('port', '管理端口', 'choice', default_filter=False),
             _field('api_url', '巡检 API 地址', source='public_api_url', filterable=False, sortable=False),
             _field('verify_ssl', '验证 TLS 证书', 'boolean'),
-            _field('os_version', '系统版本', visible=False, default_filter=False),
-            _field('os_build', '系统构建号', visible=False, default_filter=False),
+            _field('os_version', '系统版本', visible=False, default_filter=False, option_mode='suggest'),
+            _field('os_build', '系统构建号', visible=False, default_filter=False, option_mode='suggest'),
             _field('system_installed_at', '系统安装时间', visible=False, default_filter=False),
-            _field('manufacturer', '制造商', visible=False, default_filter=False),
-            _field('model', '型号', visible=False, default_filter=False),
+            _field('manufacturer', '制造商', visible=False, default_filter=False, option_mode='suggest'),
+            _field('model', '型号', visible=False, default_filter=False, option_mode='suggest'),
             _field('serial_number', '序列号', visible=False, default_filter=False),
-            _field('architecture', '系统架构', visible=False, default_filter=False),
-            _field('cpu_model', 'CPU 型号', default_filter=False),
+            _field('architecture', '系统架构', visible=False, default_filter=False, option_mode='suggest'),
+            _field('cpu_model', 'CPU 型号', default_filter=False, option_mode='suggest'),
             _field('cpu_physical_core_count', 'CPU 物理核心数', 'number', visible=False, default_filter=False),
             _field('cpu_logical_processor_count', 'CPU 逻辑处理器数', 'number', visible=False, default_filter=False),
             _field('memory_total_gb', '内存总量', 'number', default_filter=False),
             _field('disk_total_gb', '磁盘总量', 'number', default_filter=False),
+            _field('is_enabled', '启用', 'boolean', default_filter=False),
         ), 'name', 'asc', ('name', 'ip', 'server_type', 'os'), 20,
+        default_filters=(('is_enabled', 'true'),),
     ),
-    'monitors': TableDefinition(
-        'monitors', '安防设备', (
+    'weakcurrent': TableDefinition(
+        'weakcurrent', '弱电设备', (
             _field('device_name', '设备名称'), _field('ip', 'IP 地址'),
-            _field('device_type', '设备类型', 'choice'), _field('vendor', '厂商', 'choice'),
-            _field('model', '型号', default_filter=False),
+            _field('device_type', '设备类型', 'choice', choices=tuple(SUBTYPES['weakcurrent'][1:])),
+            _field('vendor', '厂商', 'choice'),
+            _field('model', '型号', default_filter=False, option_mode='suggest'),
             _field('api_url', '巡检 API 地址', source='public_api_url', filterable=False, sortable=False),
             _field('verify_ssl', '验证 TLS 证书', 'boolean'),
-            _field('cpu_model', 'CPU 型号', default_filter=False),
+            _field('cpu_model', 'CPU 型号', default_filter=False, option_mode='suggest'),
             _field('memory_total_gb', '内存总量', 'number', default_filter=False),
             _field('disk_total_gb', '磁盘总量', 'number', default_filter=False),
+            _field('is_enabled', '启用', 'boolean', default_filter=False),
         ), 'device_name', 'asc', ('device_name', 'ip', 'device_type', 'vendor', 'model'), 20,
+        default_filters=(('is_enabled', 'true'),),
     ),
     'domain_accounts': TableDefinition(
         'domain_accounts', '域账户', (
             _field('account_name', '账户名称'), _field('login_name', '登录名'),
-            _field('is_active', '是否启用', 'boolean'), _field('ou', '组织单位'),
+            _field('is_active', '是否启用', 'boolean'), _field('ou', '组织单位', option_mode='suggest'),
             _field('group_names', '所属分组'),
             _field('allowed_workstations', '允许登录域计算机', default_filter=False),
             _field('last_login_date', '最后登录日期', 'date', default_filter=False),
@@ -171,8 +188,8 @@ TABLE_DEFINITIONS = {
     ),
     'domain_computers': TableDefinition(
         'domain_computers', '域计算机', (
-            _field('computer_name', '域计算机名'), _field('os', '操作系统'),
-            _field('is_active', '是否启用', 'boolean'), _field('ou', '组织单位'),
+            _field('computer_name', '域计算机名'), _field('os', '操作系统', option_mode='suggest'),
+            _field('is_active', '是否启用', 'boolean'), _field('ou', '组织单位', option_mode='suggest'),
             _field('group_names', '所属分组'),
             _field('last_login_date', '最后登录日期', 'date', default_filter=False),
         ), 'computer_name', 'asc', ('computer_name', 'os', 'ou', 'group_names'), 20,
@@ -188,7 +205,7 @@ TABLE_DEFINITIONS = {
                 ('domain_local', '域本地'), ('global', '全局'),
                 ('universal', '通用'), ('unknown', '未知'),
             )),
-            _field('ou', '组织单位'),
+            _field('ou', '组织单位', option_mode='suggest'),
             _field('member_count', '成员数量', 'number'),
             _field('description', '描述', default_filter=False),
             _field('distinguished_name', 'DN', visible=False, default_filter=False),
@@ -200,7 +217,7 @@ TABLE_DEFINITIONS = {
         'inspection_records', '巡检与分析记录', (
             _field('problem_types', '问题类型', choices=PROBLEM_TYPE_CHOICES),
             _field('result_level', '问题等级', 'choice', choices=(('normal', '正常'), ('info', '提示'), ('warning', '警告'), ('critical', '严重'))),
-            _field('category', '执行类型', 'choice'), _field('asset', '设备名称'),
+            _field('category', '执行类型', 'choice'), _field('asset', '设备名称', option_mode='suggest'),
             _field('time', '执行时间', 'datetime', default_filter=False),
             _field(
                 'status', '执行结果', 'choice', source='ok',
@@ -216,7 +233,7 @@ TABLE_DEFINITIONS = {
     ),
     'error_records': TableDefinition(
         'error_records', '异常记录', (
-            _field('category', '设备类型', 'choice'), _field('asset', '设备名称'),
+            _field('category', '设备类型', 'choice'), _field('asset', '设备名称', option_mode='suggest'),
             _field('time', '异常时间', 'datetime', default_filter=False),
             _field('type', '异常类型', 'choice'),
             _field('message', '异常说明', sortable=False, default_filter=False),
@@ -229,14 +246,14 @@ TABLE_DEFINITIONS = {
             _field('task_source', '任务来源', filterable=False, sortable=False),
             _field('error_count', '异常数', filterable=False, sortable=False),
             _field('key_metrics', '关键指标', filterable=False, sortable=False),
-            _field('computer_name', 'PC 名称', source='computer__computer_name'),
+            _field('computer_name', 'PC 名称', source='computer__computer_name', option_mode='suggest'),
               _field('user_name', '登录用户', source='computer__user_name', default_filter=False),
-              _field('employee_number', '工号', source='details__enrichment__employee_number', default_filter=False),
-              _field('personnel_name', '人员姓名', source='details__enrichment__personnel_name', default_filter=False),
-              _field('department', '部门', source='details__enrichment__department', default_filter=False),
-              _field('user_ou', '用户 OU', source='details__enrichment__user_ou', visible=False, default_filter=False),
-              _field('computer_ou', '计算机 OU', source='details__enrichment__computer_ou', visible=False, default_filter=False),
-              _field('site', '站点', source='details__enrichment__site', default_filter=False),
+              _field('employee_number', '工号', source='details__enrichment__employee_number', default_filter=False, option_mode='suggest'),
+              _field('personnel_name', '人员姓名', source='details__enrichment__personnel_name', default_filter=False, option_mode='suggest'),
+              _field('department', '部门', source='details__enrichment__department', default_filter=False, option_mode='suggest'),
+              _field('user_ou', '用户 OU', source='details__enrichment__user_ou', visible=False, default_filter=False, option_mode='suggest'),
+              _field('computer_ou', '计算机 OU', source='details__enrichment__computer_ou', visible=False, default_filter=False, option_mode='suggest'),
+              _field('site', '站点', source='details__enrichment__site', default_filter=False, option_mode='suggest'),
             _field('log_time', '日志时间', 'datetime', source='source_collected_at', default_filter=False),
             _field('created_at', '入库时间', 'datetime', default_filter=False),
             _field(
@@ -247,7 +264,7 @@ TABLE_DEFINITIONS = {
     ),
     'computer_errors': TableDefinition(
         'computer_errors', 'PC 异常记录', (
-            _field('computer_name', 'PC 名称', source='computer__computer_name'),
+            _field('computer_name', 'PC 名称', source='computer__computer_name', option_mode='suggest'),
             _field('user_name', '登录用户', source='computer__user_name', default_filter=False),
             _field('log_time', '日志时间', 'datetime', source='source_collected_at', default_filter=False),
             _field('time', '异常时间', 'datetime', source='created_at', default_filter=False),
@@ -257,7 +274,7 @@ TABLE_DEFINITIONS = {
     ),
       'computer_logs': TableDefinition(
           'computer_logs', 'PC 日志文件', (
-              _field('computer_name', 'PC 名称', source='computer__computer_name'),
+              _field('computer_name', 'PC 名称', source='computer__computer_name', option_mode='suggest'),
               _field('platform', '平台', 'choice', default_filter=False),
               _field('collected_at', '采集时间', 'datetime', default_filter=False),
               _field('content_hash', '内容哈希', default_filter=False),
@@ -266,12 +283,12 @@ TABLE_DEFINITIONS = {
     'access_records': TableDefinition(
         'access_records', '门禁记录', (
             _field('occurred_at', '通行时间', 'datetime'),
-            _field('person_name', '人员姓名'), _field('employee_number', '工号'),
-            _field('door_name', '门点名称'),
+            _field('person_name', '人员姓名', option_mode='suggest'), _field('employee_number', '工号'),
+            _field('door_name', '门点名称', option_mode='suggest'),
             _field('direction', '方向', 'choice', choices=(('in', '进入'), ('out', '离开'), ('unknown', '未知'))),
             _field('result', '通行状态', 'choice', choices=(('passed', '通过'), ('denied', '拒绝'), ('unknown', '未知'))),
             _field('card_number', '卡号', default_filter=False),
-            _field('source', '平台来源', source='source__name', default_filter=False),
+            _field('source', '平台来源', source='source__name', default_filter=False, option_mode='suggest'),
             _field('imported_at', '入库时间', 'datetime', visible=False, default_filter=False),
         ), 'occurred_at', 'desc', ('person_name', 'employee_number', 'door_name', 'card_number', 'source'), 20,
     ),    'task_runs': TableDefinition(
@@ -301,7 +318,7 @@ TABLE_DEFINITIONS = {
         'task_targets', '任务目标', (
             _field('target_type', '目标类型', 'choice', choices=(
                 ('network_device', '网络设备'), ('server', '服务器'),
-                ('monitor', '安防设备'), ('computer_log', 'PC 日志'),
+                ('monitor', '弱电设备'), ('computer_log', 'PC 日志'),
                 ('domain_account', '域账号'), ('domain_computer', '域计算机'),
                 ('people_source', '人员 API 平台'),
             )),

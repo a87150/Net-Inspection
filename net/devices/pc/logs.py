@@ -10,7 +10,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, OperationalError, transaction
 from django.utils import timezone
 
-from net.models import Computer, ComputerLogFile
+from net.models import Computer
 from net.devices.pc.snapshot import extract_computer_snapshot
 from net.infrastructure.sanitization import sanitize
 from net.devices.pc.checks import parse_local_datetime

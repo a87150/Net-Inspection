@@ -181,8 +181,8 @@
     .topology-toolbar__controls { position: sticky; top: .5rem; z-index: 2; width: 100%; }
     .topology-toolbar__controls button { flex: 1; }
     .topology-toolbar__controls button { min-height: 44px; }
-    .topology-canvas-shell { min-height: 27rem; }
-    .topology-canvas { height: 32.5rem; }
+    .topology-canvas-shell { min-height: 48rem; }
+    .topology-canvas { height: 55rem; }
     .topology-detail { grid-template-columns: minmax(0, 1fr); }
     .topology-toolbar__controls { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .topology-toolbar__controls select { grid-column: 1 / -1; width: 100%; }

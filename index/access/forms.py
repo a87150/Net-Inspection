@@ -28,10 +28,10 @@ class AccessRecordSourceForm(forms.ModelForm):
         model = AccessRecordSource
         fields = ('name', 'platform', 'api_version', 'base_url', 'event_path',
                   'authentication_mode', 'authentication_name', 'username', 'verify_ssl',
-                  'is_enabled', 'security_device', 'default_lookback_minutes')
+                  'is_enabled', 'weak_current_device', 'default_lookback_minutes')
         labels = {'name':'配置名称','platform':'门禁管理平台','base_url':'平台地址','event_path':'门禁事件接口路径',
             'authentication_mode':'令牌传递方式','authentication_name':'令牌参数名称','username':'平台用户名（可选）',
-            'verify_ssl':'验证 HTTPS 证书','is_enabled':'启用此平台','security_device':'关联门禁设备（可选）',
+            'verify_ssl':'验证 HTTPS 证书','is_enabled':'启用此平台','weak_current_device':'关联门禁设备（可选）',
             'default_lookback_minutes':'首次回溯分钟数'}
         widgets = {
             'base_url': forms.URLInput(attrs={'placeholder': 'https://platform.example:port'}),

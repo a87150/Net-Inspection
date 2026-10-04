@@ -3,7 +3,7 @@ from django import forms
 from net.data_exchange.inventory_csv import ENTITY_SPECS
 from net.secret_masks import MASKED_SECRET, MaskedSecretInput
 
-DEVICE_KINDS = {'networks', 'servers', 'monitors'}
+DEVICE_KINDS = {'networks', 'servers', 'weakcurrent'}
 CONNECTION_FIELDS = {'connection_type', 'port', 'username', 'password', 'server_type', 'api_shared_secret',
                      'api_url', 'api_username', 'api_password', 'api_token', 'verify_ssl'}
 BASIC_FIELDS = {'name', 'device_name', 'ip', 'device_type', 'vendor', 'os_version'}
@@ -73,7 +73,7 @@ def device_form(kind, data=None, instance=None):
         field.widget.attrs['class'] = ('form-check-input' if isinstance(field.widget, forms.CheckboxInput)
                                        else 'form-select' if isinstance(field.widget, forms.Select)
                                        else 'form-control')
-    if kind in {'networks','monitors'}:
+    if kind in {'networks','weakcurrent'}:
         from net.devices.collection_profiles import vendor_choices, SUBTYPES
         for field_name, options in [('vendor',vendor_choices(kind)),('device_type',SUBTYPES[kind])]:
             if field_name in form.fields:

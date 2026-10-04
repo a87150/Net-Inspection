@@ -32,6 +32,23 @@ class SQLiteMaintenanceTests(SimpleTestCase):
         self.assertEqual(helper.sqlite_timeout('2.5'), 2.5)
         self.assertEqual(helper.sqlite_timeout('60'), 60)
 
+    def test_settings_reject_an_unknown_database_engine_instead_of_falling_back(self):
+        # A mistyped DB_ENGINE used to open a different, empty SQLite database and
+        # read as if every record had vanished. Every unrecognised value must raise.
+        settings_path = str(Path(__file__).resolve().parents[2] / 'net' / 'settings.py')
+        for engine in ('bogus', 'postgre', 'MySQL8', '', 'sqlite3'):
+            with self.subTest(engine=engine), patch.dict(os.environ, {'DB_ENGINE': engine}):
+                with self.assertRaises(ImproperlyConfigured) as caught:
+                    runpy.run_path(settings_path)
+                self.assertIn('DB_ENGINE', str(caught.exception))
+
+    def test_settings_name_the_postgresql_backlog_instead_of_claiming_unknown_engine(self):
+        settings_path = str(Path(__file__).resolve().parents[2] / 'net' / 'settings.py')
+        with patch.dict(os.environ, {'DB_ENGINE': 'postgresql'}):
+            with self.assertRaises(ImproperlyConfigured) as caught:
+                runpy.run_path(settings_path)
+        self.assertIn('changelog.md', str(caught.exception))
+
     def test_settings_apply_timeout_without_changing_database_selection(self):
         with patch.dict(os.environ, {'DB_ENGINE': 'sqlite', 'DJANGO_SQLITE_PATH': 'chosen.sqlite3', 'NET_SQLITE_TIMEOUT': '12.5'}):
             values = runpy.run_path(str(Path(__file__).resolve().parents[2] / 'net' / 'settings.py'))

@@ -37,6 +37,10 @@ def main():
                          NAME=source.as_uri() + '?mode=ro', OPTIONS={'uri': True},
                          CONN_MAX_AGE=0, CONN_HEALTH_CHECKS=False)
     connections.databases['legacy'] = source_config
+    # 校验阶段按 pk 排序整表，SQLite 默认把临时表写盘；这台机器上临时文件建不出来，
+    # 报的却是 "unable to open database file"。改用内存临时表：一次只排一张表，量可控。
+    with connections['legacy'].cursor() as cursor:
+        cursor.execute('PRAGMA temp_store=MEMORY')
     if TaskRun.objects.using('legacy').filter(status__in=['queued', 'running']).exists():
         raise RuntimeError('Source contains active tasks; finish/cancel them before migration.')
     excluded = {'contenttypes.contenttype', 'auth.permission'}
@@ -45,7 +49,9 @@ def main():
               if model._meta.managed and not model._meta.proxy and model._meta.label_lower not in excluded]
     if any(model._base_manager.using('default').exists() for model in models):
         raise RuntimeError('Target contains application data; refusing to overwrite it.')
-    with output.open('x', encoding='utf-8') as stream:
+    # O_EXCL 拒绝已有文件与符号链接；0o600 保证只有当前账号能读到这份含凭据的导出。
+    descriptor = os.open(output, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, 'O_BINARY', 0), 0o600)
+    with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
         call_command('dumpdata', database='legacy', format='migration_json', use_base_manager=True,
                      use_natural_foreign_keys=True, exclude=list(excluded), stdout=stream, verbosity=0)
 
@@ -94,7 +100,10 @@ def main():
             raise RuntimeError('Verification mismatch: ' + ', '.join(mismatches))
         target.check_constraints()
     report = output.with_suffix('.verification.json')
-    report.write_text(json.dumps(reports, ensure_ascii=False, indent=2), encoding='utf-8')
+    # 校验报告同样含逐模型计数与哈希摘要，与导出保持一致的权限位。
+    descriptor = os.open(report, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, 'O_BINARY', 0), 0o600)
+    with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+        stream.write(json.dumps(reports, ensure_ascii=False, indent=2))
     print(f'Verified {len(reports)} models, {sum(row["count"] for row in reports)} records.', flush=True)
     print(f'Export: {output}\nVerification: {report}', flush=True)
     connections.close_all()

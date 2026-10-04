@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import timedelta
 from uuid import uuid4
@@ -12,7 +13,7 @@ from django.utils import timezone
 
 from net.alerts import build_alert_message, send_alert
 from net.alerts.base import summarize
-from net.models import AlertChannel, AlertDelivery, AlertEvent, AlertPolicy, AlertState, TaskRun, TaskTargetRun
+from net.models import AlertDelivery, AlertEvent, AlertPolicy, AlertState, TaskRun, TaskTargetRun
 
 
 RETRY_DELAY_SECONDS = 30
@@ -79,10 +80,9 @@ def _normalised_findings(findings):
 
 def _target_scope(target):
     task = target.task
-    if task.task_type == TaskRun.TaskType.INSPECTION:
-        profile_type, profile_id = 'inspection_profile', str(task.inspection_profile_id)
-    else:
-        profile_type, profile_id = 'computer_analysis_profile', str(task.analysis_profile_id)
+    from net.models.alerts import alert_task_scope
+
+    profile_type, profile_id = alert_task_scope(task)
     target_type, target_id = target.target_type, target.target_id
     if task.task_type == TaskRun.TaskType.COMPUTER_ANALYSIS and target.result_type == 'computer_analysis':
         from net.models import ComputerAnalysis
@@ -94,9 +94,14 @@ def _target_scope(target):
 
 
 def _policy_for_scope(profile_type, profile_id):
-    lookup = {'inspection_profile_id': profile_id} if profile_type == 'inspection_profile' else {
-        'analysis_profile_id': profile_id,
-    }
+    # 只有两类档案作用域能映射回策略的外键；域控同步这种按 DC 配置分作用域的
+    # 直接用默认策略，硬塞进 UUID 外键只会报“不是有效 UUID”。
+    if profile_type == 'inspection_profile':
+        lookup = {'inspection_profile_id': profile_id}
+    elif profile_type == 'computer_analysis_profile':
+        lookup = {'analysis_profile_id': profile_id}
+    else:
+        return AlertPolicy.objects.filter(default_slot=AlertPolicy.DEFAULT_SLOT).first()
     return AlertPolicy.objects.filter(**lookup).first() or AlertPolicy.objects.filter(
         default_slot=AlertPolicy.DEFAULT_SLOT,
     ).first()
@@ -431,7 +436,9 @@ def process_persisted_target(target_run):
         try:
             with transaction.atomic():
                 target = TaskTargetRun.objects.select_for_update().get(pk=target_id)
-                if target.task.task_type not in ('inspection', 'computer_analysis'):
+                # 域控同步失败同样要报警：它的 result_type='domain_sync'，
+                # 走 findings_for_target 的通用失败兜底生成 execution.failure。
+                if target.task.task_type not in ('inspection', 'computer_analysis', 'domain_sync'):
                     return []
                 if target.status not in TaskRun.TERMINAL_STATUSES or target.alert_processed_at is not None:
                     return []
@@ -457,6 +464,11 @@ def process_persisted_target(target_run):
                 alert_attempted_at=timezone.now(),
                 alert_processing_error=f'Alert processing failed ({type(exc).__name__}).',
             )
+            # reconcile_terminal_targets retries this every cycle, so a reproducible bug
+            # failed silently forever. Logged after the audit write is committed.
+            logging.getLogger(__name__).warning(
+                'Alert processing failed target=%s (%s)', target_id, type(exc).__name__,
+                exc_info=True)
             return []
 
 
@@ -465,7 +477,7 @@ def reconcile_terminal_targets(*, limit=100):
     targets = list(TaskTargetRun.objects.filter(
         status__in=TaskRun.TERMINAL_STATUSES,
         alert_processed_at__isnull=True,
-        task__task_type__in=('inspection', 'computer_analysis'),
+        task__task_type__in=('inspection', 'computer_analysis', 'domain_sync'),
     ).order_by(
         F('alert_attempted_at').asc(nulls_first=True), 'finished_at', 'pk')[:limit])
     for target in targets:

@@ -144,9 +144,11 @@ body.app-shell {
     min-height: 17rem;
 }
 
-/* Dashboard surfaces use a quiet Apple-inspired glass treatment. Status is
-   communicated by text, badges and dots so no state depends on a color rail. */
-.dashboard-grid .glass-card {
+/* Site-wide glass treatment. The dashboard defined these values first; they are
+   now the single look every surface shares, so the task and alert metric blocks
+   render like the homepage instead of flat. Status is communicated by text,
+   badges and dots so no state depends on a color rail. */
+.glass-card {
     border-color: rgba(255, 255, 255, .72) !important;
     background: linear-gradient(145deg, rgba(255, 255, 255, .84), rgba(239, 244, 255, .62));
     box-shadow: 0 18px 42px rgba(31, 54, 92, .12), inset 0 1px 0 rgba(255, 255, 255, .9);
@@ -164,13 +166,13 @@ body.app-shell {
     background: transparent;
 }
 
-.dashboard-grid .glass-card:hover {
+.glass-card:hover {
     border-color: rgba(49, 87, 213, .28) !important;
     box-shadow: 0 22px 48px rgba(31, 54, 92, .16), inset 0 1px 0 rgba(255, 255, 255, .95);
 }
 
 @supports not ((backdrop-filter: blur(1px))) {
-    .dashboard-grid .glass-card {
+    .glass-card {
         background: #f8faff;
     }
 }
@@ -1084,6 +1086,12 @@ body.app-shell {
     display: grid;
     grid-template-columns: minmax(12rem, 1fr) repeat(3, minmax(7rem, .42fr)) auto auto;
     gap: .5rem;
+}
+
+/* Servers render no vendor filter (see profile_modal.html), so a five-child toolbar
+   would push the 全选 button into a flexible filter track and stretch it. */
+.target-device-picker__toolbar--no-vendor {
+    grid-template-columns: minmax(12rem, 1fr) repeat(2, minmax(7rem, .42fr)) auto auto;
 }
 
 .target-device-picker__summary {

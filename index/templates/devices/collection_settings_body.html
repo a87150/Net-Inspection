@@ -10,7 +10,7 @@
 {% elif kind == 'servers' %}
 <p>服务器按 Linux / Windows 匹配模板，不配置厂商。Linux 沿用 SSH 内置命令和解析，Windows 使用 HTTP 巡检脚本。这里设置项目适用性、阈值及报警级别；连接账号和巡检令牌在设备配置中填写。</p>
 {% else %}
-<p>安防设备按厂商、录像机 / 摄像头 / 门禁类型匹配模板。按接口能力选择 API、SNMP 或 Ping；Ping 只判断连通性，不能检查录像、通道或门禁业务。门禁平台事件同步在“门禁记录”中配置。</p>
+<p>弱电设备按厂商、录像机 / 摄像头 / 门禁类型匹配模板。按接口能力选择 API、SNMP 或 Ping；Ping 只判断连通性，不能检查录像、通道或门禁业务。门禁平台事件同步在“门禁记录”中配置。</p>
 {% endif %}
 <p class="small text-secondary mb-0">选择父模板后，未单独修改的项目继承父级规则。巡检任务中再选择设备和本次执行项目；模板修改只影响新任务。</p>
 </section>
@@ -175,9 +175,8 @@
 {% elif row.method %}
 <p class="form-text mt-3">回显由对应协议的内置字段解析器处理；只执行巡检设置中选择的项目。</p>
 {% endif %}
-{% if form.preview_item == row.key %}
-<pre class="mt-2">{{ form.preview_result }}</pre>
-{% endif %}
+<pre class="mt-2" data-preview-result{% if form.preview_item != row.key %} hidden{% endif %}>{% if form.preview_item == row.key %}{{ form.preview_result }}{% endif %}</pre>
+<p class="form-text text-danger mb-0" data-preview-error hidden></p>
 </div>
 </details>
 {% endfor %}

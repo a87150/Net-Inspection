@@ -62,7 +62,7 @@ class DashboardHierarchyTests(TestCase):
             {'key': 'computers', **common},
             {'key': 'networks', **common, 'normal': 6, 'abnormal': 4},
             {'key': 'servers', **common, 'normal': 9, 'abnormal': 1},
-            {'key': 'monitors', **common},
+            {'key': 'weakcurrent', **common},
         ]
 
     def test_cards_keep_the_original_fixed_order_even_when_attention_counts_change(self):
@@ -72,7 +72,7 @@ class DashboardHierarchyTests(TestCase):
         keys = [item['key'] for item in response.context['items']]
         self.assertEqual(
             keys,
-            ['people', 'domain', 'computers', 'networks', 'servers', 'monitors'],
+            ['people', 'domain', 'computers', 'networks', 'servers', 'weakcurrent'],
         )
 
     def test_every_card_has_one_primary_action_and_compact_secondary_actions(self):

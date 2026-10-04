@@ -143,7 +143,7 @@ def _network_node(device):
     return node
 
 
-def _endpoint_nodes(computers, servers, monitors):
+def _endpoint_nodes(computers, servers, weak_current):
     nodes = []
     for computer in computers:
         node = _node(
@@ -164,13 +164,13 @@ def _endpoint_nodes(computers, servers, monitors):
         )
         node['_networks'] = address_networks(server.ip)
         nodes.append(node)
-    for monitor in monitors:
+    for monitor in weak_current:
         node = _node(
-            node_id=f'monitors:{monitor.pk}', kind='endpoint', role='security_device',
+            node_id=f'weakcurrent:{monitor.pk}', kind='endpoint', role='weak_current_device',
             label=monitor.device_name or monitor.ip,
-            subtitle=monitor.device_type or '安防设备', ip=monitor.ip,
+            subtitle=monitor.device_type or '弱电设备', ip=monitor.ip,
             vendor=monitor.vendor, model=monitor.model,
-            url=reverse('asset_detail', args=['monitors', monitor.pk]),
+            url=reverse('asset_detail', args=['weakcurrent', monitor.pk]),
         )
         node['_networks'] = address_networks(monitor.ip)
         nodes.append(node)
@@ -221,13 +221,13 @@ def attach_endpoints(backbone_nodes, endpoint_nodes, physical_edges):
     return sorted(edges, key=lambda edge: edge['id'])
 
 
-def build_enterprise_topology(*, network_devices, computers, servers, monitors,
+def build_enterprise_topology(*, network_devices, computers, servers, weak_current,
                               physical, asset_truncation=None):
     network_nodes = [_network_node(device) for device in network_devices]
     backbone_nodes = [node for node in network_nodes if node['kind'] == 'backbone']
     endpoint_nodes = [
         *[node for node in network_nodes if node['kind'] == 'endpoint'],
-        *_endpoint_nodes(computers, servers, monitors),
+        *_endpoint_nodes(computers, servers, weak_current),
     ]
     physical_edges = list(physical.get('links', []))
     attachment_edges = attach_endpoints(backbone_nodes, endpoint_nodes, physical_edges)

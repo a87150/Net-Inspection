@@ -68,9 +68,9 @@ def _failure_redirect(request, next_url, modal, *, state, **query):
     if modal == 'policy':
         allowed_paths.add(reverse('computer_analysis_list'))
         allowed_paths.update(reverse('asset_list', args=[kind])
-                             for kind in ('computers', 'networks', 'servers', 'monitors'))
+                             for kind in ('computers', 'networks', 'servers', 'weakcurrent'))
         allowed_paths.update(reverse('record_list', args=[kind])
-                             for kind in ('networks', 'servers', 'monitors'))
+                             for kind in ('networks', 'servers', 'weakcurrent'))
     if path not in allowed_paths:
         path = reverse('alert_list')
     token = uuid4().hex

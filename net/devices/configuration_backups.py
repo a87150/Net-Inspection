@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from net.data_exchange.adapters import MAX_CONFIG_BYTES, UnsupportedConfiguration
 from net.devices.network.configuration import adapt, network_vendor
-from net.models import DeviceConfigurationBackup, Network_Device, SecurityDevice
+from net.models import DeviceConfigurationBackup, Network_Device, WeakCurrentDevice
 
 
 BACKUP_TIMEZONE = ZoneInfo('Asia/Shanghai')
@@ -25,7 +25,7 @@ BACKUP_TIMEZONE = ZoneInfo('Asia/Shanghai')
 def _identity(asset):
     if isinstance(asset, Network_Device):
         device_type = 'network_device'
-    elif isinstance(asset, SecurityDevice):
+    elif isinstance(asset, WeakCurrentDevice):
         device_type = 'monitor'
     else:
         raise UnsupportedConfiguration('Unsupported device configuration backup type')

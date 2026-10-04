@@ -14,7 +14,7 @@ from net.models import (
     ComputerLogFile,
     Domain_Account,
     Domain_Computer,
-    SecurityDevice,
+    WeakCurrentDevice,
     Monitor_Inspection,
     Network_Device,
     Network_Device_Inspection,
@@ -58,7 +58,7 @@ class DetailRouteTests(TestCase):
         self.server = Server.objects.create(
             name='SRV-ROUTE-01', ip='192.0.2.31', server_type='linux',
         )
-        self.monitor = SecurityDevice.objects.create(
+        self.monitor = WeakCurrentDevice.objects.create(
             device_name='CAM-ROUTE-01', ip='192.0.2.41', vendor='Hikvision',
         )
         self.domain_account = Domain_Account.objects.create(
@@ -92,7 +92,7 @@ class DetailRouteTests(TestCase):
         )
         self.monitor_record = Monitor_Inspection.objects.create(
             monitor=self.monitor,
-            summary='安防设备巡检完成',
+            summary='弱电设备巡检完成',
         )
 
     def test_every_asset_kind_has_list_and_detail(self):
@@ -101,7 +101,7 @@ class DetailRouteTests(TestCase):
             ('computers', self.computer.pk),
             ('networks', self.network.pk),
             ('servers', self.server.pk),
-            ('monitors', self.monitor.pk),
+            ('weakcurrent', self.monitor.pk),
         )
 
         for kind, pk in cases:
@@ -197,7 +197,7 @@ class DetailRouteTests(TestCase):
         cases = (
             ('networks', self.network_record),
             ('servers', self.server_record),
-            ('monitors', self.monitor_record),
+            ('weakcurrent', self.monitor_record),
         )
 
         for kind, record in cases:
@@ -245,9 +245,9 @@ class DetailRouteTests(TestCase):
                 reverse('asset_list', args=['servers']),
                 reverse('record_list', args=['servers']),
             ),
-            'monitors': (
-                reverse('asset_list', args=['monitors']),
-                reverse('record_list', args=['monitors']),
+            'weakcurrent': (
+                reverse('asset_list', args=['weakcurrent']),
+                reverse('record_list', args=['weakcurrent']),
             ),
         }
 

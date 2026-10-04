@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
-from django.db.models import Case, CharField, Exists, F, OuterRef, Q, Value, When
+from django.db.models import Case, CharField, F, Q, Value, When
 from django.db.models.functions import Cast, Coalesce
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
@@ -14,6 +14,7 @@ from index.common.table_query import (
     preserve_table_parameters,
     query_without_page,
 )
+from index.common.access import is_admin
 from index.common.table_registry import get_table_definition, project_record_definition
 from net.models import (
     ComputerAnalysis,
@@ -37,7 +38,7 @@ class RecordPage:
 RECORD_PAGES = {
     'networks': RecordPage(Network_Device_Inspection, 'device', '网络设备'),
     'servers': RecordPage(Server_Inspection, 'server', '服务器'),
-    'monitors': RecordPage(Monitor_Inspection, 'monitor', '安防设备'),
+    'weakcurrent': RecordPage(Monitor_Inspection, 'monitor', '弱电设备'),
 }
 
 
@@ -121,6 +122,24 @@ def _project_workspace_context(request, kind):
     return project_workspace_context(request, kind)
 
 
+def _asset_action_context(request, kind):
+    """Match the asset list's action bar, plus the modals those buttons open."""
+    from django.urls import reverse
+    from index.common.workspace_actions import workspace_action_context
+    context = workspace_action_context(
+        kind, back_url=reverse('asset_list', args=[kind]),
+    )
+    if is_admin(request.user):
+        if context['action_can_manage_devices']:
+            from index.devices.forms import device_form, device_form_sections
+            context['device_form'] = device_form(kind)
+            context['device_form_sections'] = device_form_sections(context['device_form'])
+        # The shared modal templates key off these two names.
+        context['item_key'] = kind
+        context['import_enabled'] = context['action_can_import']
+    return context
+
+
 def record_list(request, kind):
     page = _record_page(kind)
     table_definition = project_record_definition(kind)
@@ -151,6 +170,7 @@ def record_list(request, kind):
     context.update(_project_workspace_context(request, kind))
     context.update(task_modal_context(request, kind, target_source='records'))
     context.update(alert_modal_context(request, profile=context['task_default_profile']))
+    context.update(_asset_action_context(request, kind))
     return render(request, 'inspections/record_list.html', context)
 
 
@@ -189,6 +209,7 @@ def computer_analysis_list(request):
     context['latest_analysis_statistics'] = latest_analysis_statistics(context['latest_task'])
     context.update(task_modal_context(request, 'computers'))
     context.update(alert_modal_context(request, profile=context['task_default_profile']))
+    context.update(_asset_action_context(request, 'computers'))
     return render(request, 'inspections/record_list.html', context)
 
 
@@ -241,18 +262,11 @@ class _GlobalRecordRows:
             _filter_queryset, _requested_filters, _requested_sort, _table_state,
         )
         filters = _requested_filters(request, definition, prefix)
-        q = request.GET.get(f'{prefix}_q' if prefix else 'q', '').strip()
         category = request.GET.get(f'{prefix}_category' if prefix else 'category', '').strip()
         branches = self.projections or (self.query,)
         filtered = []
         for branch in branches:
             branch = _filter_queryset(branch, definition, filters.copy())
-            if q:
-                condition = Q()
-                for field_key in definition.search_fields:
-                    field = next(field for field in definition.fields if field.key == field_key)
-                    condition |= Q(**{f'{field.query_source or field.source}__icontains': q})
-                branch = branch.filter(condition)
             if category:
                 branch = branch.filter(category=category)
             filtered.append(branch.order_by())

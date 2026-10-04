@@ -108,3 +108,25 @@ test('lays backbone tiers top-down and expanded children below their parent', as
   }
   assert.ok(first.bounds.maxX <= 360);
 });
+
+test('wraps dense backbone tiers on narrow screens without overlapping cards', async () => {
+  const { layoutTopology } = await loadModule();
+  const nodes = Array.from({ length: 6 }, (_, index) => ({
+    id: `networks:access-${index}`, kind: 'backbone', role: 'access_switch',
+    tier: 3, label: `ACCESS-${index}`, childCount: 0,
+  }));
+
+  const layout = layoutTopology(
+    { nodes, attachmentEdges: [], physicalEdges: [] },
+    { width: 360, height: 760 },
+  );
+  const rows = Map.groupBy(layout.nodes, (node) => node.y);
+
+  assert.ok(rows.size >= 3);
+  for (const row of rows.values()) {
+    const positions = row.map((node) => node.x).sort((left, right) => left - right);
+    for (let index = 1; index < positions.length; index += 1) {
+      assert.ok(positions[index] - positions[index - 1] >= 120);
+    }
+  }
+});

@@ -1,5 +1,4 @@
 """Stable personnel/log joins; never fabricate a device analysis for absent evidence."""
-from collections.abc import Mapping
 from types import SimpleNamespace
 
 

@@ -25,7 +25,7 @@ from net.models import (
     Error_Monitor,
     Error_Network_Device,
     Error_Server,
-    SecurityDevice,
+    WeakCurrentDevice,
     Monitor_Inspection,
     Network_Device,
     Network_Device_Inspection,
@@ -47,7 +47,7 @@ BUSINESS_MODELS = (
     Network_Device_Inspection,
     Server,
     Server_Inspection,
-    SecurityDevice,
+    WeakCurrentDevice,
     Monitor_Inspection,
     Domain_Account,
     Domain_Computer,
@@ -80,7 +80,7 @@ class DashboardActionTests(TestCase):
         self.assertEqual(
             items['computers']['record_url'], reverse('computer_analysis_list'),
         )
-        for kind in ('networks', 'servers', 'monitors'):
+        for kind in ('networks', 'servers', 'weakcurrent'):
             with self.subTest(kind=kind):
                 self.assertEqual(
                     items[kind]['manual_action_label'], '手动执行巡检',
@@ -183,13 +183,13 @@ class DeterministicDemoSeedTests(TestCase):
                 )
             legacy_servers.append((server, inspection))
 
-        legacy_monitors = []
+        legacy_weak_current = []
         for ip, name, device_type, vendor, status, reachable, summary in (
             ('192.0.2.31', '演示-大厅摄像机', '摄像机', 'Hikvision', 'success', True, '巡检成功'),
             ('192.0.2.32', '演示-NVR录像机', 'NVR', 'Dahua', 'success', True, '巡检成功'),
             ('192.0.2.33', '演示-仓库摄像机', '摄像机', 'Hikvision', 'failed', False, '摄像机离线（演示）'),
         ):
-            monitor = SecurityDevice.objects.create(
+            monitor = WeakCurrentDevice.objects.create(
                 device_name=name,
                 ip=ip,
                 device_type=device_type,
@@ -211,8 +211,8 @@ class DeterministicDemoSeedTests(TestCase):
                     inspection=inspection,
                     error_message={'演示异常': summary},
                 )
-            legacy_monitors.append((monitor, inspection))
-        return legacy_servers, legacy_monitors
+            legacy_weak_current.append((monitor, inspection))
+        return legacy_servers, legacy_weak_current
 
     def _snapshot(self):
         return {
@@ -244,8 +244,8 @@ class DeterministicDemoSeedTests(TestCase):
                 'servers': tuple(
                     Server.objects.order_by('ip').values_list('ip', 'pk')
                 ),
-                'monitors': tuple(
-                    SecurityDevice.objects.order_by('ip').values_list('ip', 'pk')
+                'weakcurrent': tuple(
+                    WeakCurrentDevice.objects.order_by('ip').values_list('ip', 'pk')
                 ),
             },
             'record_ids': {
@@ -294,6 +294,33 @@ class DeterministicDemoSeedTests(TestCase):
         self.assertEqual(self._snapshot(), first)
         request_mock.assert_not_called()
 
+    def test_seed_adopts_a_sync_source_predating_the_fixed_uuids(self):
+        """Re-seeding a database seeded by an older version must not orphan people."""
+        legacy_pk = uuid.uuid4()
+        legacy = PeopleSyncSource.objects.create(
+            pk=legacy_pk, name='飞书', source_key='people-provider-feishu',
+            source_type='feishu', is_enabled=True,
+            credentials={'app_id': 'OLD', 'app_secret': 'OLD'},
+        )
+        person = People.objects.create(
+            name='真实人员', employee_id='REAL-LEGACY-001', sync_source=legacy,
+        )
+
+        call_command('seed_demo_data', reset=True, stdout=StringIO())
+
+        legacy.refresh_from_db()
+        person.refresh_from_db()
+        # The adopted row keeps its pk, so existing references survive.
+        self.assertEqual(legacy.pk, legacy_pk)
+        self.assertEqual(person.sync_source_id, legacy_pk)
+        # ...and the demo's own fields still land on it.
+        self.assertFalse(legacy.is_enabled)
+        self.assertEqual(legacy.credentials['app_id'], 'DEMO-ONLY-NOT-A-SECRET')
+        self.assertEqual(
+            PeopleSyncSource.objects.filter(
+                source_key='people-provider-feishu').count(), 1,
+        )
+
     def test_demo_networks_cover_ssh_hybrid_and_auto_without_routable_targets(self):
         call_command('seed_demo_data', reset=True, stdout=StringIO())
 
@@ -337,7 +364,7 @@ class DeterministicDemoSeedTests(TestCase):
         )
         self.assertTrue(Computer.objects.filter(ip_addresses__startswith='10.10.10.').exists())
         self.assertTrue(Server.objects.filter(ip__startswith='10.20.20.').exists())
-        self.assertTrue(SecurityDevice.objects.filter(ip__startswith='10.30.30.').exists())
+        self.assertTrue(WeakCurrentDevice.objects.filter(ip__startswith='10.30.30.').exists())
         link_device_ids = set(
             NetworkTopologyLink.objects.values_list('local_interface__device_id', flat=True)
         ) | set(NetworkTopologyLink.objects.values_list('remote_device_id', flat=True))
@@ -512,22 +539,22 @@ class DeterministicDemoSeedTests(TestCase):
         )
 
     def test_reset_removes_the_complete_previous_server_and_monitor_fixture(self):
-        legacy_servers, legacy_monitors = (
+        legacy_servers, legacy_weak_current = (
             self._create_previous_server_monitor_fixture()
         )
         legacy_asset_ids = [
             *(asset.pk for asset, _ in legacy_servers),
-            *(asset.pk for asset, _ in legacy_monitors),
+            *(asset.pk for asset, _ in legacy_weak_current),
         ]
         legacy_record_ids = [
             *(record.pk for _, record in legacy_servers),
-            *(record.pk for _, record in legacy_monitors),
+            *(record.pk for _, record in legacy_weak_current),
         ]
 
         call_command('seed_demo_data', reset=True, stdout=StringIO())
 
         self.assertFalse(Server.objects.filter(pk__in=legacy_asset_ids).exists())
-        self.assertFalse(SecurityDevice.objects.filter(pk__in=legacy_asset_ids).exists())
+        self.assertFalse(WeakCurrentDevice.objects.filter(pk__in=legacy_asset_ids).exists())
         self.assertFalse(
             Server_Inspection.objects.filter(pk__in=legacy_record_ids).exists()
         )
@@ -535,7 +562,7 @@ class DeterministicDemoSeedTests(TestCase):
             Monitor_Inspection.objects.filter(pk__in=legacy_record_ids).exists()
         )
         self.assertEqual(Server.objects.count(), 4)
-        self.assertEqual(SecurityDevice.objects.count(), 6)
+        self.assertEqual(WeakCurrentDevice.objects.count(), 6)
         self.assertEqual(Error_Server.objects.count(), 2)
         self.assertEqual(Error_Monitor.objects.count(), 2)
 
@@ -678,12 +705,12 @@ class DeterministicDemoSeedTests(TestCase):
         for asset_model, record_model in (
             (Network_Device, Network_Device_Inspection),
             (Server, Server_Inspection),
-            (SecurityDevice, Monitor_Inspection),
+            (WeakCurrentDevice, Monitor_Inspection),
         ):
             with self.subTest(model=asset_model._meta.label):
                 self.assertEqual(
                     asset_model.objects.count(),
-                    12 if asset_model is Network_Device else 6 if asset_model is SecurityDevice else 4,
+                    12 if asset_model is Network_Device else 6 if asset_model is WeakCurrentDevice else 4,
                 )
                 self.assertEqual(record_model.objects.count(), 5 if asset_model is Network_Device else 4)
                 self.assertEqual(
@@ -741,8 +768,8 @@ class DeterministicDemoSeedTests(TestCase):
                     list(Network_Device.objects.values_list('password', flat=True))
                     + list(Server.objects.values_list('password', flat=True))
                     + list(Server.objects.values_list('api_token', flat=True))
-                    + list(SecurityDevice.objects.values_list('api_password', flat=True))
-                    + list(SecurityDevice.objects.values_list('api_token', flat=True))
+                    + list(WeakCurrentDevice.objects.values_list('api_password', flat=True))
+                    + list(WeakCurrentDevice.objects.values_list('api_token', flat=True))
                 )
             )
         )
@@ -760,7 +787,7 @@ class DeterministicDemoSeedTests(TestCase):
             ('computers', Computer, {'computer_name': 'DEMO-PC-DEV-02'}, 'DEMO-PC-DEV-02', '02-00-00-00-01-02'),
             ('networks', Network_Device, {'ip': '192.0.2.11'}, '演示-核心交换机', 'CloudEngine S5735-L'),
             ('servers', Server, {'ip': '198.51.100.22'}, '演示-Windows文件服务器', 'Windows Server 2022'),
-            ('monitors', SecurityDevice, {'ip': '203.0.113.32'}, '演示-NVR录像机', 'NVR5216-4KS2'),
+            ('weakcurrent', WeakCurrentDevice, {'ip': '203.0.113.32'}, '演示-NVR录像机', 'NVR5216-4KS2'),
         ):
             with self.subTest(kind=kind):
                 asset = model.objects.get(**lookup)
@@ -776,7 +803,7 @@ class DeterministicDemoSeedTests(TestCase):
                         detail,
                         f'{reverse("computer_analysis_list")}?target={asset.pk}',
                     )
-                elif kind in {'networks', 'servers', 'monitors'}:
+                elif kind in {'networks', 'servers', 'weakcurrent'}:
                     self.assertContains(
                         detail,
                         f'{reverse("record_list", args=[kind])}?target={asset.pk}',
@@ -789,7 +816,7 @@ class DeterministicDemoSeedTests(TestCase):
         for kind, model, summary in (
             ('networks', Network_Device_Inspection, '发现 2 个接入端口未连接'),
             ('servers', Server_Inspection, 'Windows 巡检 API 返回部分指标'),
-            ('monitors', Monitor_Inspection, '录像保留天数低于策略要求'),
+            ('weakcurrent', Monitor_Inspection, '录像保留天数低于策略要求'),
         ):
             with self.subTest(records=kind):
                 record = model.objects.get(summary=summary)
@@ -813,7 +840,8 @@ class DeterministicDemoSeedTests(TestCase):
         # The project landing page shows task statistics; standalone historical
         # analyses remain reachable in the global records list and detail page.
         self.assertContains(analysis_list, '最新任务统计')
-        historical_list = self.client.get(reverse('inspection_records'), {'q': 'DEMO-PC-DEV-02'})
+        historical_list = self.client.get(reverse('inspection_records'),
+                                          {'filter_asset': 'DEMO-PC-DEV-02'})
         self.assertContains(historical_list, 'DEMO-PC-DEV-02')
         self.assertContains(historical_list, analysis_url)
         analysis_detail = self.client.get(analysis_url)

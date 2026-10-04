@@ -1,0 +1,32 @@
+{% if can_administer %}
+<div class="modal fade" id="taskHistoryModal" tabindex="-1" aria-labelledby="taskHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-shell">
+        <div class="modal-content modal-surface">
+            <form method="post" action="{% url 'task_history_settings' %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <div class="modal-header">
+                    <div>
+                        <p class="page-heading__eyebrow mb-1">执行中心</p>
+                        <h2 class="modal-title fs-5" id="taskHistoryModalLabel">任务记录保留</h2>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="col-md-6">
+                        <label class="form-label" for="id_task_retention_days">保留时长</label>
+                        <select class="form-select" id="id_task_retention_days" name="retention_days">
+                            {% for value, label in task_history_choices %}<option value="{{ value }}"{% if task_history_retention == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                        </select>
+                        <div class="form-text">只清理「已结束」且没有任何记录、告警或拓扑批次仍在引用的任务；运行中的任务不受影响。</div>
+                    </div>
+                </div>
+                <div class="modal-footer modal-footer--sticky">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button class="btn btn-primary" type="submit">保存设置</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}

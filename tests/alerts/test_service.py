@@ -16,7 +16,6 @@ from net.models import (
     Computer,
     ComputerAnalysis,
     ComputerAnalysisProfile,
-    ComputerLogFile,
     InspectionProfile,
     Server,
     Server_Inspection,

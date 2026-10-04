@@ -10,7 +10,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from net.data_exchange.adapters import UnsupportedConfiguration
-from net.models import Network_Device, SecurityDevice
+from net.models import Network_Device, WeakCurrentDevice
 
 
 RAW = ('version 15.2\r\nhostname edge\r\nusername admin password 0 test-password\r\n'
@@ -138,7 +138,7 @@ class ConfigurationBackupTests(TestCase):
             self.api.read_configuration_backup(backup)
 
     def test_partial_security_configuration_is_not_a_backup(self):
-        camera = SecurityDevice.objects.create(ip='192.0.2.20')
+        camera = WeakCurrentDevice.objects.create(ip='192.0.2.20')
         with self.assertRaisesRegex(UnsupportedConfiguration, '(?i)partial|section'):
             self.store(item('table.Network.Hostname=camera', vendor='dahua', scope='Network'), asset=camera)
         self.assertIsNone(self.api.latest_configuration_backup(camera))

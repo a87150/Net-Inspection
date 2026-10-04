@@ -3,6 +3,7 @@
 from django import forms
 from django.core.exceptions import ValidationError
 
+from net.devices.collection_profiles import device_type_label
 from net.models import ComputerAnalysisProfile, InspectionProfile, Schedule
 from net.inspections.selection import (
     LINUX_FIELDS,
@@ -19,7 +20,7 @@ _INSPECTION_LABELS = {
     'memory': '内存', 'storage_status': '存储', 'network_info': '网络',
     'services': '服务状态', 'logs': '系统日志', 'device_info': '设备信息',
     'temperature': '温度', 'interface_status': '接口状态',
-    'traffic': '实时接口流量（SNMP）',
+    'traffic': '实时接口流量',
     'vlan_status': 'VLAN 状态', 'status_data': '设备状态',
     'channel_status': '通道状态',
     'config_info': '设备配置（只读、脱敏，非完整恢复备份）',
@@ -46,7 +47,7 @@ def inspection_item_choices(device_type):
         keys = set(NETWORK_FIELDS) | set(NETWORK_FUNCTION_ITEMS) | set(DEFAULT_ITEMS) | {'traffic'}
     elif device_type == InspectionProfile.DeviceType.SERVER:
         keys = set(LINUX_FIELDS) | set(WINDOWS_FIELDS)
-    elif device_type == InspectionProfile.DeviceType.MONITOR:
+    elif device_type == InspectionProfile.DeviceType.WEAK_CURRENT:
         keys = set(SECURITY_FIELDS)
     else:
         keys = set()
@@ -85,7 +86,7 @@ class _ScheduleFieldsMixin:
             if cleaned.get('interval_value') is None:
                 self.add_error('interval_value', '间隔计划必须设置间隔数值。')
             if not cleaned.get('interval_unit'):
-                self.add_error('interval_unit', '间隔计划必须选择分钟或小时。')
+                self.add_error('interval_unit', '间隔计划必须选择秒、分钟或小时。')
         elif kind == Schedule.Kind.DAILY:
             if cleaned.get('daily_time') is None:
                 self.add_error('daily_time', '每日计划必须设置执行时间。')
@@ -108,6 +109,12 @@ class InspectionProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
     )
     timeout_seconds = forms.IntegerField(min_value=1, max_value=3600, label='超时（秒）')
     concurrent_workers = forms.IntegerField(min_value=1, max_value=64, label='并发数')
+    record_retention = forms.ChoiceField(
+        required=False, label='保存记录',
+        choices=InspectionProfile._meta.get_field('record_retention').choices,
+        help_text='超期记录由后台自动清理；每台设备的最新一条始终保留，'
+                  '否则资产列表的巡检状态会全部变成「未巡检」。',
+    )
     schedule_enabled = forms.BooleanField(required=False, label='启用定时执行')
     schedule_kind = forms.ChoiceField(required=False, choices=Schedule.Kind.choices, label='执行方式')
     interval_value = forms.IntegerField(required=False, min_value=1, label='间隔数值')
@@ -119,9 +126,13 @@ class InspectionProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
         self.device_type = device_type
         self.instance = instance
         from net.inspections.schedules import _ASSET_MODELS, target_rule_fields
-        target_devices = list(_ASSET_MODELS[device_type].objects.order_by('pk'))
+        # Switched-off devices are not inspection targets, so keep them out of
+        # the picker too instead of offering a choice that resolves to nothing.
+        target_devices = list(
+            _ASSET_MODELS[device_type].objects.filter(is_enabled=True).order_by('pk')
+        )
         self.fields['target_rule_ids'].choices = [(str(obj.pk), str(obj)) for obj in target_devices]
-        from net.devices.collection_profiles import collection_settings_for_assets, supported_collection_items
+        from net.devices.collection_profiles import collection_settings_for_assets, item_transports, supported_collection_items
         from net.inspections.issues import DEVICE_PROJECTS
         kind = DEVICE_PROJECTS[device_type]
         effective = collection_settings_for_assets(kind,target_devices)
@@ -129,9 +140,14 @@ class InspectionProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
             {
                 'id': str(obj.pk),
                 'items': supported_collection_items(kind,obj,effective[str(obj.pk)]),
+                # 备注跟着所选设备走：'项目=方式;项目=方式'，由 task_ui.js 按选中集合聚合。
+                'methods': ';'.join(f'{item}={note}' for item, note in
+                                    sorted(item_transports(kind,obj,effective[str(obj.pk)]).items())),
                 'label': str(obj),
                 'vendor': str(getattr(obj, 'vendor', None) or getattr(obj, 'manufacturer', None) or '未填写'),
-                'device_type': str(getattr(obj, 'device_type', None) or getattr(obj, 'server_type', None) or '未分类'),
+                'device_type': device_type_label(
+                    kind, getattr(obj, 'device_type', None) or getattr(obj, 'server_type', None)
+                ) or '未分类',
             }
             for obj in target_devices
         ]
@@ -163,6 +179,7 @@ class InspectionProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
                 'selected_items': instance.selected_items,
                 'timeout_seconds': instance.timeout_seconds,
                 'concurrent_workers': instance.concurrent_workers,
+                'record_retention': instance.record_retention,
             })
         if schedule is not None and not self.is_bound:
             self.initial.update({
@@ -219,6 +236,7 @@ class InspectionProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
             'selected_items': self.cleaned_data['selected_items'],
             'timeout_seconds': self.cleaned_data['timeout_seconds'],
             'concurrent_workers': self.cleaned_data['concurrent_workers'],
+            'record_retention': self.cleaned_data.get('record_retention') or '180',
         }
 
 

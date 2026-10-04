@@ -3,7 +3,8 @@ r"""Launch the loopback Web and Worker using the shared root .env configuration.
 Windows: .\.venv\Scripts\python.exe -m deploy.demo
 Linux:   ./.venv/bin/python -m deploy.demo
 Starts the task Worker by default. Use --no-worker for an offline display-only demo.
-Without an explicit backend, use the isolated SQLite demo. MySQL/MariaDB is never seeded.
+Always runs against the isolated SQLite demo database: the shared root .env is deliberately
+overridden so a demo can never point at a production MySQL/MariaDB database.
 """
 import argparse
 import os
@@ -16,16 +17,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def configure_environment(runtime):
-    defaults = {
+    """Force the isolated demo environment; the shared .env must never win."""
+    os.environ.update({
         'DJANGO_SETTINGS_MODULE': 'net.settings', 'DJANGO_DEBUG': 'false',
         'DJANGO_ALLOWED_HOSTS': '127.0.0.1,localhost',
         'DJANGO_SECRET_KEY': 'DEMO-ONLY-NOT-FOR-PRODUCTION-LOCAL-ISOLATED-DATABASE',
-        'DB_ENGINE': 'sqlite', 'DJANGO_STATIC_ROOT': str(runtime / 'staticfiles'),
-    }
-    for name, value in defaults.items():
-        os.environ.setdefault(name, value)
-    if os.environ['DB_ENGINE'].lower() == 'sqlite':
-        os.environ['DJANGO_SQLITE_PATH'] = str(runtime / 'demo.sqlite3')
+        # DB_ENGINE/DB_NAME point demo at the test database; host/user/password still
+        # come from .env, which load_environment() read before this ran.
+        'DB_ENGINE': 'mysql', 'DB_NAME': os.getenv('DB_TEST_NAME', 'net-test'),
+        'DJANGO_SQLITE_PATH': '',
+        'DJANGO_STATIC_ROOT': str(runtime / 'staticfiles'),
+    })
 
 
 def prepare(runtime):
@@ -59,8 +61,28 @@ def prepare(runtime):
     import django
     django.setup()
     from django.core.management import call_command
+    from django.db import connections
+    from django.db.utils import OperationalError
+    connection = connections['default']
+    try:
+        connection.ensure_connection()
+    except OperationalError as exc:
+        # migrate cannot create the database itself; error 1049 means it is not there yet.
+        if '1049' not in str(exc):
+            raise
+        name = connection.settings_dict['NAME']
+        connection.close()
+        connection.settings_dict['NAME'] = ''
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'CREATE DATABASE `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_bin'
+                % name.replace('`', '``'),
+            )
+        connection.settings_dict['NAME'] = name
+        connection.close()
+        print('Created database: ' + name, flush=True)
     call_command('migrate', interactive=False, verbosity=0)
-    if os.environ['DB_ENGINE'].lower() == 'sqlite' and not (runtime / '.seeded').exists():
+    if not (runtime / '.seeded').exists():
         call_command('seed_demo_data')
         (runtime / '.seeded').write_text('Seed complete; subsequent starts preserve edits.\n', encoding='utf-8')
     call_command('collectstatic', interactive=False, verbosity=0)
