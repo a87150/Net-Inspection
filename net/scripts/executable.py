@@ -12,7 +12,7 @@ MAGIC = b'PCCOLV02'
 FOOTER_SIZE = len(MAGIC) + 8 + 32
 PAYLOAD_HEADER_SIZE = 8 + 8 + 32 + 32
 # Updated by the reproducible Windows build command whenever the host changes.
-PREBUILT_HOST_SHA256 = '4b46884681ce458d8de46c0ef55286e873b09cecc1b8eb3dad35e4fb2588bf12'
+PREBUILT_HOST_SHA256 = '22887c5443aa6734adc4b3524f6ee482995d1ef8078acec4bde8d622205978aa'
 
 
 def _u64(value: int) -> bytes:
@@ -55,7 +55,8 @@ def build_prebuilt_host(output: Path = PREBUILT_HOST) -> str:
     output.parent.mkdir(parents=True, exist_ok=True)
     try:
         result = subprocess.run([str(compiler), '/nologo', '/target:exe', '/platform:anycpu',
-                                 '/reference:System.IO.Compression.dll', '/out:' + str(output), str(HOST_TEMPLATE)],
+                                 '/reference:System.IO.Compression.dll', '/out:' + str(output),
+                                 str(HOST_TEMPLATE)],
                                 capture_output=True, timeout=60,
                                 creationflags=subprocess.CREATE_NO_WINDOW)
     except (OSError, subprocess.TimeoutExpired) as exc:

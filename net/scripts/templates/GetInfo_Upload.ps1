@@ -1,4 +1,4 @@
-﻿# Run repeatedly with the same local account (for example SYSTEM).
+# Run repeatedly with the same local account (for example SYSTEM).
 # PC_CONFIG: __PC_CONFIG_BASE64__
 $ErrorActionPreference = 'Stop'
 $ProfileConfig = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__PC_CONFIG_BASE64__')) | ConvertFrom-Json
@@ -18,7 +18,11 @@ function Publish-PCDaily {
         $final = Join-Path $StateDirectory 'latest.json'
         $partial = Join-Path $StateDirectory ('latest.' + [guid]::NewGuid().ToString('N') + '.tmp')
         [IO.File]::WriteAllBytes($partial, $raw)
-        if (Test-Path -LiteralPath $final) { [IO.File]::Replace($partial, $final, $null) } else { [IO.File]::Move($partial, $final) }
+        # 不用 [IO.File]::Replace(..., $null)：PowerShell 会把 $null 转成空字符串传给
+        # [string] 类型的备份路径参数，.NET 直接抛 "The path is empty"（PS7 必现）。
+        # 外面已经有 latest.lock 独占锁，这里先删后移即可。
+        if (Test-Path -LiteralPath $final) { [IO.File]::Delete($final) }
+        [IO.File]::Move($partial, $final)
         $partial = $null
         for ($attempt = 1; $attempt -le 3; $attempt++) {
             try {
