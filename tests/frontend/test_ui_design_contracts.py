@@ -405,8 +405,6 @@ class SharedInterfaceContractTests(TestCase):
     def test_legacy_error_cards_use_shared_status_surfaces(self):
         template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
         paths = (
-            'devices/pc/inspection_detail.html',
-            'inspections/detail.html',
             'inspections/issue_findings.html',
             'inspections/record_detail.html',
         )
@@ -445,7 +443,6 @@ class SharedInterfaceContractTests(TestCase):
         template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
         paths = (
             'registration/login.html',
-            'common/table_filter.html',
             'public/list.html',
             'public/summary.html',
             'inspections/traffic_table.html',

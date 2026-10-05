@@ -33,3 +33,7 @@ runtime/deployment/
 # Local PC API verification and generated runtime files.
 runtime/
 TEST-PC/
+
+# Tool caches and orphaned temp directories (tempfile.mkdtemp residue).
+.ruff_cache/
+tmp*/
