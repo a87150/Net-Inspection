@@ -38,6 +38,8 @@
 - PostgreSQL：`127.0.0.1:5432`，正式库 `net`、模拟库 `net-test`，均按 `C` 排序规则建库。
 - 密码：Windows 凭据管理器服务 `net-inspection-mariadb`、用户名 `net_app`。配置文件不保存数据库密码；root 仅用于建库授权。
 - PC API 令牌由 `PC_LOG_SOURCE_ENCRYPTION_KEY`（或同名 `_FILE`）加密，不能丢失或随意替换；更换后需重置令牌并重新部署采集包。
+- 设备口令、SNMP 密钥、域控绑定口令、告警口令、人员同步 app_secret 由 `DEVICE_BACKUP_ENCRYPTION_KEY` 加密。这把密钥同时保护配置备份，**丢失即永久无法恢复**，必须离线独立备份；Web 与 Worker 必须一致。字段清单与注意事项见 [device-inspection.md](device-inspection.md) 的「凭据加密」。
+- `migrate` 会把存量明文凭据改写为密文（迁移 0064、0065）。**执行前先备份密钥**，并确认两个服务使用同一个值。
 - Windows Web/Worker 应由同一 Windows 账号运行；换服务账号需在该账号凭据管理器设置密码。Linux 可通过服务环境注入 `DB_PASSWORD`，不必依赖桌面凭据管理器。
 - Redis：`127.0.0.1:6379/1`，键前缀 `net-inspection`。不执行全库 flush。
 

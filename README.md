@@ -60,10 +60,10 @@ Linux 将解释器换成 `python3.14` / `./.venv/bin/python`。已有虚拟环�
 
 | 配置 | 用途 |
 | --- | --- |
-| `DB_ENGINE`、`DB_*` | 数据库类型与连接，取值只认 `mysql` / `sqlite`；拼错直接启动失败（**不会**回退到 SQLite）；SQLite 需注意 `DJANGO_SQLITE_PATH` 的实际位置 |
+| `DB_ENGINE`、`DB_*` | 数据库类型与连接，取值只认 `mysql` / `postgresql` / `sqlite`；拼错直接启动失败（**不会**回退到 SQLite）；SQLite 需注意 `DJANGO_SQLITE_PATH` 的实际位置 |
 | `DJANGO_DEBUG`、`DJANGO_SECRET_KEY`、`DJANGO_ALLOWED_HOSTS` | 正式环境关闭调试，设置稳定签名密钥和允许访问的主机 |
 | `PC_LOG_SOURCE_ENCRYPTION_KEY` | PC 来源凭据加密 |
-| `DEVICE_BACKUP_ENCRYPTION_KEY` | 设备备份、门禁令牌等加密 |
+| `DEVICE_BACKUP_ENCRYPTION_KEY` | 设备口令、SNMP 密钥、域控绑定口令、告警口令、人员同步 app_secret 及配置备份加密。**丢失即永久无法恢复**，必须离线独立备份；Web 与 Worker 必须一致。详见 [凭据加密](docs/device-inspection.md) |
 | `DOMAIN_OPERATION_ENCRYPTION_KEY` | 域密码操作加密 |
 | `DJANGO_STATIC_ROOT` | 静态文件收集目录 |
 | `NET_PAGE_CACHE_ENABLED`、`NET_REDIS_URL` | 可选展示缓存，默认关闭 |

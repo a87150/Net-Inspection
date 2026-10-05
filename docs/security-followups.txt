@@ -1,30 +1,50 @@
-安全改进待办（2026-09-14）
-状态：按用户要求仅记录，本轮不修改既有安全配置或凭据。
+安全改进跟踪（2026-09-14 登记，2026-10-05 更新）
 
-1. SSH 设备身份校验
+1. SSH 设备身份校验 —— 未做，仍搁置
 现状：Linux SSH 使用 AutoAddPolicy；网络 Netmiko 配置 ssh_strict=False。
 位置：net/infrastructure/ssh_collectors.py、net/devices/network/transport.py。
 风险：加密连接不能保证连接的就是登记设备。
 处理：提供管理员登记/确认主机指纹、变更告警和拒绝陌生指纹，规划已有设备迁移。
+搁置原因：现有设备如何录入指纹需要产品决策——TOFU（首次自动信任并记录，变更时告警）
+  不打断采集，强制登记则要逐台录入上百台设备。策略未定前不动。
 验收：首次未知、已信任、指纹更换及授权更新均覆盖；不能自动接受变更。
 
-2. 连接凭据应用层加密
-现状：设备 SSH/SNMP/API、域控 bind_password、告警 settings 使用普通字段存储。
-位置：net/models/devices.py、net/models/domain.py、net/models/alerts.py。
-处理：复用现有加密能力，密钥独立于数据库保管，迁移现有值，保证不修改密码的表单语义及密钥轮换。
-验收：DB/导出/任务快照/错误日志无明文凭据，原始设备配置备份仍完整可恢复；不得用脱敏破坏备份。
+2. 连接凭据应用层加密 —— 已完成
+实现：net/infrastructure/credentials.py 的 EncryptedCharField / EncryptedJSONField，
+  读写分别经 from_db_value 与 get_prep_value，调用方无感。
+  覆盖网络设备 password/snmp_community/snmp_auth_password/snmp_priv_password/api_shared_secret、
+  服务器 password/api_token、弱电设备 api_password/api_token、域控 bind_password、
+  告警 settings、人员同步 credentials。
+迁移：0064 改列类型，0065 转历史明文为密文（用原始 cursor，可逆）。
+密钥：复用已有的 DEVICE_BACKUP_ENCRYPTION_KEY，未新增独立密钥。
+  ⚠️ 这把密钥因此从「只保护配置备份」升级为「能解开全网设备口令、域控绑定口令和第三方
+  app_secret」。丢失即永久无法恢复，必须离线独立备份，Web 与 Worker 必须一致。
+取舍：轮换该密钥会同时作废配置备份和全部设备凭据；如需分开轮换，应改为独立密钥。
 说明：本轮没有审计数据库/宿主磁盘自身加密与 ACL，未证明发生泄露。
 
-3. HTTPS 与 Cookie
-检查实际部署的 DEBUG、SECRET_KEY、会话 Cookie、CSRF Cookie、HTTPS 重定向和 HSTS 设置；同时核实外部代理是否强制 HTTPS。
-处理：先确认实际入口证书、代理转发/信任范围，再提供部署配置并启用安全 Cookie/重定向，稳定后配置 HSTS。
+3. HTTPS 与 Cookie —— 已提供开关，默认关闭
+实现：net/settings.py 的 NET_SECURE_COOKIES / NET_SECURE_SSL_REDIRECT /
+  NET_SECURE_HSTS_SECONDS，均默认关闭。
+为何默认关闭：直连 HTTP 的部署一旦开启 SSL 重定向，整个站点会跳到自己无法服务的地址；
+  浏览器对 Secure Cookie 是丢弃而不是降级。HSTS 客户端无法撤回，确认 HTTPS 稳定后再开。
+待办：部署方需先确认实际入口证书与代理转发范围，再按 README 的表格逐项开启。
 验收：HTTP 不携带会话 Cookie，HTTPS 登录与 CSRF 正常，代理头不能由外部伪造。
 
-4. 登录防暴力尝试
-现状：应用未发现明确登录失败限速；外部代理限速未核实。
-处理：按账户/来源限速并保留脱敏失败审计，避免永久锁死管理员。
+4. 登录防暴力尝试 —— 已完成
+实现：index/common/login_throttle.py，不引入 django-axes，计数用项目已有的 cache。
+策略：账号与来源双计数，登录成功立即清零，阈值为 0 时整体关闭。
+  来源阈值（默认 20）故意宽于账号阈值（默认 5）：整个办公室通常共用一个 NAT 地址，
+  等值阈值会让几个人输错密码就锁死所有人。
+容错：所有 cache 读写包异常，缓存故障时放行而不是把所有人锁在门外。
 验收：正常登录不受影响，连续失败受限，登录成功可合理恢复。
+
+5. MariaDB 时区表缺失 —— 已加启动闸门
+实现：net/infrastructure/tzcheck.py 注册 net.W001 系统检查。
+背景：日期筛选一律用半开区间而非 __date，所以当前没有 bug；但以后在 DateTimeField 上
+  使用 TruncMonth 或 ExtractHour 时，Django 会生成 CONVERT_TZ(列, UTC, Asia/Shanghai)，
+  时区表为空时它求值为 NULL——筛选不报错，直接返回空。官方 mariadb:12 镜像同样不导入。
+待办：运维执行 mariadb-tzinfo-to-sql /usr/share/zoneinfo | mysql mysql。
 
 实施前核实当前部署配置；本轮未进行渗透测试或依赖漏洞库联网扫描。
 
-PC EXE 分发验证：本次一份动态生成的测试 EXE 被 Windows 安全防护以 WinError 225 拦截，实际采集包自检通过。尚不能据此保证所有终端均放行未签名 EXE；后续需结合组织代码签名流程和终端防护策略验证。遇到该拦截时测试明确标记跳过，不关闭防护、不自动添加排除项。
+PC EXE 分发验证：本次一份动态生成的测试 EXE 被 Windows 安全防护以 WinError 225 拦截，实际采集包自检通过。尚不能据此保证所有终端均放行未签名 EXE；后续需结合组织代码签名策略。

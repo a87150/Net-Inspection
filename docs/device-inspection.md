@@ -1,4 +1,4 @@
-﻿# 设备巡检与配置模板
+# 设备巡检与配置模板
 
 
 
@@ -152,7 +152,28 @@ Windows 巡检会将已选项目中有效的 CPU 型号、物理核数/逻辑处
 
 中控万傲瑞达 V6600 的[官方产品说明](https://www.zksps.com/productinfo/1274302.html?templateId=397531)确认提供 REST 北向接口，但没有公开实际事件端点。本项目目前提供**待实例核实的 V6000 2.11 兼容格式**：GET、`pageNo` / `pageSize`、`startDate` / `endDate`、正数 `code` 与 `data` 数组，事件字段包括 `id`、`eventTime`、`pin`、`name`、`eventPointName` / `devName`、`cardNo`。这不是已验证的 V6600 接口承诺；必须按部署实例的 API 文档确认认证、分页、时间和事件字段后使用。通行结果/方向缺少经过核实的编码映射时显示“未知”。海康 iSecure Center、大华 DSS 仅为待接入占位，不支持实际同步。
 
-平台令牌和弱电设备 SNMP 密码使用 `DEVICE_BACKUP_ENCRYPTION_KEY` 加密，部署须保留原密钥。
+## 凭据加密
+
+设备凭据不以明文入库，全部由 `DEVICE_BACKUP_ENCRYPTION_KEY` 加密后保存：
+
+| 对象 | 加密字段 |
+| --- | --- |
+| 网络设备 | `password`、`snmp_community`、`snmp_auth_password`、`snmp_priv_password`、`api_shared_secret` |
+| 服务器 | `password`、`api_token` |
+| 弱电/门禁设备 | `api_password`、`api_token` |
+| 域控连接 | `bind_password` |
+| 告警通道 | `settings`（SMTP 口令、webhook secret，按字符串叶子加密） |
+| 人员同步来源 | `credentials`（飞书/钉钉 app_secret，按字符串叶子加密） |
+
+读写经 `EncryptedCharField` / `EncryptedJSONField` 自动完成，界面与调用方无感知；按列精确匹配的查询仍然成立。
+
+> ⚠️ **这把密钥能解开全网设备口令、域控绑定口令和第三方 app_secret。**
+> - 必须**离线独立备份**，且不要和数据库放在一起：迁移后明文不复存在，密钥丢失即永久无法恢复，没有找回途径。
+> - Web 与 Worker **必须使用同一个值**，否则会出现一半能读、一半读不出。
+> - 轮换它会**同时作废配置备份和全部设备凭据**。如需分开轮换，应改用独立密钥。
+> - 密钥可用三种方式提供：`.env`、`<名称>_FILE` 指向的密钥文件、或系统凭据库（`DEVICE_BACKUP_KEYRING_SERVICE`）。真实环境变量优先于 `.env`。
+
+升级到本版本时，`migrate` 会把存量明文改写为密文（迁移 0064、0065，可逆）。**请在备份密钥之后再执行迁移。**
 
 ## 配置导出
 

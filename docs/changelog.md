@@ -5,21 +5,62 @@
 本文件只记录**已经生效的变更**和**仍待处理的问题**。
 系统当前是什么样，请看导航里的架构、设备巡检、人员与域控、数据库文档，本文件不重复描述。
 
+## 2026-10-05
+
+### 设备与告警凭据加密存储
+
+这些列此前是**明文**：网络设备 SSH 口令、SNMP 团体字与 SNMPv3 密钥、深信服 AC 共享密钥、
+服务器与弱电设备口令令牌、域控绑定口令、告警 SMTP 口令与 webhook secret、飞书/钉钉 app_secret。
+一次数据库读取泄露——备份被拷、账号权限过宽、一次 SQL 注入、运维导出一份库——就等于同时
+交出整份清单。项目另外 5 处密钥早已用 Fernet，这里补上缺的部分。
+
+复用 `DEVICE_BACKUP_ENCRYPTION_KEY`，未新增独立密钥。读写经 `EncryptedCharField` /
+`EncryptedJSONField` 自动完成，界面与调用方无感知；JSON 只加密字符串叶子，保留文档形状。
+迁移 0064 改列类型、0065 转存量明文为密文（可逆）。
+
+> 注意：这把密钥因此从「只保护配置备份」升级为「能解开全网设备凭据」。**丢失即永久无法恢复**，
+> 必须离线独立备份；Web 与 Worker 必须一致。轮换它会同时作废配置备份，如需分开轮换应改用独立密钥。
+
+### 登录失败限速
+
+按账号与来源双计数，登录成功立即清零，计数存在缓存里，不引入 `django-axes`。来源阈值默认 20、
+故意宽于账号阈值 5：整个办公室通常共用一个 NAT 地址，等值阈值会让几个人输错密码就锁死所有人。
+所有缓存读写都包了异常，缓存故障时放行而不是把所有人锁在门外。
+
+### HTTPS 与 Cookie 加固开关
+
+`NET_SECURE_COOKIES`、`NET_SECURE_SSL_REDIRECT`、`NET_SECURE_HSTS_SECONDS` **默认全部关闭**：
+直连 HTTP 的部署一旦开启 SSL 重定向，整个站点会跳到自己无法服务的地址；浏览器对 `Secure` Cookie
+是丢弃而不是降级；HSTS 客户端无法撤回。确认证书与代理转发就位后再逐项开启。
+
+### MariaDB 时区表缺失告警
+
+日期筛选一律用半开区间而非 `__date`，所以当前没有故障；但以后在 `DateTimeField` 上用 `TruncMonth`
+或 `ExtractHour`，Django 会生成 `CONVERT_TZ(列, UTC, Asia/Shanghai)`，时区表为空时求值为 `NULL`，
+筛选不报错、直接返回空。新增 `net.W001` 系统检查提示并给出导入命令；官方 `mariadb:12` 镜像同样不导入。
+
+### 清理与工程卫生
+
+- 删除 3 个死模板（无 view 渲染、无 include，唯一引用来自断言它们存在的测试）及对应断言。
+- 清理 `runtime/`、`.task6-artifacts/`、`.worktrees/`、`demo-runtime/` 等磁盘垃圾约 374 MB。
+- 修复 ACL 损坏的临时目录，`ruff check` 此前静默吞掉 `os error 5`、`ruff format --check` 直接 panic。
+- 最低 Python 回到 3.12（Django 6.1 自身支持的最低版本）；CI 与 ruff 目标仍为 3.14。
+- 与 `origin/main` 建立共同祖先，两条历史此前无共同祖先，一次 `push --force` 会抹掉远端提交。
 ## 当前待处理
 
 | 事项 | 说明 |
 | --- | --- |
 | 门禁平台兼容性 | V6600 需部署实例核实端点与认证，当前按 V6000 2.11 兼容格式处理；海康/大华仅为占位，不承诺可用 |
 | SSH 主机身份校验 | 尚未做 known_hosts 校验，见 [安全待办](security-followups.txt) |
-| 部分凭据存储 | 仍有凭据依赖系统凭据库，跨主机迁移需重新配置 |
+| 数据库口令存储 | 数据库密码依赖系统凭据库，跨主机迁移需重新配置（设备凭据已改为应用层加密，见 2026-10-05） |
 | PC 采集器 HTTPS 与双向认证 | 当前仅 Bearer Token，无客户端证书 |
 | `index/access/adapters.py` 方向与结果字段 | 目前固定回填 `unknown`，已知问题 |
 | H4 无障碍项 | 部分弹窗与表格控件缺少完整键盘与读屏语义 |
-| `my_command.py`、`table_filter.html`、`style.css` | 死代码，待清理 |
+| `static/app/css/style.css` | 1 行注释空壳，仍被两个 base 模板 `<link>`，每页浪费一次请求 |
 | `sync_domain` / `policy_snapshot` | 仅被测试引用的函数 |
 | 拓扑批量删除 | 关联 PROTECT 保护缺失（D2），删除前需确认级联范围 |
 | PostgreSQL 排序规则 | 库必须按 `LC_COLLATE 'C'` 建，locale 排序会让中文名先后与 MariaDB 相反 |
-| PC 采集宿主自测 | 3 个用例依赖预编译 `PCCollectorHost.exe`，它硬编码调用 Windows PowerShell 5.1；执行策略为 Restricted/AllSigned 的机器上会被拒 |
+| PC 采集宿主自测 | 3 个用例在受限令牌下会因目录 ACL 报「访问被拒绝」，已用 `@requires_powershell` 跳过。采集器本身在管理员与普通桌面会话下均已实测可用；`PCCollectorHost.exe` 现优先 PowerShell 7，找不到才退回 5.1 |
 
 ## 1.0.0（2026-10-04）
 
