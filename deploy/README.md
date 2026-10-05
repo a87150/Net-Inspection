@@ -1,4 +1,4 @@
-﻿# Windows Server / Linux 一键部署
+# Windows Server / Linux 一键部署
 
 适用于单台主机上的正式 Web + Worker。脚本安装项目依赖、配置环境、迁移数据库、收集静态文件、创建首个管理员，并设置开机启动。**不执行 `seed_demo_data`，不重置数据库，不自动创建数据库实例，不修改防火墙。**
 
@@ -6,7 +6,7 @@
 
 1. 把代码放到固定目录，例如 Windows 的 `C:\NetInspection`、Linux 的 `/opt/net-inspection`。不要从临时解压目录运行，也不要把其他机器的 `.venv` 复制过来。
 2. 准备可连接的 MariaDB/MySQL 服务。**库和专用账号不用提前建**：若首次引导填写的库/账号已能连接就直接使用；连不上时，准备检查阶段会问你要不要用管理员账号建出来（默认回车即创建），该管理员密码只用于这一次，不会写入任何文件。迁移已有库时仍需该库的建表/改表权限。库和账号的密码在首次引导中填写，不要写到命令行。
-3. Windows 安装 **64 位 Python 3.12+（为所有用户安装）**，需要“计划任务”服务；Linux 需要 systemd、root/sudo。Ubuntu 24.04+/Debian 13+ 可使用发行版 Python；支持提供 Python 3.12 软件包的 dnf 系统，其他环境可预装依赖后加 `--skip-system-packages --python /path/to/python3.12`。
+3. Windows 安装 **64 位 Python 3.14+（为所有用户安装）**，需要“计划任务”服务；Linux 需要 systemd、root/sudo。Ubuntu 24.04+/Debian 13+ 可使用发行版 Python；支持提供 Python 3.12 软件包的 dnf 系统，其他环境可预装依赖后加 `--skip-system-packages --python /path/to/python3.12`。
 4. 安装依赖需要访问 Python 包源和 Linux 软件源。使用内部软件源时先配置 pip/系统包管理器。Windows 若 mysqlclient 没有当前 Python 版本的轮子，请安装 MariaDB Connector/C 与 C++ 编译工具，或选用锁文件支持的 Python 3.12 环境。
 
 **迁移现有项目时**：先备份并迁移数据库，连同原 `.env`、所有 `*_KEY_FILE` 指向的密钥文件、设备备份密钥和软件策略一起保存。检查 Windows/Linux 路径差异。不要给已有密文生成新密钥，也不要仅迁移代码后误连空库。Windows 凭据管理器的 keyring 数据不会随 `.env` 自动迁移，需要在目标运行账号下恢复。新建空库不会复制原机器的设备、人员、配置模板或历史记录。

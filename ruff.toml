@@ -3,7 +3,7 @@
 # Scope is deliberately pyflakes-only (F). It catches unused imports and variables,
 # which is where this codebase actually regressed, without demanding a repo-wide
 # reformat or import reorder that would bury real changes in churn.
-target-version = "py312"
+target-version = "py314"
 
 exclude = [
     ".venv",

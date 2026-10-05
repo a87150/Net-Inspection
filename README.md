@@ -20,7 +20,7 @@ PC 日志由 Windows/macOS 采集器每两小时本地覆盖 `latest.json`，再
 
 ### 正式部署
 
-先将代码放到固定目录，准备可连接的 MariaDB/MySQL 数据库及专用账号。Windows 安装 **64 位 Python 3.12+**；Linux 需要 systemd 和 root/sudo。以下命令在项目根目录运行。
+先将代码放到固定目录，准备可连接的 MariaDB/MySQL 数据库及专用账号。Windows 安装 **64 位 Python 3.14+**；Linux 需要 systemd 和 root/sudo。以下命令在项目根目录运行。
 
 Windows 管理员 PowerShell：
 
@@ -45,12 +45,12 @@ sudo bash deploy/linux/install.sh
 Windows：
 
 ```powershell
-py -3.12 -m venv .venv
+py -3.14 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.lock.txt
 .\.venv\Scripts\python.exe -m deploy.demo --no-worker
 ```
 
-Linux 将解释器换成 `python3.12` / `./.venv/bin/python`。已有虚拟环境时跳过创建。打开 `http://127.0.0.1:8000/`，Ctrl+C 停止启动器。
+Linux 将解释器换成 `python3.14` / `./.venv/bin/python`。已有虚拟环境时跳过创建。打开 `http://127.0.0.1:8000/`，Ctrl+C 停止启动器。
 
 未配置数据库时使用 `demo-runtime/demo.sqlite3` 并初始化展示数据；已有 `.env` 指定 MySQL/MariaDB 时沿用该库，不灌展示数据。`--no-worker` 只展示页面；去掉它会启动 Worker 并执行新提交的真实任务。不要把演示初始化或重置命令用于生产排障。
 
@@ -143,7 +143,7 @@ Web 负责页面、后端授权、校验和短事务；Worker 在数据库领取
 
 | 开源库/组件 | 用途 |
 | --- | --- |
-| Python 3.12+、Django、Django REST framework | 应用运行、ORM/迁移/认证；DRF 仍用于部分测试，不是 PC 上传入口 |
+| Python 3.14+、Django、Django REST framework | 应用运行、ORM/迁移/认证；DRF 仍用于部分测试，不是 PC 上传入口 |
 | Waitress、WhiteNoise | WSGI Web 和正式环境静态文件 |
 | mysqlclient、redis | MariaDB/MySQL 驱动、可选页面缓存 |
 | python-dotenv、keyring、cryptography | 环境加载、系统凭据库、Fernet 加密 |

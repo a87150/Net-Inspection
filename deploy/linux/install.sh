@@ -9,7 +9,7 @@ INSTALL_PACKAGES=1
 NON_INTERACTIVE=0
 PREPARE_ONLY=0
 usage() {
-    echo "Usage: sudo bash deploy/linux/install.sh [--env-file /path/.env] [--python python3.12] [--skip-system-packages] [--non-interactive] [--prepare-only]"
+    echo "Usage: sudo bash deploy/linux/install.sh [--env-file /path/.env] [--python python3.14] [--skip-system-packages] [--non-interactive] [--prepare-only]"
 }
 while (($#)); do
     case "$1" in
@@ -50,17 +50,17 @@ if ((INSTALL_PACKAGES)); then
         apt-get update
         apt-get install -y python3 python3-venv python3-dev build-essential pkg-config default-libmysqlclient-dev iputils-ping
     elif command -v dnf >/dev/null; then
-        dnf install -y python3.12 python3.12-devel python3.12-pip gcc pkgconf-pkg-config mariadb-connector-c-devel iputils
-        [[ "$PYTHON" != python3 ]] || PYTHON=python3.12
+        dnf install -y python3.14 python3.14-devel python3.14-pip gcc pkgconf-pkg-config mariadb-connector-c-devel iputils
+        [[ "$PYTHON" != python3 ]] || PYTHON=python3.14
     else
-        echo 'Install Python 3.12+, venv, development headers, pkg-config, MariaDB client headers and ping; rerun with --skip-system-packages.' >&2
+        echo 'Install Python 3.14+, venv, development headers, pkg-config, MariaDB client headers and ping; rerun with --skip-system-packages.' >&2
         exit 1
     fi
 fi
-"$PYTHON" -c 'import sys; assert sys.version_info >= (3,12), "Python 3.12+ required (Ubuntu 24.04+/Debian 13+, or use --python)."'
+"$PYTHON" -c 'import sys; assert sys.version_info >= (3,14), "Python 3.14+ required (Ubuntu 24.04+/Debian 13+, or use --python)."'
 "$PYTHON" -m deploy.setup processes
 if [[ ! -x .venv/bin/python ]]; then "$PYTHON" -m venv .venv; fi
-.venv/bin/python -c 'import sys; assert sys.version_info >= (3,12), "Existing .venv is too old; choose a fresh checkout/compatible environment."'
+.venv/bin/python -c 'import sys; assert sys.version_info >= (3,14), "Existing .venv is too old; choose a fresh checkout/compatible environment."'
 .venv/bin/python -m pip install -r requirements.lock.txt
 ARGS=(--env-file "$ENV_FILE")
 ((NON_INTERACTIVE == 0)) || ARGS+=(--non-interactive)

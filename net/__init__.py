@@ -5,8 +5,8 @@ import sys
 
 
 def require_runtime():
-    if sys.version_info < (3, 12):
-        raise RuntimeError('Network Inspection requires Python 3.12 or newer.')
+    if sys.version_info < (3, 14):
+        raise RuntimeError('Network Inspection requires Python 3.14 or newer.')
 
 
 require_runtime()

@@ -1,4 +1,4 @@
-﻿# Linux / systemd 部署
+# Linux / systemd 部署
 
 在固定的项目目录（例如 `/opt/net-inspection`）执行：
 
@@ -6,7 +6,7 @@
 sudo bash deploy/linux/install.sh
 ```
 
-脚本安装系统和项目依赖，复用配置，以低权限账号运行两个 systemd 服务。准备 MariaDB/MySQL 数据库；需要发行版提供 Python 3.12+，或通过 `--python` 指定已安装解释器。
+脚本安装系统和项目依赖，复用配置，以低权限账号运行两个 systemd 服务。准备 MariaDB/MySQL 数据库；需要发行版提供 Python 3.14+，或通过 `--python` 指定已安装解释器。
 
 安装后用 `deploy/linux/manage.sh` 做日常运维（`status` / `start` / `stop` / `restart` / `probe` / `logs`），用法见[一键部署说明](../../README.md#linux--systemd)。
 
