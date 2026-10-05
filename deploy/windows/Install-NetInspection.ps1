@@ -60,10 +60,10 @@ if (-not $PythonExe) {
     } elseif (Get-Command python.exe -ErrorAction SilentlyContinue) {
         $PythonExe = (Get-Command python.exe).Source
     } else {
-        throw 'Install 64-bit Python 3.14+ for all users first, then rerun. https://www.python.org/downloads/windows/'
+        throw 'Install 64-bit Python 3.12+ for all users first, then rerun. https://www.python.org/downloads/windows/'
     }
 }
-Invoke-Checked $PythonExe @('-c', 'import sys; assert sys.version_info >= (3,14), "Python 3.14+ is required"; assert sys.maxsize > 2**32, "64-bit Python is required"')
+Invoke-Checked $PythonExe @('-c', 'import sys; assert sys.version_info >= (3,12), "Python 3.12+ is required"; assert sys.maxsize > 2**32, "64-bit Python is required"')
 $owner = "Network Inspection managed deployment: $ProjectRoot"
 $taskNames = @('NetInspectionWeb', 'NetInspectionWorker')
 foreach ($name in $taskNames) {

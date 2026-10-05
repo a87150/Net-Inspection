@@ -6,7 +6,7 @@
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\deploy\windows\Install-NetInspection.ps1
 ```
 
-使用系统自带计划任务管理独立 Web 和 Worker，无需 NSSM。需先安装 64 位 Python 3.14+，准备 MariaDB/MySQL 数据库。
+使用系统自带计划任务管理独立 Web 和 Worker，无需 NSSM。需先安装 64 位 Python 3.12+，准备 MariaDB/MySQL 数据库。
 
 安装后用 `Manage-NetInspection.ps1` 做日常运维（`status` / `start` / `stop` / `restart` / `probe` / `logs`），用法见[上级说明](../README.md#windows-server)。
 

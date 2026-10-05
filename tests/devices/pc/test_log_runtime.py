@@ -15,6 +15,6 @@ class FinalRuntimeTests(TestCase):
         profile = ComputerAnalysisProfile.objects.get(name='演示日志分析')
         for log in ComputerLogFile.objects.all():
             self.assertEqual(analyze_log(log, profile.analysis_items).status, 'success')
-    def test_application_import_rejects_python_313_before_startup(self):
-        with patch('sys.version_info', (3, 13, 0)), self.assertRaisesRegex(RuntimeError, '3.14'):
+    def test_application_import_rejects_python_311_before_startup(self):
+        with patch('sys.version_info', (3, 11, 9)), self.assertRaisesRegex(RuntimeError, '3.12'):
             runpy.run_path(str(settings.BASE_DIR / 'net/__init__.py'))

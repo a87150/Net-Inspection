@@ -20,7 +20,7 @@ PC 日志由 Windows/macOS 采集器每两小时本地覆盖 `latest.json`，再
 
 ### 正式部署
 
-先将代码放到固定目录，准备可连接的 MariaDB/MySQL 数据库及专用账号。Windows 安装 **64 位 Python 3.14+**；Linux 需要 systemd 和 root/sudo。以下命令在项目根目录运行。
+先将代码放到固定目录，准备可连接的 MariaDB/MySQL 数据库及专用账号。需要 **64 位 Python 3.12+**（Django 6.1 本身支持的最低版本；CI 以 3.14 运行测试）；Windows 上同样需要安装 **64 位 Python 3.12+**；Linux 需要 systemd 和 root/sudo。以下命令在项目根目录运行。
 
 Windows 管理员 PowerShell：
 
@@ -173,7 +173,7 @@ Web 负责页面、后端授权、校验和短事务；Worker 在数据库领取
 
 | 开源库/组件 | 用途 |
 | --- | --- |
-| Python 3.14+、Django、Django REST framework | 应用运行、ORM/迁移/认证；DRF 仍用于部分测试，不是 PC 上传入口 |
+| Python 3.12+（CI 跑 3.14）、Django 6.1、Django REST framework | 应用运行、ORM/迁移/认证；DRF 仍用于部分测试，不是 PC 上传入口 |
 | Waitress、WhiteNoise | WSGI Web 和正式环境静态文件 |
 | mysqlclient、redis | MariaDB/MySQL 驱动、可选页面缓存 |
 | python-dotenv、keyring、cryptography | 环境加载、系统凭据库、Fernet 加密 |
