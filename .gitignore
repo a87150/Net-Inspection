@@ -37,3 +37,6 @@ TEST-PC/
 # Tool caches and orphaned temp directories (tempfile.mkdtemp residue).
 .ruff_cache/
 tmp*/
+
+# Offline git backups.
+*.bundle
