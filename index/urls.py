@@ -5,7 +5,8 @@ from index.devices.collection_profiles import collection_templates, device_colle
 from index.domain.bitlocker import domain_computer_bitlocker
 from index.inspections.tasks import single_device_task_create
 from django.urls import path
-from django.contrib.auth.views import LoginView, LogoutView
+from django.contrib.auth.views import LogoutView
+from index.common.login_throttle import ThrottledLoginView
 from . import views
 from index.inspections.issue_settings import issue_severity_settings
 from index.inspections.analysis_summary import analysis_problem_list
@@ -36,7 +37,7 @@ urlpatterns = [
     path("assets/<str:kind>/<uuid:pk>/collection-settings/", device_collection_settings, name="device_collection_settings"),
     path("domain/computers/<uuid:pk>/bitlocker/", domain_computer_bitlocker, name="domain_computer_bitlocker"),
     path('computers/analyses/tasks/<uuid:pk>/problems/', analysis_problem_list, name='analysis_problem_list'),
-    path('login/', LoginView.as_view(template_name='registration/login.html'), name='login'),
+    path('login/', ThrottledLoginView.as_view(template_name='registration/login.html'), name='login'),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('inspections/issue-severity/', issue_severity_settings, name='issue_severity_settings'),
     path('servers/scripts/windows/', windows_server_script_download, name='windows_server_script_download'),

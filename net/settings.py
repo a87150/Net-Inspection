@@ -254,7 +254,43 @@ STATIC_ROOT = Path(os.getenv('DJANGO_STATIC_ROOT', str(BASE_DIR / 'staticfiles')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-SESSION_COOKIE_AGE = 36000
+SESSION_COOKIE_AGE = int(os.getenv('NET_SESSION_COOKIE_AGE', '36000'))
+
+
+def _net_flag(name, default='false'):
+    return os.getenv(name, default).strip().lower() in {'1', 'true', 'yes'}
+
+
+# HTTPS hardening. All of it stays off unless the deployment turns it on, because a
+# site reached over plain HTTP would redirect itself to an address it cannot serve,
+# and browsers drop (not downgrade) Secure cookies, which locks everyone out.
+# Turn NET_SECURE_SSL_REDIRECT on only together with NET_SECURE_COOKIES and a proxy
+# that sets X-Forwarded-Proto; NET_SECURE_HSTS_SECONDS is deliberately 0 until the
+# HTTPS path has proven stable, since HSTS cannot be withdrawn from a client.
+NET_SECURE_COOKIES = _net_flag('NET_SECURE_COOKIES')
+SESSION_COOKIE_SECURE = NET_SECURE_COOKIES
+CSRF_COOKIE_SECURE = NET_SECURE_COOKIES
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+SECURE_SSL_REDIRECT = _net_flag('NET_SECURE_SSL_REDIRECT')
+SECURE_REFERRER_POLICY = os.getenv('NET_SECURE_REFERRER_POLICY', 'same-origin')
+SECURE_HSTS_SECONDS = int(os.getenv('NET_SECURE_HSTS_SECONDS', '0'))
+if SECURE_HSTS_SECONDS:
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = False
+
+
+# Login throttling. django-axes is not a dependency and the counters only need to
+# outlive a burst, so the cache is enough; a cache outage must not lock anyone out,
+# hence the try/except in the middleware.
+NET_LOGIN_MAX_FAILURES = int(os.getenv('NET_LOGIN_MAX_FAILURES', '5'))
+# The per-source limit is deliberately looser than the per-account one: a whole office
+# usually shares one NAT address, so an equal limit would let a handful of typos lock
+# everyone out. The account counter is what actually stops one account being guessed.
+NET_LOGIN_IP_MAX_FAILURES = int(os.getenv('NET_LOGIN_IP_MAX_FAILURES', '20'))
+NET_LOGIN_WINDOW_SECONDS = int(os.getenv('NET_LOGIN_WINDOW_SECONDS', '900'))
+NET_LOGIN_LOCK_SECONDS = int(os.getenv('NET_LOGIN_LOCK_SECONDS', '900'))
 
 
 # Logging. Without this the project-wide logger calls fall through to Python's
