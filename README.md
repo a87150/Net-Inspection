@@ -84,7 +84,37 @@ Linux 将解释器换成 `python3.14` / `./.venv/bin/python`。已有虚拟环�
 
 首次正式安装引导创建超级用户。后续在**实际使用的数据库环境**运行 `python manage.py createsuperuser`；忘记密码用 `python manage.py changepassword 用户名`。默认演示库需要先设置 `DB_ENGINE=sqlite` 和指向 `demo-runtime/demo.sqlite3` 的 `DJANGO_SQLITE_PATH`，否则管理命令可能访问根目录另一份库。
 
-登录有效期在 [settings.py](net/settings.py) 中直接配置：`SESSION_COOKIE_AGE = 36000`，即 10 小时，没有后台设置页面。修改后重启 Web 并重新登录验证；只在 `.env` 添加同名变量不会生效，也不代表每次点击页面都会续满 10 小时。
+登录有效期由环境变量 `NET_SESSION_COOKIE_AGE` 控制，默认 36000 秒（10 小时），没有后台设置页面，修改后重启生效。
+
+### 登录限速与 HTTPS 加固
+
+登录失败会同时按**账号**和**来源地址**计数，超限后拒绝该次登录，登录成功立即清零。计数存在缓存里，只在窗口内有效，不需要额外组件。
+
+| 环境变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `NET_LOGIN_MAX_FAILURES` | `5` | 同一账号的失败上限，`0` 表示关闭限速 |
+| `NET_LOGIN_IP_MAX_FAILURES` | `20` | 同一来源的上限，故意宽于账号：整个办公室通常共用一个 NAT 地址，等值阈值会让几个人输错密码就锁死所有人 |
+| `NET_LOGIN_WINDOW_SECONDS` | `900` | 失败计数的统计窗口 |
+| `NET_LOGIN_LOCK_SECONDS` | `900` | 触发后的锁定时长，`0` 表示不锁只计数 |
+
+HTTPS 与 Cookie 加固**默认全部关闭**，因为直连 HTTP 的部署一旦开启 `NET_SECURE_SSL_REDIRECT`，整个站点会跳到自己无法服务的地址，而浏览器对 `Secure` Cookie 是丢弃而不是降级。确认已配置证书、且代理会传 `X-Forwarded-Proto` 后再按下表开启，同时启用 `NET_TRUST_PROXY_HEADERS=true`。
+
+| 环境变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `NET_SECURE_COOKIES` | `false` | 会话与 CSRF Cookie 只走 HTTPS |
+| `NET_SECURE_SSL_REDIRECT` | `false` | HTTP 请求重定向到 HTTPS |
+| `NET_SECURE_HSTS_SECONDS` | `0` | HSTS 有效期，浏览器无法撤回，确认 HTTPS 稳定后再设（如 `31536000`） |
+
+### MariaDB 时区表
+
+日期筛选一律用半开区间而不是 `__date`，因此时区表缺失当前不会引发故障。但如果以后在 `DateTimeField` 上使用 `TruncMonth`、`ExtractHour`，Django 会生成 `CONVERT_TZ(列, UTC, Asia/Shanghai)`，而时区表为空时它求值为 `NULL`——筛选不报错，直接返回空结果。`manage.py check` 会在这种情况下给出 `net.W001` 告警并附上导入命令；官方 `mariadb:12` 镜像同样不导入时区表。
+
+```bash
+# Linux：导入一次
+mariadb-tzinfo-to-sql /usr/share/zoneinfo | mysql mysql
+# Windows：用 MySQL 安装目录下的 mysql_tzinfo_to_sql.exe
+```
+启 Web 并重新登录验证；只在 `.env` 添加同名变量不会生效，也不代表每次点击页面都会续满 10 小时。
 
 ## 功能与使用顺序
 
