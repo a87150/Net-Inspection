@@ -74,7 +74,14 @@ class DailyConfigurationBackupTests(TestCase):
         collect.return_value = CollectionResult(True, 'success',
             data={'cpu': {'usage_percent': 10}, 'config_info': item}, raw={'config_info': item})
         target, task = self.claimed()
-        with override_settings(DEVICE_BACKUP_ENCRYPTION_KEY=''):
+        # Removing the key outright now fails earlier, when the device's own stored
+        # credentials are read. Patch the backup's key lookup instead, so this still
+        # exercises what it is named for: a key failure at the backup step must be
+        # contained without writing a row or leaking raw configuration.
+        from django.core.exceptions import ImproperlyConfigured
+        from net.devices import configuration_backups
+        with patch.object(configuration_backups, '_fernet',
+                          side_effect=ImproperlyConfigured('missing key')):
             outcome = execute_target(target, worker_id='backup-test')
         self.assertEqual(outcome.status, 'partial')
         self.assertFalse(DeviceConfigurationBackup.objects.exists())

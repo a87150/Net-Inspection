@@ -126,6 +126,10 @@ class ConfigurationTests(TestCase):
         self.native_http = self.enterContext(patch('aiohttp.ClientSession.get', side_effect=AssertionError('device HTTP forbidden')))
         self.connect = self.enterContext(patch('net.infrastructure.ssh_collectors._connect_network', side_effect=AssertionError('device SSH forbidden')))
         self.enterContext(patch('net.infrastructure.ssh_collectors.time', Clock()))
+        # The key must be overridden before the devices are written: credential
+        # columns are encrypted with DEVICE_BACKUP_ENCRYPTION_KEY, so rows created
+        # under the ambient key could not be read back under this one.
+        self.enterContext(override_settings(DEVICE_BACKUP_ENCRYPTION_KEY=Fernet.generate_key()))
         self.device = Network_Device.objects.create(
             ip='192.0.2.10', device_name='edge', vendor='Cisco',
             username='ssh-user-private', password='ssh-pass-private')
@@ -135,7 +139,6 @@ class ConfigurationTests(TestCase):
             api_username='api-user-private', api_password='api-pass-private',
             api_token='api-token-private')
         self.record_number = 0
-        self.enterContext(override_settings(DEVICE_BACKUP_ENCRYPTION_KEY=Fernet.generate_key()))
 
     def backup(self, asset=None, content=NETWORK_TEXT, **metadata):
         from net.devices.configuration_backups import store_configuration_backup
@@ -697,8 +700,14 @@ class ConfigurationTests(TestCase):
                 with ZipFile(BytesIO(self.exports().build_configuration_zip([self.device]))) as bundle:
                     self.assertEqual(bundle.namelist(), ['manifest.csv'])
                     self.assertNotIn(b'private', bundle.read('manifest.csv'))
+        # Stored credentials need the key too, so a deployment that lost it now stops
+        # here instead of exporting a bundle it cannot decrypt. Failing loudly is the
+        # same choice configuration_backups already makes for a missing key.
+        from django.core.exceptions import ImproperlyConfigured
         with override_settings(DEVICE_BACKUP_ENCRYPTION_KEY=''):
-            self.assertEqual(self.exports().latest_configuration(self.device).status, 'failed')
+            with self.assertRaises(ImproperlyConfigured):
+                self.exports().latest_configuration(
+                    Network_Device.objects.get(pk=self.device.pk))
 
     def test_zip_contains_only_latest_backup_and_reserves_manifest_filename(self):
         from net.devices.configuration_backups import store_configuration_backup

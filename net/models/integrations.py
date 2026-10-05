@@ -6,6 +6,8 @@ import uuid
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from net.infrastructure.credentials import EncryptedJSONField
+
 
 _SOURCE_KEY_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$')
 _CREDENTIAL_FIELDS = {
@@ -52,7 +54,7 @@ class PeopleSyncSource(models.Model):
     name = models.CharField(max_length=255)
     source_key = models.CharField(max_length=191, unique=True)
     # Exclude secrets from Django serializers, model_to_dict and auto ModelForms.
-    credentials = models.JSONField(default=dict, serialize=False, editable=False)
+    credentials = EncryptedJSONField(default=dict, serialize=False, editable=False)
     root_department_ids = models.JSONField(default=list, blank=True)
     is_enabled = models.BooleanField(default=True)
     last_tested_at = models.DateTimeField(null=True, blank=True)

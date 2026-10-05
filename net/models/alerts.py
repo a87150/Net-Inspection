@@ -13,6 +13,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, URLValidator, validate_email
 from django.db import models
 from django.db.models.signals import m2m_changed
+from net.infrastructure.credentials import EncryptedJSONField
 from django.dispatch import receiver
 from django.utils import timezone
 
@@ -176,7 +177,7 @@ class AlertChannel(models.Model):
     name = models.CharField(max_length=255, unique=True)
     channel_type = models.CharField(max_length=16, choices=ChannelType.choices)
     is_enabled = models.BooleanField(default=True)
-    settings = models.JSONField(default=dict, validators=[validate_finite_json])
+    settings = EncryptedJSONField(default=dict, validators=[validate_finite_json])
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

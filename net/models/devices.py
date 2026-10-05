@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
+from net.infrastructure.credentials import EncryptedCharField
 from net.infrastructure.sanitization import public_connection_url
 
 
@@ -79,14 +80,14 @@ class Network_Device(models.Model):
     )
     port = models.PositiveIntegerField(default=22)
     username = models.CharField(max_length=255, blank=True, null=True)
-    password = models.CharField(max_length=255, blank=True, null=True)
+    password = EncryptedCharField(blank=True, null=True)
     snmp_version = models.CharField(
         max_length=3, choices=SNMP_VERSION_CHOICES, default='v2c'
     )
     snmp_port = models.PositiveIntegerField(
         default=161, validators=[MinValueValidator(1), MaxValueValidator(65535)]
     )
-    snmp_community = models.CharField(max_length=255, blank=True, default='')
+    snmp_community = EncryptedCharField(blank=True, default='')
     snmp_security_level = models.CharField(
         max_length=12,
         choices=SNMP_SECURITY_LEVEL_CHOICES,
@@ -96,17 +97,17 @@ class Network_Device(models.Model):
     snmp_auth_protocol = models.CharField(
         max_length=6, choices=SNMP_AUTH_PROTOCOL_CHOICES, blank=True, default=''
     )
-    snmp_auth_password = models.CharField(max_length=255, blank=True, default='')
+    snmp_auth_password = EncryptedCharField(blank=True, default='')
     snmp_priv_protocol = models.CharField(
         max_length=6, choices=SNMP_PRIV_PROTOCOL_CHOICES, blank=True, default=''
     )
-    snmp_priv_password = models.CharField(max_length=255, blank=True, default='')
+    snmp_priv_password = EncryptedCharField(blank=True, default='')
     snmp_context_name = models.CharField(max_length=255, blank=True, default='')
     snmp_retries = models.PositiveSmallIntegerField(
         default=1, validators=[MinValueValidator(0), MaxValueValidator(5)]
     )
     api_url = models.URLField(max_length=500, blank=True, default='')
-    api_shared_secret = models.CharField(max_length=500, blank=True, default='')
+    api_shared_secret = EncryptedCharField(blank=True, default='')
     verify_ssl = models.BooleanField(default=True)
     cpu_model = models.CharField(max_length=255, blank=True, null=True)
     memory_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
@@ -184,9 +185,9 @@ class Server(models.Model):
     os = models.CharField(max_length=255, blank=True, null=True)
     port = models.PositiveIntegerField(default=22)
     username = models.CharField(max_length=255, blank=True, null=True)
-    password = models.CharField(max_length=255, blank=True, null=True)
+    password = EncryptedCharField(blank=True, null=True)
     api_url = models.URLField(max_length=500, blank=True, null=True)
-    api_token = models.CharField(max_length=500, blank=True, null=True)
+    api_token = EncryptedCharField(blank=True, null=True)
     verify_ssl = models.BooleanField(default=True)
     os_version = models.CharField(max_length=255, blank=True, null=True)
     os_build = models.CharField(max_length=255, blank=True, null=True)
@@ -226,8 +227,8 @@ class WeakCurrentDevice(models.Model):
     vendor = models.CharField(max_length=255, blank=True, null=True)
     api_url = models.URLField(max_length=500, blank=True, null=True)
     api_username = models.CharField(max_length=255, blank=True, null=True)
-    api_password = models.CharField(max_length=255, blank=True, null=True)
-    api_token = models.CharField(max_length=500, blank=True, null=True)
+    api_password = EncryptedCharField(blank=True, null=True)
+    api_token = EncryptedCharField(blank=True, null=True)
     verify_ssl = models.BooleanField(default=True)
     cpu_model = models.CharField(max_length=255, blank=True, null=True)
     memory_total_gb = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)

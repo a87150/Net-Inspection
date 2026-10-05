@@ -6,6 +6,8 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 
+from net.infrastructure.credentials import EncryptedCharField
+
 
 SENSITIVE_PAYLOAD_KEYS = frozenset({
     'password', 'new_password', 'bind_password', 'unicode_pwd',
@@ -137,7 +139,7 @@ class Domain_Controller_Config(models.Model):
     use_ssl = models.BooleanField(default=False)
     base_dn = models.CharField(max_length=500, blank=True, help_text='例如：DC=example,DC=com')
     bind_username = models.CharField(max_length=255, blank=True)
-    bind_password = models.CharField(max_length=255, blank=True)
+    bind_password = EncryptedCharField(blank=True)
     user_filter = models.CharField(max_length=500, default='(&(objectCategory=person)(objectClass=user))')
     computer_filter = models.CharField(max_length=500, default='(objectCategory=computer)')
     group_filter = models.CharField(max_length=500, default='(objectCategory=group)')
