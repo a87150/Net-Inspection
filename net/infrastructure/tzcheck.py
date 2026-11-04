@@ -8,6 +8,7 @@ silently evaluates to NULL -- a filter that returns nothing instead of raising.
 MariaDB needs the tables imported once (mariadb-tzinfo-to-sql), and the official
 CI image does not do it either, so the problem is invisible until it matters.
 """
+from django.conf import settings
 from django.core.checks import Warning as CheckWarning
 from django.core.checks import register
 from django.db import connections
@@ -21,7 +22,7 @@ def check_mysql_timezone_tables(app_configs, **kwargs):
     try:
         with connection.cursor() as cursor:
             cursor.execute('SELECT CONVERT_TZ(NOW(), %s, %s)',
-                           ['+00:00', connection.settings_dict.get('TIME_ZONE') or 'UTC'])
+                           ['+00:00', settings.TIME_ZONE])
             usable = cursor.fetchone()[0] is not None
     except Exception:
         # A fresh install has no database yet; that is not this check's business.
@@ -29,7 +30,7 @@ def check_mysql_timezone_tables(app_configs, **kwargs):
     if usable:
         return []
     return [CheckWarning(
-        'MariaDB has no usable time zone tables, so named zones such as Asia/Shanghai'
+        'MariaDB has no usable time zone tables, so named zones such as Asia/Shanghai '
         'evaluate to NULL.',
         hint=('Import them once on the database server:  '
               'mariadb-tzinfo-to-sql /usr/share/zoneinfo | mysql mysql  '

@@ -88,6 +88,9 @@ class DemoLauncherTests(TestCase):
                 database = connect(name)
                 try:
                     self.assertEqual(scalars(database, 'SELECT count(*) FROM net_peoplesyncsource'), [2])
+                    # 29 个默认模板（20 网络 + 9 弱电）由部署创建，另 2 个深信服模板来自迁移 0048；
+                    # 第二次 prepare 幂等，数量不增。
+                    self.assertEqual(scalars(database, 'SELECT count(*) FROM net_devicecollectiontemplate'), [31])
                     if attempt == 0:
                         with database.cursor() as cursor:
                             cursor.execute("UPDATE net_people SET name='Retained edit' WHERE employee_id='DEMO-P001'")

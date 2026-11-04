@@ -114,6 +114,7 @@ def prepare(runtime):
         connection.close()
         print('Created database: ' + name, flush=True)
     call_command('migrate', interactive=False, verbosity=0)
+    call_command('create_network_templates', verbosity=0)
     if not (runtime / '.seeded').exists():
         call_command('seed_demo_data')
         (runtime / '.seeded').write_text('Seed complete; subsequent starts preserve edits.\n', encoding='utf-8')

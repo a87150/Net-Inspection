@@ -205,6 +205,8 @@ def prepare(path, *, interactive=True):
             raise ValueError('Database connection failed. Verify the database exists, credentials, network and service-account access; no reset was attempted.') from None
     call_command('check')
     call_command('migrate', interactive=False)
+    # 默认设备模板是业务必需配置而非演示数据；命令幂等，同范围的既有模板保持人工修改。
+    call_command('create_network_templates', verbosity=0)
     call_command('collectstatic', interactive=False, verbosity=0)
     from django.contrib.auth import get_user_model
     admins = get_user_model().objects.filter(is_superuser=True, is_active=True).only('password')
@@ -213,7 +215,7 @@ def prepare(path, *, interactive=True):
             raise ValueError('No active administrator. Rerun interactively to create one; services have not been started.')
         print('Create the initial website administrator (not the database user):')
         call_command('createsuperuser', interactive=True)
-    print('Database, static files and administrator ready. No demonstration data was loaded.')
+    print('Database, default device templates, static files and administrator ready. No demonstration data was loaded.')
 
 
 def probe(path):
