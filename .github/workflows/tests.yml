@@ -45,6 +45,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Create application database
+        # The MariaDB image creates no database for us, and the app connects to
+        # DB_NAME directly, so `manage.py check` fails with 1049 without this.
+        # utf8mb4_bin matches production; the default collation would mask
+        # ordering differences the suite is meant to catch.
+        run: |
+          docker exec ${{ job.services.mariadb.id }} mariadb -uroot -pci-only \
+            --execute="CREATE DATABASE IF NOT EXISTS net CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;"
       - name: Install Python dependencies
         run: python -m pip install -r requirements.lock.txt
       - name: Generate test-only secrets
