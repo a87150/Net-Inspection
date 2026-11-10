@@ -13,7 +13,7 @@ from net.models import Network_Device, WeakCurrentDevice, Server
 
 EXPECTED_TEMPLATE_HEADERS = {
     'networks': [
-        '设备名称', 'IP地址', '设备类型', '厂商', '连接方式', '深信服 API地址',
+        '设备名称', 'IP地址', '设备类型', '厂商', '连接方式', '命令行协议', '深信服 API地址',
         '深信服共享密钥', '校验HTTPS证书', 'SSH端口',
         'SSH账号', 'SSH密码', 'SNMP 版本', 'SNMP 端口', 'SNMP Community',
         'SNMPv3 用户名', '安全级别', '认证协议', '认证密码', '加密协议', '加密密码',

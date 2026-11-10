@@ -4,7 +4,7 @@ from net.data_exchange.inventory_csv import ENTITY_SPECS
 from net.secret_masks import MASKED_SECRET, MaskedSecretInput
 
 DEVICE_KINDS = {'networks', 'servers', 'weakcurrent'}
-CONNECTION_FIELDS = {'connection_type', 'port', 'username', 'password', 'server_type', 'api_shared_secret',
+CONNECTION_FIELDS = {'connection_type', 'cli_protocol', 'port', 'username', 'password', 'server_type', 'api_shared_secret',
                      'api_url', 'api_username', 'api_password', 'api_token', 'verify_ssl'}
 BASIC_FIELDS = {'name', 'device_name', 'ip', 'device_type', 'vendor', 'os_version'}
 
@@ -69,7 +69,9 @@ def device_form(kind, data=None, instance=None):
     form.fields['ip'] = forms.GenericIPAddressField(label='IP地址', unpack_ipv4=True)
     for name, field in form.fields.items():
         if name in {'port', 'snmp_port'}:
-            form.fields[name] = field = forms.IntegerField(label=field.label, min_value=1, max_value=65535)
+            # 留空即用协议默认端口，因此不强制填写。
+            form.fields[name] = field = forms.IntegerField(
+                label=field.label, min_value=1, max_value=65535, required=False)
         field.widget.attrs['class'] = ('form-check-input' if isinstance(field.widget, forms.CheckboxInput)
                                        else 'form-select' if isinstance(field.widget, forms.Select)
                                        else 'form-control')
@@ -86,15 +88,20 @@ def device_form(kind, data=None, instance=None):
                         choices=choices,help_text=original.help_text,widget=forms.Select(attrs={'class':'form-select'}))
                 else:original.widget=forms.Select(choices=choices,attrs={'class':'form-select'})
     if kind == 'networks':
-        form.fields['connection_type'].choices=[('sangfor_api','深信服 AC Open API'),('auto','SNMP + SSH（默认，缺项自动补充）'),('hybrid','SNMP + SSH（指标不自动回退）'),('snmp','SNMP 指标 + SSH 配置备份'),('ssh','SSH 指标 + SNMP 流量')]
+        form.fields['connection_type'].choices=[('sangfor_api','深信服 AC Open API'),('auto','命令行 + SNMP（默认，缺项自动补充）'),('hybrid','命令行 + SNMP（指标不自动回退）'),('snmp','仅 SNMP 指标 + 命令行配置备份'),('ssh','仅命令行指标 + SNMP 流量')]
         if not instance:form.initial['connection_type']='auto'
-        form.fields['connection_type'].help_text='逐项采集方式以巡检模板为准；默认通过 SNMP 采集指标，SSH 获取日志和配置，缺失指标可用 SSH 补充。'
+        form.fields['connection_type'].help_text='决定命令行与 SNMP 如何分工；逐项采集方式仍以巡检模板为准。'
+        form.fields['cli_protocol'].widget.attrs['data-network-cli-protocol']=''
+        form.fields['cli_protocol'].help_text='命令行走 SSH 还是 Telnet；SNMP 不受此项影响。'
         form.fields['connection_type'].widget.attrs['data-network-connection']=''
         form.fields['connection_type'].widget.attrs['data-network-new']='true' if not instance else 'false'
         form.fields['vendor'].widget.attrs['data-network-vendor']=''
         form.fields['device_type'].widget.attrs['data-network-device-type']=''
-        labels={'port':'SSH 端口','username':'SSH 用户名','password':'SSH 密码','snmp_version':'SNMP 版本','snmp_community':'读取口令（Community）','snmp_port':'SNMP 端口','snmp_security_level':'安全方式','snmp_username':'SNMPv3 用户名','snmp_auth_protocol':'认证算法','snmp_auth_password':'认证密码','snmp_priv_protocol':'加密算法','snmp_priv_password':'加密密码','snmp_context_name':'上下文名称（通常留空）','snmp_retries':'失败重试次数'}
+        labels={'cli_protocol':'命令行协议','port':'命令行端口','username':'命令行账号','password':'命令行密码','snmp_version':'SNMP 版本','snmp_community':'读取口令（Community）','snmp_port':'SNMP 端口','snmp_security_level':'安全方式','snmp_username':'SNMPv3 用户名','snmp_auth_protocol':'认证算法','snmp_auth_password':'认证密码','snmp_priv_protocol':'加密算法','snmp_priv_password':'加密密码','snmp_context_name':'上下文名称（通常留空）','snmp_retries':'失败重试次数'}
         for key,label in labels.items():form.fields[key].label=label
+        form.fields['port'].widget.attrs.update({'data-network-port':'', 'placeholder':'22'})
+        form.fields['port'].help_text='留空按命令行协议取默认：SSH 22、Telnet 23。'
+        form.fields['snmp_port'].help_text='留空默认 161。'
         form.fields['snmp_version'].widget.attrs['data-snmp-version']=''
         form.fields['snmp_security_level'].widget.attrs['data-snmp-security']=''
         form.fields['snmp_community'].help_text='与设备上的只读 Community 一致。SNMPv2c 通常只需填写此项，端口默认 161。'
@@ -137,7 +144,7 @@ def device_form_sections(form):
     if 'connection_type' in form.fields:
         def section(title,keys,**kwargs):return {'title':title,'fields':[form[k] for k in keys],**kwargs}
         return [section('基本信息',[k for k in form.fields if k in BASIC_FIELDS]),
-            section('巡检连接方式',['connection_type']),
+            section('巡检连接方式',['connection_type','cli_protocol']),
             section('深信服 AC Open API',['api_url','api_shared_secret','verify_ssl'],network_fields='sangfor_api'),
             section('SNMP 读取设置',['snmp_version'],network_fields='standard'),
             section('SNMPv2c 读取口令',['snmp_community'],snmp_group='v2c',network_fields='standard'),

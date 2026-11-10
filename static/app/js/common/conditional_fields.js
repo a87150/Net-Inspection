@@ -52,6 +52,14 @@
         if (!api) updateSnmpFields(select);
     }
 
+    // 端口留空即取协议默认值，占位符跟着协议走，避免把 22 当成 Telnet 的默认。
+    function updatePortDefaults(form) {
+        const protocol = form.querySelector('[data-network-cli-protocol]');
+        const port = form.querySelector('[data-network-port]');
+        if (!protocol || !port) return;
+        port.placeholder = protocol.value === 'telnet' ? '23' : '22';
+    }
+
     function chooseSangforApi(form) {
         const connection = form.querySelector('[data-network-connection]');
         const vendor = form.querySelector('[data-network-vendor]');
@@ -89,6 +97,14 @@
                 field.addEventListener('change', () => chooseSangforApi(form));
             });
             chooseSangforApi(form);
+        });
+        root.querySelectorAll('[data-network-cli-protocol]').forEach(select => {
+            if (select.dataset.cliProtocolBound !== undefined) return;
+            select.dataset.cliProtocolBound = '';
+            const form = select.closest('form');
+            select.addEventListener('change', () => updatePortDefaults(form));
+            form?.addEventListener('modal-draft-restored', () => updatePortDefaults(form));
+            updatePortDefaults(form);
         });
         root.querySelectorAll('[data-schedule-kind]').forEach(select => {
             if (select.dataset.scheduleBound !== undefined) return;

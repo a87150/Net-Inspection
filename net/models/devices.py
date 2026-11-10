@@ -36,6 +36,9 @@ class Computer(models.Model):
 
 
 class Network_Device(models.Model):
+    # SSH 与 Telnet 是同一个命令行会话的两种传输，互斥；SNMP 是独立的采集通道。
+    CLI_PROTOCOL_CHOICES = [('ssh', 'SSH'), ('telnet', 'Telnet')]
+    DEFAULT_CLI_PORTS = {'ssh': 22, 'telnet': 23}
     CONNECTION_TYPE_CHOICES = [
         ('ssh', 'SSH'),
         ('snmp', 'SNMP'),
@@ -78,14 +81,21 @@ class Network_Device(models.Model):
         blank=True,
         null=True,
     )
-    port = models.PositiveIntegerField(default=22)
+    cli_protocol = models.CharField(
+        '命令行协议', max_length=8, choices=CLI_PROTOCOL_CHOICES,
+        default='ssh', blank=True, db_default='ssh',
+    )
+    # 留空按协议取默认端口（SSH 22 / Telnet 23）；只有填写了才覆盖。
+    port = models.PositiveIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(65535)],
+    )
     username = models.CharField(max_length=255, blank=True, null=True)
     password = EncryptedCharField(blank=True, null=True)
     snmp_version = models.CharField(
         max_length=3, choices=SNMP_VERSION_CHOICES, default='v2c'
     )
     snmp_port = models.PositiveIntegerField(
-        default=161, validators=[MinValueValidator(1), MaxValueValidator(65535)]
+        null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(65535)],
     )
     snmp_community = EncryptedCharField(blank=True, default='')
     snmp_security_level = models.CharField(
@@ -115,6 +125,19 @@ class Network_Device(models.Model):
     port_count = models.PositiveIntegerField(null=True, blank=True)
     vlan_count = models.PositiveIntegerField(null=True, blank=True)
     is_enabled = models.BooleanField(default=True, db_index=True)
+
+    @property
+    def effective_cli_protocol(self):
+        return self.cli_protocol if self.cli_protocol in self.DEFAULT_CLI_PORTS else 'ssh'
+
+    @property
+    def effective_port(self):
+        """Explicit port wins; otherwise the protocol default (SSH 22 / Telnet 23)."""
+        return self.port or self.DEFAULT_CLI_PORTS[self.effective_cli_protocol]
+
+    @property
+    def effective_snmp_port(self):
+        return self.snmp_port or 161
 
     @property
     def effective_connection_type(self):

@@ -537,7 +537,7 @@ class PySnmpSession:
     async def _target(self):
         if self.target is None:
             self.target = await UdpTransportTarget.create(
-                (self.device.ip, self.device.snmp_port),
+                (self.device.ip, getattr(self.device, 'effective_snmp_port', None) or self.device.snmp_port or 161),
                 timeout=self.timeout,
                 retries=self.device.snmp_retries,
             )

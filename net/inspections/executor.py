@@ -119,7 +119,8 @@ def _asset_context(target):
 
     connection_fields = {
         TaskTargetRun.TargetType.NETWORK_DEVICE: (
-            'ip', 'port', 'vendor', 'connection_type', 'api_url', 'verify_ssl', 'snmp_version', 'snmp_port',
+            'ip', 'port', 'cli_protocol', 'vendor', 'connection_type', 'api_url', 'verify_ssl',
+            'snmp_version', 'snmp_port',
             'snmp_security_level', 'snmp_username', 'snmp_auth_protocol',
             'snmp_priv_protocol', 'snmp_context_name', 'snmp_retries',
         ),

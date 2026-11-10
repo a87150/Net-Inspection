@@ -41,7 +41,7 @@ _ASSET_SPECS = {
         Network_Device,
         (
             'device_name', 'ip', 'device_type', 'model', 'vendor', 'os_version',
-            'connection_type', 'port',
+            'connection_type', 'cli_protocol', 'port',
             'snmp_version', 'snmp_port', 'snmp_security_level',
             'snmp_username', 'snmp_auth_protocol', 'snmp_priv_protocol',
             'snmp_context_name', 'snmp_retries',

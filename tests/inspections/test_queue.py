@@ -91,7 +91,9 @@ class EnqueueTaskTests(TestCase):
             'os_version': '',
             'collection_settings': {'_version_match': {'status': 'unknown', 'version': ''}},
             'connection_type': 'hybrid',
-            'port': 22,
+            'cli_protocol': 'ssh',
+            # 端口留空表示按协议取默认值，快照如实记录未填写。
+            'port': None,
             'snmp_version': 'v3',
             'snmp_port': 1161,
             'snmp_security_level': 'authPriv',

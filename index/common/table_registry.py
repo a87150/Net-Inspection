@@ -126,6 +126,7 @@ TABLE_DEFINITIONS = {
             _field('os_version', '系统版本', visible=False, default_filter=False, option_mode='suggest'),
             _field('model', '型号', default_filter=False, option_mode='suggest'),
             _field('connection_type', '连接方式', 'choice', default_filter=False),
+            _field('cli_protocol', '命令行协议', 'choice', default_filter=False),
             _field('port', '管理端口', 'choice', default_filter=False),
             _field('snmp_version', 'SNMP 版本', 'choice', visible=False, default_filter=False),
             _field('snmp_port', 'SNMP 端口', 'number', visible=False, default_filter=False),
