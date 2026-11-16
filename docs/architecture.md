@@ -1,4 +1,4 @@
-﻿# 架构与数据库结构
+# 架构与数据库结构
 
 [返回项目首页](../README.md#架构与技术栈)
 
@@ -25,7 +25,7 @@
 | 人员 | `People` → `net_people` | 工号 `employee_id` 唯一；姓名、部门、手机号、在职状态；`sync_source` 关联人员平台 |
 | 人员平台 | `PeopleSyncSource` → `net_peoplesyncsource` | 唯一 `source_key`、凭据、根部门、启用状态；配置更新/连接测试/最近同步时间分别记录 |
 | PC 台账 | `Computer` → `net_computer` | `computer_name` 唯一，保存基本资料和最近采集到的硬件信息 |
-| 网络台账 | `Network_Device` → `net_network_device` | IP 唯一，厂商/类型、SSH/SNMP 连接参数和硬件资料 |
+| 网络台账 | `Network_Device` → `net_network_device` | IP 唯一，厂商/类型、命令行（SSH/Telnet）与 SNMP 连接参数、硬件资料 |
 | 服务器台账 | `Server` → `net_server` | IP 唯一，Linux/Windows 类型、SSH 或 HTTP 参数、系统和硬件资料 |
 | 弱电台账 | `WeakCurrentDevice` → `net_weakcurrentdevice` | IP 唯一，摄像机/录像机/门禁/对讲/广播/打印机/温湿度计类型、厂商和连接参数 |
 | 配置模板 | `DeviceCollectionTemplate` → `net_devicecollectiontemplate` | `kind + vendor + subtype + version_match` 唯一；`parent` 显式继承；`settings` 保存项目方法、命令、解析和报警规则 |
