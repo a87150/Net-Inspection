@@ -1,4 +1,6 @@
 """Batch maintenance windows from the asset list and the maintenance log page."""
+import json
+import re
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
@@ -90,16 +92,31 @@ class MaintenanceWindowPageTests(TestCase):
         )
         self.assertFalse(MaintenanceWindow.objects.exists())
 
+    def _bootstrap(self, response):
+        """The page ships its first paint as json_script, so assert the payload."""
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode(response.charset)
+        match = re.search(
+            r'<script id="maintenance-bootstrap" type="application/json">(.*?)</script>',
+            html, re.S,
+        )
+        self.assertIsNotNone(match, "页面缺少注水用的 bootstrap payload")
+        return json.loads(match.group(1))
+
     def test_maintenance_page_lists_window_with_its_phase(self):
         now = timezone.now()
         MaintenanceWindow.objects.create(
             target_id=self.device.pk, starts_at=now - timedelta(minutes=10),
             ends_at=now + timedelta(minutes=50), note="正在变更",
         )
-        response = self.client.get(reverse("maintenance_list"))
-        self.assertContains(response, "核心交换机")
-        self.assertContains(response, "进行中")
-        self.assertContains(response, "正在变更")
+        payload = self._bootstrap(self.client.get(reverse("maintenance_list")))
+        self.assertEqual(payload["count"], 1)
+        row = payload["rows"][0]
+        self.assertEqual(row["asset_name"], "核心交换机")
+        self.assertEqual(row["target_type_label"], "网络设备")
+        self.assertEqual(row["phase"], "active")
+        self.assertEqual(row["phase_label"], "进行中")
+        self.assertEqual(row["note"], "正在变更")
 
     def test_maintenance_page_filters_by_state(self):
         now = timezone.now()
@@ -111,9 +128,11 @@ class MaintenanceWindowPageTests(TestCase):
             target_id=self.other.pk, starts_at=now - timedelta(days=2),
             ends_at=now - timedelta(days=1), note="早就结束",
         )
-        response = self.client.get(reverse("maintenance_list"), {"state": "active"})
-        self.assertContains(response, "正在进行")
-        self.assertNotContains(response, "早就结束")
+        payload = self._bootstrap(
+            self.client.get(reverse("maintenance_list"), {"state": "active"}),
+        )
+        self.assertEqual([row["note"] for row in payload["rows"]], ["正在进行"])
+        self.assertEqual(payload["state"], "active")
 
     def test_admin_deletes_a_window(self):
         window = MaintenanceWindow.objects.create(

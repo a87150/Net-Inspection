@@ -58,6 +58,10 @@ class AccessMiddleware(MiddlewareMixin):
             # Django's admin site independently enforces staff/model permissions.
             return None
         name = match.url_name
+        if request.path.startswith('/api/'):
+            # DRF endpoints state their own rule (index.api.permissions). Applying the
+            # page whitelist here would answer JSON clients with an HTML login redirect.
+            return None
         if name == 'pc_log_upload':
             # Endpoint enforces a write-only bearer token, independently of sessions.
             return None

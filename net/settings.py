@@ -89,7 +89,22 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'net',
     'index',
+    'rest_framework',
 ]
+
+# REST layer: session auth (same-origin Vue), one pagination rule, one error envelope.
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework.authentication.SessionAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'index.api.permissions.IsReader',
+    ),
+    'DEFAULT_PAGINATION_CLASS': 'index.api.pagination.StandardPagination',
+    'PAGE_SIZE': 20,
+    'EXCEPTION_HANDLER': 'index.api.exceptions.api_exception_handler',
+    'TEST_REQUEST_DEFAULT_FORMAT': 'json',
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

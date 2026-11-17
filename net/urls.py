@@ -40,5 +40,6 @@ urlpatterns = [
         template_name='registration/password_reset_complete.html',
     ), name='password_reset_complete'),
     path('admin/', admin.site.urls),
+    path('api/v1/', include('index.api.urls')),
     path('', include('index.urls')),
 ]

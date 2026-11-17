@@ -1,0 +1,78 @@
+# REST + Vue 架构
+
+本文说明页面如何从"服务端渲染整页 + 表单 POST"迁到"REST 资源 + Vue 页面"，以及还剩哪些页没迁。
+
+迁移是**逐页**进行的，不是整体重写：URL、外观、功能都不变，同一时刻新旧两种页可以共存。
+
+## 三层
+
+| 层 | 位置 | 职责 |
+| --- | --- | --- |
+| 外壳 | `index/templates/` | 布局、导航、标题；只渲染容器和注水 JSON |
+| 资源 | `index/api/` | DRF 视图集，JSON 读写；权限、分页、错误格式都在这一层定死 |
+| 页面 | `static/app/vue/` | Vue 组件，读注水数据渲染首屏，之后所有读写走 REST |
+
+Django 模板不再渲染表格行。行数据由视图算成 payload，同时喂给注水 JSON 和 REST 列表，两边同源。
+
+## 一次页面请求
+
+1. 浏览器 `GET /maintenance/` → 视图查一次库，把行 payload 塞进 `bootstrap`。
+2. 模板渲染标题、`{% csrf_token %}`、`<div data-vue-page="maintenance-list" data-vue-bootstrap="maintenance-bootstrap">`，外加 `{{ bootstrap|json_script:"maintenance-bootstrap" }}`。
+3. `boot.mjs` 扫 `[data-vue-page]`，按登记表动态 import 组件，用注水数据当 props 挂载。
+4. 之后的筛选、翻页、删除都是 `fetch /api/v1/...`，页面不整页刷新，地址栏用 `history.replaceState` 同步。
+
+首屏不再额外请求，所以没有空白闪烁；关掉 JavaScript 会看到明确提示，而不是空白页。
+
+## 约定
+
+- **路由**：`/api/v1/<资源>/`，注册在 `index/api/urls.py`，不进 `index.urls`（那里只放页面）。
+- **权限**：DRF 默认 `IsReader`（登录可读），写操作按需 `IsAdminOrReadOnly`。`AccessMiddleware` 对 `/api/` 前缀放行，理由写在中间件里——否则 JSON 客户端会收到 HTML 登录跳转。
+- **错误**：统一 `{"message": "...", "errors": {...}}`，`EXCEPTION_HANDLER` 在 `index/api/exceptions.py`。前端 `ApiError.message` 直接可展示。
+- **分页**：`?page=&page_size=`，`page_size` 只能取 `PAGE_SIZES` 里的值，和服务端表格同一套。
+- **CSRF**：写请求带 `X-CSRFToken`，前端先找页面上渲染的 `csrfmiddlewaretoken`，回退到 cookie。
+- **模块后缀**：前端 ESM 一律 `.mjs`。项目没有 `package.json` 的 `type` 字段，`.js` 在 Node 里按 CommonJS 解析，`node --test` 就没法直接 import。Django 静态服务对 `.mjs` 返回 `text/javascript`，浏览器照常加载。
+
+## 目录
+
+```
+index/api/
+  permissions.py    IsReader / IsAdminOrReadOnly
+  pagination.py     与表格同规则的 page_size
+  exceptions.py     统一错误信封
+  serializers.py    写侧校验 + 标签字段
+  viewsets.py       每个聚合一个视图集
+  urls.py           /api/v1/ 注册表
+static/app/vue/
+  api.mjs           fetch 封装：CSRF、查询串、ApiError
+  boot.mjs          页面登记表 + 挂载器
+  pages/*.mjs       每页一个组件
+```
+
+页面登记表在 `boot.mjs` 的 `pages` 对象里。没登记的 `data-vue-page` 会打一条 warn 并跳过，不会白屏报错。
+
+## 新增一页的步骤
+
+1. 把视图里的查询抽成函数，产出 payload（参照 `index/devices/maintenance.py` 的 `row_payloads`）。
+2. 在 `index/api/` 加视图集，复用同一个 payload 函数。
+3. 写 `static/app/vue/pages/<page>.mjs`，在 `boot.mjs` 登记；模板改成容器 + 注水。
+
+## 迁移状态
+
+已迁（1）：维护记录 `/maintenance/`。
+
+待迁，按形状分四批。
+
+| 批次 | 页面 | 说明 |
+| --- | --- | --- |
+| B1 列表页 | 告警记录、巡检记录、错误记录、任务列表、域账号/域计算机/域分组列表、门禁记录、PC 日志列表、PC 错误列表 | 都走 `apply_table_filters`，形状一致，做一个通用表格组件即可批量覆盖 |
+| B2 详情页 | 资产详情、人员详情、任务详情、告警详情、记录详情、PC 日志详情、PC 分析详情、域对象详情 | 只读为主，配少量动作 |
+| B3 写操作 | 资产新增/编辑、巡检配置、告警渠道与策略、导入、批量执行、维护窗口建删 | 目前是表单 POST + 重定向，逐步改成 REST + 前端提示 |
+| B4 其它 | 首页仪表盘、人员统计、网络拓扑、IP 管理、登录页 | 拓扑已有 JSON 端点，主要换前端渲染方式 |
+
+B1 是性价比最高的一批：一个组件 + 每页一个视图集，能吃掉 9 个页面。
+
+## 已知取舍
+
+- 迁移期间同一个功能可能同时存在表单 POST 与 REST 两条写路径（例如维护窗口建删）。两条路径共用 `create_windows` 这类 service 函数，不会各写一份校验；全部迁完后删掉表单路径。
+- 注水 JSON 让首屏和数据来源是两份表达（模板注水 / REST 列表），但都由同一个 payload 函数产生，字段不会漂移。
+- 暂不做前端路由（`vue-router`）。页面之间的跳转仍是整页导航；只有页内交互走 REST。理由：95 条页面路由里多数依赖服务端权限与上下文，改成前端路由会把权限判断搬到客户端，得不偿失。

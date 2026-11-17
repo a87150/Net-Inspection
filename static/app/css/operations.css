@@ -253,23 +253,24 @@ body.app-shell {
 }
 
 .table-filter-bar {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     align-items: end;
-    column-gap: .65rem;
-    row-gap: .8rem;
+    gap: .8rem .65rem;
 }
 
 .table-filter-bar .table-filter-field,
 .table-filter-bar .table-filter-field--keyword,
 .table-filter-bar .table-filter-field--editable-options {
-    width: 100%;
-    min-width: 0;
+    flex: 0 1 12rem;
+    min-width: 9rem;
+    width: auto;
 }
 
+/* 按钮组跟着字段同行，贴到最右；字段换行后仍然靠右。 */
 .table-filter-bar .table-filter-actions,
 .table-filter-bar .table-action-feedback {
-    grid-column: 1 / -1;
+    margin-left: auto;
 }
 
 .table-number-filter .table-number-filter__op {
@@ -283,6 +284,7 @@ body.app-shell {
     align-items: stretch;
     justify-content: flex-end;
     gap: .5rem;
+    margin-left: auto;
 }
 
 .table-more-filters,

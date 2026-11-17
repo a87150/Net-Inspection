@@ -1,55 +1,22 @@
 {% extends 'common/base.html' %}
+{% load static %}
 {% block title %}维护记录{% endblock %}
 {% block content %}
 <header class="page-heading">
     <div class="page-heading__copy">
         <p class="page-heading__eyebrow">告警维护</p>
         <h1 class="page-heading__title">维护记录</h1>
-        <p class="page-heading__description">计划变更时间窗：窗口内相关资产的告警照常入库，但不外发</p>
+        <p class="page-heading__description">计划变更时间窗：窗口内相关资产的告警照常入库，但不外发。</p>
     </div>
-    <div class="page-heading__actions"><a class="btn btn-outline-secondary" href="{% url 'alert_list' %}">告警记录</a></div>
 </header>
-
-<form method="get" class="table-filter-bar mb-3">
-    <div class="table-filter-field">
-        <label class="form-label small text-secondary" for="maintenance-state">状态</label>
-        <select class="form-select" id="maintenance-state" name="state">
-            {% for value, label in states %}<option value="{{ value }}"{% if state == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
-        </select>
+{% csrf_token %}
+<div data-table-workspace data-table-key="maintenance-windows">
+    <div id="maintenance-page" data-vue-page="maintenance-list" data-vue-bootstrap="maintenance-bootstrap">
+        <noscript><p class="alert alert-warning">这页由 Vue 渲染，需要开启 JavaScript。</p></noscript>
     </div>
-    <div class="table-filter-actions">
-        <button class="btn btn-primary text-nowrap" type="submit">筛选</button>
-        <a class="btn btn-outline-secondary text-nowrap" href="{% url 'maintenance_list' %}">重置</a>
-    </div>
-</form>
-
-<section class="card surface-card table-scroll-shell">
-    <div class="card-header surface-card__header"><h2 class="h5 mb-0">共 {{ page_obj.paginator.count }} 条</h2></div>
-    {% if windows %}
-    <div class="table-responsive" role="region" aria-label="维护窗口列表" tabindex="0">
-        <table class="table data-table table-hover align-middle mb-0">
-            <caption class="visually-hidden">维护窗口的资产、类型、起止时间、状态与备注</caption>
-            <thead><tr><th scope="col">资产</th><th scope="col">类型</th><th scope="col">开始</th><th scope="col">结束</th><th scope="col">状态</th><th scope="col">备注</th><th scope="col" class="text-end table-actions-cell">操作</th></tr></thead>
-            <tbody>{% for window in windows %}<tr>
-                <td>{{ window.asset_name }}</td>
-                <td>{{ window.type_label }}</td>
-                <td>{{ window.starts_at|date:'Y-m-d H:i' }}</td>
-                <td>{{ window.ends_at|date:'Y-m-d H:i' }}</td>
-                <td><span class="status-badge status-badge--{{ window.phase_badge }}">{{ window.phase_label }}</span></td>
-                <td>{{ window.note|default:'—' }}</td>
-                <td class="text-end table-actions-cell">
-                    <form method="post" action="{% url 'maintenance_window_delete' window.pk %}" class="d-inline">
-                        {% csrf_token %}
-                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                        <button class="btn btn-sm btn-outline-danger" type="submit">删除</button>
-                    </form>
-                </td>
-            </tr>{% endfor %}</tbody>
-        </table>
-    </div>
-    {% else %}
-    <div class="card-body"><div class="empty-state"><strong>还没有维护窗口</strong><span>在网络设备、服务器或弱电设备列表里勾选资产，点「加入维护窗口」即可批量登记。</span></div></div>
-    {% endif %}
-</section>
-{% include 'common/pagination.html' %}
+</div>
+{{ bootstrap|json_script:"maintenance-bootstrap" }}
+{% endblock %}
+{% block page_scripts %}
+<script type="module" src="{% static 'app/vue/boot.mjs' %}"></script>
 {% endblock %}
