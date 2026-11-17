@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from index.common.table_query import apply_table_filters
 from index.common.table_registry import project_record_definition
-from index.inspections.records import _computer_analysis_records
+from inspections.records import _computer_analysis_records
 from net.models import Computer, ComputerAnalysis, ComputerAnalysisProfile, TaskRun, TaskTargetRun
 
 
@@ -174,7 +174,7 @@ class PeopleQueryBackendCompilationTests(SimpleTestCase):
         from unittest.mock import patch
         from django.db.backends.mysql.base import DatabaseWrapper
         from django.db.models import Count, F, Q
-        from index.inspections.result_query import computer_queryset
+        from inspections.result_query import computer_queryset
         for version in ('8.0.36', '10.11.6-MariaDB'):
             with self.subTest(version=version):
                 backend = DatabaseWrapper({

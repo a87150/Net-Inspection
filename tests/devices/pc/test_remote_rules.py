@@ -36,7 +36,7 @@ class RemoteRuleFixture:
 
 class RemoteRuleTests(RemoteRuleFixture, TestCase):
     def test_legacy_domain_selection_is_split_without_duplicate_checks(self):
-        from index.inspections.forms import analysis_item_choices
+        from inspections.forms import analysis_item_choices
         self.assertNotIn('domain', dict(analysis_item_choices()))
         self.payloads['windows']['当前与域服务器通讯情况'] = '失败'
         result = self.analyze(['domain', 'domain_trust', 'group_policy'])

@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from index.devices.forms import device_form, preserve_empty_secrets
+from assets.forms import device_form, preserve_empty_secrets
 from net.admin.domain import AlertChannelAdminForm
 from net.models import AlertChannel, Network_Device, PeopleSyncSource, WeakCurrentDevice, Server
 

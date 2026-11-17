@@ -187,7 +187,7 @@ Web 负责页面、后端授权、校验和短事务；Worker 在数据库领取
 
 准确版本与兼容约束以 [requirements.txt](requirements.txt) 和 [requirements.lock.txt](requirements.lock.txt) 为准，安装使用锁文件，避免只升级某个协议库造成冲突。
 
-业务目录：`index/` 为页面/表单，`net/devices/people/domain/access` 为业务服务，`net/inspections/alerts` 为执行和通知，`net/infrastructure/data_exchange` 为基础设施与导入导出，`net/models/migrations` 为模型及迁移，`agents/deploy` 为终端与部署工具。
+页面按业务分 app：`people/` 人员、`domain/` 域控管理、`pc/` PC、`server/` 服务器、`weakcurrent/` 弱电设备、`network/` 网络设备、`inspections/` 后台任务、`alerts/` 告警维护、`topology/` 网络拓扑、`ipam/` IP 管理，四类资产共用的列表与配置备份在 `assets/`，外壳与共享层（`common`、`api`、`dashboard`、`templatetags`）留在 `index/`。业务服务仍在 `net/devices/people/domain/access`，执行与通知在 `net/inspections/alerts`，基础设施与导入导出在 `net/infrastructure/data_exchange`，模型及迁移在 `net/models/migrations`，终端与部署工具在 `agents/deploy`。
 
 数据库按资产、来源与模板、任务/目标、日志/巡检结果、异常与投递分层。常用查询采用关系字段和索引，异构回显与冻结规则用 JSON。表名、关系、去重约束及 MariaDB 索引说明见[数据库结构](docs/architecture.md#数据库模型与关系)，不要直接改 JSON 代替业务保存流程。
 

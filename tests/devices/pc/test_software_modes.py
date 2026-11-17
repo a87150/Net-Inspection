@@ -2,7 +2,7 @@ from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from net.devices.pc.checks import check_software
 from net.models import ComputerAnalysisProfile
-from index.inspections.forms import ComputerAnalysisProfileConfigForm
+from inspections.forms import ComputerAnalysisProfileConfigForm
 
 POLICY = {
     'WHITELIST': {'basic': ['Browser', 'SharedApp']},

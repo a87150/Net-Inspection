@@ -106,7 +106,7 @@ class ConfigurationSnapshotTests(TestCase):
         self.assertEqual(policy.thresholds, {'cpu': 75})
 
     def test_concurrent_create_returns_validation_error(self):
-        from index.inspections.issue_settings import SeveritySettingsForm
+        from inspections.issue_settings import SeveritySettingsForm
         self.client.force_login(get_user_model().objects.create_user(username='create-admin', is_staff=True))
         original = SeveritySettingsForm.overrides
 
@@ -120,7 +120,7 @@ class ConfigurationSnapshotTests(TestCase):
         self.assertEqual(IssueSeverityPolicy.objects.get(project='servers').overrides, {'cpu': 'critical'})
 
     def test_concurrent_update_cannot_overwrite_new_values(self):
-        from index.inspections.issue_settings import SeveritySettingsForm
+        from inspections.issue_settings import SeveritySettingsForm
         from django.utils import timezone
         self.client.force_login(get_user_model().objects.create_user(username='update-admin', is_staff=True))
         policy = IssueSeverityPolicy.objects.create(project='servers')

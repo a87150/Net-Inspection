@@ -9,7 +9,7 @@ from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
 from alerts.views import alert_modal_context
-from index.inspections.tasks import task_modal_context
+from inspections.tasks import task_modal_context
 from people.integrations import people_modal_context
 from index.common.access import access_context
 from net.models import ComputerAnalysisProfile, Domain_Controller_Config, PCUploadConfig, People, Server, TaskRun

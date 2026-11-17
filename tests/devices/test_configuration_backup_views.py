@@ -36,10 +36,10 @@ urlpatterns = [
 
 class BackupAccessTests(SimpleTestCase):
     def test_backup_views_exist(self):
-        self.assertIsNotNone(importlib.util.find_spec('index.devices.backups'))
+        self.assertIsNotNone(importlib.util.find_spec('assets.backups'))
 
     def view(self, name, user, method='get'):
-        views = importlib.import_module('index.devices.backups')
+        views = importlib.import_module('assets.backups')
         request = getattr(RequestFactory(), method)('/assets/networks/backups/')
         request.user = user
         args = ['networks', uuid4()]
@@ -94,7 +94,7 @@ class BackupHistoryTests(TestCase):
         )
 
     def call_list(self, backups, kind='networks', pk=None):
-        from index.devices.backups import configuration_backup_list
+        from assets.backups import configuration_backup_list
         # Storage is built independently; keep real lookup and rendering.
         def metadata_only(asset):
             self.assertEqual(asset.pk, pk or self.asset.pk)
@@ -174,7 +174,7 @@ class BackupDownloadTests(TestCase):
         )
 
     def download(self, kind='networks', pk=None, backup_id=None):
-        from index.devices.backups import configuration_backup_download
+        from assets.backups import configuration_backup_download
         return configuration_backup_download(self.request, kind, pk or self.asset.pk,
                                              backup_id or self.backup.pk)
 
@@ -233,7 +233,7 @@ class BackupDownloadTests(TestCase):
         self.assertNotIn(b'sensitive-raw-value', response.content)
 
     def test_real_history_does_not_query_ciphertext_or_decrypt(self):
-        from index.devices.backups import configuration_backup_list
+        from assets.backups import configuration_backup_list
         with override_settings(DEVICE_BACKUP_ENCRYPTION_KEY=''), CaptureQueriesContext(connection) as queries:
             response = configuration_backup_list(self.request, 'networks', self.asset.pk)
         self.assertEqual(response.status_code, 200)

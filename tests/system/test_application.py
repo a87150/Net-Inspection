@@ -1507,7 +1507,7 @@ class RecordTableDefinitionTests(TestCase):
     def setUp(self):
         login_reader(self.client)
 
-    @patch('index.inspections.records._inspection_records', return_value=[])
+    @patch('inspections.records._inspection_records', return_value=[])
     def test_empty_inspection_list_keeps_its_explicit_definition(self, inspection_records_mock):
         response = self.client.get(reverse('inspection_records'))
 
@@ -1552,7 +1552,7 @@ class RecordWorkspaceTests(TestCase):
                 'url': '/inspection/c/',
             },
         ]
-        with patch('index.inspections.records._inspection_records', return_value=records):
+        with patch('inspections.records._inspection_records', return_value=records):
             response = self.client.get(reverse('inspection_records'), {
                 'filter_category': '计算机',
                 'filter_asset': '目标',
@@ -1589,7 +1589,7 @@ class RecordWorkspaceTests(TestCase):
                 'url': '/errors/c/',
             },
         ]
-        with patch('index.inspections.records._error_records', return_value=records):
+        with patch('inspections.records._error_records', return_value=records):
             response = self.client.get(reverse('error_records'), {
                 'filter_category': '计算机',
                 'filter_asset': 'PC',
@@ -1611,7 +1611,7 @@ class RecordWorkspaceTests(TestCase):
             'summary': '巡检正常', 'time': timezone.now(),
             'url': '/inspection/safe/', 'secret': 'do-not-filter',
         }]
-        with patch('index.inspections.records._inspection_records', return_value=records):
+        with patch('inspections.records._inspection_records', return_value=records):
             response = self.client.get(reverse('inspection_records'), {
                 'filter_secret': 'missing', 'sort': 'secret',
             })
@@ -1635,7 +1635,7 @@ class RecordWorkspaceTests(TestCase):
                 'url': '/inspection/b/',
             },
         ]
-        with patch('index.inspections.records._inspection_records', return_value=records):
+        with patch('inspections.records._inspection_records', return_value=records):
             response = self.client.get(reverse('inspection_records'), {
                 'filter_status': 'not-a-supported-status',
                 # The view defaults to ('time', 'desc'); state the expected order explicitly.
@@ -1659,9 +1659,9 @@ class RecordWorkspaceTests(TestCase):
             'message': '空间不足', 'time': timezone.now(),
             'url': '/error/detail/',
         }
-        with patch('index.inspections.records._inspection_records', return_value=[inspection]):
+        with patch('inspections.records._inspection_records', return_value=[inspection]):
             inspection_response = self.client.get(reverse('inspection_records'))
-        with patch('index.inspections.records._error_records', return_value=[error]):
+        with patch('inspections.records._error_records', return_value=[error]):
             error_response = self.client.get(reverse('error_records'))
 
         inspection_document = parse_response_html(inspection_response)

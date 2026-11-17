@@ -159,7 +159,7 @@ class SangforApiConfigurationTests(TestCase):
 
     def test_profile_form_submits_all_documented_api_items_and_persists_evidence(self):
         """The real profile form must accept every documented Sangfor API item."""
-        from index.inspections.forms import InspectionProfileConfigForm
+        from inspections.forms import InspectionProfileConfigForm
         from net.devices.network.sangfor import DEFAULT_ITEMS
         from net.inspections.executor import execute_target
         from net.inspections.queue import claim_next_task, enqueue_task
@@ -207,7 +207,7 @@ class SangforApiConfigurationTests(TestCase):
         self.assertEqual(set(inspection.raw_output), {'api:' + endpoint for endpoint in payloads})
 
     def test_mixed_network_task_keeps_configuration_backup_off_api_target(self):
-        from index.inspections.forms import InspectionProfileConfigForm
+        from inspections.forms import InspectionProfileConfigForm
         from net.inspections.executor import _device_task
         from net.inspections.queue import enqueue_task
         from net.models import InspectionProfile, Network_Device, TaskRun

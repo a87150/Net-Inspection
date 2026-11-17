@@ -1,4 +1,4 @@
-from index.devices.views import (
+from assets.views import (
     ASSET_PAGES,
     asset_detail,
     asset_list,
@@ -27,7 +27,7 @@ from index.common.imports import (
 )
 from index.common.exports import table_export
 from pc.logs import computer_log_list, computer_log_detail
-from index.devices.configuration import configuration_download, configuration_zip
+from assets.configuration import configuration_download, configuration_zip
 from pc.scripts import pc_script_download
 from people.integrations import people_provider_save, people_schedule_save, people_test, people_preview, people_apply, people_operation, people_task_status, people_task_acknowledge
 from alerts.views import (
@@ -38,7 +38,7 @@ from alerts.views import (
     alert_policy_save,
     alert_test_send,
 )
-from index.inspections.tasks import (
+from inspections.tasks import (
     computer_analysis_profile_configure,
     inspection_profile_configure,
     manual_task_create,
@@ -48,7 +48,7 @@ from index.inspections.tasks import (
     task_list,
     task_modal_context,
 )
-from index.inspections.records import (
+from inspections.records import (
     RECORD_PAGES,
     _error_records,
     _inspection_records,

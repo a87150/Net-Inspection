@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.urls import reverse
 
-from index.devices.views import SWITCHABLE_KINDS
+from assets.views import SWITCHABLE_KINDS
 from net.models import Network_Device, Server, WeakCurrentDevice
 from tests.auth import login_admin
 

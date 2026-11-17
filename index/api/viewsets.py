@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from index.api.pagination import StandardPagination
 from index.api.permissions import IsAdminOrReadOnly
 from index.api.serializers import MaintenanceWindowCreateSerializer
-from index.devices.maintenance import (
+from assets.maintenance import (
     KIND_TARGET_TYPES,
     STATE_CHOICES,
     create_windows,

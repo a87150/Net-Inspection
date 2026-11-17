@@ -1,5 +1,5 @@
 from django.test import TestCase
-from index.devices.forms import device_form, preserve_empty_secrets
+from assets.forms import device_form, preserve_empty_secrets
 from net.models import Server
 
 

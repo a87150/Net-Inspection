@@ -212,7 +212,7 @@ class SharedInterfaceContractTests(TestCase):
         modal_workflows = (entrypoint.parent / 'modal-workflows.css').read_text(encoding='utf-8')
         self.assertIn('background: #fafbfc', foundation)
         self.assertIn('.config-section-card > details', modal_workflows)
-        template = (Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        template = (TemplateRoot.default()
                     / 'devices' / 'add_modal.html').read_text(encoding='utf-8')
         # 折叠区块确实是 details 套在 section.config-section-card 里。
         self.assertIn('<section class="config-section-card mb-3"', template)
@@ -662,12 +662,12 @@ class ModalVisualContractTests(TestCase):
         self.assertIn('data-confirm-message=', sources)
 
 class PcListActionContractTests(TestCase):
-    def test_pc_list_header_does_not_offer_script_downloads(self):
-        template_path = Path(__file__).resolve().parents[2] / 'index' / 'templates' / 'devices' / 'list.html'
+    def test_pc_list_header_offers_script_downloads_behind_the_config_guard(self):
+        """采集包入口在头部，但只有存在上传配置与默认配置档案时才出现。"""
+        template_path = TemplateRoot.default() / 'common' / 'workspace_actions.html'
         html = template_path.read_text(encoding='utf-8')
-        actions_start = html.index('<div class="page-heading__actions">')
-        actions_end = html.index('</header>', actions_start)
-        header_actions = html[actions_start:actions_end]
 
-        self.assertNotIn('下载 Windows 采集脚本', header_actions)
-        self.assertNotIn('下载 macOS 采集脚本', header_actions)
+        self.assertIn("task_project_kind == 'computers'", html)
+        self.assertIn('pc_upload_config and task_default_profile', html)
+        self.assertIn('下载 Windows 采集包', html)
+        self.assertIn('下载 macOS 采集脚本', html)

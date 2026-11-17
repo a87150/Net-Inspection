@@ -31,7 +31,7 @@ class CliProtocolTests(TestCase):
         self.assertEqual(device_type_for('generic', 'telnet'), 'generic_termserver_telnet')
 
     def test_form_leaves_port_optional(self):
-        from index.devices.forms import device_form
+        from assets.forms import device_form
         form = device_form('networks')
         self.assertIn('cli_protocol', form.fields)
         self.assertFalse(form.fields['port'].required)

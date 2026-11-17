@@ -77,7 +77,7 @@ class FinalDemoTests(TestCase):
             instance.full_clean()
 
     def test_seeded_analysis_items_are_selectable_in_manual_form(self):
-        from index.inspections.forms import analysis_item_choices
+        from inspections.forms import analysis_item_choices
         self.seed()
         self.assertTrue(ComputerAnalysisProfile.objects.exists())
         allowed = {key for key, _ in analysis_item_choices()}

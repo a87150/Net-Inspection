@@ -34,8 +34,27 @@ Django 模板不再渲染表格行。行数据由视图算成 payload，同时�
 
 ## 目录
 
+页面按业务分 app，一个功能一个顶层包，共享层留在 `index`：
+
 ```
-index/api/
+people/       人员（含接入渠道模板）
+domain/       域控管理
+pc/           PC 采集、日志、软件策略、上传配置
+server/       服务器采集脚本
+weakcurrent/  弱电设备（原 index/access）
+network/      网络设备参数示例
+inspections/  后台任务与巡检结果
+alerts/       告警维护 + 维护窗口
+topology/     网络拓扑
+ipam/         IP 管理
+assets/       四类资产共享的列表/详情/创建/配置备份（原 index/devices）
+index/        外壳与共享层：common、api、dashboard、templatetags、公共视图
+```
+
+每个 app 自带 `templates/<前缀>/`，模板路径（`{% include 'alerts/event_row.html' %}`）不因搬迁而变。
+
+```
+index/api/`
   permissions.py    IsReader / IsAdminOrReadOnly
   pagination.py     与表格同规则的 page_size
   exceptions.py     统一错误信封
@@ -52,7 +71,7 @@ static/app/vue/
 
 ## 新增一页的步骤
 
-1. 把视图里的查询抽成函数，产出 payload（参照 `index/devices/maintenance.py` 的 `row_payloads`）。
+1. 把视图里的查询抽成函数，产出 payload（参照 `alerts/payloads.py` 的 `alert_event_payloads`）。
 2. 在 `index/api/` 加视图集，复用同一个 payload 函数。
 3. 写 `static/app/vue/pages/<page>.mjs`，在 `boot.mjs` 登记；模板改成容器 + 注水。
 

@@ -8,7 +8,7 @@ way back to the list it belongs to.
 
 def workspace_action_context(kind, *, back_url=''):
     """Flags the shared action-bar template needs for this asset kind."""
-    from index.devices.forms import DEVICE_KINDS
+    from assets.forms import DEVICE_KINDS
     from net.data_exchange.inventory_csv import IMPORTABLE_ENTITIES
     return {
         'action_kind': kind,

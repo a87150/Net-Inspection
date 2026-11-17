@@ -38,7 +38,7 @@ class MatchingModeTests(TestCase):
         self.assertEqual(snapshot['matching_mode'], 'people')
 
     def test_configuration_form_saves_and_reopens_mode(self):
-        from index.inspections.forms import ComputerAnalysisProfileConfigForm
+        from inspections.forms import ComputerAnalysisProfileConfigForm
         form = ComputerAnalysisProfileConfigForm(data={'name': 'mode configuration',
             'matching_mode': 'people', 'analysis_items': ['processes'], 'concurrent_workers': 2})
         self.assertTrue(form.is_valid(), form.errors)
@@ -74,7 +74,7 @@ class MatchingModeTests(TestCase):
         self.assertIn('M2', response_body(exported).decode('utf-8-sig'))
         from index.common.table_query import apply_table_filters
         from index.common.table_registry import get_table_definition
-        from index.inspections.records import _computer_analysis_records
+        from inspections.records import _computer_analysis_records
         from django.test import RequestFactory
         filtered, _ = apply_table_filters(RequestFactory().get('/', {'filter_status': 'warning'}),
                         _computer_analysis_records(), get_table_definition('computer_inspections'), include_legacy_status=False)

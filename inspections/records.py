@@ -131,7 +131,7 @@ def _asset_action_context(request, kind):
     )
     if is_admin(request.user):
         if context['action_can_manage_devices']:
-            from index.devices.forms import device_form, device_form_sections
+            from assets.forms import device_form, device_form_sections
             context['device_form'] = device_form(kind)
             context['device_form_sections'] = device_form_sections(context['device_form'])
         # The shared modal templates key off these two names.

@@ -19,7 +19,7 @@ from net.models import (
     AlertEvent,
 )
 
-from index.inspections.records import (
+from inspections.records import (
     RECORD_PAGES,
     _computer_analysis_records,
     _error_records,
@@ -70,7 +70,7 @@ def _table_source(request, table_key, scope):
     if table_key == 'computer_errors':
         if scope:
             raise Http404('该表不支持分组导出')
-        from index.inspections.result_query import computer_queryset
+        from inspections.result_query import computer_queryset
         return computer_queryset().filter(_error_total__gt=0)
     if table_key == 'inspection_records':
         if scope:

@@ -123,7 +123,7 @@ class CollectionSettingsForm(forms.Form):
                     name=f'snmp_{suffix}_{metric}';self.fields[name]=field;fields.append(self[name])
                 row['snmp_fields'].append(fields)
             self.item_rows.append(row)
-        from .parameter_examples import collection_examples
+        from network.examples import collection_examples
         collection_examples(self)
         for field in self.fields.values():
             if not isinstance(field.widget,(forms.HiddenInput,forms.CheckboxSelectMultiple)):

@@ -97,6 +97,9 @@ INSTALLED_APPS = [
     'pc',
     'server',
     'weakcurrent',
+    'inspections',
+    'assets',
+    'network',
     'rest_framework',
 ]
 

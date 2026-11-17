@@ -117,7 +117,7 @@ class FinalOperatorTests(TestCase):
             _selected_target_ids(self.profile)
 
     def test_optional_filter_choice_does_not_silently_select_model_default(self):
-        from index.inspections.forms import InspectionProfileConfigForm
+        from inspections.forms import InspectionProfileConfigForm
         form = InspectionProfileConfigForm(device_type='server', instance=self.profile)
         self.assertEqual(list(form.fields['rule_server_type'].choices)[0][0], '')
         self.assertIn('value="" selected', str(form['rule_server_type']))

@@ -66,7 +66,7 @@ class LatestAnalysisStatisticsTests(TestCase):
         self.assertContains(response, '暂无日志分析任务')
 
     def test_summary_reads_aggregates_not_log_payloads(self):
-        from index.inspections.analysis_summary import latest_analysis_statistics
+        from inspections.analysis_summary import latest_analysis_statistics
         task = self.task()
         self.analysis(task, [{'analysis_item': 'patches', 'severity': 'warning'}])
         with CaptureQueriesContext(connection) as queries:

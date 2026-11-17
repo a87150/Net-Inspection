@@ -289,7 +289,7 @@ def people_operation(request, pk, *, error=''):
         'people_preview': preview,
         'open_import_modal': False,
     })
-    from index.devices.views import asset_list
+    from assets.views import asset_list
     return asset_list(request, 'people', integration_context=context)
 
 

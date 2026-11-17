@@ -88,7 +88,7 @@ class IssueSettingsTests(RemoteRuleFixture, TestCase):
         from net.models import IssueSeverityPolicy, InspectionProfile, Server
         from net.inspections.queue import enqueue_task, claim_next_task
         from net.inspections.executor import persist_execution_failure, _begin_target
-        from index.inspections.records import _infrastructure_records
+        from inspections.records import _infrastructure_records
         IssueSeverityPolicy.objects.create(project='servers', overrides={'inspection_collection': 'warning'})
         device = Server.objects.create(name='offline-test', ip='192.0.2.4', server_type='linux')
         profile = InspectionProfile.objects.create(name='device-policy', device_type='server', selected_items=['cpu'])

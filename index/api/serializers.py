@@ -1,11 +1,11 @@
 """Write-side serializers for the REST layer.
 
-Read rows come from the page payload builders (index.devices.maintenance.row_payloads)
+Read rows come from the page payload builders (assets.maintenance.row_payloads)
 so the hydrated first paint and the REST list share one field definition.
 """
 from rest_framework import serializers
 
-from index.devices.maintenance import KIND_TARGET_TYPES, TARGET_MODELS, asset_names
+from assets.maintenance import KIND_TARGET_TYPES, TARGET_MODELS, asset_names
 from net.models import MaintenanceWindow
 
 

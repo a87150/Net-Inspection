@@ -19,7 +19,7 @@ from index.common.table_registry import get_table_definition
 from net.models import Computer, Network_Device, People, WeakCurrentDevice, Server
 from net.data_exchange.inventory_csv import IMPORTABLE_ENTITIES, inventory_import_guide
 from alerts.views import alert_modal_context
-from index.inspections.tasks import task_modal_context
+from inspections.tasks import task_modal_context
 
 
 @dataclass(frozen=True)

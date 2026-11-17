@@ -1,27 +1,27 @@
 from topology.views import topology_data, topology_batches, topology_interfaces, topology_links, topology_evidence
 from domain.memberships import domain_group_members
 from weakcurrent.views import (access_record_list, access_record_sync, access_source_settings, access_source_save, access_source_test)
-from index.devices.collection_profiles import collection_templates, device_collection_settings
+from assets.collection_profiles import collection_templates, device_collection_settings
 from domain.bitlocker import domain_computer_bitlocker
-from index.inspections.tasks import single_device_task_create
+from inspections.tasks import single_device_task_create
 from django.urls import path
 from django.contrib.auth.views import LogoutView
 from index.common.login_throttle import ThrottledLoginView
 from . import views
-from index.inspections.issue_settings import issue_severity_settings
-from index.inspections.analysis_summary import analysis_problem_list
+from inspections.issue_settings import issue_severity_settings
+from inspections.analysis_summary import analysis_problem_list
 from pc import upload_config as pc_upload_views
 from server.scripts import windows_server_script_download
-from index.devices.create import asset_create, asset_edit
-from index.devices.views import asset_toggle_enabled
+from assets.create import asset_create, asset_edit
+from assets.views import asset_toggle_enabled
 from alerts.templates import alert_template_settings
-from index.devices.backups import (
+from assets.backups import (
     configuration_backup_diff,
     configuration_backup_download,
     configuration_backup_list,
 )
 from ipam.views import ip_management
-from index.devices.maintenance import (
+from assets.maintenance import (
     maintenance_list, maintenance_window_create, maintenance_window_delete,
 )
 from pc.bulk_analysis import computer_logs_analyze_bulk

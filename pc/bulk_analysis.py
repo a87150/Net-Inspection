@@ -7,7 +7,7 @@ from django.views.decorators.http import require_POST
 
 from index.common.table_query import apply_table_filters
 from index.common.table_registry import get_table_definition
-from index.inspections.forms import ManualTaskForm
+from inspections.forms import ManualTaskForm
 from net.devices.pc.analysis_scope import enqueue_latest_analysis, latest_logs
 from net.models import ComputerAnalysisProfile, ComputerLogFile, TaskRun
 

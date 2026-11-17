@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from index.common.table_query import apply_table_filters
 from index.common.table_registry import get_table_definition, project_record_definition
-from index.inspections.records import _computer_analysis_records, _error_records, _infrastructure_records
+from inspections.records import _computer_analysis_records, _error_records, _infrastructure_records
 from net.models import (Computer, ComputerAnalysis, Network_Device, Network_Device_Inspection, Server,
                         Server_Inspection)
 

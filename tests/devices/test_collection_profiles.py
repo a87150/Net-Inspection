@@ -104,7 +104,7 @@ class CollectionProfilesTests(TestCase):
         self.assertEqual(resolve_collection_settings('servers',SimpleNamespace(pk=self.device.pk,server_type='windows',manufacturer='Dell')), {})
 
     def test_brand_choices_are_category_specific_and_reject_cross_category_post(self):
-        from index.devices.forms import device_form
+        from assets.forms import device_form
         from tests.auth import login_admin
         from django.urls import reverse
         network=device_form('networks'); security=device_form('weakcurrent')
@@ -122,7 +122,7 @@ class CollectionProfilesTests(TestCase):
         self.assertFalse(DeviceCollectionTemplate.objects.filter(name='wrong').exists())
 
     def test_existing_device_brand_is_preserved_without_becoming_global_choice(self):
-        from index.devices.forms import device_form
+        from assets.forms import device_form
         self.device.vendor='legacy-brand';self.device.save()
         form=device_form('networks',instance=self.device)
         self.assertIn('legacy-brand',dict(form.fields['vendor'].choices))
@@ -209,7 +209,7 @@ class CollectionProfilesTests(TestCase):
         self.assertIn('memory',resolve_collection_settings('networks',self.device)['selected_items'])
 
     def test_snmp_item_method_and_scalar_conversion_form(self):
-        from index.devices.collection_profiles import CollectionSettingsForm
+        from assets.collection_profiles import CollectionSettingsForm
         form=CollectionSettingsForm({'method_cpu':'snmp','snmp_oid_cpu':'1.3.6.1.4.1.2011.6.1.0','snmp_scale_cpu':'0.01','threshold_cpu':'60','level_cpu':'critical'},kind='networks')
         self.assertTrue(form.is_valid(),form.errors)
         settings=form.settings_value()
@@ -250,7 +250,7 @@ class CollectionProfilesTests(TestCase):
         self.assertEqual(cpu[0]['severity'],'critical')
 
     def test_inherit_mode_discards_local_values_and_custom_keeps_only_edited_rule(self):
-        from index.devices.collection_profiles import CollectionSettingsForm
+        from assets.collection_profiles import CollectionSettingsForm
         form=CollectionSettingsForm({'rule_mode_cpu':'inherit','threshold_cpu':'invalid','method_cpu':'ssh','commands_cpu':'display cpu','rule_mode_memory':'custom','threshold_memory':'75'},kind='networks')
         self.assertTrue(form.is_valid(),form.errors)
         value=form.settings_value()
@@ -298,7 +298,7 @@ class CollectionProfilesTests(TestCase):
         self.assertEqual(task.target_runs.get().target_snapshot['collection_settings']['thresholds'],{'cpu':80,'memory':75})
 
     def test_network_connection_sections_use_simple_default_and_preserve_existing_mode(self):
-        from index.devices.forms import device_form,device_form_sections
+        from assets.forms import device_form,device_form_sections
         form=device_form('networks')
         self.assertEqual(form['connection_type'].value(),'auto')
         sections=device_form_sections(form)
@@ -307,7 +307,7 @@ class CollectionProfilesTests(TestCase):
         self.assertTrue(next(section for section in sections if any(field.name=='snmp_port' for field in section['fields']))['advanced'])
 
     def test_network_form_limits_connection_fields_and_preserves_inactive_values(self):
-        from index.devices.forms import device_form, device_form_sections
+        from assets.forms import device_form, device_form_sections
         api = device_form('networks', {
             'ip': '192.0.2.77', 'vendor': 'sangfor', 'device_type': 'ac_gateway',
             'connection_type': 'sangfor_api', 'api_url': 'https://ac.example.invalid:443',
@@ -426,7 +426,7 @@ class CollectionProfilesTests(TestCase):
 
     def test_item_choices_carry_no_static_method_note_anymore(self):
         """备注现在是按所选设备动态渲染的，标签本身不该再硬编码采集方式。"""
-        from index.inspections.forms import inspection_item_choices
+        from inspections.forms import inspection_item_choices
         labels = dict(inspection_item_choices('network_device'))
         self.assertEqual(labels['traffic'], '实时接口流量')
         for key, label in labels.items():

@@ -190,7 +190,7 @@ class InspectionProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
                 'daily_time': schedule.daily_time,
             })
         from index.common.form_examples import apply_field_examples
-        from index.devices.parameter_examples import PROFILE_EXAMPLES
+        from network.examples import PROFILE_EXAMPLES
         apply_field_examples(self, PROFILE_EXAMPLES)
 
     def clean(self):
@@ -335,7 +335,7 @@ class ComputerAnalysisProfileConfigForm(_ScheduleFieldsMixin, forms.Form):
                 'daily_time': schedule.daily_time,
             })
         from index.common.form_examples import apply_field_examples
-        from index.devices.parameter_examples import PROFILE_EXAMPLES
+        from network.examples import PROFILE_EXAMPLES
         apply_field_examples(self, PROFILE_EXAMPLES)
 
     def clean_kms_servers_text(self):

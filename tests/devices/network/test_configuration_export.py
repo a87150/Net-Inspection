@@ -15,7 +15,7 @@ import requests
 from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 
-from index.inspections.forms import inspection_item_choices
+from inspections.forms import inspection_item_choices
 from net.models import (AlertChannel, Domain_Controller_Config, InspectionProfile,
                         WeakCurrentDevice, Network_Device, PeopleSyncSource, Server)
 from net.infrastructure.http_collectors import collect_security_api
@@ -722,7 +722,7 @@ class ConfigurationTests(TestCase):
 
     def test_views_enforce_admin_get_and_no_store_without_middleware(self):
         from django.contrib.auth.models import AnonymousUser
-        from index.devices.configuration import configuration_download, configuration_zip
+        from assets.configuration import configuration_download, configuration_zip
         from tests.auth import login_admin, login_reader
         admin = login_admin(self.client)
         reader = login_reader(self.client)

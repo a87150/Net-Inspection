@@ -4,8 +4,8 @@ from net.models import People, ComputerAnalysisProfile, ComputerAnalysis
 from net.inspections.queue import enqueue_task, claim_next_task, finish_task
 from net.inspections.task_summary import build_project_task_metrics, summarize_task
 from net.devices.pc.executor import execute_computer_target
-from index.inspections.analysis_summary import latest_analysis_statistics
-from index.inspections.records import _computer_analysis_records
+from inspections.analysis_summary import latest_analysis_statistics
+from inspections.records import _computer_analysis_records
 from tests.devices.pc.helpers import import_payload
 
 

@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 from tests.auth import login_admin, login_reader
-from index.devices.forms import device_form, device_form_sections
+from assets.forms import device_form, device_form_sections
 from net.data_exchange.inventory_csv import export_csv, export_xlsx_template, import_file
 from net.models import Network_Device, Server
 
@@ -75,7 +75,7 @@ class DeviceParameterExamplesTests(TestCase):
         self.assertEqual(obj.os_version, 'original')
 
     def test_collection_examples_render_for_every_category_without_changing_defaults(self):
-        from index.devices.collection_profiles import CollectionSettingsForm
+        from assets.collection_profiles import CollectionSettingsForm
         import re
         login_admin(self.client)
         for kind in ('networks', 'servers', 'weakcurrent'):
@@ -110,7 +110,7 @@ class DeviceParameterExamplesTests(TestCase):
             self.assertEqual(page.context['device_form']['os_version'].value(), 'Version 2')
 
     def test_pc_analysis_parameters_show_examples_and_keep_values(self):
-        from index.inspections.forms import ComputerAnalysisProfileConfigForm
+        from inspections.forms import ComputerAnalysisProfileConfigForm
         form = ComputerAnalysisProfileConfigForm()
         for name in ('cpu_max_percent', 'disk_max_percent', 'site_ip_prefixes', 'minimum_windows_release', 'daily_time'):
             self.assertIn('示例', form.fields[name].help_text)

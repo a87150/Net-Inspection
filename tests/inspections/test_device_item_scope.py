@@ -2,7 +2,7 @@ from django.test import TestCase
 from net.models import WeakCurrentDevice, InspectionProfile, TaskRun
 from net.devices.collection_profiles import resolve_collection_settings, supported_collection_items
 from net.inspections.queue import enqueue_task
-from index.inspections.forms import InspectionProfileConfigForm
+from inspections.forms import InspectionProfileConfigForm
 
 
 class DeviceItemScopeTests(TestCase):

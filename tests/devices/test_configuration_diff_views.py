@@ -7,7 +7,7 @@ from uuid import uuid4
 from cryptography.fernet import Fernet
 from django.test import RequestFactory, TestCase, override_settings
 
-from index.devices.backups import configuration_backup_diff
+from assets.backups import configuration_backup_diff
 from net.models import DeviceConfigurationBackup, Network_Device
 
 
