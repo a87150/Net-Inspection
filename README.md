@@ -1,4 +1,4 @@
-# 网络巡检中心（net） 1.3.0
+# 网络巡检中心（net） 1.3.1
 
 基于 Django 的内网资产管理、设备巡检与 PC 日志分析系统。通过网页配置、手动任务和定时任务，完成数据采集、规则分析、历史查询及异常/恢复通知。
 
@@ -247,7 +247,7 @@ try {
 } finally {
     $env:DB_ENGINE = $previousEngine
 }
-node --test tests/frontend/*.test.js
+node --test tests/frontend/*.test.js tests/frontend/*.test.mjs
 ```
 
 模拟协议与 SQLite 测试不能替代目标 MariaDB 并发、服务注册、真实设备/平台和共享权限验收。系统提供周期快照与规则判断，不等于实时监控或完整安全合规；SSH 主机身份校验、部分凭据存储等后续工作记录在[安全待办](docs/security-followups.txt)。

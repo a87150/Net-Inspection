@@ -70,5 +70,5 @@
 {% block page_scripts %}
 {% include 'common/scripts/table_workspace.html' %}
 {% include 'common/scripts/modal_workflows.html' %}
-{% if domain_object_type == 'group' and can_administer %}<script defer src="{% static 'app/js/domain/group_members.js' %}"></script>{% endif %}
+{% if domain_object_type == 'group' and can_administer %}<script type="module" src="{% static 'app/js/domain/group_members_island.js' %}"></script>{% endif %}
 {% endblock %}

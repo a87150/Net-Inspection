@@ -117,6 +117,13 @@ def domain_group_members(request, pk):
         if query:
             members = members.filter(Q(account__login_name__icontains=query) | Q(account__account_name__icontains=query) | Q(computer__computer_name__icontains=query))
     page = Paginator(members, 50).get_page(request.GET.get('page'))
+    if not group.is_available:
+        candidate_total = 0
+    elif mode == 'add':
+        candidate_total = len(page.object_list)
+    else:
+        candidate_total = sum(1 for row in page.object_list if not row.is_primary)
     return render(request, 'domain/group_members.html', {'group': group, 'page_obj': page,
+        'candidate_total': candidate_total,
         'member_query': query, 'member_mode': mode, 'candidate_type': object_type,
         'selected_members': selected, 'operation_tasks': tasks})

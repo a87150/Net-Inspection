@@ -5,7 +5,7 @@
 <a class="btn btn-link domain-members-back" href="{% url 'domain_group_list' %}">← 返回域分组列表</a>
 <div class="modal fade domain-members-modal" id="domainGroupMembersModal" data-auto-open="true" tabindex="-1" aria-labelledby="domainGroupMembersLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell">
-        <div class="modal-content modal-surface">
+        <div class="modal-content modal-surface" id="domain-members-island" data-candidate-count="{{ candidate_total }}" data-member-locked="{% if group.is_available %}false{% else %}true{% endif %}">
             <div class="modal-header domain-members-header">
                 <div class="domain-members-header__copy">
                     <p class="page-heading__eyebrow mb-1">域分组成员</p>
@@ -102,11 +102,11 @@
 
                     <div class="domain-members-selection">
                         <div class="domain-members-selection__actions" role="group" aria-label="批量选择本页成员">
-                            <button type="button" class="btn btn-outline-primary btn-sm" data-member-select="all">全选本页</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" data-member-select="invert">反选本页</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" data-member-select="none">清空选择</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm" data-member-select="all" @click="select('all')">全选本页</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-member-select="invert" @click="select('invert')">反选本页</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-member-select="none" @click="select('none')">清空选择</button>
                         </div>
-                        <span class="domain-members-selection__count" data-member-selection-summary aria-live="polite">正在统计可选成员…</span>
+                        <span class="domain-members-selection__count" data-member-selection-summary aria-live="polite">已选 0 / 可选 {{ candidate_total }}</span>
                     </div>
 
                     <div class="card surface-card table-scroll-shell domain-members-table-card">
@@ -127,7 +127,7 @@
                                         {% if member_mode == 'add' %}
                                         <td class="domain-members-table__select">
                                             {% if group.is_available %}
-                                            <input type="checkbox" class="form-check-input" name="target_ids" value="{{ member.pk }}" aria-label="选择成员 {{ member }}"{% if member.pk|stringformat:'s' in selected_members %} checked{% endif %}>
+                                            <input type="checkbox" class="form-check-input" name="target_ids" value="{{ member.pk }}" data-member-target v-model="selected" :value="'{{ member.pk }}'" aria-label="选择成员 {{ member }}"{% if member.pk|stringformat:'s' in selected_members %} checked{% endif %}>
                                             {% endif %}
                                         </td>
                                         <td><span class="badge status-badge text-bg-info">{% if candidate_type == 'account' %}域账户{% else %}域计算机{% endif %}</span></td>
@@ -141,7 +141,7 @@
                                         {% else %}
                                         <td class="domain-members-table__select">
                                             {% if not member.is_primary and group.is_available %}
-                                            <input type="checkbox" class="form-check-input" name="membership_ids" value="{{ member.pk }}" aria-label="选择成员 {{ member.account|default:member.computer }}"{% if member.pk|stringformat:'s' in selected_members %} checked{% endif %}>
+                                            <input type="checkbox" class="form-check-input" name="membership_ids" value="{{ member.pk }}" data-member-target v-model="selected" :value="'{{ member.pk }}'" aria-label="选择成员 {{ member.account|default:member.computer }}"{% if member.pk|stringformat:'s' in selected_members %} checked{% endif %}>
                                             {% else %}
                                             <span class="domain-members-locked" title="主组成员不可直接移除">锁定</span>
                                             {% endif %}
@@ -189,11 +189,11 @@
             </div>
             <div class="modal-footer modal-footer--sticky domain-members-footer">
                 <div class="domain-members-footer__summary">
-                    <strong data-member-selection-summary aria-live="polite">正在统计可选成员…</strong>
+                    <strong data-member-selection-summary aria-live="polite">[[ summary ]]</strong>
                     <span>{% if member_mode == 'add' %}所选对象将加入当前分组{% else %}仅解除所选对象与当前分组的关系{% endif %}</span>
                 </div>
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">关闭</button>
-                <button type="submit" form="domain-group-member-action" class="btn {% if member_mode == 'add' %}btn-primary{% else %}btn-danger{% endif %}" data-member-submit disabled{% if not group.is_available %} data-member-locked{% endif %}>
+                <button type="submit" form="domain-group-member-action" class="btn {% if member_mode == 'add' %}btn-primary{% else %}btn-danger{% endif %}" data-member-submit :disabled="submitDisabled"{% if not group.is_available %} data-member-locked{% endif %}>
                     {% if member_mode == 'add' %}添加选中成员{% else %}移除选中成员{% endif %}
                 </button>
             </div>
@@ -203,5 +203,5 @@
 {% endblock %}
 {% block page_scripts %}
 {% include 'common/scripts/modal_workflows.html' %}
-<script defer src="{% static 'app/js/domain/group_members.js' %}"></script>
+<script type="module" src="{% static 'app/js/domain/group_members_island.js' %}"></script>
 {% endblock %}

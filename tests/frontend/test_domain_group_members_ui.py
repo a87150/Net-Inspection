@@ -46,6 +46,12 @@ class DomainGroupMemberInterfaceTests(TestCase):
         self.assertContains(response, 'data-member-selection-summary')
         self.assertContains(response, 'aria-live="polite"')
         self.assertContains(response, 'data-member-select="invert"')
+        # The island owns selection state; the table itself stays server-rendered.
+        self.assertContains(response, 'id="domain-members-island"')
+        self.assertContains(response, 'data-candidate-count=')
+        self.assertContains(response, 'data-member-target')
+        self.assertContains(response, 'v-model="selected"')
+        self.assertContains(response, 'group_members_island.js')
         self.assertContains(response, 'class="table data-table table-hover')
         self.assertContains(response, 'form="domain-group-member-action"')
         self.assertContains(
