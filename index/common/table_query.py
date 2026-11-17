@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timedelta
 from dataclasses import replace
+from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 
 from django.core.exceptions import FieldError, ValidationError
@@ -16,6 +17,9 @@ from index.common.table_registry import TableDefinition, get_table_definition
 
 
 PAGE_SIZES = (20, 50, 100, 200, 500)
+
+# One operator vocabulary for every numeric column; eq maps to the bare lookup.
+NUMBER_LOOKUPS = {'gt': 'gt', 'lt': 'lt', 'eq': 'exact'}
 
 
 def _parameter(prefix, name):
@@ -109,6 +113,21 @@ def _requested_filters(request, definition, prefix):
                     '_to_date': parsed_to,
                 }
             continue
+        if field.kind == 'number':
+            operator = request.GET.get(_parameter(prefix, f'filter_{field.key}_op'), '').strip()
+            raw = request.GET.get(_parameter(prefix, f'filter_{field.key}'), '').strip()
+            if not raw:
+                continue
+            try:
+                number = Decimal(raw)
+            except (InvalidOperation, ValueError):
+                continue
+            filters[field.key] = {
+                'op': operator if operator in NUMBER_LOOKUPS else 'gt',
+                'value': raw,
+                '_number': number,
+            }
+            continue
         value = request.GET.get(_parameter(prefix, f'filter_{field.key}'), '').strip()
         if not value:
             continue
@@ -153,6 +172,10 @@ def _filter_queryset(queryset, definition, filters):
                 boolean = _parse_boolean(value)
                 if boolean is not None:
                     queryset = queryset.filter(**{field.source: boolean})
+            elif field.kind == 'number':
+                queryset = queryset.filter(
+                    **{f'{field.source}__{NUMBER_LOOKUPS[value["op"]]}': value['_number']},
+                )
             elif field.kind in {'date', 'datetime'}:
                 from_value = value['_from_date']
                 to_value = value['_to_date']

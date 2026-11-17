@@ -1,5 +1,6 @@
 {% extends 'common/base.html' %}
 {% load extras %}
+{% load static %}
 {% block title %}{{ item_name }}列表{% endblock %}
 {% block content %}
 <header class="page-heading">
@@ -22,7 +23,7 @@
 {% if can_administer and task_project_kind %}{% if can_administer %}{% include 'inspections/profile_modal.html' %}{% endif %}{% if can_administer %}{% include 'inspections/run_modal.html' %}{% endif %}{% if can_administer %}{% include 'alerts/policy_modal.html' %}{% endif %}{% endif %}
 
 <div data-table-workspace data-table-key="{{ table_definition.key }}">
-    <div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
+    <div class="table-toolbar">{% if maintenance_enabled %}{% include 'common/table_workspace.html' with table_filter_actions_template='devices/maintenance_action.html' %}{% else %}{% include 'common/table_workspace.html' %}{% endif %}</div>
     <div class="card surface-card table-scroll-shell">
         <p class="table-scroll-hint">可横向滚动查看更多字段，最右侧操作列保持可见</p>
         <div class="table-responsive" role="region" aria-label="{{ item_name }}数据表" tabindex="0">
@@ -51,10 +52,12 @@
     </div>
     {% include 'common/pagination.html' %}
 </div>
+{% include 'devices/maintenance_modal.html' %}
 {% endblock %}
 {% block page_scripts %}
 {% include 'common/scripts/table_workspace.html' %}
 {% include 'common/scripts/modal_workflows.html' %}
+{% if maintenance_enabled %}<script src="{% static 'app/js/devices/maintenance_window.js' %}" defer></script>{% endif %}
 {% if task_project_kind %}{% include 'common/scripts/inspection_workflows.html' %}{% endif %}
 {% if people_operation or personnel_api_import %}{% include 'common/scripts/people_workflows.html' %}{% endif %}
 {% endblock %}

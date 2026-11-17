@@ -2,40 +2,53 @@
 from django import forms
 from django.contrib import admin
 
-from net.models import MaintenanceWindow, Network_Device
+from net.models import MaintenanceWindow, Network_Device, Server, WeakCurrentDevice
+
+TARGET_MODELS = {
+    MaintenanceWindow.TargetType.NETWORK_DEVICE: (Network_Device, "device_name"),
+    MaintenanceWindow.TargetType.SERVER: (Server, "name"),
+    MaintenanceWindow.TargetType.WEAK_CURRENT: (WeakCurrentDevice, "device_name"),
+}
 
 
 class MaintenanceWindowAdminForm(forms.ModelForm):
-    """Pick a device; the row stores its UUID without a hard foreign key."""
+    """Pick an asset; the row stores its UUID without a hard foreign key."""
 
-    device = forms.ModelChoiceField(queryset=Network_Device.objects.none(), label="设备")
+    target_id = forms.ChoiceField(choices=(), label="资产")
 
     class Meta:
         model = MaintenanceWindow
-        fields = ["device", "starts_at", "ends_at", "note", "is_enabled"]
+        fields = ["target_type", "target_id", "starts_at", "ends_at", "note", "is_enabled"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["device"].queryset = Network_Device.objects.order_by("device_name")
+        target_type = (
+            self.data.get("target_type")
+            or getattr(self.instance, "target_type", "")
+            or MaintenanceWindow.TargetType.NETWORK_DEVICE
+        )
+        model, label_field = TARGET_MODELS.get(
+            target_type, TARGET_MODELS[MaintenanceWindow.TargetType.NETWORK_DEVICE],
+        )
+        self.fields["target_id"].choices = [
+            (str(pk), name)
+            for pk, name in model.objects.order_by(label_field).values_list("pk", label_field)
+        ]
         if self.instance.pk:
-            self.fields["device"].initial = self.instance.device_id
-
-    def save(self, commit=True):
-        instance = super().save(commit=False)
-        instance.device_id = self.cleaned_data["device"].pk
-        if commit:
-            instance.save()
-        return instance
+            self.fields["target_id"].initial = str(self.instance.target_id)
 
 
 @admin.register(MaintenanceWindow)
 class MaintenanceWindowAdmin(admin.ModelAdmin):
     form = MaintenanceWindowAdminForm
-    list_display = ("device_name", "starts_at", "ends_at", "is_enabled", "note")
-    list_filter = ("is_enabled",)
+    list_display = ("target_name", "target_type", "starts_at", "ends_at", "is_enabled", "note")
+    list_filter = ("target_type", "is_enabled")
     search_fields = ("note",)
 
-    @admin.display(description="设备")
-    def device_name(self, obj):
-        device = Network_Device.objects.filter(pk=obj.device_id).first()
-        return str(device) if device else str(obj.device_id)
+    @admin.display(description="资产")
+    def target_name(self, obj):
+        model, label_field = TARGET_MODELS.get(
+            obj.target_type, TARGET_MODELS[MaintenanceWindow.TargetType.NETWORK_DEVICE],
+        )
+        name = model.objects.filter(pk=obj.target_id).values_list(label_field, flat=True).first()
+        return name or str(obj.target_id)

@@ -763,17 +763,26 @@ def _guard_event_state_scope(sender, instance, action, reverse, pk_set, using, *
         if _scope(event) != _scope(state):
             raise ValidationError('事件与状态必须属于同一项目和目标。')
 class MaintenanceWindow(models.Model):
-    """Planned change window for one device.
+    """Planned change window for one asset (network device, server or weak-current).
 
-    Deliveries whose event targets this device are not claimed while the
-    window is active. Nothing is deleted: the alert rows stay pending, so the
-    history shows what fired and why it stayed silent.
+    Deliveries whose event targets this asset are not claimed while the window
+    is active. Nothing is deleted: the alert rows stay pending, so the history
+    shows what fired and why it stayed silent.
     """
 
+    class TargetType(models.TextChoices):
+        NETWORK_DEVICE = 'network_device', '网络设备'
+        SERVER = 'server', '服务器'
+        WEAK_CURRENT = 'monitor', '弱电设备'
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    # Bare UUID, like DeviceConfigurationBackup: devices get re-created during
+    # Bare UUID, like DeviceConfigurationBackup: assets get re-created during
     # imports, and a hard FK would either block that or cascade the history away.
-    device_id = models.UUIDField(db_index=True)
+    # target_type mirrors AlertEvent.target_type so one window matches one alert scope.
+    target_type = models.CharField(
+        max_length=32, choices=TargetType.choices, default=TargetType.NETWORK_DEVICE,
+    )
+    target_id = models.UUIDField(db_index=True)
     starts_at = models.DateTimeField()
     ends_at = models.DateTimeField()
     note = models.CharField(max_length=200, blank=True, default='')
@@ -792,7 +801,7 @@ class MaintenanceWindow(models.Model):
         )]
 
     def __str__(self):
-        return f'{self.device_id} {self.starts_at:%Y-%m-%d %H:%M} ~ {self.ends_at:%Y-%m-%d %H:%M}'
+        return f'{self.get_target_type_display()} {self.target_id} {self.starts_at:%Y-%m-%d %H:%M} ~ {self.ends_at:%Y-%m-%d %H:%M}'
 
     def is_active(self, at=None):
         at = at or timezone.now()

@@ -127,6 +127,14 @@ def asset_list(request, kind, *, integration_context=None, creation_form=None, e
     from .forms import DEVICE_KINDS, device_form, device_form_sections
     from index.common.workspace_actions import workspace_action_context
     context.update(workspace_action_context(kind))
+    # Batch maintenance windows live on the list page: select rows, then one window
+    # covers every selected asset of this kind.
+    context['maintenance_enabled'] = is_admin(request.user) and kind in {
+        'networks', 'servers', 'weakcurrent',
+    }
+    if context['maintenance_enabled']:
+        from .maintenance import form_defaults
+        context['maintenance_default'] = form_defaults()
     if kind in DEVICE_KINDS and is_admin(request.user):
         form = creation_form if creation_form is not None else device_form(kind, instance=edit_device)
         context.update(device_form=form, device_form_sections=device_form_sections(form),
@@ -191,15 +199,7 @@ def asset_detail(request, kind, pk):
         latest = asset.inspections.order_by('-created_at', '-pk').first()
         if latest:
             latest_url = reverse('record_detail', args=[kind, latest.pk])
-    maintenance_windows = []
-    maintenance_default = None
-    if kind == 'networks' and is_admin(request.user):
-        from index.devices.maintenance import form_defaults, windows_for
-        maintenance_windows = windows_for(asset)
-        maintenance_default = form_defaults()
     return render(request, 'devices/detail.html', {
-        'maintenance_windows': maintenance_windows,
-        'maintenance_default': maintenance_default,
         'latest_record': latest,
         'latest_url': latest_url,
         'asset': asset,

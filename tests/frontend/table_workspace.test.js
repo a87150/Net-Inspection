@@ -544,23 +544,6 @@ test('opens an import modal marked for one-time auto-open', () => {
 
     assert.equal(modalInstance.showCount, 1);
 });
-test('describes every active filter for compact chips', () => {
-    assert.equal(typeof controller.activeFilterDescriptors, 'function');
-    const source = element({dataset: {
-        filterKey: 'department',
-        filterLabel: 'Department',
-        filterParameters: 'filter_department',
-        filterActive: 'true',
-    }});
-
-    assert.deepEqual(controller.activeFilterDescriptors({activeFilterSources: [source]}), [{
-        key: 'department',
-        label: 'Department',
-        parameters: ['filter_department'],
-        source,
-    }]);
-});
-
 test('clearing one filter preserves unrelated query state and focuses its control', () => {
     assert.equal(typeof controller.clearActiveFilterSource, 'function');
     const control = element({name: 'filter_department', value: 'IT'});

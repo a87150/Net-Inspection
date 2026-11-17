@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from net.alerts.service import maintenance_targets
-from net.models import MaintenanceWindow, Network_Device
+from net.models import MaintenanceWindow, Network_Device, Server
 
 
 class MaintenanceWindowTests(TestCase):
@@ -15,9 +15,10 @@ class MaintenanceWindowTests(TestCase):
         )
         self.now = timezone.now()
 
-    def _window(self, *, start_minutes=-10, end_minutes=10, enabled=True):
+    def _window(self, *, start_minutes=-10, end_minutes=10, enabled=True, target=None):
         return MaintenanceWindow.objects.create(
-            device_id=self.device.pk,
+            target_type=MaintenanceWindow.TargetType.NETWORK_DEVICE,
+            target_id=(target or self.device).pk,
             starts_at=self.now + timedelta(minutes=start_minutes),
             ends_at=self.now + timedelta(minutes=end_minutes),
             note="夜间割接", is_enabled=enabled,
@@ -35,7 +36,10 @@ class MaintenanceWindowTests(TestCase):
 
     def test_active_windows_are_reported_for_delivery_filtering(self):
         self._window()
-        self.assertEqual(maintenance_targets(self.now), {str(self.device.pk)})
+        self.assertEqual(
+            maintenance_targets(self.now),
+            {("network_device", str(self.device.pk))},
+        )
 
     def test_expired_and_future_windows_are_not_reported(self):
         self._window(start_minutes=-60, end_minutes=-30)
@@ -44,8 +48,21 @@ class MaintenanceWindowTests(TestCase):
 
     def test_end_must_be_after_start(self):
         window = MaintenanceWindow(
-            device_id=self.device.pk,
+            target_id=self.device.pk,
             starts_at=self.now, ends_at=self.now - timedelta(minutes=5),
         )
         with self.assertRaises(Exception):
             window.full_clean()
+
+    def test_same_uuid_under_another_type_is_not_muted(self):
+        server = Server.objects.create(name="应用服务器", ip="192.0.2.88")
+        MaintenanceWindow.objects.create(
+            target_type=MaintenanceWindow.TargetType.SERVER,
+            target_id=server.pk,
+            starts_at=self.now - timedelta(minutes=5),
+            ends_at=self.now + timedelta(minutes=5),
+        )
+        self.assertEqual(
+            maintenance_targets(self.now),
+            {("server", str(server.pk))},
+        )

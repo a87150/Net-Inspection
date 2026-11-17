@@ -311,7 +311,8 @@ class SharedInterfaceContractTests(TestCase):
 
         self.assertContains(response, 'table-scroll-shell')
         self.assertContains(response, '<caption class="visually-hidden">网络设备数据表</caption>', html=True)
-        self.assertContains(response, 'data-active-filter-list')
+        # 筛选条件本身就在输入框里可见，再叠一行可点击的 chip 只是重复，已移除。
+        self.assertNotContains(response, 'data-active-filter-list')
         self.assertContains(response, 'scope="col"')
         # The keyword box is gone: it OR-matched across search_fields while the column
         # filters beside it matched one field exactly, so the two read as the same

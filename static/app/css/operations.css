@@ -272,8 +272,17 @@ body.app-shell {
     grid-column: 1 / -1;
 }
 
+.table-number-filter .table-number-filter__op {
+    flex: 0 0 5.5rem;
+    width: 5.5rem;
+}
+
 .table-filter-bar .table-filter-actions {
+    display: flex;
+    flex-wrap: wrap;
     align-items: stretch;
+    justify-content: flex-end;
+    gap: .5rem;
 }
 
 .table-more-filters,
@@ -1378,25 +1387,6 @@ code {
     }
 }
 /* Dense-table controls: visible active state, compact pagination and safe wrapping. */
-.table-active-filters {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: .45rem;
-    padding: .75rem 0 .15rem;
-}
-.table-filter-chip {
-    min-height: 2rem;
-    padding: .3rem .65rem;
-    border: 1px solid rgba(49, 87, 213, .24);
-    border-radius: 999px;
-    background: rgba(238, 243, 255, .9);
-    color: var(--color-primary);
-    font-size: .78rem;
-    font-weight: 700;
-}
-.table-filter-chip:hover,
-.table-filter-chip:focus-visible { border-color: var(--color-primary); background: #e4ecff; }
 .page-pagination { flex-wrap: wrap; }
 .page-pagination .pagination { max-width: 100%; flex-wrap: wrap; gap: .2rem; }
 .page-pagination .page-link { min-width: 2.25rem; min-height: 2.25rem; border-radius: .55rem; text-align: center; }

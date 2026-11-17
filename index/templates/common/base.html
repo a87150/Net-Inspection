@@ -52,7 +52,10 @@
                         <ul class="dropdown-menu app-navbar__dropdown-menu" id="navMonitorsMenu" aria-labelledby="navMonitorsToggle"><li><a class="dropdown-item" href="{% url 'asset_list' 'weakcurrent' %}">弱电设备列表</a></li><li><a class="dropdown-item" href="{% url 'record_list' 'weakcurrent' %}">巡检记录</a></li>{% if can_view_private %}<li><a class="dropdown-item" href="{% url 'access_record_list' %}">门禁记录</a></li>{% endif %}</ul>
                     </li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'task_list' %}">后台任务</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'alert_list' %}">告警记录</a></li>
+                    <li class="nav-item dropdown" data-nav-menu="alerts">
+                        <button class="nav-link dropdown-toggle" id="navAlertsToggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="navAlertsMenu">告警维护</button>
+                        <ul class="dropdown-menu app-navbar__dropdown-menu" id="navAlertsMenu" aria-labelledby="navAlertsToggle"><li><a class="dropdown-item" href="{% url 'alert_list' %}">告警记录</a></li><li><a class="dropdown-item" href="{% url 'maintenance_list' %}">维护记录</a></li></ul>
+                    </li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'operations_overview' %}">网络拓扑</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'ip_management' %}">IP 管理</a></li>
                 </ul>

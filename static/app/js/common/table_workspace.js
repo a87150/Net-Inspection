@@ -113,17 +113,6 @@
         return String(source?.dataset?.filterParameters || '').split(/\s+/).filter(Boolean);
     }
 
-    function activeFilterDescriptors(elements) {
-        return (elements.activeFilterSources || [])
-            .filter((source) => source.dataset.filterActive !== undefined)
-            .map((source) => ({
-                key: source.dataset.filterKey,
-                label: source.dataset.filterLabel || source.dataset.filterKey,
-                parameters: filterParameters(source),
-                source,
-            }));
-    }
-
     function clearActiveFilterSource(elements, source, location) {
         if (!source || source.dataset.filterActive === undefined) return false;
         const controls = Array.from(source.querySelectorAll?.('[name]') || []);
@@ -149,33 +138,6 @@
         pageUrl.searchParams.delete('page');
         location.replace(pageUrl.toString());
         return true;
-    }
-
-    function renderActiveFilterChips(elements, documentRoot, location) {
-        const container = elements.activeFilterList;
-        if (!container || typeof documentRoot?.createElement !== 'function') return [];
-        const descriptors = activeFilterDescriptors(elements);
-        container.replaceChildren?.();
-        descriptors.forEach((descriptor) => {
-            const button = documentRoot.createElement('button');
-            button.type = 'button';
-            button.className = 'table-filter-chip';
-            button.textContent = `${descriptor.label} ×`;
-            button.setAttribute('aria-label', `清除筛选：${descriptor.label}`);
-            button.addEventListener('click', () => {
-                const toggle = elements.filterToggles.find(
-                    (candidate) => candidate.dataset.filterKey === descriptor.key,
-                );
-                if (toggle) {
-                    toggle.checked = false;
-                    delete toggle.dataset.filterActive;
-                }
-                clearActiveFilterSource(elements, descriptor.source, location);
-            });
-            container.append?.(button);
-        });
-        container.hidden = descriptors.length === 0;
-        return descriptors;
     }
 
     function clearActiveFilter(elements, toggle, location) {
@@ -260,7 +222,6 @@
             configurationFeedback: workspace.querySelector('[data-configuration-export-feedback]'),
             suggestionSelects: Array.from(workspace.querySelectorAll('[data-filter-suggestion-select]')),
             activeFilterSources: Array.from(workspace.querySelectorAll('[data-active-filter-source]')),
-            activeFilterList: workspace.querySelector('[data-active-filter-list]'),
         };
         elements.moreFilterFields = elements.moreFilters
             ? Array.from(elements.moreFilters.querySelectorAll(
@@ -291,7 +252,6 @@
             elements,
         );
         applyPreferences(elements, preferences);
-        renderActiveFilterChips(elements, workspace.ownerDocument, location);
         updateConfigurationDownload(elements.configurationExport, elements.configurationTargets);
         elements.configurationTargets.forEach((target) => {
             target.addEventListener('change', () => {
@@ -480,5 +440,5 @@
         bootstrapApi.Modal.getOrCreateInstance(modalElement).show();
     }
 
-    return {activeFilterDescriptors, announceTableUpdate, bindPartialTableNavigation, clearActiveFilterSource, configurationDownloadHref, configurationDownloadState, downloadConfiguration, handleConfigurationDownload, initializeWorkspace, initializeAll, openAutoOpenImportModal, refreshTableWorkspaces, renderActiveFilterChips, storageKey, updateTargetSelection};
+    return {announceTableUpdate, bindPartialTableNavigation, clearActiveFilterSource, configurationDownloadHref, configurationDownloadState, downloadConfiguration, handleConfigurationDownload, initializeWorkspace, initializeAll, openAutoOpenImportModal, refreshTableWorkspaces, storageKey, updateTargetSelection};
 }));

@@ -121,6 +121,13 @@ class NavigationDropdownTests(TestCase):
                         ('门禁记录', '/access/records/'),
                     ],
                 },
+                'alerts': {
+                    'toggle': '告警维护',
+                    'links': [
+                        ('告警记录', '/alerts/'),
+                        ('维护记录', '/maintenance/'),
+                    ],
+                },
             },
         )
 
@@ -129,7 +136,7 @@ class NavigationDropdownTests(TestCase):
         parser = NavigationMenuParser()
         parser.feed(response.content.decode(response.charset))
 
-        self.assertEqual(len(parser.menus), 6)
+        self.assertEqual(len(parser.menus), 7)
         for key, menu in parser.menus.items():
             with self.subTest(menu=key):
                 attributes = menu['toggle_attributes']

@@ -1,0 +1,28 @@
+{% if can_administer and maintenance_enabled %}
+<div class="modal fade" id="maintenanceWindowModal" tabindex="-1" aria-labelledby="maintenanceWindowModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-shell">
+        <div class="modal-content modal-surface">
+            <form method="post" action="{% url 'asset_maintenance_create' item_key %}" data-maintenance-form>
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h2 class="modal-title fs-5" id="maintenanceWindowModalLabel">加入维护窗口</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                </div>
+                <div class="modal-body modal-body--scroll">
+                    <p class="small text-secondary">已选 <strong data-maintenance-count>0</strong> 个资产。窗口内它们的告警照常生成并入库，只是不外发；区间含开始、不含结束。</p>
+                    <div data-maintenance-targets></div>
+                    <div class="row g-3">
+                        <div class="col-md-6"><label class="form-label" for="maintenance-start">开始</label><input class="form-control" type="datetime-local" id="maintenance-start" name="starts_at" value="{{ maintenance_default.start }}" required></div>
+                        <div class="col-md-6"><label class="form-label" for="maintenance-end">结束</label><input class="form-control" type="datetime-local" id="maintenance-end" name="ends_at" value="{{ maintenance_default.end }}" required></div>
+                        <div class="col-12"><label class="form-label" for="maintenance-note">备注</label><input class="form-control" type="text" id="maintenance-note" name="note" maxlength="200" placeholder="例如：更换上行模块，预计 30 分钟"></div>
+                    </div>
+                </div>
+                <div class="modal-footer modal-footer--sticky">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary" data-maintenance-submit disabled>保存窗口</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
