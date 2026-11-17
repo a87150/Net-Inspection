@@ -11,8 +11,8 @@ from django.urls import reverse
 
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition
-from index.domain.forms import DomainControllerConfigForm, DomainOperationForm
-from index.domain.connection_form import DomainInactivityForm
+from domain.forms import DomainControllerConfigForm, DomainOperationForm
+from domain.connection_form import DomainInactivityForm
 from net.models import (
     Domain_Account,
     Domain_Computer,
@@ -23,7 +23,7 @@ from net.models import (
 from net.domain.sync import test_domain_connection
 from net.domain.statistics import get_domain_statistics
 from net.domain.sync_tasks import enqueue_domain_sync
-from index.domain.schedule_form import DomainSyncScheduleForm
+from domain.schedule_form import DomainSyncScheduleForm
 
 
 @dataclass(frozen=True)

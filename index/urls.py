@@ -1,8 +1,8 @@
-from index.operations.topology import topology_data, topology_batches, topology_interfaces, topology_links, topology_evidence
-from index.domain.memberships import domain_group_members
+from topology.views import topology_data, topology_batches, topology_interfaces, topology_links, topology_evidence
+from domain.memberships import domain_group_members
 from index.access.views import (access_record_list, access_record_sync, access_source_settings, access_source_save, access_source_test)
 from index.devices.collection_profiles import collection_templates, device_collection_settings
-from index.domain.bitlocker import domain_computer_bitlocker
+from domain.bitlocker import domain_computer_bitlocker
 from index.inspections.tasks import single_device_task_create
 from django.urls import path
 from django.contrib.auth.views import LogoutView
@@ -14,13 +14,13 @@ from index.devices.pc import upload_config as pc_upload_views
 from index.devices.server.scripts import windows_server_script_download
 from index.devices.create import asset_create, asset_edit
 from index.devices.views import asset_toggle_enabled
-from index.alerts.templates import alert_template_settings
+from alerts.templates import alert_template_settings
 from index.devices.backups import (
     configuration_backup_diff,
     configuration_backup_download,
     configuration_backup_list,
 )
-from index.devices.ip_management import ip_management
+from ipam.views import ip_management
 from index.devices.maintenance import (
     maintenance_list, maintenance_window_create, maintenance_window_delete,
 )

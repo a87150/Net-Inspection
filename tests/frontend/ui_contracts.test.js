@@ -3,6 +3,8 @@ const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const test = require('node:test');
 
+const {templatePath} = require('./templates.js');
+
 const root = resolve(__dirname, '../..');
 const read = (relativePath) => readFileSync(resolve(root, relativePath), 'utf8');
 
@@ -41,10 +43,10 @@ test('mobile and reduced-motion contracts use shared breakpoints and touch token
 test('table and modal components own scrolling without assigning it to modal content', () => {
   const modal = read('static/app/css/modal-workflows.css');
   const templates = [
-    'index/templates/inspections/profile_modal.html',
-    'index/templates/devices/pc/config_modal.html',
-    'index/templates/common/import_modal.html',
-    'index/templates/domain/group_members.html',
+    templatePath('inspections/profile_modal.html'),
+    templatePath('devices/pc/config_modal.html'),
+    templatePath('common/import_modal.html'),
+    templatePath('domain/group_members.html'),
   ].map(read).join('\n');
 
   assert.match(modal, /\.modal-body--scroll\s*\{[^}]*overflow-y:\s*auto/s);

@@ -41,7 +41,7 @@ class FrontendConsistencyTests(SimpleTestCase):
                 self.assertIn(f'data-status="{status}"', html)
 
     def test_alert_templates_use_shared_status_and_severity_components(self):
-        root = Path(__file__).resolve().parents[2] / 'index' / 'templates' / 'alerts'
+        root = Path(__file__).resolve().parents[2] / 'alerts' / 'templates' / 'alerts'
         source = '\n'.join(
             (root / name).read_text(encoding='utf-8')
             for name in (
@@ -83,7 +83,7 @@ class FrontendConsistencyTests(SimpleTestCase):
     def test_alert_channel_boolean_options_use_aligned_toggle_component(self):
         project_root = Path(__file__).resolve().parents[2]
         source = (
-            project_root / 'index' / 'templates' / 'alerts' / 'channel_modal.html'
+            project_root / 'alerts' / 'templates' / 'alerts' / 'channel_modal.html'
         ).read_text(encoding='utf-8')
         css = (project_root / 'static' / 'app' / 'css' / 'operations.css').read_text(
             encoding='utf-8'

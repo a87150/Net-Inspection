@@ -543,7 +543,7 @@ def task_list(request):
 def task_cancel(request, pk):
     task = get_object_or_404(TaskRun, pk=pk)
     if task.task_type in TaskRun.PEOPLE_INTERACTIVE_TASK_TYPES:
-        from index.people.integrations import require_people_owner
+        from people.integrations import require_people_owner
         require_people_owner(request, task)
     if (
         task.task_type in {TaskRun.TaskType.DOMAIN_OPERATION, TaskRun.TaskType.DOMAIN_SYNC}
@@ -592,7 +592,7 @@ def task_detail(request, pk):
         pk=pk,
     )
     if task.task_type in TaskRun.PEOPLE_INTERACTIVE_TASK_TYPES:
-        from index.people.integrations import require_people_owner
+        from people.integrations import require_people_owner
         require_people_owner(request, task)
         return redirect('people_operation', pk=task.pk)
     definition = get_table_definition('task_targets')

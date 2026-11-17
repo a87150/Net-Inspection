@@ -89,6 +89,11 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'net',
     'index',
+    'people',
+    'domain',
+    'alerts',
+    'topology',
+    'ipam',
     'rest_framework',
 ]
 

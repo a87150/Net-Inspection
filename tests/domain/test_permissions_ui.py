@@ -103,7 +103,7 @@ class DomainPermissionUiTests(TestCase):
         self.assertIn('class="form-control"', password_input)
         self.assertIn('autocomplete="new-password"', password_input)
 
-    @patch('index.domain.views.test_domain_connection', return_value='连接成功')
+    @patch('domain.views.test_domain_connection', return_value='连接成功')
     @patch('net.domain.sync._connect', side_effect=AssertionError('Web sync must only enqueue'))
     def test_connection_mutations_require_domain_permission_for_all_four_roles(
         self, sync_domain, test_connection,

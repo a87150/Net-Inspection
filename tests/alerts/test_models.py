@@ -16,7 +16,7 @@ def _model(name):
 
 def _form(name):
     try:
-        forms_module = import_module('index.alerts.forms')
+        forms_module = import_module('alerts.forms')
     except ModuleNotFoundError:
         return None
     return getattr(forms_module, name, None)

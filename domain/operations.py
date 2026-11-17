@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_POST
 
-from index.domain.forms import DomainAccountImportForm, DomainOperationForm
+from domain.forms import DomainAccountImportForm, DomainOperationForm
 from net.domain.user_import import (
     csv_template_bytes, enqueue_imported_accounts, parse_account_upload,
     xlsx_template_bytes,

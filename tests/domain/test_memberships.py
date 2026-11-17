@@ -72,7 +72,7 @@ class MembershipWorkflowTests(TransactionTestCase):
         self.assertNotContains(response, 'type="text" id="domain-operation-group"')
         for action, field, value in [('add_group', 'group_dn', GROUP), ('move_ou', 'destination_dn', OU)]:
             with self.subTest(action=action):
-                from index.domain.forms import DomainOperationForm
+                from domain.forms import DomainOperationForm
                 data = {'object_type': 'account', 'action': action, 'target_ids': [str(self.account.pk)], field: value}
                 form = DomainOperationForm(data, target_choices=[self.account.pk])
                 self.assertTrue(form.is_valid(), form.errors)

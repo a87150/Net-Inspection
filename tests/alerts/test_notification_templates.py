@@ -51,7 +51,7 @@ class RenderingTests(SimpleTestCase):
         self.assertNotIn('磁盘满', render_task_summary(data, {})['text'])
 
     def test_templates_reject_anything_except_simple_known_variables(self):
-        from index.alerts.templates import AlertNotificationTemplateForm
+        from alerts.templates import AlertNotificationTemplateForm
         for value in ('{unknown}', '{task_name.__class__}', '{issues[0]}',
                       '{total:03}', '{total:}', '{total!r}', '{}', '{', '{{task_name}}'):
             with self.subTest(value=value):

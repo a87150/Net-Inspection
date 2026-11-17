@@ -14,9 +14,9 @@ class PeopleDomainBoundaryTests(SimpleTestCase):
         ("net.domain.sync", "sync_domain"),
         ("net.domain.tasks", "enqueue_domain_operation"),
         ("net.domain.executor", "execute_domain_target"),
-        ("index.domain.views", "domain_object_list"),
-        ("index.domain.operations", "domain_operation_create"),
-        ("index.domain.forms", "DomainOperationForm"),
+        ("domain.views", "domain_object_list"),
+        ("domain.operations", "domain_operation_create"),
+        ("domain.forms", "DomainOperationForm"),
     )
 
     def test_people_and_domain_entry_points_are_available(self):
@@ -29,7 +29,7 @@ class PeopleDomainBoundaryTests(SimpleTestCase):
                 self.assertTrue(callable(getattr(module, attribute)))
 
     def test_legacy_multi_source_entry_points_are_absent(self):
-        integrations = import_module('index.people.integrations')
-        forms = import_module('index.people.forms')
+        integrations = import_module('people.integrations')
+        forms = import_module('people.forms')
         self.assertFalse(hasattr(integrations, 'people_source_save'))
         self.assertFalse(hasattr(forms, 'PeopleSourceForm'))

@@ -2,7 +2,7 @@
 
 from django import forms
 
-from index.domain.connection_form import DomainControllerConfigForm as _BaseDomainControllerConfigForm
+from domain.connection_form import DomainControllerConfigForm as _BaseDomainControllerConfigForm
 from net.secret_masks import MASKED_SECRET, MaskedSecretInput
 
 

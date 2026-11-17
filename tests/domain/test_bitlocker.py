@@ -79,7 +79,7 @@ class BitLockerViewTests(TestCase):
         self.admin = get_user_model().objects.create_user(username="admin", is_staff=True)
         self.reader = get_user_model().objects.create_user(username="reader")
 
-    @patch("index.domain.bitlocker.read_bitlocker_keys", return_value=[{"key_id": str(GUID), "password": PASSWORD, "created_at": ""}])
+    @patch("domain.bitlocker.read_bitlocker_keys", return_value=[{"key_id": str(GUID), "password": PASSWORD, "created_at": ""}])
     def test_admin_post_only_and_no_task_persistence(self, read):
         self.client.force_login(self.admin)
         self.assertEqual(self.client.get(self.url).status_code, 405)
@@ -90,7 +90,7 @@ class BitLockerViewTests(TestCase):
         self.assertEqual(read.call_args.args[1].pk, self.computer.pk)
         self.assertFalse(TaskRun.objects.exists())
 
-    @patch("index.domain.bitlocker.read_bitlocker_keys")
+    @patch("domain.bitlocker.read_bitlocker_keys")
     def test_guest_and_reader_cannot_read(self, read):
         self.assertEqual(self.client.post(self.url).status_code, 302)
         self.client.force_login(self.reader)
@@ -104,7 +104,7 @@ class BitLockerViewTests(TestCase):
         self.assertContains(response, self.url)
         self.assertContains(response, "BitLocker")
 
-    @patch("index.domain.bitlocker.read_bitlocker_keys", side_effect=ValidationError("LDAP 权限不足。"))
+    @patch("domain.bitlocker.read_bitlocker_keys", side_effect=ValidationError("LDAP 权限不足。"))
     def test_lookup_error_is_uncached_and_retryable(self, read):
         self.client.force_login(self.admin)
         response = self.client.post(self.url)

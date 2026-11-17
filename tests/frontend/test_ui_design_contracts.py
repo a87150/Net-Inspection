@@ -1,4 +1,6 @@
 from pathlib import Path
+
+from tests.frontend.template_root import TemplateRoot
 import re
 
 from django.contrib.staticfiles import finders
@@ -53,7 +55,7 @@ class SharedInterfaceContractTests(TestCase):
                 )
 
     def test_table_workspace_exposes_guarded_page_action_after_export(self):
-        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        template_root = TemplateRoot.default()
         source = (template_root / 'common' / 'table_workspace.html').read_text(encoding='utf-8')
 
         self.assertIn('{% if table_filter_actions_template %}', source)
@@ -82,7 +84,7 @@ class SharedInterfaceContractTests(TestCase):
         self.assertIn('blur(18px) saturate(135%)', operations)
 
     def test_task_and_alert_summary_blocks_use_the_glass_class(self):
-        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        template_root = TemplateRoot.default()
         for relative in ('inspections/task_list.html', 'alerts/list.html'):
             source = (template_root / relative).read_text(encoding='utf-8')
             blocks = re.findall(r'<article class="[^"]*page-metric-card[^"]*"', source)
@@ -170,7 +172,7 @@ class SharedInterfaceContractTests(TestCase):
         self.assertLess(account_menu, navigation_end)
 
     def test_long_workflow_modals_share_scrollable_body_and_sticky_actions(self):
-        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        template_root = TemplateRoot.default()
         paths = (
             'inspections/profile_modal.html',
             'devices/pc/config_modal.html',
@@ -189,7 +191,7 @@ class SharedInterfaceContractTests(TestCase):
                 self.assertIn('modal-body--scroll', source)
                 self.assertIn('modal-footer--sticky', source)
     def test_shared_shell_links_ordered_local_design_layers_without_css_imports(self):
-        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        template_root = TemplateRoot.default()
         base = (template_root / 'common' / 'base.html').read_text(encoding='utf-8')
         entrypoint = Path(finders.find('app/css/style.css'))
         source = entrypoint.read_text(encoding='utf-8')
@@ -217,7 +219,7 @@ class SharedInterfaceContractTests(TestCase):
         self.assertIn('{% if section.advanced %}<details', template)
 
     def test_page_specific_workflows_are_not_loaded_by_the_shared_shell(self):
-        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        template_root = TemplateRoot.default()
         base = (template_root / 'common' / 'base.html').read_text(encoding='utf-8')
 
         self.assertIn('{% block page_scripts %}', base)
@@ -374,7 +376,7 @@ class SharedInterfaceContractTests(TestCase):
         self.assertNotContains(response, '渠道管理：</span>')
 
     def test_collection_template_workflow_uses_glass_list_and_scroll_shell(self):
-        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        template_root = TemplateRoot.default()
         body = (template_root / 'devices' / 'collection_settings_body.html').read_text(encoding='utf-8')
         modal = (template_root / 'devices' / 'collection_template_modal.html').read_text(encoding='utf-8')
 
@@ -390,7 +392,7 @@ class SharedInterfaceContractTests(TestCase):
         self.assertIn('form="collectionSettingsForm"', modal)
 
     def test_plain_history_and_task_links_use_the_shared_interactive_list(self):
-        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        template_root = TemplateRoot.default()
         paths = (
             'devices/pc/log_detail.html',
             'common/import_modal.html',
@@ -404,7 +406,7 @@ class SharedInterfaceContractTests(TestCase):
                 self.assertIn('interactive-list__item', source)
 
     def test_legacy_error_cards_use_shared_status_surfaces(self):
-        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        template_root = TemplateRoot.default()
         paths = (
             'inspections/issue_findings.html',
             'inspections/record_detail.html',
@@ -441,7 +443,7 @@ class SharedInterfaceContractTests(TestCase):
         self.assertIn('line-height: 1.2', rule.group('body'))
 
     def test_remaining_standalone_content_cards_use_the_shared_surface(self):
-        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        template_root = TemplateRoot.default()
         paths = (
             'registration/login.html',
             'public/list.html',
@@ -638,7 +640,7 @@ class ModalVisualContractTests(TestCase):
             self.assertContains(response, 'modal-footer modal-footer--sticky')
 
     def test_remaining_workflow_modals_use_the_shared_shell(self):
-        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        template_root = TemplateRoot.default()
         paths = (
             'devices/add_modal.html',
             'devices/pc/bulk_analysis_modal.html',
@@ -653,7 +655,7 @@ class ModalVisualContractTests(TestCase):
                 self.assertIn('modal-footer--sticky', source)
 
     def test_templates_do_not_use_inline_native_confirmation(self):
-        template_root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
+        template_root = TemplateRoot.default()
         sources = '\n'.join(path.read_text(encoding='utf-8') for path in template_root.rglob('*.html'))
 
         self.assertNotIn('onsubmit="return confirm(', sources)

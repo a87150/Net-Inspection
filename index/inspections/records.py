@@ -25,7 +25,7 @@ from net.models import (
 )
 from net.inspections.task_summary import project_task_queryset
 from .tasks import task_modal_context
-from index.alerts.views import alert_modal_context
+from alerts.views import alert_modal_context
 
 
 @dataclass(frozen=True)

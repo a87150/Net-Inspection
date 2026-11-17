@@ -56,6 +56,20 @@ def format_table_field(value, field):
 
 
 @register.filter
+def status_tone(status):
+    from index.common.badges import status_tone as _tone
+
+    return _tone(status)
+
+
+@register.filter
+def severity_badge(level):
+    from index.common.badges import severity_badge as _badge
+
+    return _badge(level)
+
+
+@register.filter
 def group_delivery_outcomes(deliveries):
     """Group channel names by delivery status for compact table rendering."""
     grouped = {}

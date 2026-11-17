@@ -18,7 +18,7 @@ from index.common.table_query import PAGE_SIZES, apply_table_filters, query_with
 from index.common.table_registry import get_table_definition
 from net.models import Computer, Network_Device, People, WeakCurrentDevice, Server
 from net.data_exchange.inventory_csv import IMPORTABLE_ENTITIES, inventory_import_guide
-from index.alerts.views import alert_modal_context
+from alerts.views import alert_modal_context
 from index.inspections.tasks import task_modal_context
 
 
@@ -143,7 +143,7 @@ def asset_list(request, kind, *, integration_context=None, creation_form=None, e
                        edit_device=edit_device,
                        device_modal_mode='edit' if edit_device is not None else 'add')
     if kind == 'people' and is_admin(request.user):
-        from index.people.integrations import people_modal_context
+        from people.integrations import people_modal_context
         modal_context = integration_context if integration_context is not None else people_modal_context(request)
         modal_context['open_import_modal'] = modal_context.get('open_import_modal') or context['open_import_modal']
         context.update(modal_context)

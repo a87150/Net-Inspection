@@ -42,7 +42,7 @@ from net.domain.sync import sync_domain
 from net.devices.security.api import collect_security_api
 from net.devices.server.windows_http import collect_windows_http
 from net.devices.pc.snapshot import extract_computer_snapshot
-from index.domain.connection_form import DomainControllerConfigForm
+from domain.connection_form import DomainControllerConfigForm
 
 
 class HookParser(HTMLParser):
@@ -553,7 +553,7 @@ class DomainControllerSettingsTests(TestCase):
         self.assertContains(response, '域计算机')
         self.assertNotContains(response, '开始导入')
 
-    @patch('index.domain.views.test_domain_connection', return_value='连接成功')
+    @patch('domain.views.test_domain_connection', return_value='连接成功')
     def test_domain_config_can_be_saved_and_tested(self, connection_mock):
         response = self.client.post(reverse('domain_controller_settings'), {
             'name': '公司域控', 'host': 'dc.example.com', 'port': 389,

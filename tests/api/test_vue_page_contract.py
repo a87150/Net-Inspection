@@ -5,15 +5,16 @@ from pathlib import Path
 from django.conf import settings
 from django.test import SimpleTestCase
 
-TEMPLATE_ROOT = Path(settings.BASE_DIR) / "index" / "templates"
+from tests.frontend.template_root import TemplateRoot
+
 BOOT = Path(settings.BASE_DIR) / "static" / "app" / "vue" / "boot.mjs"
 
 
 class VuePageRegistryTests(SimpleTestCase):
     def _declared_pages(self):
         pages = set()
-        for template in TEMPLATE_ROOT.rglob("*.html"):
-            text = template.read_text(encoding="utf-8")
+        for template in TemplateRoot.default().rglob("*.html"):
+            text = Path(template).read_text(encoding="utf-8")
             pages.update(re.findall(r'data-vue-page="([^"]+)"', text))
         return pages
 

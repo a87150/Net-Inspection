@@ -10,7 +10,7 @@ from net.devices.network.observations import search
 def ip_management(request):
     query = (request.GET.get("q") or "").strip()
     lookup = search(query) if query else None
-    return render(request, "devices/ip_management.html", {
+    return render(request, "ipam/ip_management.html", {
         "query": query,
         "lookup": lookup,
         "report": plan_report(),

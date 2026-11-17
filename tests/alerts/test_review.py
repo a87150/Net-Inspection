@@ -6,7 +6,7 @@ from django.db import IntegrityError, connection, transaction
 from django.test import TestCase
 from django.utils import timezone
 
-from index.alerts.forms import DingTalkAlertChannelForm, FeishuAlertChannelForm
+from alerts.forms import DingTalkAlertChannelForm, FeishuAlertChannelForm
 from net.models import (
     AlertChannel, AlertDelivery, AlertEvent, AlertPolicy, AlertState,
     ComputerAnalysisProfile, InspectionProfile, TaskRun, TaskTargetRun,

@@ -13,7 +13,7 @@ from django.urls import reverse
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_GET, require_POST
 
-from index.people.forms import PeopleProviderForm, PeopleScheduleForm
+from people.forms import PeopleProviderForm, PeopleScheduleForm
 from net.models import Schedule, TaskRun
 from net.people.directory.sync import PeopleSyncError, SyncPreview
 from net.people.providers import PROVIDERS, get_provider_source

@@ -1,8 +1,8 @@
 from django.test import TestCase
 
-from index.alerts.forms import FeishuAlertChannelForm
-from index.domain.forms import DomainControllerConfigForm
-from index.people.forms import PeopleProviderForm
+from alerts.forms import FeishuAlertChannelForm
+from domain.forms import DomainControllerConfigForm
+from people.forms import PeopleProviderForm
 from net.models import AlertChannel, Domain_Controller_Config, PeopleSyncSource
 
 

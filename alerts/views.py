@@ -8,20 +8,22 @@ from index.common.access import is_admin
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from index.alerts.forms import DingTalkAlertChannelForm, EmailAlertChannelForm, FeishuAlertChannelForm
+from alerts.forms import DingTalkAlertChannelForm, EmailAlertChannelForm, FeishuAlertChannelForm
+from alerts.payloads import (
+    alert_event_metrics, alert_event_payloads, alert_event_queryset,
+)
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition
 from net.alerts import AlertMessage, send_alert
 from net.alerts.base import summarize
 from net.models import (
-    AlertChannel, AlertEvent, AlertPolicy, AlertTestSend,
+    AlertChannel, AlertPolicy, AlertTestSend,
     ComputerAnalysisProfile, InspectionProfile,
 )
 
@@ -162,9 +164,7 @@ def alert_modal_context(request, *, profile=None):
 
 
 def _alert_events():
-    return AlertEvent.objects.select_related('task', 'target_run', 'policy').prefetch_related(
-        'deliveries__channel',
-    )
+    return alert_event_queryset()
 
 
 def alert_list(request):
@@ -172,18 +172,12 @@ def alert_list(request):
     events, table_state = apply_table_filters(
         request, _alert_events(), definition, include_legacy_status=False,
     )
-    alert_metrics = events.aggregate(
-        total=Count('pk'),
-        pending=Count('pk', filter=Q(status__in=(AlertEvent.Status.PENDING, AlertEvent.Status.SENDING))),
-        delivered=Count('pk', filter=Q(status=AlertEvent.Status.DELIVERED)),
-        partial=Count('pk', filter=Q(status=AlertEvent.Status.PARTIAL)),
-        failed=Count('pk', filter=Q(status=AlertEvent.Status.FAILED)),
-        recorded=Count('pk', filter=Q(status=AlertEvent.Status.RECORDED)),
-    )
+    alert_metrics = alert_event_metrics(events)
     page_obj = Paginator(events, table_state['page_size']).get_page(request.GET.get('page'))
     context = {
         'page_obj': page_obj,
         'alert_metrics': alert_metrics,
+        'alert_rows': alert_event_payloads(page_obj.object_list),
         'table_definition': definition,
         'table_state': table_state,
         'page_sizes': PAGE_SIZES,

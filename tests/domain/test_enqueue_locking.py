@@ -89,7 +89,7 @@ class DomainEnqueueLockingTests(TransactionTestCase):
 
     def test_busy_post_shows_actionable_message_instead_of_http_500(self):
         self.client.force_login(self.user)
-        with patch('index.domain.operations.enqueue_domain_operation', side_effect=OperationalError('database is locked')):
+        with patch('domain.operations.enqueue_domain_operation', side_effect=OperationalError('database is locked')):
             response = self.client.post(reverse('domain_operation_create'), {
                 'object_type': 'account', 'action': 'enable', 'target_ids': [str(self.account.pk)],
             }, follow=True)
