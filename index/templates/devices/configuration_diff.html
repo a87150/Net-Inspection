@@ -1,0 +1,62 @@
+{% extends 'common/base.html' %}
+{% block title %}配置版本对比{% endblock %}
+{% block content %}
+<div class="configuration-backup-workspace">
+<header class="page-heading">
+    <div class="page-heading__copy">
+        <p class="page-heading__eyebrow">设备配置</p>
+        <h1 class="page-heading__title">配置版本对比</h1>
+        <p class="page-heading__description">{{ asset }} · 仅管理员可见</p>
+    </div>
+    <div class="page-heading__actions">
+        <a class="btn btn-outline-secondary" href="{% url 'configuration_backup_list' item_key asset.pk %}">返回备份历史</a>
+    </div>
+</header>
+
+{% if against %}
+<section class="card surface-card configuration-diff-summary" aria-label="对比结果摘要">
+    <div class="card-body">
+        <div class="configuration-diff-versions">
+            <div><span class="configuration-diff-label">旧版本</span><strong>{{ against.backup_date|date:'Y-m-d' }}</strong><span class="text-secondary">{{ against.captured_at|date:'Y-m-d H:i:s' }}</span></div>
+            <div><span class="configuration-diff-label">新版本</span><strong>{{ backup.backup_date|date:'Y-m-d' }}</strong><span class="text-secondary">{{ backup.captured_at|date:'Y-m-d H:i:s' }}</span></div>
+            <div><span class="configuration-diff-label">变更</span>
+                {% if diff.changed %}<span class="status-badge status-badge--warning">新增 {{ diff.added }} 行 / 删除 {{ diff.removed }} 行</span>{% else %}<span class="status-badge status-badge--info">两版内容一致</span>{% endif %}
+            </div>
+        </div>
+        {% if versions|length > 1 %}
+        <form method="get" class="configuration-diff-switch">
+            <label for="configuration-diff-against" class="form-label">与其它版本对比</label>
+            <select id="configuration-diff-against" name="against" class="form-select" onchange="this.form.submit()">
+                {% for version in versions %}{% if version.pk != backup.pk %}
+                <option value="{{ version.pk }}" {% if version.pk == against.pk %}selected{% endif %}>{{ version.backup_date|date:'Y-m-d' }} · {{ version.captured_at|date:'H:i:s' }} · {{ version.filename }}</option>
+                {% endif %}{% endfor %}
+            </select>
+            <noscript><button type="submit" class="btn btn-sm btn-outline-primary">对比</button></noscript>
+        </form>
+        {% endif %}
+    </div>
+</section>
+
+{% if diff.truncated %}<div class="alert alert-warning" role="alert">配置过大，仅显示前 {{ diff.rows|length }} 行差异。</div>{% endif %}
+<section class="card surface-card configuration-diff-table" aria-label="配置差异明细">
+    <div class="card-header surface-card__header"><h2 class="h5 mb-0">差异明细</h2></div>
+    <div class="table-responsive" role="region" aria-label="配置差异明细表" tabindex="0">
+        <table class="table data-table configuration-diff mb-0">
+            <caption class="visually-hidden">逐行对比，左列为旧版本行号，右列为新版本行号</caption>
+            <thead><tr><th scope="col" class="configuration-diff-gutter">旧</th><th scope="col" class="configuration-diff-gutter">新</th><th scope="col">内容</th></tr></thead>
+            <tbody>{% for row in diff.rows %}<tr class="configuration-diff-row configuration-diff-row--{{ row.kind }}">
+                <td class="configuration-diff-gutter">{{ row.left|default_if_none:'' }}</td>
+                <td class="configuration-diff-gutter">{{ row.right|default_if_none:'' }}</td>
+                <td class="configuration-diff-code"><code>{{ row.text }}</code></td>
+            </tr>{% endfor %}</tbody>
+        </table>
+    </div>
+</section>
+{% else %}
+<section class="card surface-card"><div class="card-body"><div class="empty-state">
+    <strong>没有更早的版本可比</strong>
+    <span>这是该设备最早保存的一版配置，或目前只保存了一版。每日首个成功巡检会保存一个版本，最多保留 10 个。</span>
+</div></div></section>
+{% endif %}
+</div>
+{% endblock %}

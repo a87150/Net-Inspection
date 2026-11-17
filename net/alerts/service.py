@@ -331,6 +331,17 @@ def findings_for_target(target_run):
     return []
 
 
+def maintenance_targets(now=None):
+    """Network device ids whose maintenance window covers the given instant."""
+    from net.models import MaintenanceWindow
+
+    now = now or timezone.now()
+    values = MaintenanceWindow.objects.filter(
+        is_enabled=True, starts_at__lte=now, ends_at__gt=now,
+    ).values_list('device_id', flat=True)
+    return {str(value) for value in values}
+
+
 def _claim_deliveries(*, event=None, limit=1, now=None):
     now = now or timezone.now()
     event_id = getattr(event, 'pk', event)
@@ -342,6 +353,13 @@ def _claim_deliveries(*, event=None, limit=1, now=None):
             due, event__event_type='summary')
         if event_id is not None:
             rows = rows.filter(event_id=event_id)
+        muted = maintenance_targets(now)
+        if muted:
+            # Hold, do not discard: the row stays pending and the history keeps
+            # the evidence that this alert fired inside a planned change.
+            rows = rows.exclude(
+                event__target_type='network_device', event__target_id__in=muted,
+            )
         claimed = []
         for delivery in rows.order_by('created_at', 'pk')[:max(1, limit)]:
             if delivery.status == AlertDelivery.Status.SENDING and delivery.attempt_count >= delivery.max_attempts:

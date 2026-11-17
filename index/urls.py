@@ -15,13 +15,19 @@ from index.devices.server.scripts import windows_server_script_download
 from index.devices.create import asset_create, asset_edit
 from index.devices.views import asset_toggle_enabled
 from index.alerts.templates import alert_template_settings
-from index.devices.backups import configuration_backup_list, configuration_backup_download
+from index.devices.backups import (
+    configuration_backup_diff,
+    configuration_backup_download,
+    configuration_backup_list,
+)
+from index.devices.ip_lookup import ip_lookup
 from index.devices.pc.bulk_analysis import computer_logs_analyze_bulk
 from index.devices.pc.software_policy import pc_software_policy_template_download
 
 urlpatterns = [
     path('operations/overview/', views.operations_overview, name='operations_overview'),
     path('operations/overview/data/', views.operations_overview_data, name='operations_overview_data'),
+    path('network/ip-lookup/', ip_lookup, name='ip_lookup'),
     path('operations/topology/', topology_data, name='topology_data'),
     path('operations/topology/batches/', topology_batches, name='topology_batches'),
     path('operations/topology/interfaces/', topology_interfaces, name='topology_interfaces'),
@@ -51,6 +57,7 @@ urlpatterns = [
     path('assets/<str:kind>/configurations.zip', views.configuration_zip, name='configuration_zip'),
     path('assets/<str:kind>/<uuid:pk>/configuration/', views.configuration_download, name='configuration_download'),
     path('assets/<str:kind>/<uuid:pk>/backups/', configuration_backup_list, name='configuration_backup_list'),
+    path('assets/<str:kind>/<uuid:pk>/backups/<uuid:backup_id>/diff/', configuration_backup_diff, name='configuration_backup_diff'),
     path('assets/<str:kind>/<uuid:pk>/backups/<uuid:backup_id>/download/', configuration_backup_download, name='configuration_backup_download'),
     path('assets/<str:kind>/<uuid:pk>/', views.asset_detail, name='asset_detail'),
     path('people/statistics/', views.people_statistics, name='people_statistics'),

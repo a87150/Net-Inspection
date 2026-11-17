@@ -18,6 +18,10 @@ class DeviceConfigurationBackup(models.Model):
     vendor = models.CharField(max_length=100)
     sha256 = models.CharField(max_length=64)
     byte_size = models.PositiveIntegerField()
+    # Line delta against the previous saved version, computed when the row is
+    # written. The history page must never decrypt, so the count is stored.
+    change_added = models.PositiveIntegerField(null=True, blank=True)
+    change_removed = models.PositiveIntegerField(null=True, blank=True)
     ciphertext = models.BinaryField()
     task_target = models.ForeignKey(
         'net.TaskTargetRun', null=True, blank=True, on_delete=models.SET_NULL,

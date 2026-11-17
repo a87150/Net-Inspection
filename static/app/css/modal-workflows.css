@@ -519,3 +519,74 @@
 
     .collection-template-picker .btn { width: 100%; }
 }
+/* 配置版本对比：相同行弱化，增删行用左侧色条区分，行号定宽对齐。 */
+.configuration-diff-summary .card-body {
+    display: grid;
+    gap: .85rem;
+}
+
+.configuration-diff-versions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+}
+
+.configuration-diff-versions > div {
+    display: grid;
+    gap: .15rem;
+}
+
+.configuration-diff-label {
+    color: var(--color-text-muted);
+    font-size: .78rem;
+}
+
+.configuration-diff-switch {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    flex-wrap: wrap;
+}
+
+.configuration-diff-switch .form-select {
+    max-width: 32rem;
+}
+
+.configuration-diff-table .table-responsive {
+    max-height: 70vh;
+    overflow: auto;
+}
+
+.configuration-diff {
+    font-size: .82rem;
+}
+
+.configuration-diff-gutter {
+    width: 4rem;
+    color: var(--color-text-muted);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+}
+
+.configuration-diff-code code {
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: inherit;
+    background: none;
+}
+
+.configuration-diff-row--same {
+    color: var(--color-text-muted);
+}
+
+.configuration-diff-row--add {
+    background: rgba(34, 197, 94, .1);
+    box-shadow: inset 3px 0 0 rgba(34, 197, 94, .65);
+}
+
+.configuration-diff-row--remove {
+    background: rgba(239, 68, 68, .09);
+    box-shadow: inset 3px 0 0 rgba(239, 68, 68, .6);
+}
+

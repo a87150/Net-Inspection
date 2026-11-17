@@ -91,6 +91,24 @@ def _native_bytes(item):
     return raw, media_type, extension, scope, network_vendor(item.get('vendor'))
 
 
+def _change_counts(versions, raw):
+    """Line delta against the newest earlier version, or (None, None).
+
+    Computed here because the history page must never decrypt a backup; a
+    failure to read the previous version just leaves the columns empty.
+    """
+    previous = versions.order_by('-backup_date', '-captured_at', '-id').first()
+    if previous is None:
+        return None, None
+    from net.devices.configuration_diff import decode, diff_texts
+
+    try:
+        result = diff_texts(decode(read_configuration_backup(previous)), decode(raw))
+    except (ValueError, ImproperlyConfigured):
+        return None, None
+    return result['added'], result['removed']
+
+
 def store_configuration_backup(asset, item, *, task_target=None,
                                captured_at=None) -> DeviceConfigurationBackup:
     identity = _identity(asset)
@@ -109,12 +127,14 @@ def store_configuration_backup(asset, item, *, task_target=None,
         if existing is not None:
             return existing
         ciphertext = _fernet().encrypt(raw)
+        added, removed = _change_counts(versions.exclude(backup_date=day), raw)
         backup = DeviceConfigurationBackup.objects.using(database).create(
             **identity, backup_date=day, captured_at=captured_at,
             filename=f'{identity["device_type"]}-{asset.pk}-{day.isoformat()}.{extension}',
             media_type=media_type, scope=scope, vendor=vendor,
             sha256=hashlib.sha256(raw).hexdigest(), byte_size=len(raw),
             ciphertext=ciphertext, task_target=task_target,
+            change_added=added, change_removed=removed,
         )
         stale = list(versions.order_by('-backup_date', '-captured_at', '-id')
                      .values_list('pk', flat=True)[10:])

@@ -44,6 +44,7 @@ from net.inspections.executor import _database_guard, execute_target, persist_ex
 from net.people.executor import execute_people_target, persist_people_failure
 from net.access.executor import execute_access_target, persist_access_failure
 from net.domain.sync_tasks import execute_domain_sync_target, persist_domain_sync_failure
+from .budget import CLI_TARGET_TYPES, BudgetTimeout, cli_budget
 from .queue import (
     claim_next_task,
     finish_task,
@@ -126,7 +127,22 @@ class TaskWorker:
                     executor = execute_computer_target
                 else:
                     executor = execute_target
+                if (task_type == TaskRun.TaskType.INSPECTION
+                        and getattr(target, 'target_type', '') in CLI_TARGET_TYPES):
+                    with cli_budget():
+                        return executor(
+                            target, worker_id=self.worker_id, lease_guard=lease_guard,
+                        )
                 return executor(target, worker_id=self.worker_id, lease_guard=lease_guard)
+            except BudgetTimeout:
+                if lease_guard.is_set():
+                    return None
+                return persist_execution_failure(
+                    target, worker_id=self.worker_id,
+                    error='等待设备命令行并发配额超时，本次未建立连接；'
+                          '可调低巡检并发或提高 NET_SSH_CONCURRENCY。',
+                    lease_guard=lease_guard,
+                )
             except Exception as exc:
                 database_message = ''
                 if isinstance(exc, OperationalError):

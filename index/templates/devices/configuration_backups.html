@@ -21,15 +21,16 @@
     <div class="table-responsive" role="region" aria-label="配置备份版本表" tabindex="0">
         <table class="table data-table table-hover align-middle mb-0">
             <caption class="visually-hidden">配置备份版本、采集时间、范围、大小、校验值及来源任务</caption>
-            <thead><tr><th scope="col">备份日期 / 采集时间</th><th scope="col">文件</th><th scope="col">厂商 / 范围</th><th scope="col">大小</th><th scope="col">SHA-256</th><th scope="col">来源任务</th><th scope="col" class="table-actions-column table-actions-cell">操作</th></tr></thead>
+            <thead><tr><th scope="col">备份日期 / 采集时间</th><th scope="col">文件</th><th scope="col">厂商 / 范围</th><th scope="col">大小</th><th scope="col">SHA-256</th><th scope="col">较上一版</th><th scope="col">来源任务</th><th scope="col" class="table-actions-column table-actions-cell">操作</th></tr></thead>
             <tbody>{% for backup in backups %}<tr>
                 <td>{{ backup.backup_date|date:'Y-m-d' }}<br><span class="text-secondary">{{ backup.captured_at|date:'Y-m-d H:i:s T' }}</span></td>
                 <td class="text-break">{{ backup.filename }}<br><span class="text-secondary">{{ backup.media_type }}</span></td>
                 <td>{{ backup.vendor|default:'未记录' }}<br>{{ backup.scope|default:'未记录' }}</td>
                 <td>{{ backup.byte_size|filesizeformat }}<br><span class="text-secondary">{{ backup.byte_size }} 字节</span></td>
                 <td class="configuration-backup-hash"><code title="{{ backup.sha256 }}">{{ backup.sha256 }}</code></td>
+                <td>{% if backup.change_label %}<span class="status-badge status-badge--info">{{ backup.change_label }}</span>{% else %}<span class="text-secondary">首个版本</span>{% endif %}</td>
                 <td>{% if backup.task_target_id %}<a href="{% url 'task_detail' backup.task_target.task_id %}">查看来源任务</a>{% else %}<span class="text-secondary">无关联任务</span>{% endif %}</td>
-                <td class="text-end table-actions-cell"><a class="btn btn-sm btn-outline-primary" href="{% url 'configuration_backup_download' item_key asset.pk backup.pk %}">下载原文</a></td>
+                <td class="text-end table-actions-cell"><a class="btn btn-sm btn-outline-primary" href="{% url 'configuration_backup_download' item_key asset.pk backup.pk %}">下载原文</a> <a class="btn btn-sm btn-outline-secondary" href="{% url 'configuration_backup_diff' item_key asset.pk backup.pk %}">与上一版对比</a></td>
             </tr>{% endfor %}</tbody>
         </table>
     </div>

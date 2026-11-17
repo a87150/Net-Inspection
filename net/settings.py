@@ -196,6 +196,11 @@ else:
         f'DB_ENGINE must be "mysql", "sqlite" or "postgresql"; got {DB_ENGINE!r}.')
 
 
+# 单个 Worker 进程同时打开的设备命令行会话上限。巡检配置里的
+# concurrent_workers 只管一个任务，两个任务并行时仍可能占满交换机 VTY，
+# 现场表现是大面积登录失败而不是并发过高。
+NET_SSH_CONCURRENCY = int(os.getenv('NET_SSH_CONCURRENCY', '10'))
+
 # Permission for the explicit sqlite_wal maintenance command, not a startup hook.
 NET_PAGE_CACHE_ENABLED = os.getenv('NET_PAGE_CACHE_ENABLED', 'false').lower() in {'1', 'true', 'yes'}
 NET_PAGE_CACHE_SECONDS = int(os.getenv('NET_PAGE_CACHE_SECONDS', '15'))
