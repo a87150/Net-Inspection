@@ -4,6 +4,8 @@ from django.contrib.staticfiles import finders
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 
+from tests.frontend.template_root import TemplateRoot
+
 
 class FrontendConsistencyTests(SimpleTestCase):
     def test_design_tokens_cover_shared_glass_and_status_semantics(self):
@@ -58,15 +60,14 @@ class FrontendConsistencyTests(SimpleTestCase):
         self.assertNotIn('{{ delivery.get_status_display }}', source)
 
     def test_operational_tables_do_not_duplicate_bootstrap_status_badges(self):
-        root = Path(__file__).resolve().parents[2] / 'index' / 'templates'
         paths = (
             'inspections/results_table.html',
             'inspections/errors.html',
-            'devices/pc/error_list.html',
+            'pc/error_list.html',
         )
         for relative_path in paths:
             with self.subTest(template=relative_path):
-                source = (root / relative_path).read_text(encoding='utf-8')
+                source = (TemplateRoot.default() / relative_path).read_text(encoding='utf-8')
                 self.assertNotIn('badge text-bg-success', source)
                 self.assertNotIn('badge text-bg-danger', source)
                 self.assertNotIn('badge text-bg-warning', source)

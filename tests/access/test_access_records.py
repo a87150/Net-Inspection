@@ -137,7 +137,7 @@ class AccessPermissionsTests(TestCase):
         class Probe:
             def test_connection(self):
                 return None
-        with patch('index.access.views.build_adapter', return_value=Probe()):
+        with patch('weakcurrent.views.build_adapter', return_value=Probe()):
             response = self.client.post(reverse('access_source_test'), {
                 'source_id': self.source.pk, 'name': 'Retained', 'platform': 'zkteco_v6600',
                 'api_version': V6600_V6000_COMPAT_VERSION, 'base_url': 'https://changed.example.test',

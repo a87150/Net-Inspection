@@ -175,7 +175,7 @@ class SharedInterfaceContractTests(TestCase):
         template_root = TemplateRoot.default()
         paths = (
             'inspections/profile_modal.html',
-            'devices/pc/config_modal.html',
+            'pc/config_modal.html',
             'alerts/channel_modal.html',
             'alerts/policy_modal.html',
             'alerts/template_modal.html',
@@ -394,7 +394,7 @@ class SharedInterfaceContractTests(TestCase):
     def test_plain_history_and_task_links_use_the_shared_interactive_list(self):
         template_root = TemplateRoot.default()
         paths = (
-            'devices/pc/log_detail.html',
+            'pc/log_detail.html',
             'common/import_modal.html',
             'domain/sync_task_list.html',
         )
@@ -643,7 +643,7 @@ class ModalVisualContractTests(TestCase):
         template_root = TemplateRoot.default()
         paths = (
             'devices/add_modal.html',
-            'devices/pc/bulk_analysis_modal.html',
+            'pc/bulk_analysis_modal.html',
             'domain/bitlocker_modal.html',
             'access/source_modal.html',
         )

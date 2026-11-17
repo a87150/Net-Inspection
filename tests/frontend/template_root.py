@@ -6,7 +6,10 @@ instead of hardcoding index/templates.
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[2]
-APPS = ("index", "people", "domain", "alerts")
+APPS = (
+    "index", "people", "domain", "alerts", "topology", "ipam",
+    "pc", "server", "weakcurrent",
+)
 
 
 class TemplateRoot:

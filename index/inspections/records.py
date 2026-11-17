@@ -417,7 +417,7 @@ def computer_error_list(request):
     page_obj = Paginator(errors, table_state['page_size']).get_page(
         request.GET.get('page'),
     )
-    return render(request, 'devices/pc/error_list.html', {
+    return render(request, 'pc/error_list.html', {
         'page_obj': page_obj,
         'table_definition': table_definition,
         'table_state': table_state,

@@ -1,7 +1,7 @@
 {% if can_administer %}
 {% if task_project_kind == 'computers' %}
 {% if can_administer %}
-{% include 'devices/pc/config_modal.html' %}
+{% include 'pc/config_modal.html' %}
 {% endif %}
 {% else %}
 <div class="modal fade inspection-config-modal" id="profileConfigModal" data-auto-open="{{ profile_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="profileConfigModalLabel" aria-hidden="true">

@@ -2,7 +2,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const BASE = path.resolve(__dirname, '../..');
-const APP_TEMPLATE_ROOTS = ['index', 'people', 'domain', 'alerts'];
+const APP_TEMPLATE_ROOTS = [
+    'index', 'people', 'domain', 'alerts', 'topology', 'ipam',
+    'pc', 'server', 'weakcurrent',
+];
 
 function templatePath(relative) {
     for (const app of APP_TEMPLATE_ROOTS) {

@@ -12,7 +12,7 @@ from net.inspections.selection import (
     WINDOWS_FIELDS,
 )
 from net.devices.pc.analysis import ANALYSIS_ITEMS
-from index.devices.pc.software_policy import validate_software_policy_upload
+from pc.software_policy import validate_software_policy_upload
 
 
 _INSPECTION_LABELS = {

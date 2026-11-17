@@ -5,7 +5,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
-from index.access.forms import AccessRecordSourceForm
+from weakcurrent.forms import AccessRecordSourceForm
 from index.common.access import admin_required, is_admin
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition

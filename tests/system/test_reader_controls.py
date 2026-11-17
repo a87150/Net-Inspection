@@ -97,7 +97,7 @@ class ReaderControlsTests(TestCase):
 
     def test_sensitive_modal_canaries_never_render_for_reader(self):
         canary = 'READER-MUST-NOT-SEE-CONFIG-91da'
-        for template in ('inspections/profile_modal.html', 'devices/pc/config_modal.html',
+        for template in ('inspections/profile_modal.html', 'pc/config_modal.html',
                          'alerts/channel_modal.html', 'common/import_modal.html',
                          'inspections/issue_settings.html'):
             with self.subTest(template=template):

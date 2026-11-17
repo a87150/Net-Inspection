@@ -26,7 +26,7 @@ from index.inspections.forms import (
 )
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition, project_record_definition
-from index.devices.pc.software_policy import (
+from pc.software_policy import (
     software_policy_target,
     store_software_policy_upload,
 )
@@ -119,7 +119,7 @@ def task_modal_context(request, project_kind, *, allow_target_selection=False, t
     pc_upload_config = pc_upload_config_form = pc_analysis_form = None
     if project_kind == 'computers':
         from net.models import PCUploadConfig
-        from index.devices.pc.upload_config import PCUploadConfigForm
+        from pc.upload_config import PCUploadConfigForm
         pc_upload_config = PCUploadConfig.load()
         pc_upload_config_form = PCUploadConfigForm(instance=pc_upload_config)
         pc_analysis_form = ComputerAnalysisProfileConfigForm(

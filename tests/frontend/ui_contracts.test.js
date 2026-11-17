@@ -44,7 +44,7 @@ test('table and modal components own scrolling without assigning it to modal con
   const modal = read('static/app/css/modal-workflows.css');
   const templates = [
     templatePath('inspections/profile_modal.html'),
-    templatePath('devices/pc/config_modal.html'),
+    templatePath('pc/config_modal.html'),
     templatePath('common/import_modal.html'),
     templatePath('domain/group_members.html'),
   ].map(read).join('\n');

@@ -94,6 +94,9 @@ INSTALLED_APPS = [
     'alerts',
     'topology',
     'ipam',
+    'pc',
+    'server',
+    'weakcurrent',
     'rest_framework',
 ]
 
