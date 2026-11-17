@@ -1,0 +1,97 @@
+{% extends 'common/base.html' %}
+{% block title %}IP 管理{% endblock %}
+{% block content %}
+<div class="ip-workspace">
+<header class="page-heading">
+    <div class="page-heading__copy">
+        <p class="page-heading__eyebrow">网络取证</p>
+        <h1 class="page-heading__title">IP 管理</h1>
+        <p class="page-heading__description">查地址在哪台设备的哪个口见过，并对照登记的 IP 台账</p>
+    </div>
+    <div class="page-heading__actions"><a class="btn btn-outline-secondary" href="/admin/net/ipsubnet/">维护台账</a></div>
+</header>
+
+<section class="card surface-card ip-lookup-card" aria-label="IP 查询">
+    <div class="card-body">
+        <form method="get" class="ip-lookup-form" role="search">
+            <label class="visually-hidden" for="ip-lookup-query">IP 或 MAC</label>
+            <input class="form-control" id="ip-lookup-query" name="q" value="{{ query }}" placeholder="10.1.1.20 或 aabb.ccdd.eeff" maxlength="64" autocomplete="off">
+            <button type="submit" class="btn btn-primary">查询</button>
+            {% if query %}<a class="btn btn-outline-secondary" href="{% url 'ip_management' %}">清空</a>{% endif %}
+        </form>
+        <p class="ip-lookup-hint">取自各设备最近一次成功巡检的 ARP / MAC 表，默认回看 {{ report.window_days }} 天（当前覆盖 {{ report.devices }} 台设备）。ARP 与 MAC 是被动观察，只能证明某次巡检见过，不能证明此刻在线。</p>
+    </div>
+</section>
+
+{% if lookup %}
+<section class="card surface-card table-scroll-shell" aria-label="查询结果">
+    <div class="card-header surface-card__header"><h2 class="h5 mb-0">匹配 {{ lookup.matches|length }} 条</h2></div>
+    {% if lookup.matches %}
+    <div class="table-responsive" role="region" aria-label="IP 定位结果表" tabindex="0">
+        <table class="table data-table table-hover align-middle mb-0">
+            <caption class="visually-hidden">匹配到的设备、接口、VLAN、来源与采集时间</caption>
+            <thead><tr><th scope="col">IP</th><th scope="col">MAC</th><th scope="col">设备</th><th scope="col">接口</th><th scope="col">VLAN</th><th scope="col">来源</th><th scope="col">采集时间</th></tr></thead>
+            <tbody>{% for row in lookup.matches %}<tr>
+                <td><code>{{ row.ip|default:"—" }}</code></td>
+                <td><code>{{ row.mac|default:"—" }}</code></td>
+                <td><a href="{% url 'asset_detail' 'networks' row.device_id %}">{{ row.device_name }}</a><br><span class="text-secondary">{{ row.device_ip }}</span></td>
+                <td>{{ row.interface|default:"—" }}</td>
+                <td>{{ row.vlan|default:"—" }}</td>
+                <td>{% if row.source == 'arp' %}ARP{% else %}MAC{% endif %}</td>
+                <td>{{ row.observed_at|date:'Y-m-d H:i:s' }}{% if row.task_id %}<br><a href="{% url 'task_detail' row.task_id %}">查看任务</a>{% endif %}</td>
+            </tr>{% endfor %}</tbody>
+        </table>
+    </div>
+    {% if lookup.truncated %}<div class="card-body"><p class="mb-0 text-secondary">匹配过多，仅显示前 {{ lookup.matches|length }} 条。</p></div>{% endif %}
+    {% else %}<div class="card-body"><div class="empty-state"><strong>没有匹配记录</strong><span>该地址可能未在此时间窗内被采集到，或设备未勾选 ARP / MAC 表巡检项。</span></div></div>{% endif %}
+</section>
+{% endif %}
+
+<section class="card surface-card" aria-label="IP 台账">
+    <div class="card-header surface-card__header configuration-backup-header">
+        <h2 class="h5 mb-0">IP 台账</h2>
+        <ul class="configuration-backup-summary" aria-label="台账摘要">
+            <li><span>网段</span><strong>{{ report.subnets|length }}</strong></li>
+            <li><span>登记</span><strong>{{ report.registered_count }}</strong></li>
+            <li><span>观察</span><strong>{{ report.observed_count }}</strong></li>
+            <li><span>未登记</span><strong>{{ report.unplanned_count }}</strong></li>
+        </ul>
+    </div>
+    {% if report.issues %}
+    <div class="card-body ip-issue-list">
+        {% for issue in report.issues|slice:":8" %}
+        <div class="ip-issue ip-issue--{{ issue.severity }}">
+            <span class="status-badge status-badge--{% if issue.severity == 'error' %}danger{% else %}warning{% endif %}">{% if issue.severity == 'error' %}需处理{% else %}需确认{% endif %}</span>
+            <div><strong>{{ issue.title }}</strong><p>{{ issue.detail }}</p></div>
+        </div>
+        {% endfor %}
+        {% if report.issues|length > 8 %}<p class="ip-issue-more">另有 {{ report.issues|length|add:"-8" }} 条提示未展开。</p>{% endif %}
+    </div>
+    {% elif report.subnets %}
+    <div class="card-body"><p class="mb-0 text-secondary">台账与巡检观察一致，没有需要处理的提示。</p></div>
+    {% endif %}
+    {% if report.subnets %}
+    <div class="table-responsive" role="region" aria-label="IP 网段表" tabindex="0">
+        <table class="table data-table table-hover align-middle mb-0">
+            <caption class="visually-hidden">网段、用途、网关、地址池与登记数量</caption>
+            <thead><tr><th scope="col">网段</th><th scope="col">用途</th><th scope="col">VLAN</th><th scope="col">网关</th><th scope="col">DHCP 地址池</th><th scope="col">可用</th><th scope="col">登记</th></tr></thead>
+            <tbody>{% for subnet in report.subnets %}<tr>
+                <td><code>{{ subnet.cidr }}</code>{% if subnet.note %}<br><span class="text-secondary">{{ subnet.note }}</span>{% endif %}</td>
+                <td>{{ subnet.get_purpose_display }}</td>
+                <td>{{ subnet.vlan|default:"—" }}</td>
+                <td>{{ subnet.gateway|default:"—" }}</td>
+                <td>{% if subnet.pool_start %}<code>{{ subnet.pool_start }} - {{ subnet.pool_end }}</code><br><span class="text-secondary">{{ subnet.pool_size }} 个</span>{% else %}<span class="text-secondary">未设置</span>{% endif %}</td>
+                <td>{{ subnet.usable_hosts }}</td>
+                <td>{{ subnet.addresses.all|length }}</td>
+            </tr>{% endfor %}</tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card-body"><div class="empty-state"><strong>还没有登记网段</strong><span>在运维管理台的「IP 网段」里新建网段、填网关和 DHCP 地址池，登记 IP 后本页会自动比对巡检看到的结果。</span></div></div>
+    {% endif %}
+    {% if report.unplanned %}
+    <div class="card-body ip-unplanned"><strong>观察到但未登记（前 {{ report.unplanned|length }} 个）</strong><p class="mb-0"><code>{{ report.unplanned|join:"  " }}</code></p></div>
+    {% endif %}
+</section>
+</div>
+{% endblock %}

@@ -48,6 +48,36 @@ def _records(details, item):
     return rows if isinstance(rows, list) else []
 
 
+def latest_inspections(*, lookback_days=LOOKBACK_DAYS):
+    """One successful result per device: the newest inside the lookback window."""
+    since = timezone.now() - timedelta(days=lookback_days)
+    rows = (Network_Device_Inspection.objects
+            .select_related("device", "task_target")
+            .filter(status="success", created_at__gte=since)
+            .order_by("-created_at")[:MAX_RECORDS])
+    latest = {}
+    for row in rows:
+        latest.setdefault(row.device_id, row)
+    return latest
+
+
+def observed_addresses(*, lookback_days=LOOKBACK_DAYS):
+    """Every IP in ARP evidence, with the normalized MACs and device that saw it."""
+    latest = latest_inspections(lookback_days=lookback_days)
+    seen = {}
+    for inspection in latest.values():
+        for record in _records(inspection.details or {}, "arp_table"):
+            ip = _first(record, _IP_KEYS)
+            if not ip:
+                continue
+            entry = seen.setdefault(ip, {"macs": set(), "devices": []})
+            mac = _first(record, _MAC_KEYS)
+            if mac:
+                entry["macs"].add(normalize_mac(mac))
+            entry["devices"].append(inspection.device.device_name)
+    return {"addresses": seen, "devices": len(latest)}
+
+
 def search(query, *, lookback_days=LOOKBACK_DAYS):
     """Match one IP or MAC against each device's latest successful result."""
     needle = (query or "").strip()
@@ -56,15 +86,7 @@ def search(query, *, lookback_days=LOOKBACK_DAYS):
     needle_mac = normalize_mac(needle)
     needle_ip = needle.lower()
 
-    since = timezone.now() - timedelta(days=lookback_days)
-    inspections = (Network_Device_Inspection.objects
-                   .select_related("device", "task_target")
-                   .filter(status="success", created_at__gte=since)
-                   .order_by("-created_at")[:MAX_RECORDS])
-
-    latest = {}
-    for inspection in inspections:
-        latest.setdefault(inspection.device_id, inspection)
+    latest = latest_inspections(lookback_days=lookback_days)
 
     matches = []
     truncated = False

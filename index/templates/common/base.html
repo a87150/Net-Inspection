@@ -54,7 +54,7 @@
                     <li class="nav-item"><a class="nav-link" href="{% url 'task_list' %}">后台任务</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'alert_list' %}">告警记录</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'operations_overview' %}">网络拓扑</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'ip_lookup' %}">IP 定位</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'ip_management' %}">IP 管理</a></li>
                 </ul>
                 {% if can_administer %}<a class="navbar-text app-navbar__context" href="{% url 'admin:index' %}"><span class="status-dot status-dot--success" aria-hidden="true"></span>运维管理台</a>{% endif %}
                 {% if user.is_authenticated %}

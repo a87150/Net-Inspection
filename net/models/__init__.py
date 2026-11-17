@@ -10,6 +10,7 @@ from .domain import (
     DomainOperation, DomainOU, DomainMembership,
 )
 from .integrations import PeopleSyncSource
+from .ipam import IpAddress, IpSubnet
 from .people import People
 from .issue_policy import IssueSeverityPolicy
 from .records import (
@@ -33,6 +34,7 @@ __all__ = [
     "DeviceCollectionTemplate", "DeviceCollectionBinding",
     'AlertNotificationTemplate', 'DomainOU', 'DomainMembership',
     'MaintenanceWindow',
+    'IpSubnet', 'IpAddress',
     'DeviceConfigurationBackup',
     'IssueSeverityPolicy',
     'People', 'Domain_Account', 'Domain_Computer', 'Domain_Group', 'Computer', 'Network_Device',

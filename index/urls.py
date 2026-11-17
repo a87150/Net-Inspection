@@ -20,14 +20,23 @@ from index.devices.backups import (
     configuration_backup_download,
     configuration_backup_list,
 )
-from index.devices.ip_lookup import ip_lookup
+from index.devices.ip_management import ip_management
+from index.devices.maintenance import maintenance_window_create, maintenance_window_delete
 from index.devices.pc.bulk_analysis import computer_logs_analyze_bulk
 from index.devices.pc.software_policy import pc_software_policy_template_download
 
 urlpatterns = [
     path('operations/overview/', views.operations_overview, name='operations_overview'),
     path('operations/overview/data/', views.operations_overview_data, name='operations_overview_data'),
-    path('network/ip-lookup/', ip_lookup, name='ip_lookup'),
+    path('network/ip/', ip_management, name='ip_management'),
+    path(
+        'assets/<str:kind>/<uuid:pk>/maintenance/create/',
+        maintenance_window_create, name='asset_maintenance_create',
+    ),
+    path(
+        'assets/<str:kind>/<uuid:pk>/maintenance/<uuid:window_id>/delete/',
+        maintenance_window_delete, name='asset_maintenance_delete',
+    ),
     path('operations/topology/', topology_data, name='topology_data'),
     path('operations/topology/batches/', topology_batches, name='topology_batches'),
     path('operations/topology/interfaces/', topology_interfaces, name='topology_interfaces'),

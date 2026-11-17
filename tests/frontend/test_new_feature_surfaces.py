@@ -78,7 +78,8 @@ class NewFeatureSurfaceDesignTests(TestCase):
         )
 
         self.assertContains(response, 'configuration-backup-workspace')
-        self.assertContains(response, 'configuration-backup-notes')
+        self.assertContains(response, 'configuration-backup-summary')
+        self.assertContains(response, 'alert alert-warning')
         self.assertContains(response, 'table-scroll-shell')
         self.assertContains(response, 'table-scroll-hint')
         self.assertContains(response, 'table data-table')

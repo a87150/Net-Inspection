@@ -200,3 +200,240 @@
     .operations-overview *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
     .operations-overview::after { opacity: .08; }
 }
+
+
+/* ---- 全屏拓扑：画布占满视口，控件浮在图上 ---- */
+body:has(.operations-overview) .app-main {
+    width: 100%;
+    max-width: none;
+    padding: 0;
+}
+
+body:has(.operations-overview) .app-footer {
+    display: none;
+}
+
+.operations-overview {
+    position: relative;
+    display: block;
+    height: calc(100dvh - 4rem);
+    min-height: 34rem;
+    padding: 0;
+    overflow: hidden;
+}
+
+.operations-overview #operations-overview-app {
+    position: absolute;
+    inset: 0;
+}
+
+.operations-overview__panel.topology-workspace {
+    position: absolute;
+    inset: 0;
+    padding: 0;
+    border-radius: 1rem;
+    overflow: hidden;
+}
+
+.topology-canvas-shell {
+    position: absolute;
+    inset: 0;
+    min-height: 0;
+    border: 0;
+    border-radius: 1rem;
+}
+
+.topology-canvas {
+    height: 100%;
+}
+
+.operations-overview__header {
+    position: absolute;
+    top: 1.1rem;
+    left: 1.35rem;
+    z-index: 6;
+    max-width: min(30rem, 42vw);
+    margin: 0;
+    padding: .85rem 1.1rem;
+    border: 1px solid var(--overview-border);
+    border-radius: .9rem;
+    background: linear-gradient(150deg, rgba(8, 22, 36, .82), rgba(6, 16, 26, .62));
+    backdrop-filter: blur(10px);
+    pointer-events: none;
+}
+
+.operations-overview__header h1 {
+    font-size: clamp(1.25rem, 2vw, 1.6rem);
+}
+
+.operations-overview__lede {
+    font-size: .8rem;
+    line-height: 1.55;
+}
+
+.operations-overview__timestamp {
+    margin-top: .5rem;
+}
+
+.topology-toolbar {
+    position: absolute;
+    top: 1.1rem;
+    right: 1.35rem;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: .5rem;
+    margin: 0;
+    padding: .7rem .9rem;
+    border: 1px solid var(--overview-border);
+    border-radius: .9rem;
+    background: linear-gradient(150deg, rgba(8, 22, 36, .82), rgba(6, 16, 26, .62));
+    backdrop-filter: blur(10px);
+}
+
+.topology-toolbar > div:first-child {
+    display: none;
+}
+
+.operations-overview__control-rail {
+    position: absolute;
+    bottom: 1.1rem;
+    left: 50%;
+    z-index: 6;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: .85rem;
+    margin: 0;
+    padding: .45rem .75rem;
+    max-width: min(46rem, 92vw);
+}
+
+.topology-legend {
+    position: absolute;
+    bottom: 1.1rem;
+    left: 1.35rem;
+    z-index: 5;
+    margin: 0;
+    padding: .5rem .7rem;
+    border: 1px solid rgba(85, 222, 246, .14);
+    border-radius: .75rem;
+    background: rgba(3, 12, 20, .62);
+    backdrop-filter: blur(8px);
+}
+
+.topology-detail {
+    position: absolute;
+    right: 1.35rem;
+    bottom: 1.1rem;
+    z-index: 6;
+    grid-template-columns: minmax(0, 1fr);
+    width: min(24rem, 40vw);
+    max-height: 45%;
+    overflow: auto;
+    margin: 0;
+    background: linear-gradient(150deg, rgba(8, 22, 36, .88), rgba(6, 16, 26, .7));
+    backdrop-filter: blur(10px);
+}
+
+.topology-text-list {
+    position: absolute;
+    top: 1.1rem;
+    left: 1.35rem;
+    z-index: 5;
+    margin: 0;
+    max-width: min(24rem, 40vw);
+    max-height: 40vh;
+    overflow: auto;
+    background: rgba(3, 12, 20, .72);
+    backdrop-filter: blur(8px);
+}
+
+.topology-text-list ul {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.topology-limit-note,
+.topology-collection-hint,
+.topology-empty-state {
+    position: absolute;
+    bottom: 4.6rem;
+    left: 50%;
+    z-index: 5;
+    transform: translateX(-50%);
+    margin: 0;
+    max-width: min(44rem, 88vw);
+}
+
+.operations-overview__stale {
+    position: absolute;
+    top: 1.1rem;
+    left: 50%;
+    z-index: 8;
+    transform: translateX(-50%);
+    margin: 0;
+    max-width: min(38rem, 80vw);
+}
+
+@media (max-width: 991.98px) {
+    .operations-overview {
+        height: auto;
+        min-height: 0;
+        padding-block: 1rem;
+    }
+
+    .operations-overview #operations-overview-app {
+        position: static;
+    }
+
+    .operations-overview__panel.topology-workspace {
+        position: relative;
+        inset: auto;
+        padding: 1rem;
+    }
+
+    .topology-canvas-shell {
+        position: relative;
+        inset: auto;
+        min-height: 26rem;
+        border: 1px solid rgba(100, 206, 233, .12);
+    }
+
+    .topology-canvas {
+        height: 60vh;
+    }
+
+    .operations-overview__header,
+    .topology-toolbar,
+    .operations-overview__control-rail,
+    .topology-legend,
+    .topology-detail,
+    .topology-text-list,
+    .topology-limit-note,
+    .topology-collection-hint,
+    .topology-empty-state,
+    .operations-overview__stale {
+        position: static;
+        transform: none;
+        max-width: none;
+        width: auto;
+        max-height: none;
+        margin-block: .75rem;
+    }
+
+    .operations-overview__header {
+        pointer-events: auto;
+    }
+
+    .topology-toolbar > div:first-child {
+        display: block;
+    }
+
+    .topology-toolbar {
+        align-items: stretch;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: space-between;
+    }
+}

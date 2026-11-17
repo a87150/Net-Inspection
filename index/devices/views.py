@@ -191,7 +191,15 @@ def asset_detail(request, kind, pk):
         latest = asset.inspections.order_by('-created_at', '-pk').first()
         if latest:
             latest_url = reverse('record_detail', args=[kind, latest.pk])
+    maintenance_windows = []
+    maintenance_default = None
+    if kind == 'networks' and is_admin(request.user):
+        from index.devices.maintenance import form_defaults, windows_for
+        maintenance_windows = windows_for(asset)
+        maintenance_default = form_defaults()
     return render(request, 'devices/detail.html', {
+        'maintenance_windows': maintenance_windows,
+        'maintenance_default': maintenance_default,
         'latest_record': latest,
         'latest_url': latest_url,
         'asset': asset,

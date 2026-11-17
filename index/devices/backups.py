@@ -31,17 +31,29 @@ def configuration_backup_list(request, kind, pk):
     except Http404:
         return HttpResponseNotFound('未找到设备或配置备份。')
     backups = list(list_configuration_backups(asset)[:10])
+    added_total = removed_total = 0
     for backup in backups:
         added = getattr(backup, 'change_added', None)
         removed = getattr(backup, 'change_removed', None)
+        backup.change_added_value = added
+        backup.change_removed_value = removed
         if added is None and removed is None:
             backup.change_label = ''
         elif added or removed:
             backup.change_label = f'+{added or 0} / -{removed or 0}'
         else:
             backup.change_label = '无变化'
+        added_total += added or 0
+        removed_total += removed or 0
+    summary = {
+        'count': len(backups),
+        'total_bytes': sum(int(getattr(item, 'byte_size', 0) or 0) for item in backups),
+        'latest_at': backups[0].captured_at if backups else None,
+        'added': added_total,
+        'removed': removed_total,
+    }
     return render(request, 'devices/configuration_backups.html', {
-        'asset': asset, 'item_key': kind, 'backups': backups,
+        'asset': asset, 'item_key': kind, 'backups': backups, 'summary': summary,
     })
 
 

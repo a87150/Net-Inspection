@@ -27,6 +27,43 @@
         {% endfor %}
     </dl></div>
 </section>
+
+{% if maintenance_default %}
+<section class="card surface-card mt-3">
+    <div class="card-header surface-card__header">
+        <h2 class="h5 mb-0">维护窗口</h2>
+        <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#maintenance-window-form" aria-expanded="false" aria-controls="maintenance-window-form">新建窗口</button>
+    </div>
+    <div class="collapse" id="maintenance-window-form">
+        <form method="post" action="{% url 'asset_maintenance_create' item_key asset.pk %}" class="card-body maintenance-window-form">
+            {% csrf_token %}
+            <div class="row g-3">
+                <div class="col-md-3"><label class="form-label" for="maintenance-start">开始</label><input class="form-control" type="datetime-local" id="maintenance-start" name="starts_at" value="{{ maintenance_default.start }}" required></div>
+                <div class="col-md-3"><label class="form-label" for="maintenance-end">结束</label><input class="form-control" type="datetime-local" id="maintenance-end" name="ends_at" value="{{ maintenance_default.end }}" required></div>
+                <div class="col-md-6"><label class="form-label" for="maintenance-note">备注</label><input class="form-control" type="text" id="maintenance-note" name="note" maxlength="200" placeholder="例如：更换上行模块，预计 30 分钟"></div>
+            </div>
+            <p class="maintenance-window-form__hint">窗口内这台设备的告警照常生成并入库，只是不外发；窗口结束若仍在重试范围内会自动补发。区间含开始、不含结束。</p>
+            <button class="btn btn-primary" type="submit">保存窗口</button>
+        </form>
+    </div>
+    {% if maintenance_windows %}
+    <div class="table-responsive" role="region" aria-label="维护窗口列表" tabindex="0">
+        <table class="table data-table align-middle mb-0">
+            <caption class="visually-hidden">这台设备的维护窗口、状态与备注</caption>
+            <thead><tr><th scope="col">开始</th><th scope="col">结束</th><th scope="col">状态</th><th scope="col">备注</th><th scope="col" class="text-end table-actions-cell">操作</th></tr></thead>
+            <tbody>{% for window in maintenance_windows %}<tr>
+                <td>{{ window.starts_at|date:'Y-m-d H:i' }}</td>
+                <td>{{ window.ends_at|date:'Y-m-d H:i' }}</td>
+                <td><span class="status-badge status-badge--{{ window.phase_badge }}">{{ window.phase_label }}</span></td>
+                <td>{{ window.note|default:'—' }}</td>
+                <td class="text-end table-actions-cell"><form method="post" action="{% url 'asset_maintenance_delete' item_key asset.pk window.pk %}" class="d-inline">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" type="submit">删除</button></form></td>
+            </tr>{% endfor %}</tbody>
+        </table>
+    </div>
+    {% else %}<div class="card-body maintenance-window-form__hint">这台设备还没有维护窗口。窗口期内它的告警照常入库，但不外发。</div>{% endif %}
+</section>
+{% endif %}
+
 {% if history_url %}<section class="card surface-card card-body mt-3"><h2 class="h5">最新执行结果</h2>
 {% if latest_record %}<p>{{ latest_record.created_at|date:'Y-m-d H:i:s' }} · {{ latest_record.execution_status }} · {{ latest_record.task_source }} · 异常 {{ latest_record.error_count }}</p><p>{{ latest_record.summary }}</p><p>{{ latest_record.key_metrics }}</p><a href="{{ latest_url }}">查看本次结果</a>{% else %}<p>尚无执行记录。</p>{% endif %}</section>{% endif %}
 {% endblock %}
