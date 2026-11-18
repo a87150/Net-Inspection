@@ -342,17 +342,33 @@ class OperationsOverviewViewTests(TestCase):
         self.assertIn('no-cache', cache_control)
         self.assertIn('no-store', cache_control)
 
-    def test_page_offers_the_drawer_and_bulk_terminal_toggle(self):
+    def test_page_offers_the_drawer_and_per_node_terminal_toggle(self):
         login_reader(self.client)
         page = self.client.get(reverse('operations_overview'))
 
-        # 详情不再跳页：卡片里的入口打开右侧面板，工具栏能一次展开所有下联终端。
+        # 详情改右侧抽屉；每个设备卡片自带按钮，只展开它自己的下联终端。
         self.assertContains(page, 'class="topology-drawer glass-panel"')
         self.assertContains(page, 'openDrawer(node)')
-        self.assertContains(page, 'data-toggle-terminals')
-        self.assertContains(page, 'toggleAllTerminals')
-        self.assertContains(page, '显示终端设备')
+        self.assertContains(page, 'class="topology-device-card__toggle"')
+        self.assertContains(page, '@click.stop="toggleNode(node)"')
+        self.assertContains(page, '基础资料')
+        self.assertContains(page, 'drawerDetails')
+        self.assertNotContains(page, 'toggleAllTerminals')
         self.assertNotContains(page, 'class="topology-device-card__detail" :href')
+
+    def test_topology_nodes_carry_the_asset_detail_fields(self):
+        Network_Device.objects.create(
+            device_name='CORE-SW-01', ip='10.0.0.2', device_type='核心交换机',
+            vendor='Cisco', model='C9300',
+        )
+        login_reader(self.client)
+        data = self.client.get(reverse('operations_overview_data')).json()
+        nodes = [node for node in data['topology']['nodes'] if node['kind'] == 'backbone']
+
+        self.assertTrue(nodes)
+        details = {item['label']: item['value'] for item in nodes[0]['details']}
+        self.assertEqual(details['设备名称'], 'CORE-SW-01')
+        self.assertEqual(details['型号'], 'C9300')
 
     def test_anonymous_user_is_redirected_to_login(self):
         for name in ('operations_overview', 'operations_overview_data'):

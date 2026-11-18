@@ -25,6 +25,26 @@ def _raw_value(record, field):
     return getattr(record, field.source, None)
 
 
+def display_value(obj, field):
+    """Model value or its get_<field>_display() label; one rule for every surface."""
+    value = obj
+    for name in field.source.split("__"):
+        value = getattr(value, name, None)
+        if value is None:
+            break
+    display = getattr(obj, f"get_{field.source.replace('__', '_')}_display", None)
+    return display() if callable(display) else value
+
+
+def detail_field_payloads(obj, definition):
+    """基础资料 pairs for a detail card or a drawer; default-visible fields only."""
+    return [
+        {"label": field.label, "value": format_table_field(display_value(obj, field), field)}
+        for field in definition.fields
+        if field.default_visible
+    ]
+
+
 def row_payloads(records, definition, badges=None):
     """badges maps a field key to a callable returning {status, label} or None."""
     badges = badges or {}

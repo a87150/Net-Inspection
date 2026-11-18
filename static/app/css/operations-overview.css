@@ -120,8 +120,8 @@
 .topology-legend i { display: inline-block; width: 1.5rem; height: 2px; background: var(--overview-cyan); }
 .topology-legend .is-inferred i { border-top: 2px dashed #6d8798; background: none; }
 .topology-legend .is-external i { width: .65rem; height: .65rem; border: 1px solid var(--overview-amber); border-radius: 50%; background: rgba(255, 198, 109, .18); }
-.topology-canvas-shell { min-height: 32rem; overflow: hidden; border: 1px solid rgba(100, 206, 233, .12); border-radius: .85rem; background: radial-gradient(circle at center, rgba(18, 66, 83, .28), transparent 62%), rgba(2, 10, 18, .6); touch-action: none; }
-.topology-canvas { display: block; width: 100%; height: min(62vh, 38.75rem); cursor: grab; }
+.topology-canvas-shell { min-height: 32rem; max-height: 82vh; overflow: auto; border: 1px solid rgba(100, 206, 233, .12); border-radius: .85rem; background: radial-gradient(circle at center, rgba(18, 66, 83, .28), transparent 62%), rgba(2, 10, 18, .6); touch-action: none; }
+.topology-canvas { display: block; width: 100%; height: auto; min-height: min(62vh, 38.75rem); cursor: grab; }
 .topology-canvas:active { cursor: grabbing; }
 .topology-edge { fill: none; vector-effect: non-scaling-stroke; }
 .topology-edge--inferred { stroke: #8299a8; stroke-width: 1; stroke-dasharray: 4 6; opacity: .72; cursor: pointer; }
@@ -176,6 +176,14 @@
 @media (max-width: 767px) {
     .topology-drawer { top: auto; left: .5rem; right: .5rem; bottom: .5rem; width: auto; max-height: 60%; }
 }
+.topology-device-card__toggle { cursor: pointer; }
+.topology-device-card__toggle rect { fill: rgba(116, 223, 244, .16); stroke: rgba(116, 223, 244, .55); stroke-width: 1; }
+.topology-device-card__toggle text { fill: #8ee6f7; font-size: 8.5px; font-weight: 600; }
+.topology-device-card__toggle:hover rect,
+.topology-device-card__toggle:focus-visible rect { fill: rgba(116, 223, 244, .3); }
+.topology-device-card__toggle.is-expanded rect { fill: rgba(116, 223, 244, .38); }
+.topology-drawer__section { margin: .85rem 0 .1rem; font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: var(--overview-muted); }
+.topology-drawer__section:first-child { margin-top: 0; }
 .topology-device-card__detail { cursor: pointer; }
 .topology-device-card__detail text { fill: var(--overview-muted); font-size: 7px; pointer-events: auto; text-decoration: underline; }
 .topology-empty-state { display: grid; justify-items: center; gap: .55rem; min-height: 24rem; padding: 5rem 1rem; border: 1px dashed rgba(116, 223, 244, .24); border-radius: .85rem; background: rgba(2, 10, 18, .45); text-align: center; }

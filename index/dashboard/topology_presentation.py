@@ -1,9 +1,13 @@
 """Build a presentation-safe enterprise network topology payload."""
 
 import re
+from functools import lru_cache
 from ipaddress import ip_interface
 
 from django.urls import reverse
+
+from index.common.table_payload import detail_field_payloads
+from index.common.table_registry import get_table_definition
 
 
 ROLE_TIERS = {
@@ -103,10 +107,21 @@ def _subnet_parent(endpoint_networks, backbone_nodes):
     ), default=(None, None))[1]
 
 
+@lru_cache(maxsize=None)
+def _definition(table_key):
+    return get_table_definition(table_key)
+
+
+def _details(asset, table_key):
+    """基础资料 pairs, identical to the asset detail page card."""
+    return detail_field_payloads(asset, _definition(table_key))
+
+
 def _node(*, node_id, kind, role, label, subtitle, ip, vendor='', model='',
           status='unknown', url='', tier=None, parent_id=None,
-          attachment_source='', child_count=0):
+          attachment_source='', child_count=0, details=()):
     return {
+        'details': list(details),
         'id': node_id,
         'kind': kind,
         'role': role,
@@ -138,6 +153,7 @@ def _network_node(device):
         vendor=device.vendor,
         model=device.model,
         url=reverse('asset_detail', args=['networks', device.pk]),
+        details=_details(device, 'networks'),
     )
     node['_networks'] = address_networks(device.ip)
     return node
@@ -152,6 +168,7 @@ def _endpoint_nodes(computers, servers, weak_current):
             vendor=computer.manufacturer, model=computer.model,
             status='normal' if computer.is_active else 'disabled',
             url=reverse('asset_detail', args=['computers', computer.pk]),
+            details=_details(computer, 'computers'),
         )
         node['_networks'] = address_networks(computer.ip_addresses)
         nodes.append(node)
@@ -161,6 +178,7 @@ def _endpoint_nodes(computers, servers, weak_current):
             label=server.name or server.ip, subtitle=server.get_server_type_display(),
             ip=server.ip, vendor=server.manufacturer, model=server.model,
             url=reverse('asset_detail', args=['servers', server.pk]),
+            details=_details(server, 'servers'),
         )
         node['_networks'] = address_networks(server.ip)
         nodes.append(node)
@@ -171,6 +189,7 @@ def _endpoint_nodes(computers, servers, weak_current):
             subtitle=monitor.device_type or '弱电设备', ip=monitor.ip,
             vendor=monitor.vendor, model=monitor.model,
             url=reverse('asset_detail', args=['weakcurrent', monitor.pk]),
+            details=_details(monitor, 'weakcurrent'),
         )
         node['_networks'] = address_networks(monitor.ip)
         nodes.append(node)

@@ -225,6 +225,63 @@ function distribute(nodes, minX, maxX, y) {
   }));
 }
 
+/* 终端按父设备分组排布：组内一行，组与组之间用行装箱错开，绝不重叠。 */
+function claimRow(rows, left, right) {
+  let index = 0;
+  while (true) {
+    const spans = rows[index] || (rows[index] = []);
+    const overlaps = spans.some(([start, end]) => !(right < start || left > end));
+    if (!overlaps) {
+      spans.push([left, right]);
+      return index;
+    }
+    index += 1;
+  }
+}
+
+function layoutEndpointGroups(positionedBackbone, endpoints, box) {
+  const { padding, width, height } = box;
+  const groups = positionedBackbone
+    .map((parent) => ({
+      parent,
+      children: endpoints.filter((node) => node.parentId === parent.id),
+    }))
+    .filter((group) => group.children.length)
+    .sort((left, right) => left.parent.x - right.parent.x);
+  if (!groups.length) return [];
+
+  const rowGap = 78;
+  const columnGap = 12;
+  const top = Math.max(...positionedBackbone.map((node) => node.y)) + 150;
+  const perRow = Math.max(1, Math.floor((width - (padding * 2)) / 132));
+  const rows = [];
+  const placed = [];
+
+  for (const group of groups) {
+    const items = group.children.map((node) => ({ node, cardWidth: cardWidthFor(node) }));
+    for (let start = 0; start < items.length; start += perRow) {
+      const slice = items.slice(start, start + perRow);
+      const span = slice.reduce((sum, item) => sum + item.cardWidth, 0)
+        + (columnGap * (slice.length - 1));
+      const left = clamp(
+        group.parent.x - (span / 2), padding, Math.max(padding, width - padding - span),
+      );
+      const rowIndex = claimRow(rows, left, left + span);
+      let cursor = left;
+      for (const item of slice) {
+        placed.push({
+          ...item.node,
+          cardWidth: item.cardWidth,
+          x: Math.round(cursor + (item.cardWidth / 2)),
+          y: Math.round(top + (rowIndex * rowGap)),
+        });
+        cursor += item.cardWidth + columnGap;
+      }
+    }
+  }
+  return placed;
+}
+
 export function layoutTopology(graph, viewport = {}) {
   const width = Math.max(320, Number(viewport.width) || 960);
   const height = Math.max(620, Number(viewport.height) || 620);
@@ -249,25 +306,28 @@ export function layoutTopology(graph, viewport = {}) {
     }
     tierY += 35;
   }
-  const positionedEndpoints = [];
-  for (const parent of positionedBackbone) {
-    const children = endpoints.filter((node) => node.parentId === parent.id);
-    const childGap = Math.min(112, Math.max(74, (width - (padding * 2)) / Math.max(1, children.length)));
-    const totalWidth = (children.length - 1) * childGap;
-    children.forEach((node, index) => positionedEndpoints.push({
-      ...node,
-      cardWidth: cardWidthFor(node),
-      x: clamp(parent.x - (totalWidth / 2) + (index * childGap), padding, width - padding),
-      y: clamp(parent.y + 88, padding, height - padding),
-    }));
-  }
-  const positionedExternal = distribute(external, padding, width - padding, height - padding);
+  const positionedEndpoints = layoutEndpointGroups(
+    positionedBackbone, endpoints, { padding, width, height },
+  );
+  // 展开的终端可能超出一屏高度：画布跟着长高，别把它们压回去重叠。
+  const contentBottom = Math.max(
+    height - padding - 90,
+    ...positionedBackbone.map((node) => node.y),
+    ...positionedEndpoints.map((node) => node.y),
+  );
+  const positionedExternal = distribute(
+    external, padding, width - padding, contentBottom + 110,
+  );
   const positioned = [...positionedBackbone, ...positionedEndpoints, ...positionedExternal]
     .map((node) => ({
       ...node,
       x: Math.round(clamp(node.x, padding, width - padding)),
-      y: Math.round(clamp(node.y, padding, height - padding)),
+      y: Math.round(Math.max(node.y, padding)),
     }));
+  const contentMaxY = Math.max(
+    height - padding,
+    ...positioned.map((node) => node.y + 44),
+  );
 
   return {
     nodes: positioned,
@@ -278,6 +338,6 @@ export function layoutTopology(graph, viewport = {}) {
       { kind: 'inferred', label: '网段推断终端' },
       { kind: 'external', label: '未解析邻居' },
     ],
-    bounds: { minX: padding, minY: padding, maxX: width - padding, maxY: height - padding },
+    bounds: { minX: padding, minY: padding, maxX: width - padding, maxY: contentMaxY },
   };
 }

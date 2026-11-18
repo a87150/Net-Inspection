@@ -136,7 +136,7 @@ class SharedInterfaceContractTests(TestCase):
         self.assertContains(response, 'aria-hidden="true"')
         self.assertContains(response, 'LLDP/CDP')
         self.assertContains(response, 'data-topology-device-card')
-        self.assertContains(response, '@click="toggleNode(node)"')
+        self.assertContains(response, '@click.stop="toggleNode(node)"')
         self.assertContains(response, 'topology-edge--physical')
         self.assertContains(response, 'topology-edge--inferred')
         self.assertContains(response, '暂无可绘制的主要网络设备')

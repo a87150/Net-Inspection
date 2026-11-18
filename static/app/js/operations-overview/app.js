@@ -68,14 +68,13 @@ if (mountElement && bootstrapElement) {
         if (!this.drawerNodeId) return null;
         return this.topology.nodes.find((node) => node.id === this.drawerNodeId) || null;
       },
-      expandableNodes() {
-        return [...this.topologyNodes.values()]
-          .filter((node) => node.kind === 'backbone' && node.childCount);
+      canvasHeight() {
+        const maxY = (this.topology && this.topology.bounds && this.topology.bounds.maxY) || 0;
+        return Math.max(this.topologyHeight, Math.ceil(maxY + 24));
       },
-      allExpanded() {
-        const expandable = this.expandableNodes;
-        return expandable.length > 0
-          && expandable.every((node) => this.expandedNodeIds.has(node.id));
+      drawerDetails() {
+        const details = (this.drawerNode && this.drawerNode.details) || [];
+        return details.length ? details : [{ label: 'IP / 备注', value: this.drawerNode?.ip || '未配置' }];
       },
     },
     methods: {
@@ -195,22 +194,7 @@ if (mountElement && bootstrapElement) {
       closeDrawer() {
         this.drawerNodeId = '';
       },
-      toggleAllTerminals() {
-        const expandable = this.expandableNodes;
-        if (!expandable.length) {
-          this.liveStatus = '当前没有可展开的下联终端';
-          return;
-        }
-        const expand = !this.allExpanded;
-        this.expandedNodeIds = expand
-          ? new Set(expandable.map((node) => node.id))
-          : new Set();
-        this.selectedEdgeId = '';
-        const total = expandable.reduce((sum, node) => sum + node.childCount, 0);
-        this.liveStatus = expand
-          ? `已显示 ${total} 个终端设备`
-          : '已隐藏终端设备';
-      },
+
       formatTime(value) {
         if (!value) return '暂无时间';
         const date = new Date(value);
