@@ -201,46 +201,66 @@ function clamp(value, minimum, maximum) {
   return Math.min(Math.max(value, minimum), maximum);
 }
 
+/* 中文字与西文字宽度差一倍，按字符类型分别计宽，卡片不会被英文名撑长。 */
+const WIDE_CHAR = /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹯＀-｠￠-￦]/;
+
+function textWidth(text) {
+  let total = 0;
+  for (const char of String(text ?? '')) {
+    total += WIDE_CHAR.test(char) ? 13 : 7.4;
+  }
+  return total;
+}
+
 /* 卡片宽度按设备名撑开，名字不再截断；宽度也决定同层间距。 */
 export function cardWidthFor(node) {
-  const label = Array.from(String(node.label ?? '')).length;
-  const minimum = node.kind === 'backbone' ? 156 : 120;
-  return Math.max(minimum, Math.round(72 + (label * 13)));
+  const minimum = node.kind === 'backbone' ? 148 : 116;
+  return Math.max(minimum, Math.round(64 + textWidth(node.label)));
 }
 
+/* 一行内按真实宽度均分剩余空间，卡片之间至少留 40px。 */
 function distribute(nodes, minX, maxX, y) {
   if (!nodes.length) return [];
-  const widest = Math.max(...nodes.map(cardWidthFor));
+  const widths = nodes.map(cardWidthFor);
+  const total = widths.reduce((sum, value) => sum + value, 0);
   const span = maxX - minX;
-  const step = nodes.length === 1
-    ? 0
-    : Math.min(widest + 26, span / (nodes.length - 1));
-  const center = (minX + maxX) / 2;
-  const start = nodes.length === 1 ? center : center - ((step * (nodes.length - 1)) / 2);
-  return nodes.map((node, index) => ({
-    ...node,
-    cardWidth: cardWidthFor(node),
-    x: start + (step * index),
-    y,
-  }));
+  const gap = nodes.length > 1 ? Math.max(40, (span - total) / (nodes.length - 1)) : 0;
+  const rowWidth = total + (gap * (nodes.length - 1));
+  const start = minX + Math.max(0, (span - rowWidth) / 2);
+  let cursor = start;
+  return nodes.map((node, index) => {
+    const cardWidth = widths[index];
+    const placed = { ...node, cardWidth, x: cursor + (cardWidth / 2), y };
+    cursor += cardWidth + gap;
+    return placed;
+  });
 }
 
-/* 终端按父设备分组排布：组内一行，组与组之间用行装箱错开，绝不重叠。 */
-function claimRow(rows, left, right) {
-  let index = 0;
-  while (true) {
-    const spans = rows[index] || (rows[index] = []);
-    const overlaps = spans.some(([start, end]) => !(right < start || left > end));
-    if (!overlaps) {
-      spans.push([left, right]);
-      return index;
+/* 贪心装箱：按真实宽度决定一层放几张，放不下的换行，不会挤成一排。 */
+function packRows(nodes, available, gap = 40) {
+  const rows = [];
+  let row = [];
+  let used = 0;
+  for (const node of nodes) {
+    const width = cardWidthFor(node);
+    const extra = row.length ? gap : 0;
+    if (row.length && (used + extra + width) > available) {
+      rows.push(row);
+      row = [];
+      used = 0;
     }
-    index += 1;
+    row.push(node);
+    used += (row.length > 1 ? gap : 0) + width;
   }
+  if (row.length) rows.push(row);
+  return rows;
 }
 
+/* 终端紧跟自己的上级，向下错位避让，与任何已放置卡片都不重叠。 */
+// ponytail: 逐个试位的 O(n²) 避让，n 为可见卡片数（几十张），够用；
+// 若将来单页要画上千节点，改成按行建索引再二分。
 function layoutEndpointGroups(positionedBackbone, endpoints, box) {
-  const { padding, width, height } = box;
+  const { padding, width, top = 0, blockers = [] } = box;
   const groups = positionedBackbone
     .map((parent) => ({
       parent,
@@ -248,38 +268,71 @@ function layoutEndpointGroups(positionedBackbone, endpoints, box) {
     }))
     .filter((group) => group.children.length)
     .sort((left, right) => left.parent.x - right.parent.x);
-  if (!groups.length) return [];
+  if (!groups.length) return { nodes: [], bottom: top };
 
-  const rowGap = 78;
+  const rowGap = 74;
   const columnGap = 12;
-  const top = Math.max(...positionedBackbone.map((node) => node.y)) + 150;
-  const perRow = Math.max(1, Math.floor((width - (padding * 2)) / 132));
-  const rows = [];
+  const available = width - (padding * 2);
+  const occupied = blockers.map((node) => ({
+    x: node.x,
+    y: node.y,
+    cardWidth: node.cardWidth,
+    halfHeight: node.kind === 'backbone' ? 40 : 33,
+  }));
   const placed = [];
+  let bottom = top;
+
+  const settle = (centerX, cardWidth, fromY) => {
+    let y = fromY;
+    for (let guard = 0; guard < 60; guard += 1) {
+      const clash = occupied.some((other) => (
+        Math.abs(other.x - centerX) < ((other.cardWidth + cardWidth) / 2) + 8
+        && Math.abs(other.y - y) < (other.halfHeight + 33)
+      ));
+      if (!clash) break;
+      y += rowGap;
+    }
+    occupied.push({ x: centerX, y, cardWidth, halfHeight: 33 });
+    return Math.round(y);
+  };
 
   for (const group of groups) {
-    const items = group.children.map((node) => ({ node, cardWidth: cardWidthFor(node) }));
-    for (let start = 0; start < items.length; start += perRow) {
-      const slice = items.slice(start, start + perRow);
-      const span = slice.reduce((sum, item) => sum + item.cardWidth, 0)
-        + (columnGap * (slice.length - 1));
+    const items = group.children.map((node) => ({
+      node,
+      // 名字再长也不能超过一行可用宽度，否则会被整体 clamp 到同一处而重叠。
+      cardWidth: Math.min(cardWidthFor(node), available),
+    }));
+    const baseY = top;
+    let index = 0;
+    let offsetY = 0;
+    while (index < items.length) {
+      const row = [];
+      let rowWidth = 0;
+      while (index + row.length < items.length) {
+        const item = items[index + row.length];
+        const extra = row.length ? columnGap : 0;
+        if (row.length && (rowWidth + extra + item.cardWidth) > available) break;
+        rowWidth += extra + item.cardWidth;
+        row.push(item);
+      }
       const left = clamp(
-        group.parent.x - (span / 2), padding, Math.max(padding, width - padding - span),
+        group.parent.x - (rowWidth / 2), padding, Math.max(padding, width - padding - rowWidth),
       );
-      const rowIndex = claimRow(rows, left, left + span);
       let cursor = left;
-      for (const item of slice) {
-        placed.push({
-          ...item.node,
-          cardWidth: item.cardWidth,
-          x: Math.round(cursor + (item.cardWidth / 2)),
-          y: Math.round(top + (rowIndex * rowGap)),
-        });
+      let rowBottom = 0;
+      for (const item of row) {
+        const centerX = Math.round(cursor + (item.cardWidth / 2));
+        const y = settle(centerX, item.cardWidth, baseY + offsetY);
+        rowBottom = Math.max(rowBottom, y);
+        placed.push({ ...item.node, cardWidth: item.cardWidth, x: centerX, y });
         cursor += item.cardWidth + columnGap;
       }
+      bottom = Math.max(bottom, rowBottom);
+      offsetY = rowBottom - baseY + rowGap;
+      index += row.length;
     }
   }
-  return placed;
+  return { nodes: placed, bottom };
 }
 
 export function layoutTopology(graph, viewport = {}) {
@@ -290,25 +343,35 @@ export function layoutTopology(graph, viewport = {}) {
   const endpoints = graph.nodes.filter((node) => node.kind === 'endpoint');
   const external = graph.nodes.filter((node) => node.kind === 'external');
   const tiers = [...new Set(backbone.map((node) => Number(node.tier ?? 3)))].sort((a, b) => a - b);
-  const maxColumns = width < 480
-    ? 2
-    : Math.max(2, Math.floor((width - (padding * 2)) / 210) + 1);
+  const available = width - (padding * 2);
   const positionedBackbone = [];
-  let tierY = 70;
+  const positionedEndpoints = [];
+  let tierY = padding + 46;
   for (const tier of tiers) {
     const members = backbone.filter((node) => Number(node.tier ?? 3) === tier);
-    for (let index = 0; index < members.length; index += maxColumns) {
-      positionedBackbone.push(...distribute(
-        members.slice(index, index + maxColumns),
-        padding, width - padding, tierY,
-      ));
-      tierY += 110;
+    for (const row of packRows(members, available)) {
+      positionedBackbone.push(...distribute(row, padding, width - padding, tierY));
+      tierY += 118;
+    }
+    // 该层展开的终端紧跟本层卡片，下一层从它们下方继续，层间不会被压穿。
+    const tierParents = positionedBackbone.filter(
+      (node) => Number(node.tier ?? 3) === tier,
+    );
+    const children = endpoints.filter(
+      (node) => tierParents.some((parent) => parent.id === node.parentId),
+    );
+    if (children.length) {
+      const laid = layoutEndpointGroups(tierParents, children, {
+        padding,
+        width,
+        top: Math.max(...tierParents.map((node) => node.y)) + 74,
+        blockers: [...positionedBackbone, ...positionedEndpoints],
+      });
+      positionedEndpoints.push(...laid.nodes);
+      tierY = laid.bottom + 74;
     }
     tierY += 35;
   }
-  const positionedEndpoints = layoutEndpointGroups(
-    positionedBackbone, endpoints, { padding, width, height },
-  );
   // 展开的终端可能超出一屏高度：画布跟着长高，别把它们压回去重叠。
   const contentBottom = Math.max(
     height - padding - 90,

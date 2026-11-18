@@ -93,18 +93,18 @@
                            role="group"
                            :aria-label="`${node.label}，${roleLabel(node)}${node.childCount ? `，${node.childCount} 个下联终端` : ''}`">
                             <rect class="topology-device-card__surface" :x="-(cardWidth(node) / 2)" :y="node.kind === 'backbone' ? -35 : -28"
-                                  :width="cardWidth(node)" :height="node.kind === 'backbone' ? 70 : 56" rx="10" />
+                                  :width="cardWidth(node)" :height="node.kind === 'backbone' ? 80 : 66" rx="10" />
                             <g class="topology-device-card__icon" :transform="'translate(' + (-(cardWidth(node) / 2) + 10) + ' -13)'" aria-hidden="true">
                                 <rect x="0" y="0" width="24" height="18" rx="3"></rect>
                                 <path d="M5 6h14M5 11h4m3 0h7"></path>
                             </g>
                             <text class="topology-device-card__role" :x="-(cardWidth(node) / 2) + 42" y="-15">[[ roleLabel(node) ]]</text>
                             <text class="topology-device-card__name" :x="-(cardWidth(node) / 2) + 42" y="2">[[ node.label ]]</text>
-                            <text class="topology-device-card__meta" :x="-(cardWidth(node) / 2) + 42" y="18">[[ truncate(node.ip || node.subtitle || '未配置 IP', 18) ]]</text>
+                            <text class="topology-device-card__meta" :x="-(cardWidth(node) / 2) + 42" :y="node.kind === 'backbone' ? 16 : 12">[[ truncate(node.ip || node.subtitle || '未配置 IP', 18) ]]</text>
                             <text v-if="node.kind === 'backbone'" class="topology-device-card__status" :x="(cardWidth(node) / 2) - 12" y="-20" text-anchor="end">[[ nodeStatusLabel(node.status) ]]</text>
                             <g v-if="node.childCount" class="topology-device-card__toggle" data-toggle-terminals
                                :class="{ 'is-expanded': expandedNodeIds.has(node.id) }"
-                               :transform="'translate(' + ((cardWidth(node) / 2) - 33) + ' 21)'"
+                               :transform="'translate(' + ((cardWidth(node) / 2) - 33) + ' ' + (node.kind === 'backbone' ? 34 : 30) + ')'"
                                role="button" tabindex="0"
                                :aria-expanded="expandedNodeIds.has(node.id) ? 'true' : 'false'"
                                :aria-label="(expandedNodeIds.has(node.id) ? '收起 ' : '展开 ') + node.label + ' 的 ' + node.childCount + ' 个下联终端'"
@@ -112,8 +112,12 @@
                                 <rect x="-31" y="-10" width="62" height="20" rx="10"></rect>
                                 <text text-anchor="middle" y="4">[[ node.childCount ]] 终端 [[ expandedNodeIds.has(node.id) ? '−' : '+' ]]</text>
                             </g>
-                            <g class="topology-device-card__detail" role="button" tabindex="0" :aria-label="'查看 ' + node.label + ' 详情'" @click.stop="openDrawer(node)" @keydown.enter.stop.prevent="openDrawer(node)" @keydown.space.stop.prevent="openDrawer(node)">
-                                <text :x="-(cardWidth(node) / 2) + 12" :y="node.kind === 'backbone' ? 29 : 23" text-anchor="start">详情</text>
+                            <g class="topology-device-card__detail topology-device-card__pill" role="button" tabindex="0"
+                               :aria-label="'查看 ' + node.label + ' 详情'"
+                               :transform="'translate(' + (-(cardWidth(node) / 2) + 32) + ' ' + (node.kind === 'backbone' ? 34 : 30) + ')'"
+                               @click.stop="openDrawer(node)" @keydown.enter.stop.prevent="openDrawer(node)" @keydown.space.stop.prevent="openDrawer(node)">
+                                <rect x="-26" y="-10" width="52" height="20" rx="10"></rect>
+                                <text text-anchor="middle" y="4">详情</text>
                             </g>
                         </g>
                     </g>
@@ -148,7 +152,6 @@
                 </div>
                 <footer class="topology-drawer__footer">
                     <a v-if="drawerNode.url" class="btn btn-sm btn-primary" :href="drawerNode.url">打开资产详情页</a>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" @click="closeDrawer">关闭</button>
                 </footer>
             </aside>
             <details class="topology-text-list">

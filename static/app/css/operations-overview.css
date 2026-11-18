@@ -185,7 +185,10 @@
 .topology-drawer__section { margin: .85rem 0 .1rem; font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: var(--overview-muted); }
 .topology-drawer__section:first-child { margin-top: 0; }
 .topology-device-card__detail { cursor: pointer; }
-.topology-device-card__detail text { fill: var(--overview-muted); font-size: 7px; pointer-events: auto; text-decoration: underline; }
+.topology-device-card__pill rect { fill: rgba(142, 230, 247, .1); stroke: rgba(142, 230, 247, .4); stroke-width: 1; }
+.topology-device-card__pill text { fill: #9fe3f4; font-size: 8.5px; font-weight: 600; }
+.topology-device-card__pill:hover rect,
+.topology-device-card__pill:focus-visible rect { fill: rgba(142, 230, 247, .26); }
 .topology-empty-state { display: grid; justify-items: center; gap: .55rem; min-height: 24rem; padding: 5rem 1rem; border: 1px dashed rgba(116, 223, 244, .24); border-radius: .85rem; background: rgba(2, 10, 18, .45); text-align: center; }
 .topology-empty-state strong { color: var(--overview-text); font-size: 1.05rem; }
 .topology-empty-state span { color: var(--overview-muted); }
