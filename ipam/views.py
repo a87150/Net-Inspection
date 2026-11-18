@@ -2,8 +2,10 @@
 from django.shortcuts import render
 from django.views.decorators.http import require_GET
 
+from index.common.access import is_admin
 from net.devices.network.ipam import plan_report
 from net.devices.network.observations import search
+from net.models import IpSubnet
 
 
 @require_GET
@@ -14,4 +16,12 @@ def ip_management(request):
         "query": query,
         "lookup": lookup,
         "report": plan_report(),
+        "subnet_modal": {
+            "endpoint": "/api/v1/ip-subnets/",
+            "can_administer": is_admin(request.user),
+            "purposes": [
+                {"value": value, "label": label}
+                for value, label in IpSubnet.Purpose.choices
+            ],
+        },
     })

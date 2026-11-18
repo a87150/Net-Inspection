@@ -1,4 +1,5 @@
 {% extends 'common/base.html' %}
+{% load static %}
 {% block title %}IP 管理{% endblock %}
 {% block content %}
 <div class="ip-workspace">
@@ -8,7 +9,10 @@
         <h1 class="page-heading__title">IP 管理</h1>
         <p class="page-heading__description">查地址在哪台设备的哪个口见过，并对照登记的 IP 台账</p>
     </div>
-    <div class="page-heading__actions"><a class="btn btn-outline-secondary" href="/admin/net/ipsubnet/">维护台账</a></div>
+    <div class="page-heading__actions">
+        <div id="ip-subnet-form" data-vue-page="ip-subnet-form" data-vue-bootstrap="ip-subnet-bootstrap"></div>
+        <a class="btn btn-outline-secondary" href="/admin/net/ipsubnet/">维护台账</a>
+    </div>
 </header>
 
 <section class="card surface-card ip-lookup-card" aria-label="IP 查询">
@@ -87,11 +91,16 @@
         </table>
     </div>
     {% else %}
-    <div class="card-body"><div class="empty-state"><strong>还没有登记网段</strong><span>在运维管理台的「IP 网段」里新建网段、填网关和 DHCP 地址池，登记 IP 后本页会自动比对巡检看到的结果。</span></div></div>
+    <div class="card-body"><div class="empty-state"><strong>还没有登记网段</strong><span>点右上角「增加 IP 段」填网段、网关和 DHCP 地址池，登记 IP 后本页会自动比对巡检看到的结果。</span></div></div>
     {% endif %}
     {% if report.unplanned %}
     <div class="card-body ip-unplanned"><strong>观察到但未登记（前 {{ report.unplanned|length }} 个）</strong><p class="mb-0"><code>{{ report.unplanned|join:"  " }}</code></p></div>
     {% endif %}
 </section>
 </div>
+<div hidden>{% csrf_token %}</div>
+{{ subnet_modal|json_script:"ip-subnet-bootstrap" }}
+{% endblock %}
+{% block page_scripts %}
+<script type="module" src="{% static 'app/vue/boot.mjs' %}"></script>
 {% endblock %}

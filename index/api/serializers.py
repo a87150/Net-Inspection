@@ -3,10 +3,12 @@
 Read rows come from the page payload builders (assets.maintenance.row_payloads)
 so the hydrated first paint and the REST list share one field definition.
 """
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from assets.maintenance import KIND_TARGET_TYPES, TARGET_MODELS, asset_names
-from net.models import MaintenanceWindow
+from net.models import IpSubnet, MaintenanceWindow
+from net.models.ipam import normalize_cidr
 
 
 class MaintenanceWindowCreateSerializer(serializers.Serializer):
@@ -38,6 +40,45 @@ class MaintenanceWindowCreateSerializer(serializers.Serializer):
                 "有 %d 个资产不存在或不属于该类型。" % len(missing),
             )
         return value
+
+
+class IpSubnetCreateSerializer(serializers.Serializer):
+    """One subnet. CIDR normalization and pool checks stay in the model's clean()."""
+
+    cidr = serializers.CharField(max_length=43)
+    purpose = serializers.ChoiceField(
+        choices=[(value, label) for value, label in IpSubnet.Purpose.choices],
+        required=False,
+    )
+    gateway = serializers.CharField(max_length=39, required=False, allow_blank=True)
+    vlan = serializers.CharField(max_length=32, required=False, allow_blank=True)
+    pool_start = serializers.CharField(max_length=39, required=False, allow_blank=True)
+    pool_end = serializers.CharField(max_length=39, required=False, allow_blank=True)
+    note = serializers.CharField(max_length=200, required=False, allow_blank=True)
+
+    def validate_cidr(self, value):
+        """Point the CIDR error at the field the operator typed into."""
+        try:
+            return normalize_cidr(value)
+        except DjangoValidationError as error:
+            raise serializers.ValidationError(error.messages[0]) from error
+
+    def validate(self, attrs):
+        for key in ("gateway", "pool_start", "pool_end"):
+            attrs[key] = attrs.get(key) or None
+        attrs.setdefault("purpose", IpSubnet.Purpose.OFFICE)
+        attrs.setdefault("vlan", "")
+        attrs.setdefault("note", "")
+        subnet = IpSubnet(**attrs)
+        try:
+            subnet.full_clean()
+        except DjangoValidationError as error:
+            raise serializers.ValidationError(
+                getattr(error, "message_dict", error.messages),
+            ) from error
+        # clean() rewrote the CIDR to its network address; persist that form.
+        attrs["cidr"] = subnet.cidr
+        return attrs
 
 
 def kind_target_type(kind):

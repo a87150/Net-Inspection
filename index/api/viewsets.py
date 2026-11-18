@@ -10,7 +10,7 @@ from rest_framework.response import Response
 
 from index.api.pagination import StandardPagination
 from index.api.permissions import IsAdminOrReadOnly
-from index.api.serializers import MaintenanceWindowCreateSerializer
+from index.api.serializers import IpSubnetCreateSerializer, MaintenanceWindowCreateSerializer
 from assets.maintenance import (
     KIND_TARGET_TYPES,
     STATE_CHOICES,
@@ -19,7 +19,7 @@ from assets.maintenance import (
     window_metrics,
     window_queryset,
 )
-from net.models import MaintenanceWindow
+from net.models import IpSubnet, MaintenanceWindow
 
 
 class MaintenanceWindowViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
@@ -78,3 +78,20 @@ class MaintenanceWindowViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet
             ],
             "metrics": window_metrics(),
         })
+
+
+class IpSubnetViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
+    """POST one subnet from the IP page's modal; validation is the model's clean()."""
+
+    permission_classes = [IsAdminOrReadOnly]
+    serializer_class = IpSubnetCreateSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        subnet = IpSubnet(**serializer.validated_data)
+        subnet.save()
+        return Response(
+            {"id": str(subnet.pk), "cidr": subnet.cidr},
+            status=status.HTTP_201_CREATED,
+        )

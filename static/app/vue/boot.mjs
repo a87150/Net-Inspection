@@ -3,6 +3,7 @@ import { createApp } from '../../vendor/vue/vue.esm-browser.prod.js';
 
 const pages = {
     'maintenance-list': () => import('./pages/maintenance_list.mjs'),
+    'ip-subnet-form': () => import('./pages/ip_subnet_form.mjs'),
 };
 
 export function readBootstrap(id) {
