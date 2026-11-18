@@ -138,6 +138,17 @@ class AlertEventViewSet(TableRowsViewSet):
         response.data["metrics"] = alert_event_metrics(events)
         return response
 
+    def get_queryset(self):
+        return alert_event_queryset().select_related(
+            "policy", "task", "target_run",
+        ).prefetch_related("deliveries__channel")
+
+    @action(detail=True, methods=["get"], url_path="detail")
+    def detail_view(self, request, pk=None):
+        from alerts.payloads import alert_detail_payload
+
+        return Response(alert_detail_payload(self.get_object()))
+
 
 class RecordTableViewSet(TableRowsViewSet):
     """Shared row shape for the field-loop pages (records, errors, ...)."""

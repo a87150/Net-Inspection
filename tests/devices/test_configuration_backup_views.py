@@ -12,12 +12,12 @@ from cryptography.fernet import Fernet
 
 from django.contrib.auth.models import AnonymousUser
 from django.http import HttpResponse
-from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import include, path
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
+from assets.payloads import asset_detail_payload
 from net.models import Network_Device, WeakCurrentDevice
 
 
@@ -139,11 +139,14 @@ class BackupHistoryTests(TestCase):
         for admin in (True, False):
             for kind in ('networks', 'weakcurrent', 'servers', 'computers'):
                 with self.subTest(admin=admin, kind=kind):
-                    html = render_to_string('devices/detail.html', {
-                        'can_administer': admin, 'item_key': kind,
-                        'asset': self.asset, 'back_url': '/',
-                    })
-                    self.assertEqual('配置备份历史' in html,
+                    payload = asset_detail_payload(
+                        kind=kind, item_name='设备', asset=self.asset, detail_fields=[],
+                        latest_record=None, latest_url='', history_url='/history/',
+                        back_url='/', manual_action_label='手动执行巡检',
+                        can_administer=admin,
+                    )
+                    labels = [action['label'] for action in payload['actions']]
+                    self.assertEqual('配置备份历史' in labels,
                                      admin and kind in ('networks', 'weakcurrent'))
 
 

@@ -16,7 +16,8 @@ from django.views.decorators.http import require_POST
 
 from alerts.forms import DingTalkAlertChannelForm, EmailAlertChannelForm, FeishuAlertChannelForm
 from alerts.payloads import (
-    alert_event_metrics, alert_event_payloads, alert_event_queryset,
+    alert_detail_payload, alert_event_metrics, alert_event_payloads,
+    alert_event_queryset,
 )
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition
@@ -198,8 +199,15 @@ def alert_list(request):
 
 
 def alert_detail(request, pk):
-    event = get_object_or_404(_alert_events(), pk=pk)
-    return render(request, 'alerts/detail.html', {'event': event})
+    event = get_object_or_404(
+        _alert_events().select_related('policy', 'task', 'target_run')
+        .prefetch_related('deliveries__channel'),
+        pk=pk,
+    )
+    return render(request, 'alerts/detail.html', {
+        'event': event,
+        'detail': alert_detail_payload(event),
+    })
 
 
 @require_POST

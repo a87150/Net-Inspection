@@ -320,7 +320,8 @@ body.app-shell {
 }
 
 .table-responsive {
-    max-height: min(68vh, 48rem);
+    /* 表格跟随页面整体滚动：卡片里不再套第二根滚动条。 */
+    max-height: none;
 }
 
 .data-table {
@@ -1509,3 +1510,11 @@ code {
         padding: 1rem;
     }
 }
+
+.resource-detail__grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+    align-items: start;
+}
+.detail-text { white-space: pre-wrap; word-break: break-word; }

@@ -50,14 +50,16 @@ class FrontendConsistencyTests(SimpleTestCase):
                 'list.html',
                 'detail.html',
                 'event_row.html',
-                'event_detail.html',
-                'delivery_list.html',
             )
         )
 
         self.assertIn("common/status_badge.html", source)
         self.assertIn("inspections/severity_badge.html", source)
         self.assertNotIn('{{ delivery.get_status_display }}', source)
+        # 详情页的徽章改由 payload 生产，仍然只认这一套助手。
+        payloads = (Path(__file__).resolve().parents[2]
+                    / 'alerts' / 'payloads.py').read_text(encoding='utf-8')
+        self.assertIn('from index.common.badges import severity_badge, status_badge', payloads)
 
     def test_operational_tables_do_not_duplicate_bootstrap_status_badges(self):
         paths = (

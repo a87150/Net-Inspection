@@ -29,16 +29,20 @@ class FrozenSummaryTests(SimpleTestCase):
 
 class RenderingTests(SimpleTestCase):
     def test_summary_detail_shows_frozen_text_without_target_link(self):
-        from django.template.loader import render_to_string
         from uuid import UUID
+        from alerts.payloads import alert_detail_payload
+        empty = SimpleNamespace(all=lambda: [])
         event = SimpleNamespace(event_type='summary', task_id=UUID(int=1), profile_type='server',
             get_event_type_display='任务总结', get_status_display='待发送', summary='',
+            deliveries=SimpleNamespace(select_related=lambda *related: empty),
             summary_data={'message_title': '固定总结', 'message_text': '<script>unsafe</script>\n正常 7',
                           'total': 10, 'normal': 7, 'abnormal': 2})
-        html = render_to_string('alerts/detail.html', {'event': event})
-        self.assertIn('固定总结', html)
-        self.assertIn('&lt;script&gt;unsafe&lt;/script&gt;', html)
-        self.assertNotIn('filter_target_id', html)
+        payload = alert_detail_payload(event)
+        text = payload['sections'][1]['text']
+        self.assertEqual(payload['title'], '固定总结')
+        # 正文原样交给前端插值，转义由 Vue 的文本绑定负责，不再手工拼 HTML。
+        self.assertEqual(text, '<script>unsafe</script>\n正常 7')
+        self.assertNotIn('filter_target_id', str(payload))
 
     def test_custom_fields_and_empty_fields_use_selected_mode(self):
         from net.alerts.templates import render_task_summary

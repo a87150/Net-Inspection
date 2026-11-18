@@ -3,6 +3,7 @@ import json
 import re
 
 from tests import response_body
+from tests.payloads import payload_text
 import uuid
 from datetime import timedelta
 from io import StringIO
@@ -806,12 +807,12 @@ class DeterministicDemoSeedTests(TestCase):
                 self.assertContains(listing, identity)
                 self.assertContains(listing, detail_url)
                 detail = self.client.get(detail_url)
-                self.assertContains(detail, identity)
-                self.assertContains(detail, detail_value)
+                body = payload_text(detail, 'detail-bootstrap')
+                self.assertIn(identity, body)
+                self.assertIn(detail_value, body)
                 if kind == 'computers':
-                    self.assertContains(
-                        detail,
-                        f'{reverse("computer_analysis_list")}?target={asset.pk}',
+                    self.assertIn(
+                        f'{reverse("computer_analysis_list")}?target={asset.pk}', body,
                     )
                 elif kind in {'networks', 'servers', 'weakcurrent'}:
                     self.assertContains(

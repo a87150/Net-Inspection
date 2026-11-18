@@ -84,7 +84,7 @@ static/app/vue/
 | 批次 | 页面 | 说明 |
 | --- | --- | --- |
 | ~~B1 列表页~~ 已迁 | 告警记录、巡检记录、错误记录、任务列表、域账号/域计算机/域分组列表、门禁记录、PC 日志列表、PC 错误列表 | 完成：`index/common/table_payload.py` 把 `TableDefinition` 的列/单元格/徽章/行动作压成 JSON，`static/app/vue/pages/resource_table.mjs` 一份组件渲染 8 页（告警页保留专属组件），翻页走 REST，筛选与排序仍是 URL 参数 |
-| B2 详情页 | 资产详情、人员详情、任务详情、告警详情、记录详情、PC 日志详情、PC 分析详情、域对象详情 | 只读为主，配少量动作 |
+| B2 详情页 进行中 | 资产详情、人员详情、任务详情、告警详情、记录详情、PC 日志详情、PC 分析详情、域对象详情 | 已迁告警详情与资产详情（人员/服务器/网络设备/弱电设备/PC 五类共用一份 `devices/detail.html`）：`index/common/detail_payload.py` 把详情页压成 `{title, eyebrow, description, actions, sections}`，`static/app/vue/pages/resource_detail.mjs` 一份组件渲染，`GET /api/v1/alert-events/<pk>/detail/` 与页面共用同一个 payload 构造函数 |
 | B3 写操作 | 资产新增/编辑、巡检配置、告警渠道与策略、导入、批量执行、维护窗口建删 | 目前是表单 POST + 重定向，逐步改成 REST + 前端提示 |
 | B4 其它 | 首页仪表盘、人员统计、网络拓扑、IP 管理台账、登录页 | 拓扑已有 JSON 端点，主要换前端渲染方式 |
 

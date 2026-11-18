@@ -3,6 +3,7 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.urls import reverse
 from tests.auth import login_admin, login_reader
+from tests.payloads import payload_text
 
 from net.models import Computer
 
@@ -38,9 +39,10 @@ class AssetDashboardUiTests(TestCase):
             reverse('asset_detail', args=['computers', self.pc.pk]),
         )
 
-        self.assertContains(response, 'PC详情')
-        self.assertContains(response, 'CPU 型号')
-        self.assertNotContains(response, '是否启用')
+        body = payload_text(response, 'detail-bootstrap')
+        self.assertIn('PC详情', body)
+        self.assertIn('CPU 型号', body)
+        self.assertNotIn('是否启用', body)
 
     def test_pc_list_uses_pc_copy_in_the_empty_state_and_data_note(self):
         """Replacing PC-facing text with ordinary-computer wording must be caught."""

@@ -14,8 +14,10 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from assets.payloads import asset_detail_payload, configuration_notice
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition
+from index.templatetags.extras import format_table_field
 from net.models import Computer, Network_Device, People, WeakCurrentDevice, Server
 from net.data_exchange.inventory_csv import IMPORTABLE_ENTITIES, inventory_import_guide
 from alerts.views import alert_modal_context
@@ -184,7 +186,7 @@ def asset_detail(request, kind, pk):
     detail_fields = [
         {
             'label': field.label,
-            'value': _display_value(asset, field),
+            'value': format_table_field(_display_value(asset, field), field),
             'kind': field.kind,
         }
         for field in table_definition.fields
@@ -199,20 +201,31 @@ def asset_detail(request, kind, pk):
         latest = asset.inspections.order_by('-created_at', '-pk').first()
         if latest:
             latest_url = reverse('record_detail', args=[kind, latest.pk])
+    back_url = reverse('asset_list', args=[kind])
+    history_url = _history_url(kind, asset)
+    can_administer = is_admin(request.user)
+    manual_action_label = '手动执行分析' if kind == 'computers' else (
+        '手动执行巡检' if page.inspection_kind else ''
+    )
     return render(request, 'devices/detail.html', {
-        'latest_record': latest,
-        'latest_url': latest_url,
         'asset': asset,
-        'inventory_import_guide': inventory_import_guide(kind) if is_admin(request.user) else [],
         'item_key': kind,
         'item_name': page.title,
-        'detail_fields': detail_fields,
-        'back_url': reverse('asset_list', args=[kind]),
-        'history_url': _history_url(kind, asset),
-        'inspection_type': page.inspection_kind,
-        'manual_action_label': '手动执行分析' if kind == 'computers' else (
-            '手动执行巡检' if page.inspection_kind else ''
+        'back_url': back_url,
+        'history_url': history_url,
+        'detail': asset_detail_payload(
+            kind=kind,
+            item_name=page.title,
+            asset=asset,
+            detail_fields=detail_fields,
+            latest_record=latest,
+            latest_url=latest_url,
+            history_url=history_url,
+            back_url=back_url,
+            manual_action_label=manual_action_label,
+            can_administer=can_administer,
         ),
+        'notice': configuration_notice(kind) if can_administer else '',
     })
 
 

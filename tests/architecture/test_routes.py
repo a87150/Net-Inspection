@@ -5,6 +5,7 @@ from html.parser import HTMLParser
 from django.test import TestCase
 from django.urls import reverse
 from tests.auth import login_admin, login_reader
+from tests.payloads import payload_text
 from tests.devices.pc.helpers import analysis_task_url
 from django.utils import timezone
 
@@ -146,8 +147,9 @@ class DetailRouteTests(TestCase):
         )
 
         history_url = reverse('record_list', args=['networks'])
-        self.assertContains(response, f'{history_url}?target={self.network.pk}')
-        self.assertContains(response, self.network_record.summary)
+        body = payload_text(response, 'detail-bootstrap')
+        self.assertIn(f'{history_url}?target={self.network.pk}', body)
+        self.assertIn(self.network_record.summary, body)
 
     def test_infrastructure_history_filter_submission_keeps_asset_scope(self):
         other = Network_Device.objects.create(

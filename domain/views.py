@@ -9,6 +9,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
+from assets.payloads import asset_detail_payload
 from index.common.table_payload import row_payloads as table_row_payloads
 from index.common.table_payload import table_payload
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
@@ -275,14 +276,23 @@ def domain_object_detail(request, object_type, pk):
         'computers': 'domain_computer_list',
         'groups': 'domain_group_list',
     }[object_type]
+    back_url = reverse(list_route)
     return render(request, 'devices/detail.html', {
         'asset': domain_object,
         'item_name': page.title,
-        'detail_fields': detail_fields,
-        'back_url': reverse(list_route),
-        'history_url': '',
-        'inspection_type': '',
-        'domain_object': True,
+        'back_url': back_url,
+        'detail': asset_detail_payload(
+            kind=object_type,
+            item_name=page.title,
+            asset=domain_object,
+            detail_fields=detail_fields,
+            latest_record=None,
+            latest_url='',
+            history_url='',
+            back_url=back_url,
+            manual_action_label='',
+            can_administer=False,
+        ),
     })
 
 

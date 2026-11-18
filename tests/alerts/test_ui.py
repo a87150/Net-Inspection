@@ -10,6 +10,7 @@ import json
 import re
 
 from tests import response_body
+from tests.payloads import payload_text
 from urllib.parse import parse_qs, urlsplit
 
 from django.test import Client, TestCase
@@ -304,12 +305,13 @@ class AlertUiTests(TestCase):
 
         detail = self.client.get(reverse('alert_detail', args=[event.pk]))
         self.assertEqual(detail.status_code, 200)
-        self.assertContains(detail, 'primary disabled channel')
-        self.assertContains(detail, 'secondary email channel')
-        self.assertContains(detail, '任务详情')
-        self.assertNotContains(detail, '目标执行详情')
-        self.assertNotContains(detail, 'private-token')
-        self.assertNotContains(detail, 'mail-password-value')
+        body = payload_text(detail, 'detail-bootstrap')
+        self.assertIn('primary disabled channel', body)
+        self.assertIn('secondary email channel', body)
+        self.assertIn('任务详情', body)
+        self.assertNotIn('目标执行详情', body)
+        self.assertNotIn('private-token', body)
+        self.assertNotIn('mail-password-value', body)
 
         exported = self.client.get(reverse('table_export', args=['alert_events']), {
             'filter_event_type': AlertEvent.EventType.SUMMARY,
