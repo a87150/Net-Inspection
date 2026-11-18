@@ -146,6 +146,37 @@
 .topology-device-card__status { fill: var(--overview-green) !important; font-size: 7px; }
 .topology-device-card__badge rect { fill: rgba(85, 230, 165, .16); stroke: rgba(85, 230, 165, .72); }
 .topology-device-card__badge text { fill: var(--overview-green); font-size: 8px; font-weight: 800; }
+
+/* 详情侧边栏：卡片里的「详情」只开面板，不再跳转页面。 */
+.topology-drawer {
+    position: absolute;
+    top: .75rem;
+    right: .75rem;
+    bottom: .75rem;
+    z-index: 9;
+    display: flex;
+    flex-direction: column;
+    gap: .85rem;
+    width: min(23rem, calc(100% - 1.5rem));
+    padding: 1rem 1.05rem;
+    overflow-y: auto;
+    border-radius: .9rem;
+    backdrop-filter: blur(10px);
+}
+.topology-drawer__header { display: flex; gap: .75rem; align-items: flex-start; justify-content: space-between; }
+.topology-drawer__eyebrow { margin: 0 0 .2rem; font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: rgba(226, 240, 248, .62); }
+.topology-drawer__header h3 { margin: 0; font-size: 1.02rem; line-height: 1.35; word-break: break-word; }
+.topology-drawer__close { flex: none; border: 0; border-radius: .4rem; background: transparent; color: inherit; font-size: .95rem; line-height: 1; padding: .3rem .4rem; cursor: pointer; }
+.topology-drawer__close:hover, .topology-drawer__close:focus-visible { background: rgba(127, 157, 178, .18); }
+.topology-drawer__body { display: grid; gap: .65rem; }
+.topology-drawer__body > div { display: grid; gap: .16rem; }
+.topology-drawer__body span { font-size: .72rem; color: rgba(226, 240, 248, .62); }
+.topology-drawer__body strong { font-weight: 600; word-break: break-word; }
+.topology-drawer__footer { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: auto; }
+@media (max-width: 767px) {
+    .topology-drawer { top: auto; left: .5rem; right: .5rem; bottom: .5rem; width: auto; max-height: 60%; }
+}
+.topology-device-card__detail { cursor: pointer; }
 .topology-device-card__detail text { fill: var(--overview-muted); font-size: 7px; pointer-events: auto; text-decoration: underline; }
 .topology-empty-state { display: grid; justify-items: center; gap: .55rem; min-height: 24rem; padding: 5rem 1rem; border: 1px dashed rgba(116, 223, 244, .24); border-radius: .85rem; background: rgba(2, 10, 18, .45); text-align: center; }
 .topology-empty-state strong { color: var(--overview-text); font-size: 1.05rem; }

@@ -28,6 +28,7 @@ if (mountElement && bootstrapElement) {
         topologyHeight: 620,
         selectedEdgeId: '',
         expandedNodeIds: new Set(),
+        drawerNodeId: '',
         liveStatus: '网络拓扑已就绪',
         controller: null,
         unsubscribe: null,
@@ -62,6 +63,19 @@ if (mountElement && bootstrapElement) {
       selectedEdge() {
         return [...this.topology.physicalEdges, ...this.topology.attachmentEdges]
           .find((edge) => edge.id === this.selectedEdgeId) || null;
+      },
+      drawerNode() {
+        if (!this.drawerNodeId) return null;
+        return this.topology.nodes.find((node) => node.id === this.drawerNodeId) || null;
+      },
+      expandableNodes() {
+        return [...this.topologyNodes.values()]
+          .filter((node) => node.kind === 'backbone' && node.childCount);
+      },
+      allExpanded() {
+        const expandable = this.expandableNodes;
+        return expandable.length > 0
+          && expandable.every((node) => this.expandedNodeIds.has(node.id));
       },
     },
     methods: {
@@ -170,6 +184,32 @@ if (mountElement && bootstrapElement) {
       truncate(value, length) {
         const stringValue = String(value || '');
         return stringValue.length > length ? `${stringValue.slice(0, length - 1)}…` : stringValue;
+      },
+      cardWidth(node) {
+        return node.cardWidth || (node.kind === 'backbone' ? 156 : 120);
+      },
+      openDrawer(node) {
+        this.drawerNodeId = node.id;
+        this.liveStatus = `已打开 ${node.label} 的详情`;
+      },
+      closeDrawer() {
+        this.drawerNodeId = '';
+      },
+      toggleAllTerminals() {
+        const expandable = this.expandableNodes;
+        if (!expandable.length) {
+          this.liveStatus = '当前没有可展开的下联终端';
+          return;
+        }
+        const expand = !this.allExpanded;
+        this.expandedNodeIds = expand
+          ? new Set(expandable.map((node) => node.id))
+          : new Set();
+        this.selectedEdgeId = '';
+        const total = expandable.reduce((sum, node) => sum + node.childCount, 0);
+        this.liveStatus = expand
+          ? `已显示 ${total} 个终端设备`
+          : '已隐藏终端设备';
       },
       formatTime(value) {
         if (!value) return '暂无时间';

@@ -201,11 +201,28 @@ function clamp(value, minimum, maximum) {
   return Math.min(Math.max(value, minimum), maximum);
 }
 
+/* 卡片宽度按设备名撑开，名字不再截断；宽度也决定同层间距。 */
+export function cardWidthFor(node) {
+  const label = Array.from(String(node.label ?? '')).length;
+  const minimum = node.kind === 'backbone' ? 156 : 120;
+  return Math.max(minimum, Math.round(72 + (label * 13)));
+}
+
 function distribute(nodes, minX, maxX, y) {
   if (!nodes.length) return [];
-  const step = nodes.length === 1 ? 0 : (maxX - minX) / (nodes.length - 1);
-  const start = nodes.length === 1 ? (minX + maxX) / 2 : minX;
-  return nodes.map((node, index) => ({ ...node, x: start + (step * index), y }));
+  const widest = Math.max(...nodes.map(cardWidthFor));
+  const span = maxX - minX;
+  const step = nodes.length === 1
+    ? 0
+    : Math.min(widest + 26, span / (nodes.length - 1));
+  const center = (minX + maxX) / 2;
+  const start = nodes.length === 1 ? center : center - ((step * (nodes.length - 1)) / 2);
+  return nodes.map((node, index) => ({
+    ...node,
+    cardWidth: cardWidthFor(node),
+    x: start + (step * index),
+    y,
+  }));
 }
 
 export function layoutTopology(graph, viewport = {}) {
@@ -218,7 +235,7 @@ export function layoutTopology(graph, viewport = {}) {
   const tiers = [...new Set(backbone.map((node) => Number(node.tier ?? 3)))].sort((a, b) => a - b);
   const maxColumns = width < 480
     ? 2
-    : Math.max(2, Math.floor((width - (padding * 2)) / 190) + 1);
+    : Math.max(2, Math.floor((width - (padding * 2)) / 210) + 1);
   const positionedBackbone = [];
   let tierY = 70;
   for (const tier of tiers) {
@@ -239,6 +256,7 @@ export function layoutTopology(graph, viewport = {}) {
     const totalWidth = (children.length - 1) * childGap;
     children.forEach((node, index) => positionedEndpoints.push({
       ...node,
+      cardWidth: cardWidthFor(node),
       x: clamp(parent.x - (totalWidth / 2) + (index * childGap), padding, width - padding),
       y: clamp(parent.y + 88, padding, height - padding),
     }));

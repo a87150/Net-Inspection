@@ -342,6 +342,18 @@ class OperationsOverviewViewTests(TestCase):
         self.assertIn('no-cache', cache_control)
         self.assertIn('no-store', cache_control)
 
+    def test_page_offers_the_drawer_and_bulk_terminal_toggle(self):
+        login_reader(self.client)
+        page = self.client.get(reverse('operations_overview'))
+
+        # 详情不再跳页：卡片里的入口打开右侧面板，工具栏能一次展开所有下联终端。
+        self.assertContains(page, 'class="topology-drawer glass-panel"')
+        self.assertContains(page, 'openDrawer(node)')
+        self.assertContains(page, 'data-toggle-terminals')
+        self.assertContains(page, 'toggleAllTerminals')
+        self.assertContains(page, '显示终端设备')
+        self.assertNotContains(page, 'class="topology-device-card__detail" :href')
+
     def test_anonymous_user_is_redirected_to_login(self):
         for name in ('operations_overview', 'operations_overview_data'):
             with self.subTest(name=name):
