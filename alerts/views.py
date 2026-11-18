@@ -61,7 +61,7 @@ def _policy_for_profile(profile):
     return None
 
 
-def _failure_redirect(request, next_url, modal, *, state, **query):
+def _failure_redirect(request, next_url, modal, *, state, message='', **query):
     """Carry only explicitly selected non-secret state across one redirect.
 
     Discard arbitrary return-query values, including credential-like parameters.
@@ -70,9 +70,8 @@ def _failure_redirect(request, next_url, modal, *, state, **query):
     if wants_json(request):
         if state.get('errors'):
             return form_errors(state['errors'], next_url)
-        # 成功：把刚记下的 flash 消息直接交给模态框，不让它整页刷新。
-        return form_saved(' '.join(str(message) for message in messages.get_messages(request)),
-                          next_url)
+        # 成功：直接把这条消息交给模态框，不读 session 里别的请求留下的 flash。
+        return form_saved(message, next_url)
     path = urlsplit(next_url).path
     allowed_paths = {reverse('alert_list')}
     if modal == 'policy':
@@ -249,8 +248,10 @@ def alert_channel_save(request):
             request, next_url, 'channel', state={'values': values, 'errors': errors},
             alert_channel_type=channel_type, alert_channel_id=str(channel.pk) if channel else '',
         )
-    messages.success(request, f'已保存告警渠道“{saved.name}”。')
+    message = f'已保存告警渠道“{saved.name}”。'
+    messages.success(request, message)
     return _failure_redirect(request, next_url, 'channel', state={'values': {}, 'errors': []},
+                             message=message,
                              alert_channel_type=saved.channel_type, alert_channel_id=str(saved.pk))
 
 
@@ -319,8 +320,9 @@ def alert_policy_save(request):
                    'channels': [str(channel.pk) for channel in channels], 'errors': exc.messages},
             alert_policy_scope=scope, alert_policy_profile_id=str(profile.pk) if profile else '',
         )
-    messages.success(request, f'已保存“{policy.name}”。')
-    return _failure_redirect(request, next_url, 'policy',
+    message = f'已保存“{policy.name}”。'
+    messages.success(request, message)
+    return _failure_redirect(request, next_url, 'policy', message=message,
                              state={'errors': [], 'name': policy.name, 'mode': policy.mode,
                                     'channels': [str(value) for value in policy.channels.values_list('pk', flat=True)]},
                              alert_policy_scope=scope,
@@ -350,6 +352,8 @@ def alert_test_send(request):
         response_summary=summary,
         error_summary='' if success else summary,
     )
-    messages.success(request, '测试发送已记录。' if success else '测试发送未成功，结果已记录。')
+    message = '测试发送已记录。' if success else '测试发送未成功，结果已记录。'
+    messages.success(request, message)
     return _failure_redirect(request, next_url, 'channel', state={'values': {}, 'errors': []},
+                             message=message,
                              alert_channel_type=channel.channel_type, alert_channel_id=str(channel.pk))

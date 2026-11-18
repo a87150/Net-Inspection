@@ -32,6 +32,14 @@ class FormJsonContractTests(TestCase):
         plain = self.client.post(self.url, payload)
         self.assertEqual(plain.status_code, 302)
 
+    def test_success_message_does_not_pick_up_an_earlier_failure(self):
+        """A failed attempt stays unread in the session; success must not echo it."""
+        self.client.post(self.url, {**self.payload, 'mode': 'not-a-mode'},
+                         headers={'X-Form-Ajax': '1'})
+        ajax = self.client.post(self.url, self.payload, headers={'X-Form-Ajax': '1'})
+
+        self.assertNotIn('未保存', ajax.json()['message'])
+
     def test_valid_submission_returns_message_and_redirect(self):
         ajax = self.client.post(self.url, self.payload, headers={'X-Form-Ajax': '1'})
 
