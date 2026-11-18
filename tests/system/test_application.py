@@ -945,20 +945,26 @@ class VisualStructureTests(TestCase):
     def test_dedicated_computer_record_pages_use_shared_table_surfaces(self):
         for url in (analysis_task_url(), reverse('computer_error_list')):
             with self.subTest(url=url):
-                document = parse_response_html(self.client.get(url))
+                response = self.client.get(url)
+                document = parse_response_html(response)
                 self.assertTrue(
                     self._elements_with_class(document, 'div', 'table-toolbar'),
                 )
                 self.assertTrue(
                     self._elements_with_class(document, 'div', 'surface-card'),
                 )
-                sort_links = [
-                    attrs
-                    for tag, attrs in document.elements
-                    if tag == 'a' and 'data-sort-key' in attrs
-                ]
-                self.assertTrue(sort_links)
-                self.assertTrue(all(link.get('aria-label') for link in sort_links))
+                if response.context['table_definition'].key == 'computer_errors':
+                    # 该页表格由 Vue 渲染，排序能力来自 payload 的可排序列。
+                    columns = records_bootstrap(response)['columns']
+                    self.assertTrue(any(column['sortable'] for column in columns))
+                else:
+                    sort_links = [
+                        attrs
+                        for tag, attrs in document.elements
+                        if tag == 'a' and 'data-sort-key' in attrs
+                    ]
+                    self.assertTrue(sort_links)
+                    self.assertTrue(all(link.get('aria-label') for link in sort_links))
 
     def test_navigation_and_modals_have_accessible_names(self):
         asset_document = parse_response_html(
@@ -1715,8 +1721,11 @@ class RecordWorkspaceTests(TestCase):
         detail_url = reverse('computer_analysis_detail', args=[inspection.pk])
         self.assertContains(inspection_response, f'href="{detail_url}"')
         self.assertContains(inspection_response, '<span class="badge status-badge text-bg-warning" data-status="warning">警告</span>', html=True)
-        self.assertContains(error_response, f'href="{detail_url}"')
-        self.assertContains(error_response, f'<span class="badge status-badge text-bg-danger" data-status="abnormal">{error.report_problem_types}</span>', html=True)
+        error_rows = records_bootstrap(error_response)['rows']
+        self.assertIn(detail_url, [action['url'] for action in error_rows[0]['actions']])
+        badge = error_rows[0]['cells']['type']['badge']
+        self.assertEqual(badge['status'], 'abnormal')
+        self.assertEqual(badge['label'], error.report_problem_types)
 
     def test_dedicated_computer_record_pages_use_registered_page_size(self):
         inspections = [

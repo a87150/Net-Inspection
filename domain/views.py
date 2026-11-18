@@ -9,6 +9,8 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
+from index.common.table_payload import row_payloads as table_row_payloads
+from index.common.table_payload import table_payload
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition
 from domain.forms import DomainControllerConfigForm, DomainOperationForm
@@ -191,7 +193,46 @@ def domain_object_list(request, object_type, *, operation_form=None):
     page_obj = Paginator(objects, table_state['page_size']).get_page(
         request.GET.get('page'),
     )
+    admin = is_admin(request.user)
+    can_select = admin and object_type != 'groups'
+    can_manage = object_type != 'groups' and admin
+
+    def row_actions(obj):
+        actions = [{
+            'kind': 'link', 'label': '查看详情',
+            'url': reverse(page.detail_route, args=[obj.pk]),
+        }]
+        if object_type == 'groups' and admin:
+            actions.append({
+                'kind': 'link', 'label': '成员管理', 'variant': 'primary',
+                'url': reverse('domain_group_members', args=[obj.pk]),
+                'modal_target': 'domainGroupMembersModal',
+            })
+        if object_type == 'computers' and can_manage:
+            actions.append({
+                'kind': 'modal', 'label': '获取 BitLocker 密钥', 'variant': 'primary',
+                'url': reverse('domain_computer_bitlocker', args=[obj.pk]),
+                'modal_target': 'domainBitLockerModal',
+                'computer_name': obj.computer_name,
+            })
+        return actions
+
+    domain_objects = table_payload(
+        page_obj, table_definition,
+        table_row_payloads(
+            page_obj.object_list, table_definition,
+            row_id=lambda obj: obj.pk, actions=row_actions,
+        ),
+        extra={
+            'endpoint': f'/api/v1/domain-{object_type}/',
+            'label': page.title,
+            'region_label': f'{page.title}数据表',
+            'select_attr': 'data-domain-target-checkbox' if can_select else '',
+            'select_value_key': 'id',
+        },
+    )
     return render(request, 'domain/object_list.html', {
+        'domain_objects': domain_objects,
         'item_key': page.export_key,
         'export_key': page.export_key,
         'item_name': page.title,

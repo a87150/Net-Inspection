@@ -4,6 +4,8 @@ from django.contrib.auth import get_user_model
 from django.test import TransactionTestCase
 from django.urls import reverse
 
+from tests.payloads import rows as payload_rows
+
 from net.models import Domain_Account, Domain_Computer, Domain_Group, DomainMembership, Domain_Controller_Config, TaskRun
 from net.domain.sync import apply_domain_snapshot
 from net.domain.client import DomainActionResult
@@ -29,8 +31,16 @@ class MemberManagementTests(TransactionTestCase):
 
     def test_blue_entry_and_add_candidates_exclude_existing_members(self):
         page = self.client.get(reverse('domain_group_list'))
-        self.assertContains(page, 'data-modal-load="domainGroupMembersModal">成员管理</a>')
-        self.assertContains(page, 'class="btn btn-outline-primary btn-sm" href="' + self.url + '"')
+        actions = [
+            action for row in payload_rows(page, 'domain-objects-bootstrap')
+            for action in row['actions']
+        ]
+        member_action = next(
+            item for item in actions
+            if item['label'] == '成员管理' and item['url'] == self.url
+        )
+        self.assertEqual(member_action['modal_target'], 'domainGroupMembersModal')
+        self.assertEqual(member_action['url'], self.url)
         response = self.client.get(self.url, {'mode': 'add', 'object_type': 'account', 'q': 'Bob'})
         self.assertEqual(response.context['page_obj'].paginator.count, 1)
         self.assertContains(response, 'Bob')

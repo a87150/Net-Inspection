@@ -77,18 +77,18 @@ static/app/vue/
 
 ## 迁移状态
 
-已迁（2）：维护记录 `/maintenance/`（整页 Vue + REST 读写）、IP 管理 `/network/ip/`（台账仍服务端渲染，新增网段走本页弹窗 + `POST /api/v1/ip-subnets/`，不再跳后台 admin）。
+已迁（3）：维护记录 `/maintenance/`（整页 Vue + REST 读写）、IP 管理 `/network/ip/`（台账仍服务端渲染，新增网段走本页弹窗 + `POST /api/v1/ip-subnets/`，不再跳后台 admin）、B1 全部 9 个列表页（见下）。
 
 待迁，按形状分四批。
 
 | 批次 | 页面 | 说明 |
 | --- | --- | --- |
-| B1 列表页 | 告警记录、巡检记录、错误记录、任务列表、域账号/域计算机/域分组列表、门禁记录、PC 日志列表、PC 错误列表 | 都走 `apply_table_filters`，形状一致，做一个通用表格组件即可批量覆盖 |
+| ~~B1 列表页~~ 已迁 | 告警记录、巡检记录、错误记录、任务列表、域账号/域计算机/域分组列表、门禁记录、PC 日志列表、PC 错误列表 | 完成：`index/common/table_payload.py` 把 `TableDefinition` 的列/单元格/徽章/行动作压成 JSON，`static/app/vue/pages/resource_table.mjs` 一份组件渲染 8 页（告警页保留专属组件），翻页走 REST，筛选与排序仍是 URL 参数 |
 | B2 详情页 | 资产详情、人员详情、任务详情、告警详情、记录详情、PC 日志详情、PC 分析详情、域对象详情 | 只读为主，配少量动作 |
 | B3 写操作 | 资产新增/编辑、巡检配置、告警渠道与策略、导入、批量执行、维护窗口建删 | 目前是表单 POST + 重定向，逐步改成 REST + 前端提示 |
 | B4 其它 | 首页仪表盘、人员统计、网络拓扑、IP 管理台账、登录页 | 拓扑已有 JSON 端点，主要换前端渲染方式 |
 
-B1 是性价比最高的一批：一个组件 + 每页一个视图集，能吃掉 9 个页面。
+B1 已完成：一个通用组件 + `RecordTableViewSet` 子类吃掉了 9 个页面。行内的「查看详情 / 结束任务 / 成员管理 / BitLocker」由 payload 的 `actions` 描述（`link` / `form` / `modal` 三种），所以表单 POST 与模态框脚本照旧工作；域列表的分批选择列复用原 `data-domain-target-checkbox` 属性，`operation_modal.js` 无需改动。
 
 写操作先落 REST、页面继续服务端渲染是可行的中间态：IP 管理页就是这么做的，弹窗提交成功后整页刷新，台账仍由 `plan_report()` 渲染，没有第二套数据拼装。
 

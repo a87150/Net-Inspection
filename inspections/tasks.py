@@ -13,6 +13,7 @@ from django.db.models import Count, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import NoReverseMatch, reverse
+from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -24,6 +25,8 @@ from inspections.forms import (
     analysis_item_choices,
     inspection_item_choices,
 )
+from index.common.badges import status_tone
+from index.common.table_payload import row_payloads, table_payload
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition, project_record_definition
 from pc.software_policy import (
@@ -506,6 +509,28 @@ def task_history_settings(request):
     return redirect(reverse('task_list'))
 
 
+def _task_status_badge(task):
+    return {
+        'class': status_tone(task.status),
+        'status': task.status,
+        'label': task.get_status_display(),
+    }
+
+
+def _task_actions(task, admin):
+    actions = [{
+        'kind': 'link', 'label': '查看进度',
+        'url': reverse('task_detail', args=[task.pk]),
+    }]
+    if admin and task.status in task.ACTIVE_STATUSES:
+        actions.append({
+            'kind': 'form', 'label': '结束任务', 'danger': True,
+            'url': reverse('task_cancel', args=[task.pk]),
+            'confirm': '确定结束这个任务吗？尚未开始的目标会被取消，正在执行的外部调用将在超时后退出。',
+        })
+    return actions
+
+
 def task_list(request):
     definition = get_table_definition('task_runs')
     tasks, table_state = apply_table_filters(
@@ -524,8 +549,22 @@ def task_list(request):
         cancelled=Count('pk', filter=Q(status=TaskRun.Status.CANCELLED)),
     )
     page_obj = Paginator(tasks, table_state['page_size']).get_page(request.GET.get('page'))
+    admin = is_admin(request.user)
     return render(request, 'inspections/task_list.html', {
         'page_obj': page_obj,
+        'records_bootstrap': table_payload(
+            page_obj, definition,
+            row_payloads(
+                page_obj.object_list, definition,
+                badges={'status': _task_status_badge},
+                actions=lambda task: _task_actions(task, admin),
+            ),
+            extra={
+                'endpoint': '/api/v1/task-runs/', 'label': '后台任务',
+                'region_label': '后台任务数据表',
+                'csrf': get_token(request),
+            },
+        ),
         'task_metrics': task_metrics,
         'table_definition': definition,
         'table_state': table_state,

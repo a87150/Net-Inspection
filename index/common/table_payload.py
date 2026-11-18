@@ -22,7 +22,7 @@ def column_payloads(definition):
 def _raw_value(record, field):
     if isinstance(record, dict):
         return record.get(field.source)
-    return getattr(record, field.source, None)
+    return display_value(record, field)
 
 
 def display_value(obj, field):
@@ -45,8 +45,12 @@ def detail_field_payloads(obj, definition):
     ]
 
 
-def row_payloads(records, definition, badges=None):
-    """badges maps a field key to a callable returning {status, label} or None."""
+def row_payloads(records, definition, badges=None, actions=None, row_id=None):
+    """badges/actions/row_id are callables taking one record.
+
+    badges maps a field key to {status, tone, label} or None; actions returns a
+    list of {kind, label, url, danger?, confirm?} entries rendered in the 操作 cell.
+    """
     badges = badges or {}
     rows = []
     for record in records:
@@ -61,10 +65,15 @@ def row_payloads(records, definition, badges=None):
             cells[field.key] = {
                 "text": format_table_field(_raw_value(record, field), field),
             }
-        rows.append({
+        row = {
             "cells": cells,
             "url": (record.get("url") if isinstance(record, dict) else None) or "",
-        })
+        }
+        if actions:
+            row["actions"] = actions(record) or []
+        if row_id:
+            row["id"] = str(row_id(record))
+        rows.append(row)
     return rows
 
 

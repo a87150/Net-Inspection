@@ -51,23 +51,16 @@
 
 <div data-table-workspace data-table-key="{{ table_definition.key }}">
 <div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
-<div class="card surface-card table-scroll-shell"><p class="table-scroll-hint">可横向滚动查看更多域对象字段</p><div class="table-responsive" role="region" aria-label="{{ item_name }}数据表" tabindex="0"><table class="table data-table table-hover align-middle mb-0">
-{% include 'common/table_caption.html' %}
-    <thead><tr>
-        {% if can_administer and can_manage_domain %}<th scope="col" class="text-center"><span class="visually-hidden">选择</span></th>{% endif %}
-        {% include 'common/table_sort_headers.html' %}
-        <th scope="col" class="table-actions-column table-actions-cell">操作</th>
-    </tr></thead>
-    <tbody>
-    {% for obj in page_obj %}
-    <tr>{% if can_administer and can_manage_domain %}<td class="text-center"><input class="form-check-input" type="checkbox" value="{{ obj.pk }}" data-domain-target-checkbox aria-label="选择{{ obj }}"></td>{% endif %}{% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ obj|get_attr:field.source|format_table_value:field.kind }}</td>{% endfor %}<td class="text-end table-actions-cell"><a class="btn btn-outline-dark btn-sm" href="{% url detail_route obj.pk %}">查看详情</a>{% if domain_object_type == 'group' and can_administer %} <a class="btn btn-outline-primary btn-sm" href="{% url 'domain_group_members' obj.pk %}" data-modal-load="domainGroupMembersModal">成员管理</a>{% endif %}{% if domain_object_type == 'computer' and can_manage_domain %} <button type="button" class="btn btn-outline-primary btn-sm" data-bitlocker-url="{% url 'domain_computer_bitlocker' obj.pk %}" data-computer-name="{{ obj.computer_name }}" data-bs-toggle="modal" data-bs-target="#domainBitLockerModal">获取 BitLocker 密钥</button>{% endif %}</td></tr>
-    {% empty %}<tr><td colspan="20"><div class="empty-state"><strong>暂无{{ item_name }}</strong><span>请配置域控后执行同步。</span></div></td></tr>{% endfor %}
-    </tbody>
-</table></div></div>
-{% include 'common/pagination.html' %}
+<div class="card surface-card table-scroll-shell"><p class="table-scroll-hint">可横向滚动查看更多域对象字段</p>
+<div id="domain-objects" data-vue-page="domain-objects" data-vue-bootstrap="domain-objects-bootstrap">
+<noscript><p class="alert alert-warning mb-0">域对象表需要启用 JavaScript。</p></noscript>
+</div>
+</div>
+{{ domain_objects|json_script:"domain-objects-bootstrap" }}
 </div>
 {% endblock %}
 {% block page_scripts %}
+<script type="module" src="{% static 'app/vue/boot.mjs' %}"></script>
 {% include 'common/scripts/table_workspace.html' %}
 {% include 'common/scripts/modal_workflows.html' %}
 {% if domain_object_type == 'group' and can_administer %}<script type="module" src="{% static 'app/js/domain/group_members_island.js' %}"></script>{% endif %}

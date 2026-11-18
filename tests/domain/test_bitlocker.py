@@ -6,6 +6,8 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
+
+from tests.payloads import rows as payload_rows
 from ldap3 import LEVEL
 
 from net.domain.bitlocker import read_bitlocker_keys
@@ -101,8 +103,10 @@ class BitLockerViewTests(TestCase):
         self.client.force_login(self.admin)
         response = self.client.get(reverse("domain_computer_list"))
         self.assertNotContains(response, 'value="unlock"')
-        self.assertContains(response, self.url)
-        self.assertContains(response, "BitLocker")
+        # 按钮由注入的行数据渲染，断言 payload 而非 HTML。
+        actions = payload_rows(response, 'domain-objects-bootstrap')[0]['actions']
+        self.assertIn(self.url, [action['url'] for action in actions])
+        self.assertTrue(any('BitLocker' in action['label'] for action in actions))
 
     @patch("domain.bitlocker.read_bitlocker_keys", side_effect=ValidationError("LDAP 权限不足。"))
     def test_lookup_error_is_uncached_and_retryable(self, read):

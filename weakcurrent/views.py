@@ -7,6 +7,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from weakcurrent.forms import AccessRecordSourceForm
 from index.common.access import admin_required, is_admin
+from index.common.table_payload import row_payloads, table_payload
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition
 from net.access.adapters import V6600_V6000_COMPAT_VERSION, build_adapter
@@ -21,8 +22,16 @@ def access_record_list(request):
         request, AccessRecord.objects.select_related('source', 'source__weak_current_device'), definition,
         include_legacy_status=False,
     )
+    page_obj = Paginator(records, table_state['page_size']).get_page(request.GET.get('page'))
     return render(request, 'access/record_list.html', {
-        'page_obj': Paginator(records, table_state['page_size']).get_page(request.GET.get('page')),
+        'page_obj': page_obj,
+        'records_bootstrap': table_payload(
+            page_obj, definition, row_payloads(page_obj.object_list, definition),
+            extra={
+                'endpoint': '/api/v1/access-records/', 'label': '门禁记录',
+                'show_actions': False, 'region_label': '门禁记录数据表',
+            },
+        ),
         'table_definition': definition, 'table_preference_key': 'access_records',
         'table_state': table_state, 'page_sizes': PAGE_SIZES,
         'pagination_query': query_without_page(request),

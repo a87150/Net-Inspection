@@ -7,6 +7,11 @@ const pages = {
     'alert-list': () => import('./pages/alert_list.mjs'),
     'inspection-records': () => import('./pages/resource_table.mjs'),
     'error-records': () => import('./pages/resource_table.mjs'),
+    'access-records': () => import('./pages/resource_table.mjs'),
+    'pc-logs': () => import('./pages/resource_table.mjs'),
+    'pc-errors': () => import('./pages/resource_table.mjs'),
+    'task-runs': () => import('./pages/resource_table.mjs'),
+    'domain-objects': () => import('./pages/resource_table.mjs'),
 };
 
 export function readBootstrap(id) {

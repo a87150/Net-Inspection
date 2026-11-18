@@ -39,36 +39,15 @@
 {% include 'common/table_workspace.html' %}
 </div>
 <div class="card surface-card table-scroll-shell">
-<div class="table-responsive" role="region" aria-label="门禁记录数据表" tabindex="0">
-<table class="table data-table table-hover align-middle mb-0">
-{% include 'common/table_caption.html' %}
-<thead>
-<tr>
-{% include 'common/table_sort_headers.html' %}
-</tr>
-</thead>
-<tbody>
-{% for record in page_obj %}
-<tr>
-{% for field in table_definition.fields %}
-<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}>{{ record|get_attr:field.source|format_table_value:field.kind }}</td>
-{% endfor %}
-</tr>
-{% empty %}
-<tr>
-<td colspan="8">
-{% include 'common/empty_state.html' with empty_title="暂无门禁记录" empty_message="管理员配置平台并发起采集后，记录将显示在这里。" %}
-</td>
-</tr>
-{% endfor %}
-</tbody>
-</table>
+<div id="access-records" data-vue-page="access-records" data-vue-bootstrap="records-bootstrap">
+<noscript><p class="alert alert-warning mb-0">门禁记录表需要启用 JavaScript。</p></noscript>
 </div>
 </div>
-{% include 'common/pagination.html' %}
+{{ records_bootstrap|json_script:"records-bootstrap" }}
 </div>
 {% endblock %}
 {% block page_scripts %}
+<script type="module" src="{% static 'app/vue/boot.mjs' %}"></script>
 {% include 'common/scripts/table_workspace.html' %}
 {% include 'common/scripts/modal_workflows.html' %}
 <script defer src="{% static 'app/js/access/source_modal.js' %}">

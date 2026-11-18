@@ -450,6 +450,21 @@ def error_records(request):
     })
 
 
+def _error_type_badge_for_analysis(analysis):
+    return {
+        'class': 'text-bg-danger',
+        'status': 'abnormal',
+        'label': analysis.report_problem_types or '异常',
+    }
+
+
+def _error_actions(analysis):
+    return [{
+        'kind': 'link', 'label': '详情',
+        'url': reverse('computer_analysis_detail', args=[analysis.pk]),
+    }]
+
+
 def computer_error_list(request):
     table_definition = get_table_definition('computer_errors')
     from .result_query import computer_queryset
@@ -461,6 +476,19 @@ def computer_error_list(request):
     return render(request, 'pc/error_list.html', {
         'page_obj': page_obj,
         'table_definition': table_definition,
+        'records_bootstrap': table_payload(
+            page_obj, table_definition,
+            table_row_payloads(
+                page_obj.object_list, table_definition,
+                badges={'type': _error_type_badge_for_analysis},
+                actions=_error_actions,
+            ),
+            extra={
+                'endpoint': '/api/v1/computer-errors/', 'label': 'PC 异常记录',
+                'region_label': 'PC 异常记录数据表',
+                'cell_class': {'message': 'text-wrap detail-cell'},
+            },
+        ),
         'table_state': table_state,
         'page_sizes': PAGE_SIZES,
         'table_export_path': reverse('table_export', args=['computer_errors']),

@@ -3,6 +3,7 @@
 import csv
 
 from tests import response_body
+from tests.payloads import rows as payload_rows
 from datetime import time
 from io import StringIO
 from urllib.parse import urlsplit
@@ -384,9 +385,16 @@ class TaskUiTestCase(TestCase):
         detail = self.client.get(reverse('task_detail', args=[task.pk]))
 
         stop_url = reverse('task_cancel', args=[task.pk])
-        for response in (listing, detail):
-            self.assertContains(response, '结束任务')
-            self.assertContains(response, f'action="{stop_url}"')
+        stop_actions = [
+            action for row in payload_rows(listing, 'records-bootstrap')
+            for action in row['actions']
+            if action['kind'] == 'form'
+        ]
+        self.assertTrue(stop_actions)
+        self.assertEqual(stop_actions[0]['label'], '结束任务')
+        self.assertEqual(stop_actions[0]['url'], stop_url)
+        self.assertContains(detail, '结束任务')
+        self.assertContains(detail, f'action="{stop_url}"')
 
     def test_manual_stop_requires_login_and_cancels_the_task(self):
         """An unauthenticated or GET request must not mutate task execution state."""

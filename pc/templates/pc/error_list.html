@@ -1,5 +1,5 @@
 {% extends 'common/base.html' %}
-{% load extras %}
+{% load extras static %}
 {% block title %}PC 异常记录{% endblock %}
 {% block content %}
 <header class="page-heading">
@@ -7,19 +7,12 @@
 </header>
 <div data-table-workspace data-table-key="{{ table_definition.key }}">
 <div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
-<div class="card surface-card table-scroll-shell"><p class="table-scroll-hint">可横向滚动查看完整异常信息</p><div class="table-responsive" role="region" aria-label="PC 异常记录数据表" tabindex="0"><table class="table data-table table-hover align-middle mb-0">
-{% include 'common/table_caption.html' %}
-    <thead><tr>{% include 'common/table_sort_headers.html' %}<th scope="col" class="table-actions-column table-actions-cell">操作</th></tr></thead>
-    <tbody>
-    {% for analysis in page_obj %}
-    <tr>
-        {% for field in table_definition.fields %}<td data-column-key="{{ field.key }}"{% if not field.default_visible %} hidden{% endif %}{% if field.key == 'message' %} class="text-wrap detail-cell"{% endif %}>{% if field.key == 'computer_name' %}<span class="fw-semibold">{{ analysis.computer.computer_name|default:"未知" }}</span>{% elif field.key == 'user_name' %}{{ analysis.computer.user_name|default:"-" }}{% elif field.key == 'log_time' %}{{ analysis.source_collected_at|date:"Y-m-d H:i:s"|default:"-" }}{% elif field.key == 'time' %}{{ analysis.created_at|date:"Y-m-d H:i:s" }}{% elif field.key == 'type' %}{% include 'common/status_badge.html' with status="abnormal" label=analysis.report_problem_types %}{% elif field.key == 'message' %}{{ analysis.summary }}{% endif %}</td>{% endfor %}
-        <td class="text-end table-actions-cell"><a href="{% url 'computer_analysis_detail' analysis.pk %}" class="btn btn-outline-dark btn-sm">详情</a></td>
-    </tr>
-    {% empty %}<tr><td colspan="6"><div class="empty-state"><strong>没有异常记录</strong><span>当前 PC 日志分析记录未发现需要处理的异常。</span></div></td></tr>{% endfor %}
-    </tbody>
-</table></div></div>
-{% include 'common/pagination.html' %}
+<div class="card surface-card table-scroll-shell"><p class="table-scroll-hint">可横向滚动查看完整异常信息</p>
+<div id="pc-errors" data-vue-page="pc-errors" data-vue-bootstrap="records-bootstrap">
+<noscript><p class="alert alert-warning mb-0">PC 异常记录表需要启用 JavaScript。</p></noscript>
+</div>
+</div>
+{{ records_bootstrap|json_script:"records-bootstrap" }}
 </div>
 {% endblock %}
-{% block page_scripts %}{% include 'common/scripts/table_workspace.html' %}{% endblock %}
+{% block page_scripts %}<script type="module" src="{% static 'app/vue/boot.mjs' %}"></script>{% include 'common/scripts/table_workspace.html' %}{% endblock %}
