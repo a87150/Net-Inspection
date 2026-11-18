@@ -78,13 +78,15 @@
                      role="img" aria-labelledby="topology-title topology-description"
                      @pointerdown.self="startPan" @pointermove="movePan" @pointerup="endPan" @pointercancel="endPan">
                     <title id="topology-title">企业主要网络设备与 LLDP/CDP 物理拓扑</title>
-                    <desc id="topology-description">默认显示主要网络设备，点击交换机或无线控制器可展开下联终端；实线表示 LLDP/CDP，虚线表示网段推断。</desc>
+                    <desc id="topology-description">按出口、核心、汇聚、接入自上而下排列；粗线是设备上下级关系，实线表示 LLDP/CDP，虚线表示网段推断。点击交换机或无线控制器可展开下联终端。</desc>
                     <g :transform="`translate(${viewport.x} ${viewport.y}) scale(${viewport.scale})`">
+                        <path v-for="edge in topology.hierarchyEdges" :key="edge.id" :d="hierarchyPath(edge)"
+                              class="topology-edge topology-edge--hierarchy" aria-hidden="true" />
                         <path v-for="edge in topology.attachmentEdges" :key="edge.id" :d="edgePath(edge)"
                               class="topology-edge" :class="edge.attachmentSource === 'physical_discovered' ? 'topology-edge--attachment-physical' : 'topology-edge--inferred'"
                               tabindex="0" role="button" :aria-label="edgeAriaLabel(edge)" @click="selectEdge(edge)" @keydown.enter.prevent="selectEdge(edge)" @keydown.space.prevent="selectEdge(edge)" />
                         <path v-for="edge in topology.physicalEdges" :key="edge.id" :d="edgePath(edge)"
-                              class="topology-edge topology-edge--physical" :class="{ 'is-stale': edge.status === 'stale' }"
+                              class="topology-edge topology-edge--physical" :class="{ 'is-stale': edge.status === 'stale', 'is-lateral': edge.lateral }"
                               tabindex="0" role="button" :aria-label="edgeAriaLabel(edge)" @click="selectEdge(edge)" @keydown.enter.prevent="selectEdge(edge)" @keydown.space.prevent="selectEdge(edge)" />
                         <g v-for="node in topology.nodes" :key="node.id" data-topology-device-card
                            class="topology-node topology-device-card"

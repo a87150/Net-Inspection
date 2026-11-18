@@ -1,6 +1,7 @@
 """Build a presentation-safe enterprise network topology payload."""
 
 import re
+from collections import deque
 from functools import lru_cache
 from ipaddress import ip_interface
 
@@ -55,7 +56,11 @@ def network_role(device):
         return 'distribution_switch'
     if any(token in value for token in ('wireless controller', '无线控制器')) or _has_code(value, 'wlc') or _has_code(value, 'ac'):
         return 'wireless_controller'
-    if any(token in value for token in ('access switch', '接入交换机', '交换机', 'switch')):
+    # 现场台账里大量设备只写了「接入」「汇聚」「POE」，没有英文型号，
+    # 只认 switch/交换机 会把它们全部压成「其他」，层级就散了。
+    if any(token in value for token in ('access switch', '接入交换机', '交换机', 'switch', 'poe')):
+        return 'access_switch'
+    if '接入' in value:
         return 'access_switch'
     if any(token in value for token in ('router', '路由器')):
         return 'router'
@@ -216,6 +221,43 @@ def _physical_parent(endpoint, backbone_by_id, physical_edges):
     return None
 
 
+def backbone_parents(backbone_nodes, physical_edges):
+    """把已解析链路收成树：从最靠近出口的设备出发做 BFS。
+
+    链路本身是网状的，树只是一种呈现。先访问的一定更靠近出口（tier 更小），
+    所以父节点的层号永远不大于子节点，画出来就是从出口往下走。
+    """
+    by_pk = {node['id'].split(':', 1)[1]: node for node in backbone_nodes}
+    adjacency = {node['id']: set() for node in backbone_nodes}
+    for edge in physical_edges:
+        if edge.get('resolution_status') != 'resolved':
+            continue
+        left = by_pk.get(str(edge.get('local_device_id') or ''))
+        right = by_pk.get(str(edge.get('remote_device_id') or ''))
+        if left is None or right is None or left is right:
+            continue
+        adjacency[left['id']].add(right['id'])
+        adjacency[right['id']].add(left['id'])
+
+    parent = {}
+    visited = set()
+    for root in sorted(backbone_nodes, key=lambda node: (
+            node['tier'] if node['tier'] is not None else 99, node['label'], node['id'])):
+        if root['id'] in visited:
+            continue
+        visited.add(root['id'])
+        queue = deque([root['id']])
+        while queue:
+            current = queue.popleft()
+            for neighbour in sorted(adjacency[current]):
+                if neighbour in visited:
+                    continue
+                visited.add(neighbour)
+                parent[neighbour] = current
+                queue.append(neighbour)
+    return parent
+
+
 def attach_endpoints(backbone_nodes, endpoint_nodes, physical_edges):
     backbone_by_id = {node['id']: node for node in backbone_nodes}
     edges = []
@@ -249,6 +291,19 @@ def build_enterprise_topology(*, network_devices, computers, servers, weak_curre
         *_endpoint_nodes(computers, servers, weak_current),
     ]
     physical_edges = list(physical.get('links', []))
+    hierarchy = backbone_parents(backbone_nodes, physical_edges)
+    hierarchy_edges = []
+    for node in backbone_nodes:
+        parent_id = hierarchy.get(node['id'])
+        if not parent_id:
+            continue
+        node['parent_id'] = parent_id
+        hierarchy_edges.append({
+            'id': f'hierarchy:{parent_id}:{node["id"]}',
+            'kind': 'backbone_hierarchy',
+            'source': parent_id,
+            'target': node['id'],
+        })
     attachment_edges = attach_endpoints(backbone_nodes, endpoint_nodes, physical_edges)
     nodes = backbone_nodes + endpoint_nodes
     nodes.sort(key=lambda node: (
@@ -264,6 +319,7 @@ def build_enterprise_topology(*, network_devices, computers, servers, weak_curre
         'mode': 'empty' if not backbone_count else ('hybrid' if has_physical_links else 'backbone'),
         'nodes': nodes,
         'attachment_edges': attachment_edges,
+        'hierarchy_edges': sorted(hierarchy_edges, key=lambda edge: edge['id']),
         'interfaces': list(physical.get('interfaces', [])),
         'physical_edges': physical_edges,
         'asset_truncation': dict(asset_truncation or {}),

@@ -170,7 +170,16 @@ export function normalizeTopology(snapshot = {}) {
   const physicalEdges = [...physicalByEndpoints.values()]
     .map(({ observationCount, ...edge }) => edge)
     .sort((left, right) => compareText(left.id, right.id));
-  return { nodes, attachmentEdges, physicalEdges };
+  const hierarchyEdges = (Array.isArray(snapshot.hierarchy_edges) ? snapshot.hierarchy_edges : [])
+    .filter((edge) => edge && nodeIds.has(text(edge.source)) && nodeIds.has(text(edge.target)))
+    .map((edge) => ({
+      id: text(edge.id),
+      kind: 'backbone_hierarchy',
+      source: text(edge.source),
+      target: text(edge.target),
+    }))
+    .sort((left, right) => compareText(left.id, right.id));
+  return { nodes, attachmentEdges, physicalEdges, hierarchyEdges };
 }
 
 export function reconcileExpandedIds(expandedIds, graph) {
@@ -194,7 +203,10 @@ export function visibleTopology(graph, expandedIds = new Set()) {
     && !attachmentPairs.has(`${edge.source}|${edge.target}`)
     && !attachmentPairs.has(`${edge.target}|${edge.source}`)
   ));
-  return { ...graph, nodes, attachmentEdges, physicalEdges };
+  const hierarchyEdges = (graph.hierarchyEdges || []).filter(
+    (edge) => ids.has(edge.source) && ids.has(edge.target),
+  );
+  return { ...graph, nodes, hierarchyEdges, attachmentEdges, physicalEdges };
 }
 
 function clamp(value, minimum, maximum) {
@@ -256,11 +268,12 @@ function packRows(nodes, available, gap = 40) {
   return rows;
 }
 
-/* 终端紧跟自己的上级，向下错位避让，与任何已放置卡片都不重叠。 */
-// ponytail: 逐个试位的 O(n²) 避让，n 为可见卡片数（几十张），够用；
-// 若将来单页要画上千节点，改成按行建索引再二分。
-function layoutEndpointGroups(positionedBackbone, endpoints, box) {
-  const { padding, width, blockers = [] } = box;
+/* 所有展开的终端统一排在主干各层之下，按上游设备分组，一组一行。
+   早期版本把终端塞进主干行间空隙里避让，结果接入层和终端混成一片，
+   横向也跟自己的上级对不上；分层到底反而更好读。 */
+function layoutEndpointLayers(positionedBackbone, endpoints, box) {
+  const { padding, width, startY } = box;
+  const available = width - (padding * 2);
   const groups = positionedBackbone
     .map((parent) => ({
       parent,
@@ -268,87 +281,31 @@ function layoutEndpointGroups(positionedBackbone, endpoints, box) {
     }))
     .filter((group) => group.children.length)
     .sort((left, right) => left.parent.x - right.parent.x);
-  if (!groups.length) return { nodes: [], bottom: 0 };
-
-  const rowGap = 72;
-  const columnGap = 12;
-  const available = width - (padding * 2);
-  const occupied = blockers.map((node) => ({
-    x: node.x,
-    y: node.y,
-    cardWidth: node.cardWidth,
-    halfHeight: node.kind === 'backbone' ? 40 : 33,
-  }));
   const placed = [];
-  let bottom = 0;
-
-  const fits = (left, y, row) => {
-    let cursor = left;
-    for (const item of row) {
-      const centerX = cursor + (item.cardWidth / 2);
-      const clash = occupied.some((other) => (
-        Math.abs(other.x - centerX) < ((other.cardWidth + item.cardWidth) / 2) + 8
-        && Math.abs(other.y - y) < (other.halfHeight + 33)
-      ));
-      if (clash) return false;
-      cursor += item.cardWidth + columnGap;
-    }
-    return true;
-  };
-
+  let y = startY;
   for (const group of groups) {
-    const items = group.children.map((node) => ({
-      node,
-      // 名字再长也不能超过一行可用宽度，否则会被整体 clamp 到同一处而重叠。
-      cardWidth: Math.min(cardWidthFor(node), available),
-    }));
-    let index = 0;
-    // 从父卡片底边往下 8px 起排，边上还有空位就先横着挪，挪不开才往下让。
-    let rowY = group.parent.y + 81;
-    while (index < items.length) {
-      const row = [];
-      let rowWidth = 0;
-      while (index + row.length < items.length) {
-        const item = items[index + row.length];
-        const extra = row.length ? columnGap : 0;
-        if (row.length && (rowWidth + extra + item.cardWidth) > available) break;
-        rowWidth += extra + item.cardWidth;
-        row.push(item);
-      }
-      const maxLeft = Math.max(padding, width - padding - rowWidth);
-      const centered = clamp(group.parent.x - (rowWidth / 2), padding, maxLeft);
-      const stride = Math.max(140, rowWidth * 0.6);
-      const candidates = [centered];
-      for (let shift = 1; shift <= 3; shift += 1) {
-        candidates.push(clamp(centered + (shift * stride), padding, maxLeft));
-        candidates.push(clamp(centered - (shift * stride), padding, maxLeft));
-      }
-      candidates.push(padding, maxLeft);
-
-      let spot = null;
-      for (let attempt = 0; attempt < 24 && !spot; attempt += 1) {
-        const y = rowY + (attempt * rowGap);
-        const left = candidates.find((candidate) => fits(candidate, y, row));
-        if (left !== undefined) spot = { left, y };
-      }
-      if (!spot) {
-        spot = { left: centered, y: rowY + (24 * rowGap) };
-      }
-      let cursor = spot.left;
-      for (const item of row) {
-        const centerX = Math.round(cursor + (item.cardWidth / 2));
-        occupied.push({ x: centerX, y: spot.y, cardWidth: item.cardWidth, halfHeight: 33 });
-        placed.push({
-          ...item.node, cardWidth: item.cardWidth, x: centerX, y: Math.round(spot.y),
-        });
-        cursor += item.cardWidth + columnGap;
-      }
-      bottom = Math.max(bottom, spot.y);
-      rowY = spot.y + rowGap;
-      index += row.length;
+    for (const row of packRows(group.children, available)) {
+      placed.push(...distribute(row, padding, width - padding, y));
+      y += 74;
     }
+    y += 14;
   }
-  return { nodes: placed, bottom };
+  return { nodes: placed, bottom: groups.length ? y : startY };
+}
+
+
+/* 同层的子设备按父设备在上一层的左右位置排序，同一棵子树因此挨在一起，
+   顺着连线往下读不会左右跳。没有父的（多站点各自出口）排在本层最前。 */
+function orderByParent(nodes, placed) {
+  const parentX = new Map(placed.map((node) => [node.id, node.x]));
+  return [...nodes].sort((left, right) => {
+    const leftX = parentX.has(left.parentId) ? parentX.get(left.parentId) : -1;
+    const rightX = parentX.has(right.parentId) ? parentX.get(right.parentId) : -1;
+    return leftX - rightX
+      || compareText(left.parentId || '', right.parentId || '')
+      || compareText(left.label, right.label)
+      || compareText(left.id, right.id);
+  });
 }
 
 export function layoutTopology(graph, viewport = {}) {
@@ -364,29 +321,22 @@ export function layoutTopology(graph, viewport = {}) {
   const positionedEndpoints = [];
   let tierY = padding + 46;
   for (const tier of tiers) {
-    const members = backbone.filter((node) => Number(node.tier ?? 3) === tier);
-    // 逐行推进：某个设备的终端紧跟它所在那一行，后面的行再从终端下方开始，
-    // 这样终端不会被本层后面几行的卡片挤到底部去。
+    const members = orderByParent(
+      backbone.filter((node) => Number(node.tier ?? 3) === tier),
+      positionedBackbone,
+    );
     for (const row of packRows(members, available)) {
-      const placedRow = distribute(row, padding, width - padding, tierY);
-      positionedBackbone.push(...placedRow);
+      positionedBackbone.push(...distribute(row, padding, width - padding, tierY));
       tierY += 118;
-
-      const children = endpoints.filter(
-        (node) => placedRow.some((parent) => parent.id === node.parentId),
-      );
-      if (children.length) {
-        const laid = layoutEndpointGroups(placedRow, children, {
-          padding,
-          width,
-          blockers: [...positionedBackbone, ...positionedEndpoints],
-        });
-        positionedEndpoints.push(...laid.nodes);
-        tierY = laid.bottom + 74;
-      }
     }
     tierY += 35;
   }
+
+  const terminals = layoutEndpointLayers(positionedBackbone, endpoints, {
+    padding, width, startY: tierY + 20,
+  });
+  positionedEndpoints.push(...terminals.nodes);
+  tierY = terminals.bottom;
   // 展开的终端可能超出一屏高度：画布跟着长高，别把它们压回去重叠。
   const contentBottom = Math.max(
     height - padding - 90,
@@ -407,10 +357,23 @@ export function layoutTopology(graph, viewport = {}) {
     ...positioned.map((node) => node.y + 44),
   );
 
+  const placedById = new Map(positioned.map((node) => [node.id, node]));
+  const sameTier = (edge) => {
+    const source = placedById.get(edge.source);
+    const target = placedById.get(edge.target);
+    if (!source || !target) return false;
+    // 同一层内多行时 y 会差一整行，所以按层号判断，不按 y。
+    if (source.kind === 'backbone' && target.kind === 'backbone') {
+      return Number(source.tier ?? 3) === Number(target.tier ?? 3);
+    }
+    return Math.abs(source.y - target.y) < 12;
+  };
   return {
     nodes: positioned,
+    hierarchyEdges: (graph.hierarchyEdges || []).map((edge) => ({ ...edge })),
     attachmentEdges: graph.attachmentEdges.map((edge) => ({ ...edge })),
-    physicalEdges: graph.physicalEdges.map((edge) => ({ ...edge })),
+    // 同层互联网线在树状图里只会横向切开画面，标出来交给样式淡化。
+    physicalEdges: graph.physicalEdges.map((edge) => ({ ...edge, lateral: sameTier(edge) })),
     legend: [
       { kind: 'physical', label: 'LLDP/CDP 物理链路' },
       { kind: 'inferred', label: '网段推断终端' },

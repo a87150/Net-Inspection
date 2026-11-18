@@ -86,7 +86,8 @@ static/app/vue/
 | ~~B1 列表页~~ 已迁 | 告警记录、巡检记录、错误记录、任务列表、域账号/域计算机/域分组列表、门禁记录、PC 日志列表、PC 错误列表 | 完成：`index/common/table_payload.py` 把 `TableDefinition` 的列/单元格/徽章/行动作压成 JSON，`static/app/vue/pages/resource_table.mjs` 一份组件渲染 8 页（告警页保留专属组件），翻页走 REST，筛选与排序仍是 URL 参数 |
 | ~~B2 详情页~~ 已迁 | 资产详情、人员详情、任务详情、告警详情、记录详情、PC 日志详情、PC 分析详情、域对象详情 | 8 类详情页全部由 `index/common/detail_payload.py` + `static/app/vue/pages/resource_detail.mjs` 渲染。payload 是 `{title, eyebrow, description, actions, sections, disclosure, csrf}`；分区只有 `fields` / `list` / `table` / `groups` / `text` / `alert` / `form` 七种，够覆盖现有全部详情页。`actions` 支持 `link` 与 `form`（带 `confirm`），表格单元格支持 `{text, badge, url, label, note}`，所以分级徽章、结果链接、脱敏摘要都不用另写模板。`GET /api/v1/alert-events/<pk>/detail/` 与页面共用同一个构造函数 |
 | ~~B3 写操作~~ 已迁 | 资产新增/编辑、巡检配置、问题等级、告警渠道/策略/模板、导入、批量执行、维护窗口、PC 采集配置、人员平台与同步计划、门禁来源 | 模态框表单带 `data-form-ajax` 时用 fetch 提交，服务端按 `X-Form-Ajax` 决定回 JSON 还是重定向：失败 400 + `errors[]` 留在框里，成功 200 + `message/redirect` 就地提示。表单本身没改，禁用 JS 时照旧 POST + 重定向 |
-| B4 其它 | 首页仪表盘、人员统计、网络拓扑、IP 管理台账、登录页 | 拓扑已有 JSON 端点，主要换前端渲染方式 |
+| ~~B4 拓扑~~ 已改 | 网络拓扑 | 拓扑本来就是 Vue（`operations-overview/*.js`），这轮改的是布局本身：后端用已解析链路给主干设备算上下级，前端按出口→核心→汇聚→接入自上而下分层，连线换成正交折线，展开的终端统一沉到所有主干层之下 |
+| B4 其余 | 首页仪表盘、人员统计、IP 管理台账、登录页 | 均为只读汇总或单表单页，服务端渲染首屏更快、无 JS 依赖。首页卡片数据已经是 `items` 列表结构，需要自动刷新时再挂 Vue 岛即可 |
 
 B1 已完成：一个通用组件 + `RecordTableViewSet` 子类吃掉了 9 个页面。行内的「查看详情 / 结束任务 / 成员管理 / BitLocker」由 payload 的 `actions` 描述（`link` / `form` / `modal` 三种），所以表单 POST 与模态框脚本照旧工作；域列表的分批选择列复用原 `data-domain-target-checkbox` 属性，`operation_modal.js` 无需改动。
 

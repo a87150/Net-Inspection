@@ -129,6 +129,10 @@
 .topology-edge--physical { stroke: var(--overview-cyan); stroke-width: 2.2; filter: drop-shadow(0 0 4px rgba(85, 222, 246, .48)); cursor: pointer; }
 .topology-edge--physical.is-stale { stroke: var(--overview-amber); stroke-dasharray: 7 5; }
 .topology-edge--physical:focus { stroke-width: 4; outline: none; }
+/* 上下级连线只交代结构，压在最底层，别和物理链路抢注意力。 */
+.topology-edge--hierarchy { stroke: rgba(148, 196, 214, .42); stroke-width: 1.4; stroke-linecap: square; }
+/* 同层互联的链路在树状图里只是横向干扰，压到几乎看不见。 */
+.topology-edge--physical.is-lateral { stroke-width: 1; opacity: .28; filter: none; }
 .topology-device-card { cursor: default; outline: none; }
 .topology-device-card.is-backbone[role="button"] { cursor: pointer; }
 .topology-device-card__surface { fill: rgba(12, 34, 50, .96); stroke: rgba(116, 223, 244, .62); stroke-width: 1.2; vector-effect: non-scaling-stroke; transition: fill .18s ease, stroke .18s ease, filter .18s ease; }

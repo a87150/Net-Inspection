@@ -147,12 +147,39 @@ if (mountElement && bootstrapElement) {
         this.panStart = null;
         this.controller?.updateUiState({ viewport: this.viewport });
       },
-      edgePath(edge) {
+      /* 卡片上下边缘：连线从这里出发，不穿卡片。和模板里的 rect 尺寸保持一致。 */
+      nodeTop(node) {
+        return node.kind === 'backbone' ? -35 : -28;
+      },
+      nodeBottom(node) {
+        return node.kind === 'backbone' ? 45 : 38;
+      },
+      /* 正交折线：垂直下落 → 横移 → 垂直落到上级/下级的边缘。
+         树状图靠的就是这条折线，读者可以顺着一条竖线找到父设备。 */
+      elbowPath(edge) {
         const source = this.topologyNodes.get(edge.source);
         const target = this.topologyNodes.get(edge.target);
         if (!source || !target) return '';
-        const midpoint = source.y + ((target.y - source.y) * 0.5);
-        return `M ${source.x} ${source.y} C ${source.x} ${midpoint}, ${target.x} ${midpoint}, ${target.x} ${target.y}`;
+        if (Math.abs(source.y - target.y) < 12) {
+          // 同层互联（核心之间、交换机之间）：下探一点再横着过去，不压住卡片。
+          const dip = Math.max(
+            source.y + this.nodeBottom(source),
+            target.y + this.nodeBottom(target),
+          ) + 20;
+          return `M ${source.x} ${source.y + this.nodeBottom(source)} V ${dip} H ${target.x} V ${target.y + this.nodeBottom(target)}`;
+        }
+        const upper = source.y < target.y ? source : target;
+        const lower = source.y < target.y ? target : source;
+        const from = upper.y + this.nodeBottom(upper);
+        const to = lower.y + this.nodeTop(lower);
+        const mid = from + Math.max(14, (to - from) / 2);
+        return `M ${upper.x} ${from} V ${mid} H ${lower.x} V ${to}`;
+      },
+      edgePath(edge) {
+        return this.elbowPath(edge);
+      },
+      hierarchyPath(edge) {
+        return this.elbowPath(edge);
       },
       selectEdge(edge) {
         this.selectedEdgeId = edge.id;
