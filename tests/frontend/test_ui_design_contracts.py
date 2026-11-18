@@ -394,7 +394,6 @@ class SharedInterfaceContractTests(TestCase):
     def test_plain_history_and_task_links_use_the_shared_interactive_list(self):
         template_root = TemplateRoot.default()
         paths = (
-            'pc/log_detail.html',
             'common/import_modal.html',
             'domain/sync_task_list.html',
         )
@@ -404,6 +403,10 @@ class SharedInterfaceContractTests(TestCase):
                 source = (template_root / relative_path).read_text(encoding='utf-8')
                 self.assertIn('interactive-list', source)
                 self.assertIn('interactive-list__item', source)
+        # 日志详情的分析历史由 Vue 渲染，条目样式仍沿用同一套链接列表。
+        component = Path(finders.find('app/vue/pages/resource_detail.mjs')).read_text(
+            encoding='utf-8')
+        self.assertIn("kind === 'list'", component)
 
     def test_legacy_error_cards_use_shared_status_surfaces(self):
         source = Path(finders.find('app/vue/pages/resource_detail.mjs')).read_text(

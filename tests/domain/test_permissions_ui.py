@@ -8,6 +8,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from tests.payloads import payload_text
 from net.models import (
     DomainOperation,
     Domain_Account,
@@ -337,13 +338,15 @@ class DomainPermissionUiTests(TestCase):
         permitted = self.client.get(reverse('task_detail', args=[operation.task.pk]))
 
         self.assertEqual(readonly.status_code, 200)
-        self.assertContains(readonly, '移动到 OU')
-        self.assertNotContains(readonly, 'data-domain-retry')
-        self.assertContains(permitted, 'data-domain-operation-detail')
-        self.assertContains(permitted, 'OU=Managed,DC=example,DC=test')
-        self.assertContains(permitted, 'DOMAIN-PC-01')
-        self.assertContains(permitted, '目录服务器拒绝目标操作。')
-        self.assertContains(permitted, 'data-domain-retry')
+        readonly_body = payload_text(readonly, 'detail-bootstrap')
+        permitted_body = payload_text(permitted, 'detail-bootstrap')
+        self.assertIn('移动到 OU', readonly_body)
+        self.assertNotIn(reverse('domain_operation_retry', args=[operation.pk]), readonly_body)
+        self.assertIn('域控操作', permitted_body)
+        self.assertIn('OU=Managed,DC=example,DC=test', permitted_body)
+        self.assertIn('DOMAIN-PC-01', permitted_body)
+        self.assertIn('目录服务器拒绝目标操作。', permitted_body)
+        self.assertIn(reverse('domain_operation_retry', args=[operation.pk]), permitted_body)
 
     @override_settings(
         DOMAIN_OPERATION_ENCRYPTION_KEY='V6NyMLdzoMKswUV33psN2GpZlkAhw4y8ao_0J2lCp7E=',
@@ -402,9 +405,9 @@ class DomainPermissionUiTests(TestCase):
         )
 
         self.assertEqual(detail.status_code, 200)
-        self.assertContains(detail, 'data-domain-manual-intervention')
-        self.assertContains(detail, '请人工检查目录对象后再处理')
-        self.assertNotContains(detail, 'data-domain-retry')
+        detail_body = payload_text(detail, 'detail-bootstrap')
+        self.assertIn('请人工检查目录对象后再处理', detail_body)
+        self.assertNotIn(reverse('domain_operation_retry', args=[operation.pk]), detail_body)
         self.assertContains(retry, '需要人工核查')
         self.assertEqual(DomainOperation.objects.filter(action='create_user').count(), 1)
         combined = detail.content.decode() + retry.content.decode()

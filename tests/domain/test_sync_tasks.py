@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from net.domain.sync_tasks import enqueue_domain_sync, execute_domain_sync_target
 from net.inspections.queue import claim_next_task, finish_task, cancel_task
 from net.inspections.schedules import enqueue_due_schedules
+from tests.payloads import payload_text
 
 
 class DomainSyncTaskTests(TestCase):
@@ -59,7 +60,7 @@ class DomainSyncTaskTests(TestCase):
         target.refresh_from_db()
         self.assertEqual(target.result_snapshot['accounts'], 1)
         page = self.client.get(reverse('task_detail', args=[claimed.pk]))
-        self.assertContains(page, '1 个账号')
+        self.assertIn('1 个账号', payload_text(page, 'detail-bootstrap'))
 
     def test_duplicate_manual_sync_is_rejected(self):
         enqueue_domain_sync()

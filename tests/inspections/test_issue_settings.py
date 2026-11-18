@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from tests.auth import login_reader
 from tests.devices.pc.test_remote_rules import RemoteRuleFixture
+from tests.payloads import payload_text
 
 
 class IssueSettingsTests(RemoteRuleFixture, TestCase):
@@ -55,7 +56,8 @@ class IssueSettingsTests(RemoteRuleFixture, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['table_definition'].key, 'computer_inspections')
         self.assertEqual(response.context['page_obj'].paginator.count, 1)
-        self.assertTemplateUsed(response, 'inspections/results_table.html')
+        detail_body = payload_text(response, 'detail-bootstrap')
+        self.assertIn('任务结果记录', detail_body)
         exported = self.client.get(reverse('table_export', args=['computer_inspections']), {'task': str(task.pk)})
         self.assertEqual(exported.status_code, 200)
         self.assertIn('硬件', response_body(exported).decode('utf-8-sig'))

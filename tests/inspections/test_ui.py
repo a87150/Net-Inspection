@@ -3,7 +3,7 @@
 import csv
 
 from tests import response_body
-from tests.payloads import rows as payload_rows
+from tests.payloads import payload_text, rows as payload_rows
 from datetime import time
 from io import StringIO
 from urllib.parse import urlsplit
@@ -317,10 +317,11 @@ class TaskUiTestCase(TestCase):
         self.assertEqual(detail.status_code, 200)
         self.assertEqual([row.pk for row in listing.context['page_obj']], [task.pk])
         self.assertEqual([row.pk for row in detail.context['execution_page']], [target.pk])
-        self.assertContains(detail, str(self.linux.pk))
-        self.assertContains(detail, '<td>失败</td>', html=True)
-        self.assertContains(detail, 'SSH 连接超时')
-        self.assertContains(detail, '1 / 1')
+        detail_body = payload_text(detail, 'detail-bootstrap')
+        self.assertIn(str(self.linux.pk), detail_body)
+        self.assertIn('失败', detail_body)
+        self.assertIn('SSH 连接超时', detail_body)
+        self.assertIn('1 / 1', detail_body)
         export_url = listing.context['table_export_path']
         exported = self.client.get(export_url, {'filter_status': 'queued'})
         excluded = self.client.get(export_url, {'filter_status': 'success'})
@@ -393,8 +394,9 @@ class TaskUiTestCase(TestCase):
         self.assertTrue(stop_actions)
         self.assertEqual(stop_actions[0]['label'], '结束任务')
         self.assertEqual(stop_actions[0]['url'], stop_url)
-        self.assertContains(detail, '结束任务')
-        self.assertContains(detail, f'action="{stop_url}"')
+        detail_body = payload_text(detail, 'detail-bootstrap')
+        self.assertIn('结束任务', detail_body)
+        self.assertIn(stop_url, detail_body)
 
     def test_manual_stop_requires_login_and_cancels_the_task(self):
         """An unauthenticated or GET request must not mutate task execution state."""

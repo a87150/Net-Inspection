@@ -7,6 +7,7 @@ from index.common.table_payload import row_payloads, table_payload
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition
 from net.models import ComputerLogFile
+from pc.detail_payload import computer_log_detail_payload
 
 
 def _log_actions(log):
@@ -39,8 +40,10 @@ def computer_log_list(request, *, bulk=None):
 
 
 def computer_log_detail(request, pk):
-    log = get_object_or_404(ComputerLogFile, pk=pk, retained=True)
+    log = get_object_or_404(
+        ComputerLogFile.objects.select_related('computer'), pk=pk, retained=True)
+    analyses = list(log.analyses.order_by('-created_at', '-pk'))
     return render(request, 'pc/log_detail.html', {
         'log': log,
-        'analyses': log.analyses.order_by('-created_at', '-pk'),
+        'detail': computer_log_detail_payload(log=log, analyses=analyses),
     })

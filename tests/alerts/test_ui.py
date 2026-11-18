@@ -380,8 +380,9 @@ class AlertUiTests(TestCase):
 
         response = self.client.get(reverse('task_detail', args=[target.task_id]))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '告警处理待重试')
-        self.assertContains(response, 'alert processor test failure')
+        body = payload_text(response, 'detail-bootstrap')
+        self.assertIn('告警处理待重试', body)
+        self.assertIn('alert processor test failure', body)
         self.assertEqual(target.alert_events.count(), 0)
 
     @patch('net.alerts.feishu.requests.post')

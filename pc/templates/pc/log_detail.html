@@ -1,3 +1,10 @@
-{% extends 'common/base.html' %}{% load custom_filters %}
+{% extends 'common/base.html' %}
+{% load static %}
 {% block title %}PC 日志详情{% endblock %}
-{% block content %}<header class="page-heading"><div class="page-heading__copy"><p class="page-heading__eyebrow">PC 日志</p><h1 class="page-heading__title">日志详情 #{{ log.pk }}</h1><p class="page-heading__description">日志内容只读；分析由手动或定时任务按每台 PC 最新日志执行。</p></div><div class="page-heading__actions"><a class="btn btn-outline-secondary" href="{% url 'computer_log_list' %}">返回日志列表</a></div></header><section class="card surface-card card-body mb-3"><dl class="row detail-list mb-0"><dt class="col-sm-3">PC</dt><dd class="col-sm-9">{{ log.computer.computer_name|default:'未知' }}</dd><dt class="col-sm-3">采集时间</dt><dd class="col-sm-9">{{ log.collected_at|date:'Y-m-d H:i:s' }}</dd><dt class="col-sm-3">平台</dt><dd class="col-sm-9">{{ log.platform|default:'-' }}</dd><dt class="col-sm-3">内容哈希</dt><dd class="col-sm-9 text-break">{{ log.content_hash }}</dd></dl></section><section class="card surface-card card-body mb-3"><h2 class="h5">分析历史</h2><div class="interactive-list" role="list">{% for analysis in analyses %}<a class="interactive-list__item" role="listitem" href="{% url 'computer_analysis_detail' analysis.pk %}"><span class="interactive-list__content"><strong class="interactive-list__title">{{ analysis.created_at|date:'Y-m-d H:i:s' }}</strong><span class="interactive-list__meta">{% include 'common/status_badge.html' with status=analysis.status label=analysis.get_status_display %}<span>{{ analysis.summary|default:'暂无摘要' }}</span></span></span><span class="interactive-list__action">查看详情</span></a>{% empty %}<div class="interactive-list__empty"><strong>尚未分析</strong><span>完成一次日志分析后，历史记录会显示在这里。</span></div>{% endfor %}</div></section><details class="card surface-card card-body"><summary>已脱敏日志内容</summary><pre class="json-view text-wrap text-break">{{ log.payload|pretty_json }}</pre></details>{% endblock %}
+{% block content %}
+<div id="log-detail" data-vue-page="log-detail" data-vue-bootstrap="detail-bootstrap">
+    <noscript><p class="alert alert-warning mb-0">日志详情需要启用 JavaScript。</p></noscript>
+</div>
+{{ detail|json_script:"detail-bootstrap" }}
+{% endblock %}
+{% block page_scripts %}<script type="module" src="{% static 'app/vue/boot.mjs' %}"></script>{% endblock %}

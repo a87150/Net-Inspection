@@ -1,4 +1,5 @@
 from tests import response_body
+from tests.payloads import payload_text
 
 from datetime import datetime, time, timezone as dt_timezone
 from unittest.mock import patch
@@ -163,6 +164,8 @@ class FinalOperatorTests(TestCase):
         self.assertEqual(analysis.exceptions[0]['analysis_item'], 'activation')
         self.assertEqual(analysis.actionable_issue_count, 0)
         page = self.client.get(analysis_task_url(analysis))
-        self.assertContains(page, 'CPU 23%')
-        self.assertContains(page, '<td data-column-key="execution_status">成功</td>', html=True)
-        self.assertContains(page, '<td data-column-key="status"><span class="badge status-badge text-bg-info" data-status="info">提示</span></td>', html=True)
+        body = payload_text(page, 'detail-bootstrap')
+        self.assertIn('CPU 23%', body)
+        self.assertIn('成功', body)
+        # 徽章由 payload 给出，组件按 status 上色。
+        self.assertIn('"status": "info"', body)

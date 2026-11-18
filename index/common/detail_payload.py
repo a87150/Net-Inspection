@@ -31,13 +31,43 @@ def alert_section(level, text):
     return {"heading": "", "kind": "alert", "level": level, "text": text or ""}
 
 
-def table_section(heading, columns, rows, empty="", note=""):
+def table_section(heading, columns, rows, empty="", note="", pagination=None,
+                  workspace=""):
+    """columns: [label | {label, sort_url?, aria_sort?}]; a cell is a string or
+    {text?, badge?, url?, label?, note?}. Cells stay strings when that is all the
+    template showed."""
+    normalised = [
+        {"label": column} if isinstance(column, str) else dict(column)
+        for column in columns
+    ]
     return {
         "heading": heading,
         "kind": "table",
-        "columns": list(columns),
+        "columns": normalised,
         "rows": [list(row) for row in rows],
         "empty": empty,
+        "note": note,
+        "pagination": pagination,
+        "workspace": workspace,
+    }
+
+
+def form_section(heading, fields, submit, note="", inputs=(), confirm=""):
+    """A POST block: read-only fields, optional inputs, one submit button."""
+    return {
+        "heading": heading,
+        "kind": "form",
+        "fields": [
+            {"label": label, "value": "" if value is None else str(value)}
+            for label, value in fields
+        ],
+        "inputs": list(inputs),
+        "submit": {
+            "label": submit[0],
+            "url": submit[1],
+            "variant": submit[2] if len(submit) > 2 else "danger",
+            "confirm": confirm,
+        },
         "note": note,
     }
 
@@ -52,15 +82,23 @@ def group_section(heading, summary, groups):
     }
 
 
-def detail_payload(*, title, eyebrow="", description="", actions=(), sections=()):
+def detail_payload(*, title, eyebrow="", description="", actions=(), sections=(),
+                   disclosure=None, csrf=""):
     return {
         "title": title,
         "eyebrow": eyebrow,
         "description": description,
         "actions": [action for action in actions if action],
         "sections": [section for section in sections if section],
+        "disclosure": disclosure,
+        "csrf": csrf,
     }
 
 
 def link_action(label, url, variant=""):
     return {"kind": "link", "label": label, "url": url, "variant": variant or ""}
+
+
+def form_action(label, url, variant="danger", confirm=""):
+    return {"kind": "form", "label": label, "url": url, "variant": variant,
+            "confirm": confirm}

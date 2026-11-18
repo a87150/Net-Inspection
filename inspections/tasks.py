@@ -691,9 +691,30 @@ def task_detail(request, pk):
         'domain_manual_intervention': domain_manual_intervention,
     }
     from .task_results import task_result_context
-    context.update(task_result_context(request, task))
-    if context.get('show_result_table'):
+    result_context = task_result_context(request, task)
+    context.update(result_context)
+    alert_processing_page = None
+    if result_context.get('show_result_table'):
         diagnostics = task.target_runs.exclude(alert_processing_error='').only(
             'pk', 'target_id', 'alert_processing_error', 'alert_attempted_at').order_by('pk')
-        context['alert_processing_page'] = Paginator(diagnostics, 20).get_page(request.GET.get('alert_page'))
+        alert_processing_page = Paginator(diagnostics, 20).get_page(
+            request.GET.get('alert_page'))
+    from django.middleware.csrf import get_token
+    from .task_payload import task_detail_payload
+    context['detail'] = task_detail_payload(
+        task=task,
+        request=request,
+        page_obj=page_obj,
+        table_definition=definition,
+        table_state=table_state,
+        target_page_obj=page_obj,
+        domain_operation=domain_operation,
+        domain_retry_available=domain_retry_available,
+        domain_retry_requires_password=domain_retry_requires_password,
+        domain_manual_intervention=domain_manual_intervention,
+        can_administer=is_admin(request.user),
+        result_context=result_context,
+        alert_processing_page=alert_processing_page,
+        csrf=get_token(request),
+    )
     return render(request, 'inspections/task_detail.html', context)

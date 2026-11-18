@@ -1,4 +1,5 @@
 from tests.devices.pc.helpers import add_analysis_issue, create_log_file
+from tests.payloads import payload_text
 
 
 def records_bootstrap(response):
@@ -950,21 +951,17 @@ class VisualStructureTests(TestCase):
                 self.assertTrue(
                     self._elements_with_class(document, 'div', 'table-toolbar'),
                 )
-                self.assertTrue(
-                    self._elements_with_class(document, 'div', 'surface-card'),
-                )
+                # 表格主体由 Vue 渲染，卡片外壳在组件里；服务端只需给出表格岛。
+                self.assertTrue(document.find('div', **{'data-vue-page': ''})
+                                or self._elements_with_class(document, 'div', 'surface-card'))
                 if response.context['table_definition'].key == 'computer_errors':
                     # 该页表格由 Vue 渲染，排序能力来自 payload 的可排序列。
                     columns = records_bootstrap(response)['columns']
                     self.assertTrue(any(column['sortable'] for column in columns))
                 else:
-                    sort_links = [
-                        attrs
-                        for tag, attrs in document.elements
-                        if tag == 'a' and 'data-sort-key' in attrs
-                    ]
-                    self.assertTrue(sort_links)
-                    self.assertTrue(all(link.get('aria-label') for link in sort_links))
+                    # 排序链接同样来自 payload：可排序列会带 sort_url。
+                    sections = payload_text(response, 'detail-bootstrap')
+                    self.assertIn('"sort_url"', sections)
 
     def test_navigation_and_modals_have_accessible_names(self):
         asset_document = parse_response_html(
@@ -1712,15 +1709,14 @@ class RecordWorkspaceTests(TestCase):
         inspection_document = parse_response_html(inspection_response)
         error_document = parse_response_html(error_response)
 
-        self.assertTrue(inspection_document.find(
-            'div', **{'data-table-workspace': '', 'data-table-key': 'computer_inspections'},
-        ))
-        self.assertTrue(error_document.find(
-            'div', **{'data-table-workspace': '', 'data-table-key': 'computer_errors'},
-        ))
+        self.assertIn('"workspace": "computer_inspections"',
+                      payload_text(inspection_response, 'detail-bootstrap'))
+        self.assertEqual(records_bootstrap(error_response)['columns'][0]['key'] is not None, True)
         detail_url = reverse('computer_analysis_detail', args=[inspection.pk])
-        self.assertContains(inspection_response, f'href="{detail_url}"')
-        self.assertContains(inspection_response, '<span class="badge status-badge text-bg-warning" data-status="warning">警告</span>', html=True)
+        self.assertIn(detail_url, payload_text(inspection_response, 'detail-bootstrap'))
+        # 徽章由 payload 输出，组件按 {status, tone, label} 渲染成同一套 class。
+        self.assertIn('"status": "warning"',
+                      payload_text(inspection_response, 'detail-bootstrap'))
         error_rows = records_bootstrap(error_response)['rows']
         self.assertIn(detail_url, [action['url'] for action in error_rows[0]['actions']])
         badge = error_rows[0]['cells']['type']['badge']

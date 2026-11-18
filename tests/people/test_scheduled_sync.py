@@ -10,6 +10,7 @@ from net.inspections.worker import TaskWorker
 from net.models import InspectionProfile, People, PeopleSyncSource, Schedule, TaskRun
 from net.people.directory import DirectoryPerson
 from tests.people.test_directory_sync import SnapshotAdapter
+from tests.payloads import payload_text
 
 
 class PeopleScheduleModelTests(TestCase):
@@ -196,7 +197,10 @@ class PeopleScheduledWorkerTests(TransactionTestCase):
         })
         self.assertTrue(People.objects.filter(employee_id='E001', is_active=True).exists())
         response = self.client.get(f'/tasks/{self.task.pk}/')
-        self.assertContains(response, '新增 1 · 更新 0 · 未变化 0 · 停用 0 · 跳过 1')
+        self.assertIn(
+            '新增 1 · 更新 0 · 未变化 0 · 停用 0 · 跳过 1',
+            payload_text(response, 'detail-bootstrap'),
+        )
 
     def test_successful_sync_keeps_connection_test_valid_for_next_schedule(self):
         configured_at = self.source.updated_at

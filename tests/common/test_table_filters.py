@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from tests.auth import login_reader
+from tests.payloads import payload_text
 from tests.devices.pc.helpers import add_analysis_issue, create_log_file
 from django.utils import timezone
 
@@ -551,7 +552,7 @@ class ComputerAnalysisOutcomeTests(TestCase):
             '<option value="warning" selected>警告</option>',
             html=True,
         )
-        self.assertContains(abnormal_response, '>警告</span>')
+        self.assertIn('warning', payload_text(abnormal_response, 'detail-bootstrap'))
         self.assertEqual(
             abnormal_response.context['table_state']['field_options']['status'],
             (('normal', '正常'), ('info', '提示'), ('warning', '警告'), ('critical', '严重')),

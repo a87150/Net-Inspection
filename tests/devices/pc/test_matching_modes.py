@@ -1,4 +1,5 @@
 from tests import response_body
+from tests.payloads import payload_text
 
 from types import SimpleNamespace
 from django.test import TestCase
@@ -68,7 +69,7 @@ class MatchingModeTests(TestCase):
         self.assertContains(response, 'name="matching_mode"')
         response = self.client.get(reverse('task_detail', args=[task.pk]))
         self.assertEqual(response.context['page_obj'].paginator.count, 2)
-        self.assertContains(response, '未匹配日志')
+        self.assertIn('未匹配日志', payload_text(response, 'detail-bootstrap'))
         exported = self.client.get(reverse('table_export', args=['computer_inspections']))
         self.assertEqual(exported.status_code, 200)
         self.assertIn('M2', response_body(exported).decode('utf-8-sig'))
