@@ -1,7 +1,7 @@
 {% if can_administer %}
 <div class="modal fade" id="{% if device_modal_mode == 'edit' %}editDeviceModal{% else %}addDeviceModal{% endif %}" tabindex="-1" aria-labelledby="{% if device_modal_mode == 'edit' %}editDeviceModalLabel{% else %}addDeviceModalLabel{% endif %}" aria-hidden="true"{% if open_add_device_modal or open_edit_device_modal %} data-auto-open="true"{% endif %}>
  <div class="modal-dialog modal-dialog-scrollable modal-lg modal-shell"><div class="modal-content modal-surface">
-  <form method="post" action="{% if device_modal_mode == 'edit' %}{% url 'asset_edit' item_key edit_device.pk %}{% else %}{% url 'asset_create' item_key %}{% endif %}" class="d-flex flex-column overflow-hidden">
+  <form method="post" data-form-ajax action="{% if device_modal_mode == 'edit' %}{% url 'asset_edit' item_key edit_device.pk %}{% else %}{% url 'asset_create' item_key %}{% endif %}" class="d-flex flex-column overflow-hidden">
    {% csrf_token %}
    <div class="modal-header"><h2 class="modal-title fs-5" id="{% if device_modal_mode == 'edit' %}editDeviceModalLabel{% else %}addDeviceModalLabel{% endif %}">{% if device_modal_mode == 'edit' %}修改{{ item_name }}{% else %}添加{{ item_name }}{% endif %}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
    <div class="modal-body modal-body--scroll">

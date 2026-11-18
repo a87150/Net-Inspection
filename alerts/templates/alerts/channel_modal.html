@@ -9,7 +9,7 @@
 <input type="hidden" name="channel_id" value="{{ channel.pk }}">
 </form>
 {% endfor %}
-        <form method="post" action="{% url 'alert_channel_save' %}">
+        <form method="post" action="{% url 'alert_channel_save' %}" data-form-ajax>
 {% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
 {% if alert_edit_channel %}

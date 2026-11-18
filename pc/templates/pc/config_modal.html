@@ -5,12 +5,12 @@
   <div class="modal-body modal-body--scroll">
    <p class="text-secondary small">终端通过 API 将日志直接写入数据库。手动和定时执行都只分析每台 PC 当前保留的最新日志。</p>
    <div class="inspection-config-layout">
-   <form id="pc-upload-config-form" class="inspection-config-layout" method="post" action="{% url 'pc_upload_config_save' %}">
+   <form id="pc-upload-config-form" class="inspection-config-layout" method="post" data-form-ajax action="{% url 'pc_upload_config_save' %}">
     {% csrf_token %}{{ pc_upload_config_form.non_field_errors }}
     <section class="inspection-config-block"><div class="inspection-config-block__heading"><span class="inspection-config-block__index">01</span><div><h3 class="h6 mb-1">终端 API 配置</h3><p class="mb-0">保存后下载采集包；令牌不会再次显示。</p></div></div><div class="row g-3">{% include 'pc/config_field.html' with field=pc_upload_config_form.endpoint_url col='col-md-8' %}{% include 'pc/config_field.html' with field=pc_upload_config_form.log_retention col='col-md-4' %}{% include 'pc/config_field.html' with field=pc_upload_config_form.is_enabled col='col-12' %}{% include 'pc/config_field.html' with field=pc_upload_config_form.token col='col-12' %}</div></section>
    </form>
    {% if pc_upload_config %}<form id="pc-upload-token-reset-form" method="post" action="{% url 'pc_upload_config_reset_token' %}">{% csrf_token %}</form>{% endif %}
-   <form id="pc-analysis-config-form" class="inspection-config-layout" method="post" enctype="multipart/form-data" action="{% url 'computer_analysis_profile_configure' %}">
+   <form id="pc-analysis-config-form" class="inspection-config-layout" method="post" data-form-ajax enctype="multipart/form-data" action="{% url 'computer_analysis_profile_configure' %}">
     {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
     {{ pc_analysis_form.profile_id }}{{ pc_analysis_form.non_field_errors }}
 <section class="inspection-config-block"><div class="inspection-config-block__heading"><span class="inspection-config-block__index">04</span><div><h3 class="h6 mb-1">选择配置与执行参数</h3><p class="mb-0">选择已有分析配置，并设置名称及下载、分析的并发上限。</p></div></div><div class="row g-3">{% if task_profiles %}<div class="col-md-4"><label class="form-label" for="pc-profile-switch">编辑配置</label><select id="pc-profile-switch" class="form-select" data-pc-profile-switch>{% for profile in task_profiles %}<option value="{{ profile.pk }}"{% if profile.pk == task_default_profile.pk %} selected{% endif %}>{{ profile.name }}</option>{% endfor %}</select></div>{% endif %}

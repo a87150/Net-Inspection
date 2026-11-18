@@ -2,7 +2,7 @@
 <div class="modal fade" id="maintenanceWindowModal" tabindex="-1" aria-labelledby="maintenanceWindowModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-scrollable modal-shell">
         <div class="modal-content modal-surface">
-            <form method="post" action="{% url 'asset_maintenance_create' item_key %}" data-maintenance-form>
+            <form method="post" action="{% url 'asset_maintenance_create' item_key %}" data-maintenance-form data-form-ajax>
                 {% csrf_token %}
                 <div class="modal-header">
                     <h2 class="modal-title fs-5" id="maintenanceWindowModalLabel">加入维护窗口</h2>

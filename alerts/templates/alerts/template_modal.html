@@ -1,6 +1,6 @@
 <div class="modal fade alert-template-modal" id="alertTemplateModal" tabindex="-1" aria-labelledby="alertTemplateModalLabel" aria-hidden="true" data-template-settings-url="{% url 'alert_template_settings' %}">
   <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell"><div class="modal-content modal-surface">
-    {% if template_form %}<form id="alert-template-form" method="post" action="{% url 'alert_template_settings' %}" data-modal-form>{% csrf_token %}{% endif %}
+    {% if template_form %}<form id="alert-template-form" method="post" action="{% url 'alert_template_settings' %}" data-form-ajax data-modal-form>{% csrf_token %}{% endif %}
     <div class="modal-header"><h2 class="modal-title fs-5" id="alertTemplateModalLabel">任务总结通知模板</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button></div>
     <div class="modal-body modal-body--scroll">
       {% if template_form %}

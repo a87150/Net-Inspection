@@ -6,6 +6,8 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import redirect
 from django.urls import reverse
+
+from index.common.form_json import form_errors, form_saved, wants_json
 from django.views.decorators.http import require_POST
 
 from net.models import PCUploadConfig
@@ -56,8 +58,12 @@ def pc_upload_config_save(request):
             raise ValidationError('；'.join(message for errors in form.errors.values() for message in errors))
         form.save()
     except ValidationError as exc:
+        if wants_json(request):
+            return form_errors(exc.messages, reverse('computer_analysis_list'))
         messages.error(request, '采集 API 配置未保存：' + '；'.join(exc.messages))
         return _config_redirect()
+    if wants_json(request):
+        return form_saved('PC 采集 API 配置已保存。', reverse('computer_analysis_list'))
     messages.success(request, 'PC 采集 API 配置已保存。')
     return _config_redirect()
 

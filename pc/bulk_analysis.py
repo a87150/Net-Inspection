@@ -5,6 +5,9 @@ from django.core.exceptions import ValidationError
 from django.shortcuts import redirect
 from django.views.decorators.http import require_POST
 
+from django.urls import reverse
+
+from index.common.form_json import form_errors, form_saved, wants_json
 from index.common.table_query import apply_table_filters
 from index.common.table_registry import get_table_definition
 from inspections.forms import ManualTaskForm
@@ -59,8 +62,15 @@ def computer_logs_analyze_bulk(request):
             raise ValidationError('该筛选范围没有可分析的当前日志，未创建分析任务。')
         task = enqueue_latest_analysis(profile, 'manual', overrides={'selected_items': form.cleaned_data['selected_items']}, computer_ids=computer_ids)
     except (ValidationError, ValueError, TypeError) as exc:
-        from .logs import computer_log_list
         error = '；'.join(exc.messages) if isinstance(exc, ValidationError) else '无法创建批量分析任务，请检查选择。'
+        if wants_json(request):
+            return form_errors([error], reverse('computer_log_list'))
+        from .logs import computer_log_list
         return computer_log_list(request, bulk=bulk_context(request, error=error, bound_form=form))
+    if wants_json(request):
+        return form_saved(
+            f'已创建后台分析任务，共 {count} 台 PC 的最新日志。',
+            reverse('task_detail', args=[task.pk]),
+        )
     messages.success(request, f'已创建后台分析任务，共 {count} 台 PC 的最新日志。')
     return redirect('task_detail', pk=task.pk)

@@ -26,6 +26,7 @@ from inspections.forms import (
     inspection_item_choices,
 )
 from index.common.badges import status_tone
+from index.common.form_json import form_errors, form_saved, wants_json
 from index.common.table_payload import row_payloads, table_payload
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition, project_record_definition
@@ -423,6 +424,8 @@ def _inspection_profile_configure(request):
     else:
         device_type = request.POST.get('device_type', '')
         if device_type not in InspectionProfile.DeviceType.values:
+            if wants_json(request):
+                return form_errors(['请选择要配置的巡检项目。'], next_url)
             messages.error(request, '请选择要配置的巡检项目。')
             _remember_modal(request, 'profile')
             return redirect(next_url)
@@ -431,9 +434,12 @@ def _inspection_profile_configure(request):
         schedule=_schedule_for_profile(existing) if existing else None,
     )
     if not form.is_valid():
-        messages.error(request, '配置未保存：' + '；'.join(
+        error = '配置未保存：' + '；'.join(
             message for errors in form.errors.values() for message in errors
-        ))
+        )
+        if wants_json(request):
+            return form_errors([error], next_url)
+        messages.error(request, error)
         _remember_modal(request, 'profile')
         return redirect(next_url)
     try:
@@ -441,9 +447,13 @@ def _inspection_profile_configure(request):
             profile = existing or InspectionProfile(device_type=device_type)
             profile = _save_profile(profile, form)
     except ValidationError as exc:
+        if wants_json(request):
+            return form_errors(exc.messages, next_url)
         messages.error(request, '配置未保存：' + '；'.join(exc.messages))
         _remember_modal(request, 'profile')
         return redirect(next_url)
+    if wants_json(request):
+        return form_saved(f'已保存“{profile.name}”的巡检配置。', next_url)
     messages.success(request, f'已保存“{profile.name}”的巡检配置。')
     _remember_modal(request, 'profile')
     return redirect(next_url)
@@ -465,9 +475,12 @@ def _computer_analysis_profile_configure(request):
         schedule=_schedule_for_profile(existing) if existing else None,
     )
     if not form.is_valid():
-        messages.error(request, '配置未保存：' + '；'.join(
+        error = '配置未保存：' + '；'.join(
             message for errors in form.errors.values() for message in errors
-        ))
+        )
+        if wants_json(request):
+            return form_errors([error], next_url)
+        messages.error(request, error)
         _remember_modal(request, 'profile')
         return redirect(next_url)
     try:
@@ -482,9 +495,13 @@ def _computer_analysis_profile_configure(request):
                 profile.save(update_fields=['software_policy_path', 'updated_at'])
                 store_software_policy_upload(uploaded_policy, policy_path)
     except ValidationError as exc:
+        if wants_json(request):
+            return form_errors(exc.messages, next_url)
         messages.error(request, '配置未保存：' + '；'.join(exc.messages))
         _remember_modal(request, 'profile')
         return redirect(next_url)
+    if wants_json(request):
+        return form_saved(f'已保存“{profile.name}”的分析配置。', next_url)
     messages.success(request, f'已保存“{profile.name}”的分析配置。')
     _remember_modal(request, 'profile')
     return redirect(next_url)

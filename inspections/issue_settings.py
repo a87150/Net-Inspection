@@ -6,6 +6,9 @@ from django.http import Http404
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.clickjacking import xframe_options_sameorigin
+from django.urls import reverse
+
+from index.common.form_json import form_errors, form_saved, wants_json
 from net.models import IssueSeverityPolicy
 from net.inspections.issues import PROJECT_RULES, PROJECT_LABELS, METRIC_DEFAULTS, PC_THRESHOLD_FIELDS
 from net.devices.pc.severity import LEVELS
@@ -103,6 +106,15 @@ def issue_severity_settings(request):
         else:
             form = SeveritySettingsForm(project=project, overrides=candidate.overrides,
                                         thresholds=candidate.thresholds, updated_at=candidate.updated_at)
+    if wants_json(request):
+        back = '%s?project=%s' % (reverse('issue_severity_settings'), project)
+        if saved:
+            return form_saved('问题等级设置已保存。', back)
+        return form_errors([
+            '%s：%s' % (form.fields[name].label if name in form.fields else '配置',
+                       ' '.join(str(message) for message in messages))
+            for name, messages in form.errors.items()
+        ], back)
     return render(request, 'inspections/issue_settings.html', {'form': form, 'saved': saved,
                   'project': project, 'project_label': PROJECT_LABELS[project]},
                   status=400 if request.method == 'POST' and not saved else 200)

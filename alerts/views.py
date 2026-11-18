@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from django.contrib import messages
 from index.common.access import is_admin
+from index.common.form_json import form_errors, form_saved, wants_json
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
@@ -66,6 +67,12 @@ def _failure_redirect(request, next_url, modal, *, state, **query):
     Discard arbitrary return-query values, including credential-like parameters.
     The token prevents another tab's modal from consuming this form state.
     """
+    if wants_json(request):
+        if state.get('errors'):
+            return form_errors(state['errors'], next_url)
+        # 成功：把刚记下的 flash 消息直接交给模态框，不让它整页刷新。
+        return form_saved(' '.join(str(message) for message in messages.get_messages(request)),
+                          next_url)
     path = urlsplit(next_url).path
     allowed_paths = {reverse('alert_list')}
     if modal == 'policy':

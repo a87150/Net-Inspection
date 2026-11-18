@@ -1,8 +1,10 @@
 from django.contrib import messages
 from index.common.access import admin_required
+from index.common.form_json import form_errors, form_saved, wants_json
 from django.db import IntegrityError, transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 from net.models import TaskRun, TaskTargetRun
 
@@ -22,8 +24,13 @@ def asset_create(request, kind):
         except IntegrityError:
             form.add_error(None, '设备保存冲突，请检查 IP 是否已存在。')
         else:
+            if wants_json(request):
+                return form_saved('设备已添加，可在列表中查看；尚未执行巡检。',
+                                  reverse('asset_list', args=[kind]))
             messages.success(request, '设备已添加，可在列表中查看；尚未执行巡检。')
             return redirect('asset_list', kind=kind)
+    if wants_json(request):
+        return form_errors(_form_messages(form), reverse('asset_list', args=[kind]))
     from .views import asset_list
     return asset_list(request, kind, creation_form=form)
 
@@ -74,6 +81,19 @@ def asset_edit(request, kind, pk):
             form.add_error(None, '设备保存冲突，请检查 IP 是否已存在。')
         else:
             if not form.errors:
-                messages.success(request, '设备配置已更新；硬件与系统信息仍由巡检自动采集。')
+                message = '设备配置已更新；硬件与系统信息仍由巡检自动采集。'
+                if wants_json(request):
+                    return form_saved(message, reverse('asset_edit', args=[kind, asset.pk]))
+                messages.success(request, message)
                 return redirect('asset_edit', kind=kind, pk=asset.pk)
+    if wants_json(request):
+        return form_errors(_form_messages(form), reverse('asset_edit', args=[kind, asset.pk]))
     return asset_list(request, kind, creation_form=form, edit_device=asset)
+
+
+def _form_messages(form):
+    """Flatten Django's field->errors mapping into sentences a person reads."""
+    return [
+        '%s：%s' % (form.fields[name].label if name in form.fields else '配置', ' '.join(errors))
+        for name, errors in form.errors.items()
+    ]

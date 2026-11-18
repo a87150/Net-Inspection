@@ -7,6 +7,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from weakcurrent.forms import AccessRecordSourceForm
 from index.common.access import admin_required, is_admin
+from index.common.form_json import form_errors, form_saved, wants_json
 from index.common.table_payload import row_payloads, table_payload
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition
@@ -54,6 +55,12 @@ def access_source_settings(request):
 
 
 def _source_form_response(request, source, form, status=400):
+    if wants_json(request):
+        return form_errors([
+            '%s：%s' % (form.fields[name].label if name in form.fields else '配置',
+                       ' '.join(str(message) for message in messages))
+            for name, messages in form.errors.items()
+        ], reverse('access_source_settings'))
     return render(request, 'access/source_settings.html', {
         'form': form, 'source': source, 'sources': AccessRecordSource.objects.order_by('name'),
         'compatibility_version': V6600_V6000_COMPAT_VERSION,
@@ -68,7 +75,10 @@ def access_source_save(request):
     if not form.is_valid():
         return _source_form_response(request, source, form)
     saved = form.save()
-    messages.success(request, f'已保存门禁平台来源“{saved.name}”。')
+    message = f'已保存门禁平台来源“{saved.name}”。'
+    if wants_json(request):
+        return form_saved(message, f"{reverse('access_source_settings')}?source={saved.pk}&saved=1")
+    messages.success(request, message)
     return redirect(f"{reverse('access_source_settings')}?source={saved.pk}&saved=1")
 
 

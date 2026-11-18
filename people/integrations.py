@@ -4,6 +4,7 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from index.common.access import is_admin
+from index.common.form_json import form_errors, form_saved, wants_json
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.forms.utils import ErrorDict, ErrorList
@@ -115,12 +116,23 @@ def _render_modal(request, **kwargs):
     return redirect(_provider_redirect(provider))
 
 
+def _form_messages(form):
+    """Flatten field errors into sentences, so the modal shows one list."""
+    return [
+        '%s：%s' % (form.fields[name].label if name in form.fields else '配置',
+                    ' '.join(str(message) for message in errors))
+        for name, errors in form.errors.items()
+    ]
+
+
 def _provider_redirect(provider):
     query = urlencode({'import': 'people', 'provider': provider})
     return f"{reverse('asset_list', args=['people'])}?{query}"
 
 
 def _redirect_invalid_provider_form(request, form, provider):
+    if wants_json(request):
+        return form_errors(_form_messages(form), _provider_redirect(provider))
     request.session[PROVIDER_FORM_FEEDBACK_SESSION_KEY] = {
         'provider': provider,
         'data': {
@@ -164,14 +176,17 @@ def people_schedule_save(request, provider):
     form = PeopleScheduleForm(request.POST, source=source, schedule=schedule)
     if form.is_valid():
         form.save()
+        if wants_json(request):
+            return form_saved(
+                f'{PROVIDERS[provider].label}自动同步计划已保存。',
+                _provider_redirect(provider),
+            )
         messages.success(request, f'{PROVIDERS[provider].label}自动同步计划已保存。')
-    else:
-        messages.error(
-            request,
-            '自动同步计划保存失败：' + ' '.join(
-                str(message) for errors in form.errors.values() for message in errors
-            ),
-        )
+        return redirect(_provider_redirect(provider))
+    message = '自动同步计划保存失败：' + ' '.join(_form_messages(form))
+    if wants_json(request):
+        return form_errors([message], _provider_redirect(provider))
+    messages.error(request, message)
     return redirect(_provider_redirect(provider))
 
 

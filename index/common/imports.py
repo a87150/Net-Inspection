@@ -3,7 +3,10 @@ from urllib.parse import quote
 from django.contrib import messages
 from django.http import Http404, HttpResponse
 from django.shortcuts import redirect
+from django.urls import reverse
 from django.views.decorators.http import require_POST
+
+from index.common.form_json import form_errors, form_saved, wants_json
 
 from net.data_exchange.inventory_csv import (
     IMPORTABLE_ENTITIES,
@@ -46,16 +49,25 @@ def import_inventory(request, entity):
             return redirect('domain_controller_settings')
         return redirect('item_list', item=entity)
 
-    uploaded_file = request.FILES.get('file')
-    if not uploaded_file:
-        messages.error(request, '请选择 CSV 文件。')
+    back = reverse('item_list', args=[entity])
+
+    def fail(message):
+        if wants_json(request):
+            return form_errors([message], back)
+        messages.error(request, message)
         request.session['open_import_modal'] = entity
         return redirect('item_list', item=entity)
 
+    uploaded_file = request.FILES.get('file')
+    if not uploaded_file:
+        return fail('请选择 CSV 文件。')
+
     try:
         created, updated = import_file(entity, uploaded_file)
-        messages.success(request, f'导入完成：新增 {created} 条，更新 {updated} 条。')
     except ValueError as exc:
-        messages.error(request, f'导入失败：{exc}')
-        request.session['open_import_modal'] = entity
+        return fail(f'导入失败：{exc}')
+    message = f'导入完成：新增 {created} 条，更新 {updated} 条。'
+    if wants_json(request):
+        return form_saved(message, back)
+    messages.success(request, message)
     return redirect('item_list', item=entity)

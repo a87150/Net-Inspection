@@ -8,9 +8,9 @@
   <div class="modal-dialog modal-xl modal-dialog-scrollable modal-shell">
 <div class="modal-content modal-surface">
     {% if task_project_kind == 'computers' %}
-<form method="post" action="{% url 'computer_analysis_profile_configure' %}">
+<form method="post" action="{% url 'computer_analysis_profile_configure' %}" data-form-ajax>
 {% else %}
-<form method="post" action="{% url 'inspection_profile_configure' %}">
+<form method="post" action="{% url 'inspection_profile_configure' %}" data-form-ajax>
 {% endif %}
       {% csrf_token %}
 <input type="hidden" name="next" value="{{ request.get_full_path }}">

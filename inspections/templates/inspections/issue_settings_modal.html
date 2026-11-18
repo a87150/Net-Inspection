@@ -18,7 +18,7 @@
                     {% if project == "computers" %}<p class="small text-secondary mt-2 mb-0">阈值留空时继续使用各 PC 分析配置中的原值。</p>{% endif %}
                 </div>
                 {% if saved %}<div class="alert alert-success" role="status">已保存，设置将用于新入队任务。</div>{% endif %}
-                <form id="issueSeverityForm" method="post" action="{% url 'issue_severity_settings' %}?project={{ project }}">
+                <form id="issueSeverityForm" method="post" data-form-ajax action="{% url 'issue_severity_settings' %}?project={{ project }}">
                     {% csrf_token %}
                     {{ form.updated_at }}
                     {{ form.updated_at.errors }}

@@ -10,10 +10,12 @@ from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST, require_http_methods
 
 from index.common.access import admin_required
+from index.common.form_json import form_errors, form_saved, wants_json
 from net.models import MaintenanceWindow, Network_Device, Server, WeakCurrentDevice
 
 # One asset kind per list page; the values mirror AlertEvent.target_type.
@@ -154,34 +156,36 @@ def create_windows(target_type, target_ids, starts_at, ends_at, note=""):
 @require_POST
 def maintenance_window_create(request, kind):
     """Create one window per selected asset; the list page posts here."""
+    def fail(message):
+        if wants_json(request):
+            return form_errors([message], reverse("asset_list", args=[kind]))
+        messages.error(request, message)
+        return redirect("asset_list", kind)
+
     target_type = KIND_TARGET_TYPES.get(kind)
     if not target_type:
-        messages.error(request, "这类资产不支持维护窗口。")
-        return redirect("asset_list", kind)
+        return fail("这类资产不支持维护窗口。")
 
     form = MaintenanceWindowForm(request.POST)
     requested = [value for value in request.POST.getlist("target_ids") if value]
     if not requested:
-        messages.error(request, "请先在列表里勾选要加入维护窗口的资产。")
-        return redirect("asset_list", kind)
+        return fail("请先在列表里勾选要加入维护窗口的资产。")
     if not form.is_valid():
-        messages.error(request, "维护窗口未保存：%s" % " ".join(
+        return fail("维护窗口未保存：%s" % " ".join(
             "%s %s" % (field, " ".join(errors)) for field, errors in form.errors.items()
         ))
-        return redirect("asset_list", kind)
 
     known = asset_names(target_type, requested)
     missing = [value for value in requested if value not in known]
     if missing:
-        messages.error(request, "有 %d 个选中项已不存在，请刷新列表后重新选择。" % len(missing))
-        return redirect("asset_list", kind)
+        return fail("有 %d 个选中项已不存在，请刷新列表后重新选择。" % len(missing))
 
     data = form.cleaned_data
     create_windows(target_type, list(known), data["starts_at"], data["ends_at"], data["note"])
-    messages.success(
-        request,
-        "已为 %d 个资产登记维护窗口：窗口内告警照常入库，但不外发。" % len(known),
-    )
+    message = "已为 %d 个资产登记维护窗口：窗口内告警照常入库，但不外发。" % len(known)
+    if wants_json(request):
+        return form_saved(message, reverse("asset_list", args=[kind]))
+    messages.success(request, message)
     return redirect("asset_list", kind)
 
 

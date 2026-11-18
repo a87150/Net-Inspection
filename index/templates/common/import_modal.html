@@ -28,7 +28,7 @@
                 </details>
                 {% if item_key == "weakcurrent" %}<p class="form-text">弱电设备的 SNMP 凭据在导入后通过设备行“巡检设置”填写；厂商/类型共用规则在“配置模板”设置。本表不接受 SNMP 列。</p>{% endif %}
                 {% endif %}
-                <form method="post" enctype="multipart/form-data" action="{% url 'import_inventory' item_key %}">
+                <form method="post" data-form-ajax enctype="multipart/form-data" action="{% url 'import_inventory' item_key %}">
                     {% csrf_token %}<label class="form-label" for="inventoryFile-{{ item_key }}">CSV 或 Excel 文件</label>
                     <div class="d-flex flex-column flex-md-row gap-3"><input class="form-control" id="inventoryFile-{{ item_key }}" type="file" name="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required><button class="btn btn-dark text-nowrap" type="submit">开始导入</button></div>
                 </form>

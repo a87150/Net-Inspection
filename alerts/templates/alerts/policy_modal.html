@@ -2,7 +2,7 @@
 <div class="modal fade alert-policy-modal" id="alertPolicyModal" data-auto-open="{{ alert_policy_modal_auto_open|yesno:'true,false' }}" tabindex="-1" aria-labelledby="alertPolicyModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable modal-shell">
 <div class="modal-content modal-surface">
-        <form method="post" action="{% url 'alert_policy_save' %}" data-alert-policy-form>
+        <form method="post" action="{% url 'alert_policy_save' %}" data-alert-policy-form data-form-ajax>
 {% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
 <input type="hidden" name="scope" value="{{ alert_policy_scope }}">

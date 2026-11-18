@@ -7,7 +7,7 @@
         <li><strong>第 2 步：预览数据</strong>——读取目录并计算新增、更新、停用和跳过，不写数据库。</li>
         <li><strong>第 3 步：执行导入</strong>——核对预览后确认写入。</li>
     </ol>
-    <form method="post" action="{% url 'people_provider_save' tab.provider %}" class="d-grid gap-3">
+    <form method="post" data-form-ajax action="{% url 'people_provider_save' tab.provider %}" class="d-grid gap-3">
         {% csrf_token %}
         {% if tab.form.errors %}<div class="alert alert-danger mb-0" role="alert">请检查 API 设置。{{ tab.form.non_field_errors }}</div>{% endif %}
         {% for field in tab.form.visible_fields %}<div><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}{% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}</div>{% endfor %}
@@ -23,7 +23,7 @@
         {% else %}<div class="small text-danger mt-2">当前配置尚未通过连接测试，请先完成第 1 步。</div>{% endif %}
     </div>
     {% if tab.selected %}
-    <form method="post" action="{% url 'people_schedule_save' tab.provider %}" class="border-top mt-3 pt-3 d-grid gap-2">
+    <form method="post" data-form-ajax action="{% url 'people_schedule_save' tab.provider %}" class="border-top mt-3 pt-3 d-grid gap-2">
         {% csrf_token %}
         <h4 class="h6 mb-1">自动定时同步</h4>
         <label class="form-check"><input class="form-check-input" type="checkbox" name="is_enabled"{% if tab.schedule and tab.schedule.is_enabled %} checked{% endif %}><span class="form-check-label">启用自动同步</span></label>
