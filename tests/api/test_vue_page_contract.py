@@ -30,6 +30,16 @@ class VuePageRegistryTests(SimpleTestCase):
             path = BOOT.parent / "pages" / target
             self.assertTrue(path.exists(), f"缺少组件文件：{path}")
 
+    def test_import_paths_resolve(self):
+        """静态模块的相对 import 写错时页面会整块白屏，浏览器只报 404。"""
+        for module in sorted(BOOT.parent.rglob("*.mjs")):
+            text = module.read_text(encoding="utf-8")
+            for target in re.findall(r"from '(\.{1,2}/[^']+)'", text):
+                resolved = (module.parent / target).resolve()
+                self.assertTrue(
+                    resolved.exists(), f"{module.name} 引用了不存在的模块：{target}",
+                )
+
     def test_every_registered_page_is_used_by_a_template(self):
         boot = BOOT.read_text(encoding="utf-8")
         registered = set(re.findall(r"'([a-z0-9-]+)': \(\) => import\(", boot))

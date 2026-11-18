@@ -1,5 +1,5 @@
 /* Page mounter: one registry entry per migrated page, no build step. */
-import { createApp } from '../vendor/vue/vue.esm-browser.prod.js';
+import { createApp } from '../../vendor/vue/vue.esm-browser.prod.js';
 
 const pages = {
     'maintenance-list': () => import('./pages/maintenance_list.mjs'),
