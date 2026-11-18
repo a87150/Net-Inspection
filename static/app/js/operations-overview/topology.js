@@ -260,7 +260,7 @@ function packRows(nodes, available, gap = 40) {
 // ponytail: 逐个试位的 O(n²) 避让，n 为可见卡片数（几十张），够用；
 // 若将来单页要画上千节点，改成按行建索引再二分。
 function layoutEndpointGroups(positionedBackbone, endpoints, box) {
-  const { padding, width, top = 0, blockers = [] } = box;
+  const { padding, width, blockers = [] } = box;
   const groups = positionedBackbone
     .map((parent) => ({
       parent,
@@ -268,9 +268,9 @@ function layoutEndpointGroups(positionedBackbone, endpoints, box) {
     }))
     .filter((group) => group.children.length)
     .sort((left, right) => left.parent.x - right.parent.x);
-  if (!groups.length) return { nodes: [], bottom: top };
+  if (!groups.length) return { nodes: [], bottom: 0 };
 
-  const rowGap = 74;
+  const rowGap = 72;
   const columnGap = 12;
   const available = width - (padding * 2);
   const occupied = blockers.map((node) => ({
@@ -280,20 +280,20 @@ function layoutEndpointGroups(positionedBackbone, endpoints, box) {
     halfHeight: node.kind === 'backbone' ? 40 : 33,
   }));
   const placed = [];
-  let bottom = top;
+  let bottom = 0;
 
-  const settle = (centerX, cardWidth, fromY) => {
-    let y = fromY;
-    for (let guard = 0; guard < 60; guard += 1) {
+  const fits = (left, y, row) => {
+    let cursor = left;
+    for (const item of row) {
+      const centerX = cursor + (item.cardWidth / 2);
       const clash = occupied.some((other) => (
-        Math.abs(other.x - centerX) < ((other.cardWidth + cardWidth) / 2) + 8
+        Math.abs(other.x - centerX) < ((other.cardWidth + item.cardWidth) / 2) + 8
         && Math.abs(other.y - y) < (other.halfHeight + 33)
       ));
-      if (!clash) break;
-      y += rowGap;
+      if (clash) return false;
+      cursor += item.cardWidth + columnGap;
     }
-    occupied.push({ x: centerX, y, cardWidth, halfHeight: 33 });
-    return Math.round(y);
+    return true;
   };
 
   for (const group of groups) {
@@ -302,9 +302,9 @@ function layoutEndpointGroups(positionedBackbone, endpoints, box) {
       // 名字再长也不能超过一行可用宽度，否则会被整体 clamp 到同一处而重叠。
       cardWidth: Math.min(cardWidthFor(node), available),
     }));
-    const baseY = top;
     let index = 0;
-    let offsetY = 0;
+    // 从父卡片底边往下 8px 起排，边上还有空位就先横着挪，挪不开才往下让。
+    let rowY = group.parent.y + 81;
     while (index < items.length) {
       const row = [];
       let rowWidth = 0;
@@ -315,20 +315,36 @@ function layoutEndpointGroups(positionedBackbone, endpoints, box) {
         rowWidth += extra + item.cardWidth;
         row.push(item);
       }
-      const left = clamp(
-        group.parent.x - (rowWidth / 2), padding, Math.max(padding, width - padding - rowWidth),
-      );
-      let cursor = left;
-      let rowBottom = 0;
+      const maxLeft = Math.max(padding, width - padding - rowWidth);
+      const centered = clamp(group.parent.x - (rowWidth / 2), padding, maxLeft);
+      const stride = Math.max(140, rowWidth * 0.6);
+      const candidates = [centered];
+      for (let shift = 1; shift <= 3; shift += 1) {
+        candidates.push(clamp(centered + (shift * stride), padding, maxLeft));
+        candidates.push(clamp(centered - (shift * stride), padding, maxLeft));
+      }
+      candidates.push(padding, maxLeft);
+
+      let spot = null;
+      for (let attempt = 0; attempt < 24 && !spot; attempt += 1) {
+        const y = rowY + (attempt * rowGap);
+        const left = candidates.find((candidate) => fits(candidate, y, row));
+        if (left !== undefined) spot = { left, y };
+      }
+      if (!spot) {
+        spot = { left: centered, y: rowY + (24 * rowGap) };
+      }
+      let cursor = spot.left;
       for (const item of row) {
         const centerX = Math.round(cursor + (item.cardWidth / 2));
-        const y = settle(centerX, item.cardWidth, baseY + offsetY);
-        rowBottom = Math.max(rowBottom, y);
-        placed.push({ ...item.node, cardWidth: item.cardWidth, x: centerX, y });
+        occupied.push({ x: centerX, y: spot.y, cardWidth: item.cardWidth, halfHeight: 33 });
+        placed.push({
+          ...item.node, cardWidth: item.cardWidth, x: centerX, y: Math.round(spot.y),
+        });
         cursor += item.cardWidth + columnGap;
       }
-      bottom = Math.max(bottom, rowBottom);
-      offsetY = rowBottom - baseY + rowGap;
+      bottom = Math.max(bottom, spot.y);
+      rowY = spot.y + rowGap;
       index += row.length;
     }
   }
@@ -349,26 +365,25 @@ export function layoutTopology(graph, viewport = {}) {
   let tierY = padding + 46;
   for (const tier of tiers) {
     const members = backbone.filter((node) => Number(node.tier ?? 3) === tier);
+    // 逐行推进：某个设备的终端紧跟它所在那一行，后面的行再从终端下方开始，
+    // 这样终端不会被本层后面几行的卡片挤到底部去。
     for (const row of packRows(members, available)) {
-      positionedBackbone.push(...distribute(row, padding, width - padding, tierY));
+      const placedRow = distribute(row, padding, width - padding, tierY);
+      positionedBackbone.push(...placedRow);
       tierY += 118;
-    }
-    // 该层展开的终端紧跟本层卡片，下一层从它们下方继续，层间不会被压穿。
-    const tierParents = positionedBackbone.filter(
-      (node) => Number(node.tier ?? 3) === tier,
-    );
-    const children = endpoints.filter(
-      (node) => tierParents.some((parent) => parent.id === node.parentId),
-    );
-    if (children.length) {
-      const laid = layoutEndpointGroups(tierParents, children, {
-        padding,
-        width,
-        top: Math.max(...tierParents.map((node) => node.y)) + 74,
-        blockers: [...positionedBackbone, ...positionedEndpoints],
-      });
-      positionedEndpoints.push(...laid.nodes);
-      tierY = laid.bottom + 74;
+
+      const children = endpoints.filter(
+        (node) => placedRow.some((parent) => parent.id === node.parentId),
+      );
+      if (children.length) {
+        const laid = layoutEndpointGroups(placedRow, children, {
+          padding,
+          width,
+          blockers: [...positionedBackbone, ...positionedEndpoints],
+        });
+        positionedEndpoints.push(...laid.nodes);
+        tierY = laid.bottom + 74;
+      }
     }
     tierY += 35;
   }
