@@ -1,7 +1,16 @@
 from tests.devices.pc.helpers import add_analysis_issue, create_log_file
+
+
+def records_bootstrap(response):
+    """The record tables hydrate rows as JSON; assertions read that payload."""
+    match = re.search(
+        r'id="records-bootstrap"[^>]*>(.*?)</script>', response.content.decode(), re.S,
+    )
+    return json.loads(match.group(1)) if match else {"rows": []}
 from datetime import date, datetime, timedelta
 from html.parser import HTMLParser
 from io import StringIO
+import json
 import re
 import uuid
 from unittest.mock import Mock, patch
@@ -1681,10 +1690,12 @@ class RecordWorkspaceTests(TestCase):
         self.assertTrue(error_document.find(
             'input', **{'data-column-toggle': '', 'data-column-key': 'type'},
         ))
-        self.assertContains(inspection_response, 'href="/inspection/detail/"')
-        self.assertTrue(inspection_document.find('span', **{'data-status': 'abnormal'}))
-        self.assertContains(error_response, 'href="/error/detail/"')
-        self.assertContains(error_response, '<span class="badge status-badge text-bg-danger" data-status="abnormal">磁盘异常</span>', html=True)
+        inspection_rows = records_bootstrap(inspection_response)['rows']
+        self.assertEqual(inspection_rows[0]['url'], '/inspection/detail/')
+        self.assertEqual(inspection_rows[0]['cells']['status']['badge']['status'], 'abnormal')
+        error_rows = records_bootstrap(error_response)['rows']
+        self.assertEqual(error_rows[0]['url'], '/error/detail/')
+        self.assertEqual(error_rows[0]['cells']['type']['text'], '磁盘异常')
 
     def test_dedicated_computer_record_pages_have_unique_registered_workspaces(self):
         inspection = create_computer_analysis('PC-DEDICATED', user_name='测试用户')

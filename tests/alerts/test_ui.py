@@ -6,6 +6,8 @@ real for disabled channels so the view cannot accidentally initiate a request.
 
 from unittest.mock import patch
 import csv
+import json
+import re
 
 from tests import response_body
 from urllib.parse import parse_qs, urlsplit
@@ -15,6 +17,13 @@ from django.core.management import call_command
 from io import StringIO
 from django.urls import reverse
 from django.utils import timezone
+
+def alert_bootstrap(response):
+    """The list rows are hydrated as JSON now; assertions read the payload."""
+    html = response.content.decode()
+    match = re.search(r'id="alert-bootstrap"[^>]*>(.*?)</script>', html, re.S)
+    return json.loads(match.group(1)) if match else {"rows": []}
+
 
 from net.models import (
     AlertChannel,
@@ -288,11 +297,9 @@ class AlertUiTests(TestCase):
         self.assertContains(listing, '任务总结')
         self.assertEqual(list(listing.context['page_obj'].object_list), [event])
         self.assertContains(listing, '导出筛选结果')
-        self.assertContains(
-            listing,
-            'primary disabled channel、tertiary dingtalk channel：发送成功',
-        )
-        self.assertContains(listing, 'secondary email channel：发送失败')
+        labels = [item['label'] for item in alert_bootstrap(listing)['rows'][0]['deliveries']]
+        self.assertIn('primary disabled channel、tertiary dingtalk channel：发送成功', labels)
+        self.assertIn('secondary email channel：发送失败', labels)
         self.assertNotContains(listing, '查看送达结果')
 
         detail = self.client.get(reverse('alert_detail', args=[event.pk]))
@@ -347,9 +354,11 @@ class AlertUiTests(TestCase):
                 params = {'filter_delivery_outcome': outcome, 'page_size': 20}
                 response = self.client.get(reverse('alert_list'), params)
                 self.assertEqual(list(response.context['page_obj'].object_list), [event])
-                self.assertContains(
-                    response,
-                    f'primary disabled channel、secondary email channel：{label}',
+                labels = [
+                    item['label'] for item in alert_bootstrap(response)['rows'][0]['deliveries']
+                ]
+                self.assertIn(
+                    f'primary disabled channel、secondary email channel：{label}', labels,
                 )
                 exported = self.client.get(reverse('table_export', args=['alert_events']), params)
                 rows = list(csv.reader(StringIO(response_body(exported).decode('utf-8-sig'))))

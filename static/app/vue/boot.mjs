@@ -4,6 +4,9 @@ import { createApp } from '../../vendor/vue/vue.esm-browser.prod.js';
 const pages = {
     'maintenance-list': () => import('./pages/maintenance_list.mjs'),
     'ip-subnet-form': () => import('./pages/ip_subnet_form.mjs'),
+    'alert-list': () => import('./pages/alert_list.mjs'),
+    'inspection-records': () => import('./pages/resource_table.mjs'),
+    'error-records': () => import('./pages/resource_table.mjs'),
 };
 
 export function readBootstrap(id) {

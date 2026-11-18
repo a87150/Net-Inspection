@@ -15,6 +15,8 @@ from index.common.table_query import (
     query_without_page,
 )
 from index.common.access import is_admin
+from index.common.table_payload import row_payloads as table_row_payloads
+from index.common.table_payload import table_payload
 from index.common.table_registry import get_table_definition, project_record_definition
 from net.models import (
     ComputerAnalysis,
@@ -370,6 +372,37 @@ def _error_records(per_type=None):
     return _GlobalRecordRows(projections, _global_url)
 
 
+def _inspection_status_badge(record):
+    ok = record.get('ok') if isinstance(record, dict) else getattr(record, 'ok', None)
+    if ok is None:
+        return None
+    return {
+        'status': 'normal' if ok else 'abnormal',
+        'tone': 'success' if ok else 'danger',
+        'label': '正常' if ok else '异常',
+    }
+
+
+def _error_type_badge(record):
+    value = record.get('type') if isinstance(record, dict) else getattr(record, 'type', None)
+    if not value:
+        return None
+    return {'status': 'abnormal', 'tone': 'danger', 'label': str(value)}
+
+
+INSPECTION_RECORD_BADGES = {'status': _inspection_status_badge}
+ERROR_RECORD_BADGES = {'type': _error_type_badge}
+
+
+def _records_bootstrap(page_obj, definition, endpoint, label, badges=None):
+    """Rows the page hydrates with; the REST twin builds the same shape."""
+    return table_payload(
+        page_obj, definition,
+        table_row_payloads(page_obj.object_list, definition, badges),
+        extra={'endpoint': endpoint, 'label': label},
+    )
+
+
 def inspection_records(request):
     table_definition = get_table_definition('inspection_records')
     records, table_state = apply_table_filters(
@@ -382,6 +415,10 @@ def inspection_records(request):
         'page_obj': page_obj,
         'table_definition': table_definition,
         'table_preference_key': 'inspection_records-global',
+        'records_bootstrap': _records_bootstrap(
+            page_obj, table_definition, '/api/v1/inspection-records/', '巡检与分析记录',
+            INSPECTION_RECORD_BADGES,
+        ),
         'table_state': table_state,
         'page_sizes': PAGE_SIZES,
         'table_export_path': reverse(
@@ -402,6 +439,10 @@ def error_records(request):
     return render(request, 'inspections/errors.html', {
         'page_obj': page_obj,
         'table_definition': table_definition,
+        'records_bootstrap': _records_bootstrap(
+            page_obj, table_definition, '/api/v1/error-records/', '全部异常记录',
+            ERROR_RECORD_BADGES,
+        ),
         'table_state': table_state,
         'page_sizes': PAGE_SIZES,
         'table_export_path': reverse('table_export', args=['error_records']),

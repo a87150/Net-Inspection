@@ -3,14 +3,21 @@
 Rows are produced by the same payload builder the server-rendered模板 uses, so the
 list response and the page's hydrated first paint cannot drift apart.
 """
+from django.core.paginator import Paginator
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from alerts.payloads import (
+    alert_event_metrics, alert_event_payloads, alert_event_queryset,
+)
 from index.api.pagination import StandardPagination
-from index.api.permissions import IsAdminOrReadOnly
+from index.api.permissions import IsAdminOrReadOnly, IsReader
 from index.api.serializers import IpSubnetCreateSerializer, MaintenanceWindowCreateSerializer
+from index.common.table_payload import row_payloads as table_row_payloads
+from index.common.table_query import apply_table_filters
+from index.common.table_registry import get_table_definition
 from assets.maintenance import (
     KIND_TARGET_TYPES,
     STATE_CHOICES,
@@ -78,6 +85,105 @@ class MaintenanceWindowViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet
             ],
             "metrics": window_metrics(),
         })
+
+
+class TableRowsViewSet(viewsets.GenericViewSet):
+    """One endpoint per list page, sharing the page's own filter/sort state.
+
+    The page keeps its GET form for filtering; this endpoint serves the rows so
+    the client can re-render without the server building table HTML.
+    """
+
+    permission_classes = [IsReader]
+    table_key = ""
+    page_param = "page"
+
+    def get_table(self):
+        raise NotImplementedError
+
+    def list(self, request):
+        definition = get_table_definition(self.table_key)
+        rows, table_state = self.get_table(request, definition)
+        paginator = Paginator(rows, table_state["page_size"])
+        page = paginator.get_page(request.GET.get(self.page_param))
+        return Response({
+            "count": paginator.count,
+            "page": page.number,
+            "pages": paginator.num_pages,
+            "page_size": table_state["page_size"],
+            "start_index": page.start_index() if paginator.count else 0,
+            "end_index": page.end_index() if paginator.count else 0,
+            "results": self.serialize(page.object_list),
+        })
+
+    def serialize(self, object_list):
+        raise NotImplementedError
+
+
+class AlertEventViewSet(TableRowsViewSet):
+    table_key = "alert_events"
+
+    def get_table(self, request, definition):
+        return apply_table_filters(
+            request, alert_event_queryset(), definition, include_legacy_status=False,
+        )
+
+    def serialize(self, object_list):
+        return alert_event_payloads(object_list)
+
+    def list(self, request):
+        response = super().list(request)
+        definition = get_table_definition(self.table_key)
+        events, _state = self.get_table(request, definition)
+        response.data["metrics"] = alert_event_metrics(events)
+        return response
+
+
+class RecordTableViewSet(TableRowsViewSet):
+    """Shared row shape for the field-loop pages (records, errors, ...)."""
+
+    base_queryset = None
+    badges = None
+
+    def get_table(self, request, definition):
+        return apply_table_filters(request, self.build_queryset(), definition)
+
+    def build_queryset(self):
+        raise NotImplementedError
+
+    def serialize(self, object_list):
+        definition = get_table_definition(self.table_key)
+        return table_row_payloads(object_list, definition, self.badges)
+
+
+class InspectionRecordViewSet(RecordTableViewSet):
+    table_key = "inspection_records"
+
+    def build_queryset(self):
+        from inspections.records import _inspection_records
+
+        return _inspection_records()
+
+    @property
+    def badges(self):
+        from inspections.records import INSPECTION_RECORD_BADGES
+
+        return INSPECTION_RECORD_BADGES
+
+
+class ErrorRecordViewSet(RecordTableViewSet):
+    table_key = "error_records"
+
+    def build_queryset(self):
+        from inspections.records import _error_records
+
+        return _error_records()
+
+    @property
+    def badges(self):
+        from inspections.records import ERROR_RECORD_BADGES
+
+        return ERROR_RECORD_BADGES
 
 
 class IpSubnetViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):

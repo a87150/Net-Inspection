@@ -31,28 +31,14 @@
 {% endif %}
 <div data-table-workspace data-table-key="alert-events">
     <div class="table-toolbar">{% include 'common/table_workspace.html' %}</div>
-    <div class="card surface-card table-scroll-shell">
-        <p class="table-scroll-hint">可横向滚动查看渠道送达与事件信息</p>
-        <div class="table-responsive" role="region" aria-label="告警记录数据表" tabindex="0">
-            <table class="table data-table table-hover align-middle mb-0">
-                {% include 'common/table_caption.html' %}
-                <thead>
-                    <tr>{% include 'common/table_sort_headers.html' %}<th scope="col" class="table-actions-column table-actions-cell">操作</th></tr>
-                </thead>
-                <tbody>
-                    {% for event in page_obj %}
-                        {% include 'alerts/event_row.html' %}
-                    {% empty %}
-                    <tr><td colspan="10">{% include 'common/empty_state.html' with empty_title="暂无告警记录" empty_message="异常或恢复事件产生后将显示在这里。" %}</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+    <div id="alert-list" data-vue-page="alert-list" data-vue-bootstrap="alert-bootstrap">
+        <noscript><p class="alert alert-warning">告警记录表需要启用 JavaScript。</p></noscript>
     </div>
-    {% include 'common/pagination.html' %}
+    {{ alert_bootstrap|json_script:"alert-bootstrap" }}
 </div>
 {% endblock %}
 {% block page_scripts %}
+<script type="module" src="{% static 'app/vue/boot.mjs' %}"></script>
 {% include 'common/scripts/table_workspace.html' %}
 {% include 'common/scripts/modal_workflows.html' %}
 {% include 'common/scripts/inspection_workflows.html' %}

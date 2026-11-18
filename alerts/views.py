@@ -177,7 +177,16 @@ def alert_list(request):
     context = {
         'page_obj': page_obj,
         'alert_metrics': alert_metrics,
-        'alert_rows': alert_event_payloads(page_obj.object_list),
+        'alert_bootstrap': {
+            'endpoint': '/api/v1/alert-events/',
+            'rows': alert_event_payloads(page_obj.object_list),
+            'count': page_obj.paginator.count,
+            'page': page_obj.number,
+            'pages': page_obj.paginator.num_pages,
+            'page_size': table_state['page_size'],
+            'start_index': page_obj.start_index() if page_obj.paginator.count else 0,
+            'end_index': page_obj.end_index() if page_obj.paginator.count else 0,
+        },
         'table_definition': definition,
         'table_state': table_state,
         'page_sizes': PAGE_SIZES,

@@ -1,4 +1,6 @@
 import csv
+import json
+import re
 
 from tests import response_body
 import uuid
@@ -13,6 +15,14 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from tests.auth import login_admin
+
+
+def _records_payload(response):
+    """Hydrated rows as plain text, so Chinese cell values are searchable."""
+    match = re.search(
+        r'id="records-bootstrap"[^>]*>(.*?)</script>', response.content.decode(), re.S,
+    )
+    return json.dumps(json.loads(match.group(1)), ensure_ascii=False) if match else ""
 
 from net.models import (
     Computer,
@@ -843,17 +853,20 @@ class DeterministicDemoSeedTests(TestCase):
         historical_list = self.client.get(reverse('inspection_records'),
                                           {'filter_asset': 'DEMO-PC-DEV-02'})
         self.assertContains(historical_list, 'DEMO-PC-DEV-02')
-        self.assertContains(historical_list, analysis_url)
+        self.assertIn(analysis_url, historical_list.content.decode())
         analysis_detail = self.client.get(analysis_url)
         self.assertContains(analysis_detail, '磁盘空间不足')
         self.assertContains(analysis_detail, '系统盘剩余空间低于 10%')
 
         consolidated = self.client.get(reverse('inspection_records'))
         self.assertContains(consolidated, 'DEMO-PC-DEV-02')
-        self.assertContains(consolidated, 'Windows 巡检 API 返回部分指标')
         errors = self.client.get(reverse('error_records'))
-        self.assertContains(errors, '磁盘空间不足')
-        self.assertContains(errors, '摄像机离线（演示）')
+        # Rows are hydrated as JSON, so Chinese cell text lives in the payload.
+        consolidated_text = _records_payload(consolidated)
+        error_text = _records_payload(errors)
+        self.assertIn('Windows 巡检 API 返回部分指标', consolidated_text)
+        self.assertIn('磁盘空间不足', error_text)
+        self.assertIn('摄像机离线（演示）', error_text)
 
         domain_page = self.client.get(reverse('domain_controller_settings'))
         self.assertContains(domain_page, 'dc.demo.invalid')
