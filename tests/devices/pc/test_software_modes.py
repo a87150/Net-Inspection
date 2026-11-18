@@ -3,6 +3,7 @@ from django.urls import reverse
 from net.devices.pc.checks import check_software
 from net.models import ComputerAnalysisProfile
 from inspections.forms import ComputerAnalysisProfileConfigForm
+from tests.payloads import payload_text
 
 POLICY = {
     'WHITELIST': {'basic': ['Browser', 'SharedApp']},
@@ -88,4 +89,7 @@ class SoftwareModeConfiguration(TestCase):
         issues = [v for v in result.exceptions if v['问题类型'] == '软件问题']
         self.assertEqual(issues[0]['详细问题'], 'Game')
         response = self.client.get(reverse('computer_analysis_detail', args=[result.pk]))
-        self.assertContains(response, '本次软件分析模式：黑名单模式')
+        self.assertIn(
+            '本次软件分析模式：黑名单模式',
+            payload_text(response, 'detail-bootstrap'),
+        )

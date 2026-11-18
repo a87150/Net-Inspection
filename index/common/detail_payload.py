@@ -26,6 +26,32 @@ def text_section(heading, text):
     return {"heading": heading, "kind": "text", "text": text or ""}
 
 
+def alert_section(level, text):
+    """level: success | warning | danger | secondary | info."""
+    return {"heading": "", "kind": "alert", "level": level, "text": text or ""}
+
+
+def table_section(heading, columns, rows, empty="", note=""):
+    return {
+        "heading": heading,
+        "kind": "table",
+        "columns": list(columns),
+        "rows": [list(row) for row in rows],
+        "empty": empty,
+        "note": note,
+    }
+
+
+def group_section(heading, summary, groups):
+    """groups: [{title, count, items: [{label, detail, badge}]}]."""
+    return {
+        "heading": heading,
+        "kind": "groups",
+        "summary": summary or "",
+        "groups": list(groups),
+    }
+
+
 def detail_payload(*, title, eyebrow="", description="", actions=(), sections=()):
     return {
         "title": title,

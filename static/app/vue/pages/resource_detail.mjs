@@ -9,6 +9,14 @@ export default {
         sections: {type: Array, default: () => []},
         notice: {type: String, default: ''},
     },
+    computed: {
+        alerts() {
+            return this.sections.filter((section) => section.kind === 'alert');
+        },
+        blocks() {
+            return this.sections.filter((section) => section.kind !== 'alert');
+        },
+    },
     methods: {
         badgeClass(badge) {
             return badge.class || ('text-bg-' + (badge.tone || 'info'));
@@ -33,9 +41,41 @@ export default {
             </div>
         </header>
         <div v-if="notice" class="alert alert-warning">{{ notice }}</div>
+        <div v-for="(section, index) in alerts" :key="'alert-' + index" class="resource-detail__alert"
+             :class="'alert alert-' + section.level" role="alert">[[ section.text ]]</div>
         <div class="resource-detail__grid">
-            <section v-for="section in sections" :key="section.heading" class="card surface-card">
-                <div class="card-header surface-card__header"><h2 class="h5 mb-0">[[ section.heading ]]</h2></div>
+            <section v-for="section in blocks" :key="section.heading" class="card surface-card">
+                <div v-if="section.heading" class="card-header surface-card__header"><h2 class="h5 mb-0">[[ section.heading ]]</h2></div>
+                <div v-if="section.kind === 'table'" class="card-body">
+                    <p v-if="section.note" class="small text-secondary">[[ section.note ]]</p>
+                    <div class="table-responsive" role="region" :aria-label="section.heading" tabindex="0">
+                        <table class="table data-table mb-0">
+                            <thead><tr><th v-for="column in section.columns" :key="column" scope="col">[[ column ]]</th></tr></thead>
+                            <tbody>
+                                <tr v-for="(row, rowIndex) in section.rows" :key="rowIndex">
+                                    <td v-for="(cell, cellIndex) in row" :key="cellIndex">[[ cell ]]</td>
+                                </tr>
+                                <tr v-if="!section.rows.length"><td :colspan="section.columns.length">[[ section.empty ]]</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div v-else-if="section.kind === 'groups'" class="card-body">
+                    <p v-if="section.summary" class="text-secondary">[[ section.summary ]]</p>
+                    <div v-for="group in section.groups" :key="group.title" class="card surface-card status-surface mb-3">
+                        <div class="card-header surface-card__header d-flex align-items-center justify-content-between gap-2">
+                            <strong>[[ group.title ]]</strong>
+                            <span class="status-badge status-badge--neutral">[[ group.count ]] 项</span>
+                        </div>
+                        <ul class="list-group list-group-flush">
+                            <li v-for="(item, itemIndex) in group.items" :key="itemIndex" class="list-group-item">
+                                <span v-if="item.badge" class="badge status-badge" :class="badgeClass(item.badge)" :data-status="item.badge.status">[[ item.badge.label ]]</span>
+                                <strong>[[ item.label ]]</strong>
+                                <div class="text-secondary mt-1">[[ item.detail ]]</div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
                 <div class="card-body">
                     <dl v-if="section.kind === 'fields'" class="row mb-0">
                         <template v-for="field in section.fields" :key="field.label">

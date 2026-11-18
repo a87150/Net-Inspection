@@ -406,17 +406,11 @@ class SharedInterfaceContractTests(TestCase):
                 self.assertIn('interactive-list__item', source)
 
     def test_legacy_error_cards_use_shared_status_surfaces(self):
-        template_root = TemplateRoot.default()
-        paths = (
-            'inspections/issue_findings.html',
-            'inspections/record_detail.html',
-        )
-
-        for relative_path in paths:
-            with self.subTest(template=relative_path):
-                source = (template_root / relative_path).read_text(encoding='utf-8')
-                self.assertNotIn('card border-danger', source)
-                self.assertIn('surface-card', source)
+        source = Path(finders.find('app/vue/pages/resource_detail.mjs')).read_text(
+            encoding='utf-8')
+        self.assertNotIn('card border-danger', source)
+        self.assertIn('surface-card', source)
+        self.assertIn('status-surface', source)
 
     def test_shared_interactive_list_has_responsive_accessible_states(self):
         css = Path(finders.find('app/css/foundation.css')).read_text(encoding='utf-8')
@@ -448,7 +442,6 @@ class SharedInterfaceContractTests(TestCase):
             'registration/login.html',
             'public/list.html',
             'public/summary.html',
-            'inspections/traffic_table.html',
         )
 
         for relative_path in paths:

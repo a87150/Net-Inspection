@@ -840,8 +840,9 @@ class DeterministicDemoSeedTests(TestCase):
                     self.assertContains(listing, summary)
                     self.assertContains(listing, detail_url)
                 detail = self.client.get(detail_url)
-                self.assertContains(detail, summary)
-                self.assertContains(detail, '设备在线，但数据采集未完整成功')
+                body = payload_text(detail, 'detail-bootstrap')
+                self.assertIn(summary, body)
+                self.assertIn('设备在线，但数据采集未完整成功', body)
 
         analysis = ComputerAnalysis.objects.get(
             summary='发现异常：系统盘空间不足',
@@ -856,8 +857,12 @@ class DeterministicDemoSeedTests(TestCase):
         self.assertContains(historical_list, 'DEMO-PC-DEV-02')
         self.assertIn(analysis_url, historical_list.content.decode())
         analysis_detail = self.client.get(analysis_url)
-        self.assertContains(analysis_detail, '磁盘空间不足')
-        self.assertContains(analysis_detail, '系统盘剩余空间低于 10%')
+        self.assertIn(
+            '磁盘空间不足', payload_text(analysis_detail, 'detail-bootstrap'),
+        )
+        self.assertIn(
+            '系统盘剩余空间低于 10%', payload_text(analysis_detail, 'detail-bootstrap'),
+        )
 
         consolidated = self.client.get(reverse('inspection_records'))
         self.assertContains(consolidated, 'DEMO-PC-DEV-02')

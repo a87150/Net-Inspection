@@ -320,8 +320,10 @@ body.app-shell {
 }
 
 .table-responsive {
-    /* 表格跟随页面整体滚动：卡片里不再套第二根滚动条。 */
+    /* 表格跟随页面整体滚动：横向可滑，纵向永不出现第二根滚动条。 */
     max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
 }
 
 .data-table {

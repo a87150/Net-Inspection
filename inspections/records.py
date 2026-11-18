@@ -8,6 +8,9 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 
+from inspections.detail_payload import (
+    analysis_detail_payload, inspection_record_detail_payload,
+)
 from index.common.table_query import (
     PAGE_SIZES,
     apply_table_filters,
@@ -186,17 +189,22 @@ def record_detail(request, kind, pk):
     if inspection.raw_output:
         detail_fields.append(('原始响应', inspection.raw_output))
     error_manager = getattr(inspection, 'errors', None)
+    asset_name = str(getattr(inspection, page.asset_field, None) or '未知设备')
     return render(request, 'inspections/record_detail.html', {
-        'record_type': 'infrastructure',
         'record_kind': kind,
         'item_name': page.title,
-        'asset_name': str(getattr(inspection, page.asset_field, None) or '未知设备'),
+        'asset_name': asset_name,
         'inspection': inspection,
-        'detail_fields': [
-            (name, value) for name, value in detail_fields if value
-        ],
-        'inspection_errors': (
-            list(error_manager.all()) if error_manager is not None else []
+        'detail': inspection_record_detail_payload(
+            inspection=inspection,
+            record_kind=kind,
+            item_name=page.title,
+            asset_name=asset_name,
+            detail_fields=[(name, value) for name, value in detail_fields if value],
+            inspection_errors=(
+                list(error_manager.all()) if error_manager is not None else []
+            ),
+            back_url=reverse('record_list', args=[kind]),
         ),
     })
 
@@ -222,8 +230,13 @@ def computer_analysis_detail(request, pk):
     )
     return render(request, 'inspections/record_detail.html', {
         'record_type': 'computer_analysis',
+        'item_name': 'PC',
         'analysis': analysis,
-        'detail_fields': list((analysis.details or {}).items()),
+        'detail': analysis_detail_payload(
+            analysis=analysis,
+            detail_fields=list((analysis.details or {}).items()),
+            back_url=reverse('computer_analysis_list'),
+        ),
     })
 
 

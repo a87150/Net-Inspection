@@ -7,6 +7,7 @@ const pages = {
     'alert-list': () => import('./pages/alert_list.mjs'),
     'alert-detail': () => import('./pages/resource_detail.mjs'),
     'asset-detail': () => import('./pages/resource_detail.mjs'),
+    'record-detail': () => import('./pages/resource_detail.mjs'),
     'inspection-records': () => import('./pages/resource_table.mjs'),
     'error-records': () => import('./pages/resource_table.mjs'),
     'access-records': () => import('./pages/resource_table.mjs'),

@@ -1,6 +1,7 @@
 from django.test import TestCase, override_settings
 
 from net.models import Computer, Domain_Account, Domain_Computer, People
+from inspections.detail_payload import analysis_detail_payload
 from tests.devices.pc.test_remote_rules import RemoteRuleFixture
 
 
@@ -83,15 +84,18 @@ class FrozenEnrichmentTests(RemoteRuleFixture, TestCase):
         self.assertEqual(result.details['enrichment']['site'], 'Fixture Site')
 
     def test_detail_page_displays_frozen_personnel_and_ou(self):
-        from django.template.loader import render_to_string
         People.objects.create(employee_id='tester', name='Frozen Person', department='Frozen Department')
         account = Domain_Account.objects.create(login_name='tester', account_name='Test', ou='OU=Frozen')
         result = self.analyze(['resource'])
         account.ou = 'OU=Changed'
         account.save()
-        html = render_to_string('inspections/record_detail.html',
-                                {'record_type': 'computer_analysis', 'analysis': result})
-        self.assertIn('Frozen Person', html)
-        self.assertIn('Frozen Department', html)
-        self.assertIn('OU=Frozen', html)
-        self.assertNotIn('OU=Changed', html)
+        payload = analysis_detail_payload(
+            analysis=result,
+            detail_fields=list((result.details or {}).items()),
+            back_url='/computers/analyses/',
+        )
+        text = str(payload)
+        self.assertIn('Frozen Person', text)
+        self.assertIn('Frozen Department', text)
+        self.assertIn('OU=Frozen', text)
+        self.assertNotIn('OU=Changed', text)
