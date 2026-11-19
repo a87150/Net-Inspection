@@ -1,6 +1,7 @@
 from assets.views import (
     ASSET_PAGES,
     asset_detail,
+    asset_detail_json,
     asset_list,
     item_list,
     person_detail,
@@ -69,6 +70,7 @@ __all__ = [
     '_error_records',
     '_inspection_records',
     'asset_detail',
+    'asset_detail_json',
     'asset_list',
     'computer_analysis_detail',
     'computer_analysis_list',

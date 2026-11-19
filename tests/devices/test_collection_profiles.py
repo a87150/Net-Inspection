@@ -2,6 +2,7 @@ from django.test import TestCase
 from django.core.exceptions import ValidationError
 from net.models import Network_Device, DeviceCollectionTemplate, DeviceCollectionBinding
 from net.devices.collection_profiles import collection_method_choices, resolve_collection_settings
+from tests.payloads import asset_table_text
 
 class CollectionProfilesTests(TestCase):
     def setUp(self):
@@ -274,8 +275,11 @@ class CollectionProfilesTests(TestCase):
         from django.urls import reverse
         login_admin(self.client)
         response=self.client.get(reverse('asset_list',args=['networks']))
-        self.assertContains(response,reverse('device_collection_settings',args=['networks',self.device.pk]))
-        self.assertContains(response,'data-modal-load="collectionTemplateModal">巡检设置')
+        # 行内动作由 Vue 渲染：URL 与模态框目标都在 bootstrap 的行数据里。
+        table=asset_table_text(response)
+        self.assertIn(reverse('device_collection_settings',args=['networks',self.device.pk]),table)
+        self.assertIn('collectionTemplateModal',table)
+        self.assertIn('巡检设置',table)
         self.assertNotContains(response,'巡检与报警设置')
 
     def test_reset_one_project_to_parent_keeps_other_project_and_updates_new_snapshot(self):

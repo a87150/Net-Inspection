@@ -16,6 +16,7 @@ from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 
 from inspections.forms import inspection_item_choices
+from tests.payloads import asset_table
 from net.models import (AlertChannel, Domain_Controller_Config, InspectionProfile,
                         WeakCurrentDevice, Network_Device, PeopleSyncSource, Server)
 from net.infrastructure.http_collectors import collect_security_api
@@ -489,24 +490,27 @@ class ConfigurationTests(TestCase):
         self.assertEqual(self.client.get('/assets/servers/configurations.zip').status_code, 404)
 
     def test_device_selection_is_first_column_with_current_page_bulk_actions(self):
+        from pathlib import Path
+
         result = self.client.get('/assets/networks/')
         html = result.content.decode()
-        device_table = html[html.index('<div data-table-workspace'):]
-        header = device_table[device_table.index('<thead'):device_table.index('</thead>')]
 
-        self.assertContains(result, 'data-device-selection-column')
+        # 选择列由组件渲染，服务端只给开关；select-all 仍在工具栏里。
+        self.assertEqual(asset_table(result)['selectAttr'], 'data-device-selection-target')
         self.assertContains(result, 'data-device-select-all')
         self.assertContains(result, 'data-device-select-invert')
         self.assertContains(result, 'data-configuration-export-feedback')
+        # 表头由组件渲染：选择列必须排在列循环之前这条顺序，只能验组件模板。
+        template = Path('static/app/vue/pages/asset_workspace.mjs').read_text(encoding='utf-8')
         self.assertLess(
-            header.index('data-device-selection-column'),
-            header.index('data-column-key'),
+            template.index('data-device-selection-column'),
+            template.index('v-for="column in visibleColumns"'),
         )
         self.assertLess(html.index('data-device-select-all'), html.index('data-selected-config-export'))
         for kind in ('servers', 'weakcurrent'):
             with self.subTest(kind=kind):
                 page = self.client.get(f'/assets/{kind}/')
-                self.assertContains(page, 'data-device-selection-column')
+                self.assertEqual(asset_table(page)['selectAttr'], 'data-device-selection-target')
                 self.assertContains(page, 'data-device-select-all')
 
     def test_unknown_network_vendor_never_opens_a_config_connection(self):

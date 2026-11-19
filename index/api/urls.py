@@ -3,7 +3,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from index.api.viewsets import (
-    AccessRecordViewSet, AlertEventViewSet, ComputerErrorViewSet,
+    AccessRecordViewSet, AlertEventViewSet, AssetViewSet, ComputerErrorViewSet,
     ComputerLogViewSet, DomainAccountViewSet, DomainComputerViewSet,
     DomainGroupViewSet, ErrorRecordViewSet, InspectionRecordViewSet,
     IpSubnetViewSet, MaintenanceWindowViewSet, TaskRunViewSet,
@@ -24,5 +24,7 @@ router.register("domain-computers", DomainComputerViewSet, basename="domain-comp
 router.register("domain-groups", DomainGroupViewSet, basename="domain-group")
 
 urlpatterns = [
+    # 资产的行端点按 kind 分路径，table_key 与查询集都从 kind 推出来。
+    path("asset-rows/<str:kind>/", AssetViewSet.as_view({"get": "list"}), name="asset-row-list"),
     path("", include(router.urls)),
 ]

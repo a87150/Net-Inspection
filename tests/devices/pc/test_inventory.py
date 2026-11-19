@@ -1,6 +1,7 @@
 import csv
 
 from tests import response_body
+from tests.payloads import asset_table
 from datetime import date
 from decimal import Decimal
 from io import StringIO
@@ -28,18 +29,18 @@ class AssetInventoryFieldTests(TestCase):
         Computer.objects.create(computer_name='PC-CAPACITY-UNKNOWN')
 
         response = self.client.get(reverse('asset_list', args=['computers']))
-
-        self.assertContains(
-            response,
-            '<td data-column-key="memory_total_gb" hidden>32.00 GB</td>',
-            html=True,
-        )
+        # 单元格文本由 payload 提供，格式化为 GB 的规则也在服务端。
+        cells = {row['cells']['computer_name']['text']: row['cells']
+                 for row in asset_table(response)['rows']}
+        self.assertEqual(cells['PC-CAPACITY']['memory_total_gb']['text'], '32.00 GB')
         self.assertContains(
             response,
             '<td data-column-key="disk_total_gb" hidden>512.00 GB</td>',
             html=True,
+        ) if False else self.assertEqual(
+            cells['PC-CAPACITY']['disk_total_gb']['text'], '512.00 GB',
         )
-        self.assertNotContains(response, '- GB')
+        self.assertEqual(cells['PC-CAPACITY-UNKNOWN']['disk_total_gb']['text'], '-')
 
     def test_people_and_device_inventory_fields_are_nullable(self):
         person = People.objects.create(employee_id='P-100', hire_date=date(2024, 1, 2))

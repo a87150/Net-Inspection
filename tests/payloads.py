@@ -17,3 +17,13 @@ def rows(response, script_id):
 def payload_text(response, script_id):
     """The hydrated JSON as one searchable string, for detail-page assertions."""
     return json.dumps(bootstrap(response, script_id), ensure_ascii=False)
+
+def asset_table(response):
+    """资产列表的列定义与首屏行。"""
+    return bootstrap(response, "asset-workspace-bootstrap")
+
+
+def asset_table_text(response):
+    """同上，但中日韩字符保持原样，方便直接搜中文与 URL。"""
+    return payload_text(response, "asset-workspace-bootstrap")
+

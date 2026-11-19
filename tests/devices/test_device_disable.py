@@ -4,6 +4,7 @@ from django.urls import reverse
 from assets.views import SWITCHABLE_KINDS
 from net.models import Network_Device, Server, WeakCurrentDevice
 from tests.auth import login_admin
+from tests.payloads import asset_table_text
 
 
 class DeviceDisableTests(TestCase):
@@ -22,14 +23,16 @@ class DeviceDisableTests(TestCase):
 
     def test_default_list_hides_disabled_devices(self):
         response = self.client.get(reverse('asset_list', args=['networks']))
-        self.assertContains(response, self.row('networks', self.enabled))
-        self.assertNotContains(response, self.row('networks', self.disabled))
+        table = asset_table_text(response)
+        self.assertIn(self.row('networks', self.enabled), table)
+        self.assertNotIn(self.row('networks', self.disabled), table)
 
     def test_disabled_devices_are_still_reachable_through_the_filter(self):
         response = self.client.get(reverse('asset_list', args=['networks']),
                                     {'filter_is_enabled': 'false'})
-        self.assertContains(response, self.row('networks', self.disabled))
-        self.assertNotContains(response, self.row('networks', self.enabled))
+        table = asset_table_text(response)
+        self.assertIn(self.row('networks', self.disabled), table)
+        self.assertNotIn(self.row('networks', self.enabled), table)
 
     def test_toggle_flips_the_flag_and_keeps_the_row(self):
         response = self.client.post(
@@ -66,12 +69,13 @@ class DeviceDisableTests(TestCase):
                 **{name_field: '退役', 'ip': '192.0.2.%d' % (20 + index)},
                 is_enabled=False,
             )
-            listed = self.client.get(reverse('asset_list', args=[kind]))
-            self.assertContains(listed, self.row(kind, on), msg_prefix=kind)
-            self.assertNotContains(listed, self.row(kind, off), msg_prefix=kind)
-            self.assertContains(listed, '停用', msg_prefix=kind)
-            show_off = self.client.get(
+            table = asset_table_text(self.client.get(reverse('asset_list', args=[kind])))
+            self.assertIn(self.row(kind, on), table, kind)
+            self.assertNotIn(self.row(kind, off), table, kind)
+            # 停用按钮作为行内动作由组件渲染，动作清单在 payload 里。
+            self.assertIn('停用', table, kind)
+            show_off = asset_table_text(self.client.get(
                 reverse('asset_list', args=[kind]), {'filter_is_enabled': 'false'},
-            )
-            self.assertContains(show_off, self.row(kind, off), msg_prefix=kind)
+            ))
+            self.assertIn(self.row(kind, off), show_off, kind)
 

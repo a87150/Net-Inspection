@@ -17,6 +17,7 @@ const pages = {
     'pc-errors': () => import('./pages/resource_table.mjs'),
     'task-runs': () => import('./pages/resource_table.mjs'),
     'domain-objects': () => import('./pages/resource_table.mjs'),
+    'asset-workspace': () => import('./pages/asset_workspace.mjs'),
 };
 
 export function readBootstrap(id) {

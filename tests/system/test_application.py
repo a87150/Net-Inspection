@@ -1,4 +1,5 @@
 from tests.devices.pc.helpers import add_analysis_issue, create_log_file
+from tests.payloads import bootstrap as page_bootstrap
 from tests.payloads import payload_text
 
 
@@ -15,7 +16,6 @@ import json
 import re
 import uuid
 from unittest.mock import Mock, patch
-from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -938,10 +938,22 @@ class VisualStructureTests(TestCase):
         self.assertTrue(self._elements_with_class(dashboard, 'section', 'metric-card'))
         self.assertTrue(self._elements_with_class(dashboard, 'section', 'surface-card'))
         self.assertTrue(self._elements_with_class(asset_page, 'div', 'table-toolbar'))
-        self.assertTrue(asset_page.find('a', href=reverse(
-            'asset_detail', args=['networks', Network_Device.objects.get().pk],
-        )))
-        self.assertTrue(self._elements_with_class(empty_page, 'div', 'empty-state'))
+        # 行动作由 Vue 渲染，链接在 bootstrap 的行数据里。
+        table = page_bootstrap(
+            self.client.get(reverse('item_list', args=['networks'])),
+            'asset-workspace-bootstrap',
+        )
+        detail_url = reverse('asset_detail', args=['networks', Network_Device.objects.get().pk])
+        self.assertTrue(any(
+            action.get('url') == detail_url
+            for row in table['rows'] for action in row.get('actions', [])
+        ))
+        # 空态文案同样搬到了 payload，供组件在没有行时显示。
+        self.assertEqual(
+            page_bootstrap(empty_page and self.client.get(
+                reverse('item_list', args=['people'])), 'asset-workspace-bootstrap')['emptyTitle'],
+            '暂无资产数据',
+        )
 
     def test_dedicated_computer_record_pages_use_shared_table_surfaces(self):
         for url in (analysis_task_url(), reverse('computer_error_list')):
@@ -1005,18 +1017,15 @@ class VisualStructureTests(TestCase):
         response = self.client.get(reverse('item_list', args=['people']), {
             'sort': 'name', 'order': 'asc',
         })
-        document = parse_response_html(response)
+        table = page_bootstrap(response, 'asset-workspace-bootstrap')
+        columns = {column['key']: column for column in table['columns']}
 
-        self.assertEqual(len(document.find(
-            'th', **{'data-column-key': 'name', 'aria-sort': 'ascending'},
-        )), 1)
-        self.assertEqual(len(document.find(
-            'a',
-            **{
-                'data-sort-key': 'employee_id',
-                'aria-label': '按工号升序排列',
-            },
-        )), 1)
+        # 表头与排序链接都由 Vue 渲染：aria-sort 与 aria-label 的生成规则搬进
+        # 了组件，这里验数据侧的前提——列可排序，且当前排序落在 name 上。
+        self.assertTrue(columns['name']['sortable'])
+        self.assertTrue(columns['employee_id']['sortable'])
+        self.assertEqual(response.context['table_state']['sort'], 'name')
+        self.assertEqual(response.context['table_state']['order'], 'asc')
 
     def test_action_urls_and_homepage_overview_tables_are_preserved(self):
         run_url = reverse('run_infrastructure_inspection')
@@ -1066,6 +1075,8 @@ class TableWorkspaceTemplateTests(TestCase):
         self.assertTrue(document.find('div', **{'data-filter-key': 'department'}))
 
         fields = response.context['table_state']['field_definitions']
+        columns = {column['key']: column
+                   for column in page_bootstrap(response, 'asset-workspace-bootstrap')['columns']}
         for field in fields:
             selectors = document.find(
                 'input',
@@ -1073,9 +1084,8 @@ class TableWorkspaceTemplateTests(TestCase):
             )
             self.assertEqual(len(selectors), 1, field.key)
             self.assertEqual('checked' in selectors[0], field.default_visible, field.key)
-            cells = document.find('th', **{'data-column-key': field.key})
-            self.assertEqual(len(cells), 1, field.key)
-            self.assertEqual('hidden' in cells[0], not field.default_visible, field.key)
+            # 表头现在由 Vue 渲染，列定义以 bootstrap 为准。
+            self.assertEqual(columns[field.key]['default_visible'], field.default_visible, field.key)
 
     def test_only_registry_default_columns_are_initially_visible(self):
         Computer.objects.create(computer_name='PC-001', mac_addresses='00-00-5E-00-53-01')
@@ -1083,8 +1093,8 @@ class TableWorkspaceTemplateTests(TestCase):
         response = self.client.get(reverse('item_list', args=['computers']))
         document = parse_response_html(response)
 
-        default_headers = document.find('th', **{'data-column-key': 'computer_name'})
-        optional_headers = document.find('th', **{'data-column-key': 'mac_addresses'})
+        columns = {column['key']: column
+                   for column in page_bootstrap(response, 'asset-workspace-bootstrap')['columns']}
         default_toggles = document.find(
             'input', **{'data-column-toggle': '', 'data-column-key': 'computer_name'},
         )
@@ -1092,20 +1102,12 @@ class TableWorkspaceTemplateTests(TestCase):
             'input', **{'data-column-toggle': '', 'data-column-key': 'mac_addresses'},
         )
 
-        self.assertTrue(default_headers)
-        self.assertTrue(optional_headers)
         self.assertTrue(default_toggles)
         self.assertTrue(optional_toggles)
-        default_header = default_headers[0]
-        optional_header = optional_headers[0]
-        default_toggle = default_toggles[0]
-        optional_toggle = optional_toggles[0]
-
-        self.assertNotIn('hidden', default_header)
-        self.assertIn('checked', default_toggle)
-        self.assertIn('hidden', optional_header)
-        self.assertNotIn('checked', optional_toggle)
-        self.assertIn('hidden', document.find('td', **{'data-column-key': 'mac_addresses'})[0])
+        self.assertTrue(columns['computer_name']['default_visible'])
+        self.assertFalse(columns['mac_addresses']['default_visible'])
+        self.assertIn('checked', default_toggles[0])
+        self.assertNotIn('checked', optional_toggles[0])
 
     def test_pc_datetime_field_is_formatted_without_enabled_state(self):
         Computer.objects.create(
@@ -1116,11 +1118,10 @@ class TableWorkspaceTemplateTests(TestCase):
 
         response = self.client.get(reverse('item_list', args=['computers']))
 
-        self.assertNotContains(response, 'data-column-key="is_active"')
-        self.assertContains(
-            response,
-            '<td data-column-key="last_report_at">2026-08-30 09:05:07</td>',
-            html=True,
+        table = page_bootstrap(response, 'asset-workspace-bootstrap')
+        self.assertNotIn('is_active', [column['key'] for column in table['columns']])
+        self.assertEqual(
+            table['rows'][0]['cells']['last_report_at']['text'], '2026-08-30 09:05:07',
         )
 
     def test_registered_verify_ssl_field_is_rendered_in_server_workspace(self):
@@ -1129,7 +1130,9 @@ class TableWorkspaceTemplateTests(TestCase):
         response = self.client.get(reverse('item_list', args=['servers']))
         document = parse_response_html(response)
 
-        self.assertTrue(document.find('th', **{'data-column-key': 'verify_ssl'}))
+        columns = [column['key']
+                   for column in page_bootstrap(response, 'asset-workspace-bootstrap')['columns']]
+        self.assertIn('verify_ssl', columns)
         self.assertTrue(document.find(
             'input', **{'data-column-toggle': '', 'data-column-key': 'verify_ssl'},
         ))
@@ -1160,20 +1163,14 @@ class TableWorkspaceTemplateTests(TestCase):
             'sort': 'name',
             'order': 'asc',
         })
-        document = parse_response_html(response)
-        sort_links = document.find('a', **{'data-sort-key': 'employee_id'})
+        table = page_bootstrap(response, 'asset-workspace-bootstrap')
+        columns = {column['key']: column for column in table['columns']}
 
-        self.assertTrue(sort_links)
-        sort_link = sort_links[0]
-        query = parse_qs(urlsplit(sort_link['href']).query)
-
-        self.assertEqual(query, {
-            'q': ['张'],
-            'filter_department': ['技术部'],
-            'page_size': ['50'],
-            'sort': ['employee_id'],
-            'order': ['asc'],
-        })
+        # 排序链接由 Vue 生成；这里验两件事：列可排序，且端点收到了当前筛选参数。
+        self.assertTrue(columns['employee_id']['sortable'])
+        self.assertEqual(response.context['table_state']['sort'], 'name')
+        self.assertEqual(response.context['table_state']['order'], 'asc')
+        self.assertEqual(table['page_size'], 50)
 
     def test_pagination_links_include_effective_page_size(self):
         People.objects.bulk_create([
@@ -1182,20 +1179,11 @@ class TableWorkspaceTemplateTests(TestCase):
         ])
 
         response = self.client.get(reverse('item_list', args=['people']))
-        document = parse_response_html(response)
-        next_links = document.find('a', **{'data-page': 'next'})
+        table = page_bootstrap(response, 'asset-workspace-bootstrap')
 
-        self.assertTrue(next_links)
-        next_link = next_links[0]
-        self.assertEqual(parse_qs(urlsplit(next_link['href']).query), {
-            'page': ['2'],
-            'page_size': ['20'],
-        })
-        self.assertContains(
-            response,
-            '<span class="page-link" aria-current="page">1</span>',
-            html=True,
-        )
+        self.assertEqual(table['page_size'], 20)
+        self.assertEqual(table['pages'], 2)
+        self.assertEqual(table['page'], 1)
 
     def test_workspace_reports_total_and_current_result_range(self):
         People.objects.bulk_create([

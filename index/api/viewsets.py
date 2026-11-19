@@ -101,7 +101,8 @@ class TableRowsViewSet(viewsets.GenericViewSet):
     def get_table(self):
         raise NotImplementedError
 
-    def list(self, request):
+    def list(self, request, *args, **kwargs):
+        # 路径里的 kind 等参数从这里进来，子类按需从 kwargs 取。
         definition = get_table_definition(self.table_key)
         rows, table_state = self.get_table(request, definition)
         paginator = Paginator(rows, table_state["page_size"])
@@ -277,6 +278,44 @@ class TaskRunViewSet(RecordTableViewSet):
         admin = is_admin(self.request.user)
         return lambda task: _task_actions(task, admin)
 
+
+class AssetViewSet(RecordTableViewSet):
+    """5 类资产列表的行端点，与页面首屏共用同一个 payload 构造器。
+
+    table_key 和查询集都跟着 URL 里的 kind 走，所以 /api/v1/asset-rows/people/ 与
+    /assets/people/ 的筛选、排序、列定义永远一致——这是资源层最容易漂的地方。
+    """
+
+    def _page(self):
+        from assets.views import _asset_page
+
+        return _asset_page(self.kwargs['kind'])
+
+    @property
+    def table_key(self):
+        return self._page().table_key
+
+    def build_queryset(self):
+        return self._page().model.objects.all()
+
+    def get_table(self, request, definition):
+        return apply_table_filters(
+            request, self.build_queryset(), definition, include_legacy_status=False,
+        )
+
+    def serialize(self, object_list):
+        definition = get_table_definition(self.table_key)
+        return table_row_payloads(
+            object_list, definition, actions=self.actions,
+            row_id=lambda obj: obj.pk,
+        )
+
+    @property
+    def actions(self):
+        from assets.payloads import asset_row_actions
+        from index.common.access import is_admin
+
+        return asset_row_actions(self.kwargs['kind'], is_admin(self.request.user))
 
 class DomainObjectViewSet(RecordTableViewSet):
     """Accounts, computers and groups share one row shape."""

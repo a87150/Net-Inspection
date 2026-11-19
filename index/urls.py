@@ -71,6 +71,7 @@ urlpatterns = [
     path('assets/<str:kind>/<uuid:pk>/backups/', configuration_backup_list, name='configuration_backup_list'),
     path('assets/<str:kind>/<uuid:pk>/backups/<uuid:backup_id>/diff/', configuration_backup_diff, name='configuration_backup_diff'),
     path('assets/<str:kind>/<uuid:pk>/backups/<uuid:backup_id>/download/', configuration_backup_download, name='configuration_backup_download'),
+    path('assets/<str:kind>/<uuid:pk>/detail.json', views.asset_detail_json, name='asset_detail_json'),
     path('assets/<str:kind>/<uuid:pk>/', views.asset_detail, name='asset_detail'),
     path('people/statistics/', views.people_statistics, name='people_statistics'),
     path('people/<uuid:pk>/', views.person_detail, name='person_detail'),

@@ -5,6 +5,30 @@
 本文件只记录**已经生效的变更**和**仍待处理的问题**。
 系统当前是什么样，请看导航里的架构、设备巡检、人员与域控、数据库文档，本文件不重复描述。
 
+## 1.54（2026-11-19）
+
+资产列表改成 REST 驱动的 Vue 岛，并把详情收进右侧面板——点行不再跳页。
+
+### 五类资产列表 Vue 化
+
+`assets/templates/devices/list.html` 里的服务端表格换成 `asset-workspace` 挂载点，行数据由新增的 `GET /api/v1/asset-rows/<kind>/` 提供。该端点复用页面自己的 `apply_table_filters` 与 `table_row_payloads`，所以首屏和翻页看到的列、筛选、排序、行动作是同一套代码算出来的，不会各自漂移。
+
+列定义仍以服务端 `table_registry.py` 为唯一来源，通过 bootstrap 传给前端；列偏好开关继续走 `data-column-toggle`，组件监听 change 事件同步可见性。
+
+### 右侧详情面板
+
+`static/app/vue/pages/asset_workspace.mjs` 负责表格 + 分页 + 详情栏。点行时取一次 `GET /assets/<kind>/<pk>/detail.json`，右栏直接嵌 `resource_detail.mjs` 渲染，URL 用 `replaceState` 记下 `?selected=`。宽屏两侧分栏，窄屏详情落在列表下方。
+
+详情 JSON 由新视图 `asset_detail_json` 提供，与整页详情共用同一个 `_asset_detail_context`，两边字段不会分叉。它按普通读者放行（进了 `READER_VIEWS`）——同一份数据、同一套判定，多一层白名单只会让两处规则漂开。
+
+### 渲染契约测试跟着搬家
+
+表格结构现在归组件所有，所以约二十条断言从「grep HTML」改成读 bootstrap JSON（`tests.payloads.asset_table` / `asset_table_text`）。少数纯前端的约定（选择列在第一列、`role="region"`、分页控件）改成断言组件源码。
+
+### 尚未做的
+
+`改装方案.md` 里的 `/people/<pk>/` 深链合并、PC 与域对象的页内 tab、人员统计并入工作区，都还没动。本次只覆盖五类资产列表与它的详情面板。
+
 ## 1.53（2026-11-19）
 
 ### 巡检令牌走明文 HTTP（SEC-04）

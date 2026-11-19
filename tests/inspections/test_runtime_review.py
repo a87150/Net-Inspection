@@ -7,6 +7,7 @@ from django.db import IntegrityError, connections, transaction
 from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 from tests.auth import login_admin
+from tests.payloads import asset_table_text
 
 
 from net.models import (ComputerAnalysisProfile, InspectionProfile,
@@ -82,7 +83,8 @@ class ReviewUiTests(TestCase):
 
     def test_row_execution_can_restore_exactly_one_selected_asset(self):
         response = self.client.get('/assets/servers/', {'task_targets': str(self.second.pk), 'task_mode': 'selected', 'task_modal': 'run'})
-        self.assertContains(response, f'task_single_target={self.second.pk}" data-single-device-run')
+        # 行内动作由组件渲染，链接在 bootstrap 的行数据里。
+        self.assertIn(f'task_single_target={self.second.pk}', asset_table_text(response))
         self.assertEqual(response.context['task_selected_ids'], [str(self.second.pk)])
         self.client.post('/tasks/manual/', {'profile_id': self.memory.pk, 'target_mode': 'selected', 'target_ids': [self.second.pk], 'selected_items': ['memory']})
         self.assertEqual(list(TaskRun.objects.get().target_runs.values_list('target_id', flat=True)), [str(self.second.pk)])

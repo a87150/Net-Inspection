@@ -8,13 +8,16 @@ from django.core.management import call_command
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.core.exceptions import PermissionDenied
-from django.http import Http404
+from django.http import Http404, JsonResponse
+from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from assets.payloads import asset_detail_payload, configuration_notice
+from assets.payloads import asset_detail_payload, asset_row_actions, configuration_notice
+from index.common.table_payload import row_payloads as table_row_payloads
+from index.common.table_payload import table_payload
 from index.common.table_query import PAGE_SIZES, apply_table_filters, query_without_page
 from index.common.table_registry import get_table_definition
 from index.templatetags.extras import format_table_field
@@ -126,6 +129,14 @@ def asset_list(request, kind, *, integration_context=None, creation_form=None, e
             request.session.pop('open_import_modal', None) == kind
         ),
     }
+    # 首屏行由服务端算好塞进 bootstrap：Vue 挂载后不用再跑一次同样的查询，
+    # 也避免「先空表后刷出数据」的闪烁。
+    admin = is_admin(request.user)
+    context['workspace_rows'] = table_row_payloads(
+        page_obj.object_list, table_definition,
+        actions=asset_row_actions(kind, admin),
+        row_id=lambda obj: obj.pk,
+    )
     from .forms import DEVICE_KINDS, device_form, device_form_sections
     from index.common.workspace_actions import workspace_action_context
     context.update(workspace_action_context(kind))
@@ -156,10 +167,32 @@ def asset_list(request, kind, *, integration_context=None, creation_form=None, e
         context.update(alert_modal_context(
             request, profile=context['task_default_profile'],
         ))
+    # selectable 要等 task_modal_context 填过 task_allow_target_selection 才能算。
+    selectable = bool(admin and context.get('task_allow_target_selection'))
+    context['workspace_table'] = table_payload(
+        page_obj, table_definition, context.pop('workspace_rows'),
+        extra={
+            'endpoint': reverse('asset-row-list', args=[kind]),
+            'detailBase': reverse('asset_list', args=[kind]),
+            'label': page.title,
+            'regionLabel': page.title + '数据表',
+            'emptyTitle': '暂无 PC 数据' if kind == 'computers' else '暂无资产数据',
+            'emptyMessage': EMPTY_MESSAGES.get(kind, '可点击右上角导入添加资产。'),
+            'selectAttr': 'data-device-selection-target' if selectable else '',
+            'formId': 'manualTaskForm' if selectable else '',
+            'csrf': get_token(request),
+            'selectedId': request.GET.get('selected', ''),
+        },
+    )
     return render(request, 'devices/list.html', context)
 
 
 SWITCHABLE_KINDS = frozenset({'networks', 'servers', 'weakcurrent'})
+
+EMPTY_MESSAGES = {
+    'computers': '请运行 PowerShell PC 信息采集脚本并上报。',
+    'people': '可点击右上角“导入人员”添加人员。',
+}
 
 
 @require_POST
@@ -179,7 +212,7 @@ def asset_toggle_enabled(request, kind):
                     or reverse('asset_list', args=[kind]))
 
 
-def asset_detail(request, kind, pk):
+def _asset_detail_context(request, kind, pk):
     page = _asset_page(kind)
     asset = get_object_or_404(page.model, pk=pk)
     table_definition = get_table_definition(page.table_key)
@@ -207,26 +240,41 @@ def asset_detail(request, kind, pk):
     manual_action_label = '手动执行分析' if kind == 'computers' else (
         '手动执行巡检' if page.inspection_kind else ''
     )
-    return render(request, 'devices/detail.html', {
+    detail = asset_detail_payload(
+        kind=kind,
+        item_name=page.title,
+        asset=asset,
+        detail_fields=detail_fields,
+        latest_record=latest,
+        latest_url=latest_url,
+        history_url=history_url,
+        back_url=back_url,
+        manual_action_label=manual_action_label,
+        can_administer=can_administer,
+    )
+    return {
         'asset': asset,
         'item_key': kind,
         'item_name': page.title,
         'back_url': back_url,
         'history_url': history_url,
-        'detail': asset_detail_payload(
-            kind=kind,
-            item_name=page.title,
-            asset=asset,
-            detail_fields=detail_fields,
-            latest_record=latest,
-            latest_url=latest_url,
-            history_url=history_url,
-            back_url=back_url,
-            manual_action_label=manual_action_label,
-            can_administer=can_administer,
-        ),
+        'detail': detail,
         'notice': configuration_notice(kind) if can_administer else '',
-    })
+    }
+
+
+def asset_detail(request, kind, pk):
+    return render(request, 'devices/detail.html', _asset_detail_context(request, kind, pk))
+
+
+def asset_detail_json(request, kind, pk):
+    """右侧面板换行时取的那份 payload，与整页详情共用同一个构造器。
+
+    权限不在视图里另写一套：AccessMiddleware 已按 url_name 判定过，这里再判一次
+    只会让两处规则慢慢漂开。
+    """
+    context = _asset_detail_context(request, kind, pk)
+    return JsonResponse({**context["detail"], "notice": context["notice"]})
 
 
 def person_detail(request, pk):

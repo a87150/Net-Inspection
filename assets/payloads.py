@@ -7,6 +7,39 @@ from index.common.detail_payload import (
 )
 
 
+SWITCHABLE_KINDS = frozenset({'networks', 'servers', 'weakcurrent'})
+
+
+def asset_row_actions(kind, admin):
+    """列表行与右侧详情面板共用的按钮组。
+
+    返回一个「记录 -> 动作列表」的工厂，行端点和首屏 payload 都调它，避免两处
+    各写一套后按钮权限与跳转开始漂移。
+    """
+    device_kind = kind in SWITCHABLE_KINDS
+    run_label = '手动执行分析' if kind == 'computers' else '手动执行巡检'
+
+    def build(obj):
+        entries = [{'kind': 'link', 'label': '查看详情',
+                    'url': reverse('asset_detail', args=[kind, obj.pk])}]
+        if admin and device_kind:
+            entries.append({'kind': 'link', 'label': '巡检设置', 'variant': 'primary',
+                            'url': reverse('device_collection_settings', args=[kind, obj.pk]),
+                            'modal_target': 'collectionTemplateModal'})
+            entries.append({'kind': 'link', 'label': '修改配置',
+                            'url': reverse('asset_edit', args=[kind, obj.pk])})
+            entries.append({'kind': 'link', 'label': run_label, 'variant': 'primary',
+                            'url': '?task_modal=run&task_single_target=%s' % obj.pk})
+        if admin and device_kind:
+            entries.append({
+                'kind': 'form', 'label': '停用' if obj.is_enabled else '启用',
+                'url': reverse('asset_toggle_enabled', args=[kind]),
+                'fields': {'pk': str(obj.pk)},
+            })
+        return entries
+
+    return build
+
 def _latest_section(latest, latest_url):
     if latest is None:
         return text_section('最新执行结果', '尚无执行记录。')

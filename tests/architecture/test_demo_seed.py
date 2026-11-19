@@ -804,8 +804,11 @@ class DeterministicDemoSeedTests(TestCase):
                 asset = model.objects.get(**lookup)
                 listing = self.client.get(reverse('asset_list', args=[kind]))
                 detail_url = reverse('asset_detail', args=[kind, asset.pk])
-                self.assertContains(listing, identity)
-                self.assertContains(listing, detail_url)
+                # 列表改成 Vue 岛之后，行内容与动作链接都在 bootstrap JSON 里；
+                # 直接 grep HTML 只会看到 \u 转义后的字节。
+                table = payload_text(listing, 'asset-workspace-bootstrap')
+                self.assertIn(identity, table)
+                self.assertIn(detail_url, table)
                 detail = self.client.get(detail_url)
                 body = payload_text(detail, 'detail-bootstrap')
                 self.assertIn(identity, body)

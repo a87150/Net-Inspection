@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from net.models import Server
+from tests.payloads import asset_table
 
 
 class NumericFilterTests(TestCase):
@@ -23,8 +24,9 @@ class NumericFilterTests(TestCase):
     def _names(self, params):
         response = self.client.get(reverse("asset_list", args=["servers"]), params)
         self.assertEqual(response.status_code, 200)
-        html = response.content.decode(response.charset)
-        return {name for name in ("小内存", "中内存", "大内存") if name in html}
+        # 行由 Vue 渲染，名字在 bootstrap JSON 里。
+        rows = asset_table(response)["rows"]
+        return {row["cells"]["name"]["text"] for row in rows}
 
     def test_greater_than_keeps_only_larger_values(self):
         names = self._names({"filter_memory_total_gb_op": "gt", "filter_memory_total_gb": "16"})

@@ -10,7 +10,8 @@ from django.utils.deprecation import MiddlewareMixin
 PUBLIC_VIEWS = frozenset({'index', 'asset_list', 'people_statistics', 'item_list'})
 READER_VIEWS = PUBLIC_VIEWS | frozenset({
     'access_record_list',
-    'asset_detail', 'person_detail', 'computer_analysis_list', 'computer_log_list',
+    'asset_detail', 'asset_detail_json', 'person_detail',
+    'computer_analysis_list', 'computer_log_list',
     'computer_log_detail', 'computer_analysis_detail', 'computer_error_list',
     'task_list', 'task_detail', 'alert_list', 'alert_detail',
     'table_export', 'table_export_scoped', 'domain_account_list', 'domain_account_detail',

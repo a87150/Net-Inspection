@@ -312,19 +312,21 @@ class SharedInterfaceContractTests(TestCase):
         response = self.client.get(reverse('asset_list', args=['networks']))
 
         self.assertContains(response, 'table-scroll-shell')
-        self.assertContains(response, '<caption class="visually-hidden">网络设备数据表</caption>', html=True)
+        # 表体与 caption 由组件渲染：外壳留在模板里，表格结构只能验组件源码。
+        component = (Path(__file__).resolve().parents[2]
+                     / 'static/app/vue/pages/asset_workspace.mjs').read_text(encoding='utf-8')
+        self.assertIn('table data-table table-hover align-middle mb-0', component)
         # 筛选条件本身就在输入框里可见，再叠一行可点击的 chip 只是重复，已移除。
         self.assertNotContains(response, 'data-active-filter-list')
-        self.assertContains(response, 'scope="col"')
+        self.assertIn('scope="col"', component)
         # The keyword box is gone: it OR-matched across search_fields while the column
         # filters beside it matched one field exactly, so the two read as the same
         # control with different results.
         self.assertNotContains(response, 'networks-keyword-filter')
         self.assertNotContains(response, 'data-filter-key="keyword"')
         self.assertContains(response, 'table-scroll-hint')
-        self.assertContains(response, 'class="table data-table')
-        self.assertContains(response, 'table-actions-column')
-        self.assertContains(response, 'table-actions-cell')
+        self.assertIn('table-actions-column', component)
+        self.assertIn('table-actions-cell', component)
 
     def test_long_configuration_modal_has_shared_scroll_shell_and_sections(self):
         response = self.client.get(reverse('asset_list', args=['computers']))
