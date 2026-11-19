@@ -31,11 +31,28 @@ class NetworkDeviceForm(forms.ModelForm):
 class ServerDeviceForm(forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
-        inactive = ('port', 'username', 'password') if cleaned.get('server_type') == 'windows' else ('api_url', 'api_token', 'verify_ssl')
+        windows = cleaned.get('server_type') == 'windows'
+        if windows:
+            self._reject_token_over_plaintext(cleaned)
+        inactive = ('port', 'username', 'password') if windows else ('api_url', 'api_token', 'verify_ssl')
         for name in inactive:
             self._errors.pop(name, None)
             cleaned[name] = self.initial.get(name, self._meta.model._meta.get_field(name).get_default())
         return cleaned
+
+    def _reject_token_over_plaintext(self, cleaned):
+        """HTTP 上加 Bearer 令牌，等于把唯一身份凭据明文广播。
+
+        采集地址留空时走的是内置 http://<IP>:9180/inspection，同样明文；所以空地址
+        也要按 http 处理。只读采集（无令牌）在 http 下仍然允许。
+        """
+        token = (cleaned.get('api_token') or '').strip()
+        if not token or token == MASKED_SECRET:
+            return
+        url = (cleaned.get('api_url') or '').strip().lower()
+        if not url or url.startswith('http://'):
+            self.add_error('api_url', '巡检令牌不能走明文 HTTP：抓包即可取得该令牌并伪造上报。'
+                                     '把采集地址改成 https://，或清空令牌只做只读采集。')
 
 
 def device_form(kind, data=None, instance=None):

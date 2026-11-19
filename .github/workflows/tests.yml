@@ -81,9 +81,14 @@ jobs:
         run: python manage.py test --verbosity 1
       # tests/browser/*.test.cjs needs a Playwright install that CI does not do, so the
       # glob stays scoped to the framework-free suites under tests/frontend.
-      - name: Run JavaScript tests
+      # 两种扩展名分两步跑：.test.mjs 里是 Vue 岛的逻辑核心（成员选择、API 客户端），
+      # 只匹配 .js 时它们从来没在 CI 上执行过；而两种放在同一次 node --test 里会
+      # 静默丢掉 .mjs 那一批。
+      - name: Run JavaScript tests (CommonJS)
         run: node --test "tests/frontend/**/*.test.js"
+      - name: Run JavaScript tests (ES modules)
+        run: node --test "tests/frontend/**/*.test.mjs"
       # A separate step: a multi-line run inherits the job's bash -e, so a failing
       # node --test above would abort the script before this check ever ran.
       - name: Syntax-check application JavaScript
-        run: find static/app/js -name '*.js' -print0 | xargs -0 -n1 node --check
+        run: find static/app/js -name '*.js' -o -name '*.mjs' | xargs -n1 node --check

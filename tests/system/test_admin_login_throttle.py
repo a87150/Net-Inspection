@@ -19,6 +19,9 @@ class AdminLoginThrottleTests(TestCase):
         self.url = reverse('admin:login')
 
     def attempt(self, password, **kwargs):
+        # 用固定的测试来源地址：默认 127.0.0.1 会和整套测试里别的登录失败共用一个
+        # 计数桶，整个套件跑下来能达到来源上限，把这条用例锁在门外。
+        kwargs.setdefault('REMOTE_ADDR', '203.0.113.77')
         return self.client.post(
             self.url, {'username': self.user.username, 'password': password}, **kwargs,
         )
