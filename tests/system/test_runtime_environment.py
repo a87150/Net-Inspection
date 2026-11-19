@@ -40,7 +40,7 @@ class RuntimeEnvironmentTests(SimpleTestCase):
 
     def test_demo_honours_a_configured_database_name(self):
         from deploy.demo import configure_environment
-        with patch.dict(os.environ, {'DB_ENGINE': 'mysql', 'DB_TEST_NAME': 'net-demo'},
+        with patch.dict(os.environ, {'DB_ENGINE': 'mysql', 'DB_DEMO_NAME': 'net-demo'},
                         clear=True):
             configure_environment(Path('runtime'))
             self.assertEqual(os.environ['DB_NAME'], 'net-demo')

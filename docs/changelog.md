@@ -5,6 +5,38 @@
 本文件只记录**已经生效的变更**和**仍待处理的问题**。
 系统当前是什么样，请看导航里的架构、设备巡检、人员与域控、数据库文档，本文件不重复描述。
 
+## 1.51（2026-11-19）
+
+健康检查报告里「立即」一档的七项。
+
+### DB_TEST_NAME 与演示库重名会删数据（ENG-01）
+
+`deploy/demo.py` 优先读 `DB_TEST_NAME` 决定演示库名，而 settings 又用它推导测试库名——`.env` 里写了 `DB_TEST_NAME=net-test` 时，`manage.py test` 会把演示库当成测试库 DROP 重建。现在演示库只认 `DB_DEMO_NAME`，settings 在测试库名撞上生产库或演示库时直接抛 `ImproperlyConfigured`，启动就失败而不是跑到一半删库。
+
+### admin 登录没有限速（SEC-05）
+
+`/login/` 早就有失败计数，`/admin/login/` 一直裸奔，而 admin 能改全部设备口令。改用 `ThrottledAdminConfig.default_site` 挂自定义 `AdminSite`，锁定期间即使密码正确也拒绝，成功登录清零计数。
+
+### 模板解析超时预算恒为 2 秒（F-01）
+
+`max(2.0, min(timeout, 2.0))` 对任何输入都等于 2.0，调用方传的 250ms 快速放弃预算完全没起作用。改成 `min(max(timeout, 0.05), 2.0)`，并把计时起点挪到进程启动之后——Windows 上 spawn 冷启动要 200-600ms，算进预算会让每次解析都判超时。
+
+### 依赖升级（SEC-01）
+
+按 OSV 通告升级：aiohttp 3.14.5、certifi 2026.10.23、djangorestframework 3.18.3、dnspython 2.9.2、pyasn1 0.6.5、urllib3 2.8.0、yarl 1.25.1。`requirements.txt` 与 lock 同步更新。
+
+### 依赖测试不再钉版本号（SEC-02）
+
+`tests/system/test_dependencies.py` 原先把 19 个依赖的最新版本写成常量双向断言，任何升级都会被判成契约破坏。现在只保证 requirements ↔ lock ↔ 已安装三方对齐。
+
+### manage.sh 忽略角色参数（ENG-05）
+
+`start` 和 `restart` 共用一支分支，且都遍历写死的 `web worker`，传 `restart worker` 照样把在线 Web 重启一遍。拆成两支，各自只操作 `roles` 数组里点名的角色。
+
+### 空目录（Q-01）
+
+删掉 `net/api`、`net/exports/adapters`、`net/services/collectors`、`net/tasks/executors`、`net/integrations/people`、`index/forms` 等 10 个零文件目录。
+
 ## 1.50（2026-11-19）
 
 ### 更名为天枢

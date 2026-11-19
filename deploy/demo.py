@@ -29,8 +29,12 @@ def demo_sqlite_path(runtime):
 
 
 def demo_database():
-    """The demo never touches the production database, on any backend."""
-    return os.getenv('DB_TEST_NAME') or os.getenv('DB_DEMO_NAME') or 'net-test'
+    """The demo never touches the production database, on any backend.
+
+    只认 DB_DEMO_NAME。DB_TEST_NAME 是 Django test runner 的测试库名，读它会让
+    演示库和测试库变成同一个名字，一次 manage.py test 就会把演示数据 DROP 掉。
+    """
+    return os.getenv('DB_DEMO_NAME') or 'net-test'
 
 
 def configure_environment(runtime):

@@ -30,8 +30,10 @@ def subprocess_environment(name, env_file, **extra):
     have to be passed explicitly; otherwise the child falls back to settings.py's
     placeholder account and cannot connect.
     """
+    # DB_DEMO_NAME 是演示进程实际连的库；DB_TEST_NAME 只影响 Django 测试库推导，
+    # 两者必须分开，否则 settings 会判定"测试库撞演示库"而拒绝启动。
     environment = {**os.environ, **credentials(), 'NET_ENV_FILE': str(env_file),
-                  'DB_TEST_NAME': name, **extra}
+                  'DB_DEMO_NAME': name, 'DB_TEST_NAME': 'test_' + name, **extra}
     return environment
 
 

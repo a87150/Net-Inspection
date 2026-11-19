@@ -46,8 +46,15 @@ case "$action" in
             exit 1
         fi
         ;;
-    start|restart)
-        for role in web worker; do systemctl restart "$(unit "$role")"; done
+    start)
+        # 只按给定角色启动。start 不该顺带重启已经在跑的实例。
+        for role in "${roles[@]}"; do systemctl start "$(unit "$role")"; done
+        sleep 3
+        for role in "${roles[@]}"; do status_one "$role" || true; done
+        ;;
+    restart)
+        # 与 Windows 版一致：只重启第 2 个参数点名的角色，别把在线 Web 一起踢掉。
+        for role in "${roles[@]}"; do systemctl restart "$(unit "$role")"; done
         sleep 3
         for role in "${roles[@]}"; do status_one "$role" || true; done
         ;;

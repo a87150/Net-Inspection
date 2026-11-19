@@ -81,7 +81,8 @@ if not DEBUG:
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
+    # 自定义 default_site，让 /admin/login/ 也走 login_throttle 的失败计数。
+    'index.common.admin_site.ThrottledAdminConfig',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -169,6 +170,29 @@ import net.infrastructure.database  # noqa: F401
 
 DB_ENGINE = os.getenv('DB_ENGINE', 'sqlite').strip().lower()
 
+# demo 的常驻库名；deploy.demo 把 DB_NAME 指向它。
+DEMO_DATABASE_NAME = os.getenv('DB_DEMO_NAME') or 'net-test'
+
+
+def _test_database_name():
+    """测试库名，并拒绝与生产库/演示库重名。
+
+    Django 在 mysql/PG 上对测试库执行 DROP DATABASE + CREATE，一旦名字撞上
+    demo 或生产库，一次 manage.py test 就把真实数据删了。宁可启动失败。
+    """
+    from django.core.exceptions import ImproperlyConfigured
+
+    name = os.getenv('DB_TEST_NAME') or 'test_' + os.getenv('DB_NAME', 'net')
+    reserved = {DEMO_DATABASE_NAME: '演示库（DB_DEMO_NAME）',
+                os.getenv('DB_NAME', 'net'): '生产库（DB_NAME）'}
+    if name in reserved:
+        raise ImproperlyConfigured(
+            'DB_TEST_NAME 与%s同名（%s）。测试库会被 DROP 重建，'
+            '请改用其它名字，或用 DB_DEMO_NAME 单独指定演示库。' % (reserved[name], name),
+        )
+    return name
+
+
 if DB_ENGINE == 'mysql':
     DATABASES = {
         'default': {
@@ -184,7 +208,7 @@ if DB_ENGINE == 'mysql':
                         'init_command': "SET sql_mode='STRICT_TRANS_TABLES', time_zone='+00:00'", 'connect_timeout': 5},
             # 保持 Django 默认的 test_<库名>：单元测试每次重建、用完即弃，不能碰 net 或 net-test。
             # net-test 是 demo 的常驻库（deploy.demo 用它），里面可能存着真实迁移数据。
-            'TEST': {'NAME': os.getenv('DB_TEST_NAME', 'test_' + os.getenv('DB_NAME', 'net'))},
+            'TEST': {'NAME': _test_database_name()},
         }
     }
 elif DB_ENGINE == 'sqlite':

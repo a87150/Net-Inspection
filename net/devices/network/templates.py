@@ -249,9 +249,13 @@ def parse_template_output(parser, output, timeout=0.25):
     context = multiprocessing.get_context('spawn')
     queue = context.Queue(1)
     process = context.Process(target=_isolated_parse_worker, args=(parser['engine'], parser['template'], parser.get('flags', ''), str(output)[:_MAX_TEXT], queue))
-    deadline = time.monotonic() + max(2.0, min(float(timeout), 2.0))
     try:
         process.start()
+        # 预算夹在 [50ms, 2s]：写成 max(2.0, min(timeout, 2.0)) 会恒等于 2 秒，
+        # 调用方传进来的 250ms 快速放弃预算就完全失效了。
+        # 计时从进程启动之后开始：Windows 上 spawn 冷启动要 200-600ms，把它算进
+        # 解析预算会让每一次解析都判超时。
+        deadline = time.monotonic() + min(max(float(timeout), 0.05), 2.0)
         while time.monotonic() < deadline:
             try:
                 status, value = queue.get(timeout=min(.05, deadline - time.monotonic()))
