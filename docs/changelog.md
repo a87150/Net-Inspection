@@ -5,6 +5,28 @@
 本文件只记录**已经生效的变更**和**仍待处理的问题**。
 系统当前是什么样，请看导航里的架构、设备巡检、人员与域控、数据库文档，本文件不重复描述。
 
+## 1.52（2026-11-19）
+
+### 首页 SQL 随历史任务线性增长（PERF-01）
+
+`inspection_task_queryset()` 用 `.defer()` 排除了 `parameters_snapshot` 这个大 JSON 字段，而 `_frozen_roster_ids()` 每读一次就补一条 SELECT——实测首页 25 条 SQL 里有 10 条是逐个任务回查同一个字段，历史任务越多越慢。现在一次批量取回并回填，只给真正需要名册的人员模式任务查。首页降到 15 条，且不随任务数增长。
+
+新增 `tests/dashboard/test_home_query_budget.py`：10 个任务和 30 个任务的首页 SQL 上限相同。
+
+### 版本号三处不一致（DOC-05）
+
+`net/__init__.py` 写死 1.4.0、README 写 1.50、`VERSION` 文件又是第三个数。现在 `net.__version__` 直接读 `VERSION`，改版本只改一处；测试同时断言 README 首行与 `VERSION` 一致，且没有模块再硬编码版本串。
+
+### .env.example 缺 15 个变量（DOC-02）
+
+补到与代码读取的 36 个变量完全覆盖，包括登录限速四项、SQLite 三项、HTTPS 与静态目录。新增 `tests/system/test_env_example_coverage.py` 守住这条。
+
+顺带修掉示例里 `# DB_TEST_NAME=net-test` 这行——它教的正是 1.51 修掉的那个删库写法，现在改为 `DB_DEMO_NAME=net-test` 并加注释说明两者不能重名。
+
+### 未在本轮处理
+
+PERF-02（拓扑写入持锁逐条 N+1）需要重排双向链路的规范化逻辑与 stale 计数，改动面覆盖整段 `complete_topology_batch` 事务，单独排一期；Q-02/Q-03（视图直连 ORM、11 组循环依赖）同理。
+
 ## 1.51（2026-11-19）
 
 健康检查报告里「立即」一档的七项。

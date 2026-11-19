@@ -21,22 +21,37 @@ def _outcome_expression(prefix='', task_prefix='task__'):
         default=Value('pending'), output_field=CharField())
 
 
-def _legacy_orphan_targets(task_ids):
-    """Scope old persisted results without loading their evidence JSON or rewriting history."""
+def _legacy_orphan_targets(task_ids, rosters):
+    """Scope old persisted results without loading their evidence JSON or rewriting history.
+
+    ``rosters`` 是 {任务 id: 冻结人员 id 集合}。早期版本在这里自己查一次 TaskRun，
+    但调用方手上的 task 来自 defer 过 parameters_snapshot 的查询集，每读一次就回
+    查一行——历史任务越多，首页 SQL 越多。
+    """
+    # task_ids 可能是 id 列表，也可能是 values('pk') 子查询；后者迭代出来是 dict。
+    ids = (list(task_ids.values_list('pk', flat=True))
+           if isinstance(task_ids, QuerySet) else list(task_ids))
     condition = Q(pk__in=[])
-    tasks = TaskRun.objects.filter(pk__in=task_ids, task_type='computer_analysis',
-                                   profile_snapshot__matching_mode='people').only('pk', 'parameters_snapshot')
-    for task in tasks:
-        records = ComputerAnalysis.objects.filter(task_target__task_id=task.pk)
-        matched = records.filter(report_enrichment__personnel_id__in=_frozen_roster_ids(task))
+    for task_id in ids:
+        if task_id not in rosters:
+            # 没有冻结名册就不是人员模式任务，originating 的孤儿判定不适用。
+            continue
+        records = ComputerAnalysis.objects.filter(task_target__task_id=task_id)
+        matched = records.filter(report_enrichment__personnel_id__in=rosters.get(task_id, set()))
         orphan_targets = records.exclude(pk__in=matched.values('pk')).values('task_target_id')
-        condition |= Q(task_id=task.pk, pk__in=orphan_targets)
+        condition |= Q(task_id=task_id, pk__in=orphan_targets)
     return condition
 
 
-def _summary_counts(task_ids, *, people_task_ids=None):
+def _summary_counts(task_ids, *, people_task_ids=None, rosters=None):
     rows = TaskTargetRun.objects.filter(task_id__in=task_ids).order_by().annotate(
-        outcome=Case(When(_legacy_orphan_targets(task_ids if people_task_ids is None else people_task_ids), then=Value('ignored')),
+        outcome=Case(When(
+            _legacy_orphan_targets(
+                task_ids if people_task_ids is None else people_task_ids,
+                rosters or {},
+            ),
+            then=Value('ignored'),
+        ),
                      default=_outcome_expression(), output_field=CharField())
     ).values('task_id', 'outcome').annotate(count=Count('pk'))
     counts = {}
@@ -45,11 +60,39 @@ def _summary_counts(task_ids, *, people_task_ids=None):
     return counts
 
 
+def _load_snapshots(tasks, wanted):
+    """一次取回 parameters_snapshot 并回填，避免 deferred 字段逐个回查。
+
+    inspection_task_queryset() 用 .defer() 排除了这个大 JSON 字段；只要有人读一次
+    就补一条 SELECT。历史任务越多，首页 SQL 越多——指数、缓存都救不了。
+    """
+    # 只补真正没加载的，而且只补点名要的人。没有 people 模式任务时一个查询都不发：
+    # 空 pk__in 在 Django 里本来就不产生 SQL。
+    pending = [task.pk for task in tasks
+               if task.pk in wanted and 'parameters_snapshot' in task.get_deferred_fields()]
+    if not pending:
+        return {task.pk: task.parameters_snapshot for task in tasks if task.pk in wanted}
+    snapshots = dict(
+        TaskRun.objects.filter(pk__in=pending).values_list('pk', 'parameters_snapshot'),
+    )
+    for task in tasks:
+        if task.pk in snapshots:
+            task.parameters_snapshot = snapshots[task.pk]
+    return snapshots
+
+
 def _prepare_summaries(tasks):
     tasks = list(tasks)
     people_ids = [task.pk for task in tasks if task.task_type == 'computer_analysis'
                   and task.profile_snapshot.get('matching_mode') == 'people']
-    counts = _summary_counts([task.pk for task in tasks], people_task_ids=people_ids) if tasks else {}
+    snapshots = _load_snapshots(tasks, set(people_ids))
+    rosters = {
+        task_id: _frozen_roster_ids_from(snapshots.get(task_id))
+        for task_id in people_ids
+    }
+    counts = _summary_counts(
+        [task.pk for task in tasks], people_task_ids=people_ids, rosters=rosters,
+    ) if tasks else {}
     missing = _missing_people_counts(tasks)
     for task in tasks:
         task._summary_counts = counts.get(task.pk, {})
@@ -140,7 +183,10 @@ def summarize_task(task) -> dict:
         # The loaded task already identifies whether historical personnel scoping is needed.
         people_ids = ([task.pk] if task.task_type == 'computer_analysis'
                       and task.profile_snapshot.get('matching_mode') == 'people' else [])
-        counts.update(_summary_counts([task.pk], people_task_ids=people_ids).get(task.pk, {}))
+        rosters = {pk: _frozen_roster_ids(task) for pk in people_ids}
+        counts.update(_summary_counts(
+            [task.pk], people_task_ids=people_ids, rosters=rosters,
+        ).get(task.pk, {}))
     materialized_count = sum(counts.values())
     missing_count = max(task.total_targets - materialized_count, 0)
     surplus_count = max(materialized_count - task.total_targets, 0)
@@ -181,7 +227,11 @@ _COMPLETED_HEALTH_STATUSES = frozenset({
 
 
 def _frozen_roster_ids(task):
-    snapshot = task.parameters_snapshot if isinstance(task.parameters_snapshot, dict) else {}
+    return _frozen_roster_ids_from(task.parameters_snapshot)
+
+
+def _frozen_roster_ids_from(snapshot):
+    snapshot = snapshot if isinstance(snapshot, dict) else {}
     roster = snapshot.get('personnel_roster', [])
     if not isinstance(roster, list):
         return set()
@@ -247,8 +297,15 @@ def build_project_task_metrics(tasks):
     if isinstance(tasks, QuerySet):
         summary = tasks.aggregate(task_count=Count('pk'), latest_task_at=Max('created_at'))
         task_ids = tasks.order_by().values('pk')
+        # 人员模式的冻结名册只有读 parameters_snapshot 才知道；QuerySet 传不进去，
+        # 这里单独取一次，别让每个任务各查一遍。
+        people_tasks = list(tasks.filter(
+            task_type=TaskRun.TaskType.COMPUTER_ANALYSIS,
+            profile_snapshot__matching_mode='people',
+        ).select_related(None).only('pk', 'parameters_snapshot'))
+        rosters = {task.pk: _frozen_roster_ids(task) for task in people_tasks}
         rows = TaskTargetRun.objects.filter(task_id__in=task_ids).exclude(
-            _legacy_orphan_targets(task_ids)).annotate(
+            _legacy_orphan_targets(task_ids, rosters)).annotate(
             outcome=_outcome_expression())
         counts = rows.aggregate(normal_count=Count('pk', filter=Q(outcome='normal')),
                                 abnormal_count=Count('pk', filter=Q(outcome='abnormal')))
@@ -256,7 +313,15 @@ def build_project_task_metrics(tasks):
                                abnormal_count=counts['abnormal_count'] + missing_people)
     normal_count = 0
     abnormal_count = missing_people
-    scoped_counts = _summary_counts([task.pk for task in tasks])
+    rosters = {
+        task.pk: _frozen_roster_ids(task) for task in tasks
+        if task.task_type == 'computer_analysis'
+        and task.profile_snapshot.get('matching_mode') == 'people'
+    }
+    scoped_counts = _summary_counts(
+        [task.pk for task in tasks],
+        people_task_ids=list(rosters), rosters=rosters,
+    )
     for task in tasks:
         normal_count += scoped_counts.get(task.pk, {}).get('normal', 0)
         abnormal_count += scoped_counts.get(task.pk, {}).get('abnormal', 0)
