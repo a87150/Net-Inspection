@@ -28,7 +28,7 @@ class AssetDashboardUiTests(TestCase):
         self.assertContains(response, 'metric-card__footer metric-card__actions')
         self.assertContains(response, 'metric-card__last-run')
         self.assertContains(response, '>域控管理<')
-        self.assertContains(response, '域账号')
+        self.assertContains(response, '域账户')
         self.assertContains(response, '域计算机')
         self.assertContains(response, '域分组')
 

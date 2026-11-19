@@ -48,7 +48,7 @@ class DomainOperationForm(forms.Form):
     """Normalize bulk operation input before it reaches the queue service."""
 
     object_type = forms.ChoiceField(
-        choices=(('account', '域账号'), ('computer', '域计算机')),
+        choices=(('account', '域账户'), ('computer', '域计算机')),
         widget=forms.HiddenInput,
     )
     action = forms.CharField(widget=forms.HiddenInput)
@@ -111,7 +111,7 @@ class DomainOperationForm(forms.Form):
                 self.add_error('target_ids', '请选择至少一个目标。')
             return cleaned
         if cleaned.get('object_type') != 'account':
-            self.add_error('action', '新增用户仅适用于域账号。')
+            self.add_error('action', '新增用户仅适用于域账户。')
         if cleaned.get('target_ids'):
             self.add_error('target_ids', '新增用户不应选择既有账号。')
         for field in ('user_dn', 'login_name', 'display_name', 'initial_password', 'initial_password_confirm'):

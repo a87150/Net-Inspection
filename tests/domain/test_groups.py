@@ -104,7 +104,7 @@ class DomainGroupWorkspaceTests(TestCase):
     def test_overview_separates_enabled_disabled_counts_and_links_groups(self):
         response = self.client.get(reverse('domain_controller_settings'))
 
-        self.assertContains(response, '域账号')
+        self.assertContains(response, '域账户')
         self.assertContains(response, '启用')
         self.assertContains(response, '停用 1')
         self.assertContains(

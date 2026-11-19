@@ -559,7 +559,7 @@ class DomainControllerSettingsTests(TestCase):
         response = self.client.get(reverse('domain_controller_settings'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '测试连接')
-        self.assertContains(response, '域账号')
+        self.assertContains(response, '域账户')
         self.assertContains(response, '域计算机')
         self.assertNotContains(response, '开始导入')
 
@@ -627,7 +627,7 @@ class DomainWorkspaceTests(TestCase):
     def setUp(self):
         login_reader(self.client)
         self.account = Domain_Account.objects.create(
-            account_name='域账号', login_name='domain.user', is_active=True,
+            account_name='域账户', login_name='domain.user', is_active=True,
         )
         self.domain_computer = Domain_Computer.objects.create(
             computer_name='DOMAIN-PC', os='Windows 11', is_active=True,

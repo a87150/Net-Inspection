@@ -1,7 +1,7 @@
 {% extends "admin/base.html" %}
 {% load i18n static %}
 
-{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | 网络巡检中心{% endblock %}
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | 天枢{% endblock %}
 {% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'app/css/tokens.css' %}"><link rel="stylesheet" href="{% static 'app/css/foundation.css' %}"><link rel="stylesheet" href="{% static 'app/css/operations.css' %}"><link rel="stylesheet" href="{% static 'app/css/modal-workflows.css' %}"><link rel="stylesheet" href="{% static 'app/css/style.css' %}">{% endblock %}
 {% block finalstyle %}<link rel="stylesheet" href="{% static 'app/css/admin.css' %}">{% endblock %}
 {% block bodyclass %}{{ block.super }} app-shell admin-shell{% endblock %}
@@ -15,4 +15,4 @@
 </ul>
 {% endif %}{% endblock %}
 {% block extrabody %}<script defer src="{% static 'app/js/common/form_accessibility.js' %}"></script>{% endblock %}
-{% block footer %}<span>网络巡检中心 · 企业运维管理</span>{% endblock %}
+{% block footer %}<span>天枢 · 网络巡检管理中心</span>{% endblock %}

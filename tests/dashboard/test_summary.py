@@ -278,7 +278,7 @@ class DashboardSummaryTests(TestCase):
                 device_name=f'SW-QUERY-{number}', ip=f'192.0.2.{number + 20}',
             )
 
-        # 人员、域账号、域计算机、域分组及四类设备各使用一条固定汇总查询。
+        # 人员、域账户、域计算机、域分组及四类设备各使用一条固定汇总查询。
         with self.assertNumQueries(8):
             summaries = build_asset_card_summaries()
 

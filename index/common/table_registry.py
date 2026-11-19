@@ -320,7 +320,7 @@ TABLE_DEFINITIONS = {
             _field('target_type', '目标类型', 'choice', choices=(
                 ('network_device', '网络设备'), ('server', '服务器'),
                 ('monitor', '弱电设备'), ('computer_log', 'PC 日志'),
-                ('domain_account', '域账号'), ('domain_computer', '域计算机'),
+                ('domain_account', '域账户'), ('domain_computer', '域计算机'),
                 ('people_source', '人员 API 平台'),
             )),
             _field('target_id', '目标标识'),

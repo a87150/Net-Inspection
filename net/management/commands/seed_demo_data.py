@@ -439,7 +439,7 @@ class Command(BaseCommand):
             '演示数据已就绪：'
             f'人员 {len(people)}、计算机 {len(computers)}、'
             f'网络设备 {len(networks)}、服务器 {len(servers)}、'
-            f'弱电设备 {len(weak_current)}、域账号 {len(domain_accounts)}、'
+            f'弱电设备 {len(weak_current)}、域账户 {len(domain_accounts)}、'
             f'域计算机 {len(domain_computers)}、域分组 {len(domain_groups)}、'
             '目录来源 2、计划 2（停用）、'
             f'任务 10（含域操作 2）、分析 4、告警事件 2、投递结果 3、可下载配置 {backup_count}。',

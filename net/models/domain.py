@@ -158,7 +158,7 @@ class DomainOperation(models.Model):
     """The immutable audit envelope for one queued domain operation."""
 
     class ObjectType(models.TextChoices):
-        ACCOUNT = 'account', '域账号'
+        ACCOUNT = 'account', '域账户'
         COMPUTER = 'computer', '域计算机'
 
     class Action(models.TextChoices):

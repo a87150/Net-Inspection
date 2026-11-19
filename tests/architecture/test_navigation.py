@@ -86,7 +86,7 @@ class NavigationDropdownTests(TestCase):
                     'toggle': '域控管理',
                     'links': [
                         ('域控管理', '/settings/domain-controller/'),
-                        ('域账号', '/domain/accounts/'),
+                        ('域账户', '/domain/accounts/'),
                         ('域计算机', '/domain/computers/'),
                         ('域分组', '/domain/groups/'),
                     ],

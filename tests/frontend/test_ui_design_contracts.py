@@ -113,8 +113,8 @@ class SharedInterfaceContractTests(TestCase):
         html = render_to_string('common/brand.html', {'brand_url': '/destination/'})
 
         self.assertIn('href="/destination/"', html)
-        self.assertIn('网络巡检中心', html)
-        self.assertIn('Operations Console', html)
+        self.assertIn('天枢', html)
+        self.assertIn('网络巡检管理中心', html)
 
     def test_operations_overview_is_local_accessible_and_page_scoped(self):
         response = self.client.get(reverse('operations_overview'))
@@ -265,7 +265,7 @@ class SharedInterfaceContractTests(TestCase):
         response = self.client.get(reverse('index'))
 
         self.assertContains(response, f'href="{reverse("admin:index")}"')
-        self.assertContains(response, 'Operations Console')
+        self.assertContains(response, '天枢')
         self.assertContains(response, 'navbar-collapse')
         self.assertContains(response, '运维管理台')
         self.assertContains(response, 'app-brand__copy')
@@ -498,7 +498,7 @@ class AdminVisualContractTests(TestCase):
         self.assertContains(response, 'app-main')
         self.assertContains(response, 'app/css/style.css')
         self.assertContains(response, 'app/css/admin.css')
-        self.assertContains(response, 'Operations Console')
+        self.assertContains(response, '天枢')
         self.assertContains(response, 'navbar-collapse')
         self.assertContains(response, '返回运维总览')
         self.assertContains(response, '修改密码')
@@ -651,11 +651,22 @@ class ModalVisualContractTests(TestCase):
                 self.assertIn('modal-footer--sticky', source)
 
     def test_templates_do_not_use_inline_native_confirmation(self):
-        template_root = TemplateRoot.default()
-        sources = '\n'.join(path.read_text(encoding='utf-8') for path in template_root.rglob('*.html'))
+        """确认弹窗走 appConfirmModal，不用原生 confirm。
 
-        self.assertNotIn('onsubmit="return confirm(', sources)
-        self.assertIn('data-confirm-message=', sources)
+        表单现在由 Vue 岛屿渲染，绑定写成 :data-confirm-message，所以断言要连
+        .mjs 一起扫，否则删掉一个静态模板就会误报成"没人用"。
+        """
+        template_root = TemplateRoot.default()
+        project_root = Path(__file__).resolve().parents[2]
+        sources = '\n'.join(path.read_text(encoding='utf-8') for path in template_root.rglob('*.html'))
+        vue_sources = '\n'.join(
+            path.read_text(encoding='utf-8')
+            for path in (project_root / 'static' / 'app' / 'vue').rglob('*.mjs')
+        )
+
+        self.assertNotIn('onsubmit="return confirm(', sources + vue_sources)
+        self.assertIn('data-confirm-message', sources + vue_sources)
+        self.assertIn('appConfirmModal', (project_root / 'index/templates/common/base.html').read_text(encoding='utf-8'))
 
 class PcListActionContractTests(TestCase):
     def test_pc_list_header_offers_script_downloads_behind_the_config_guard(self):

@@ -83,7 +83,7 @@ static/app/vue/
 
 | 批次 | 页面 | 说明 |
 | --- | --- | --- |
-| ~~B1 列表页~~ 已迁 | 告警记录、巡检记录、错误记录、任务列表、域账号/域计算机/域分组列表、门禁记录、PC 日志列表、PC 错误列表 | 完成：`index/common/table_payload.py` 把 `TableDefinition` 的列/单元格/徽章/行动作压成 JSON，`static/app/vue/pages/resource_table.mjs` 一份组件渲染 8 页（告警页保留专属组件），翻页走 REST，筛选与排序仍是 URL 参数 |
+| ~~B1 列表页~~ 已迁 | 告警记录、巡检记录、错误记录、任务列表、域账户/域计算机/域分组列表、门禁记录、PC 日志列表、PC 错误列表 | 完成：`index/common/table_payload.py` 把 `TableDefinition` 的列/单元格/徽章/行动作压成 JSON，`static/app/vue/pages/resource_table.mjs` 一份组件渲染 8 页（告警页保留专属组件），翻页走 REST，筛选与排序仍是 URL 参数 |
 | ~~B2 详情页~~ 已迁 | 资产详情、人员详情、任务详情、告警详情、记录详情、PC 日志详情、PC 分析详情、域对象详情 | 8 类详情页全部由 `index/common/detail_payload.py` + `static/app/vue/pages/resource_detail.mjs` 渲染。payload 是 `{title, eyebrow, description, actions, sections, disclosure, csrf}`；分区只有 `fields` / `list` / `table` / `groups` / `text` / `alert` / `form` 七种，够覆盖现有全部详情页。`actions` 支持 `link` 与 `form`（带 `confirm`），表格单元格支持 `{text, badge, url, label, note}`，所以分级徽章、结果链接、脱敏摘要都不用另写模板。`GET /api/v1/alert-events/<pk>/detail/` 与页面共用同一个构造函数 |
 | ~~B3 写操作~~ 已迁 | 资产新增/编辑、巡检配置、问题等级、告警渠道/策略/模板、导入、批量执行、维护窗口、PC 采集配置、人员平台与同步计划、门禁来源 | 模态框表单带 `data-form-ajax` 时用 fetch 提交，服务端按 `X-Form-Ajax` 决定回 JSON 还是重定向：失败 400 + `errors[]` 留在框里，成功 200 + `message/redirect` 就地提示。表单本身没改，禁用 JS 时照旧 POST + 重定向 |
 | ~~B4 拓扑~~ 已改 | 网络拓扑 | 拓扑本来就是 Vue（`operations-overview/*.js`），这轮只改布局：后端按「摘掉出口之间的链路后剩下的连通分量」切场地，每块场地内部再按出口→核心→汇聚→接入分层，前端一个场地一列并排展开，场地之间的链路按 VPN 隧道单独上色。效果见 [topology-preview.png](topology-preview.png) |

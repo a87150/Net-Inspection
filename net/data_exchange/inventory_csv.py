@@ -97,7 +97,7 @@ ENTITY_SPECS = {
         'sample': ('张三', 'H10001', 'zhangsan@example.invalid', '13800138000', '信息技术部', '李经理', '是', '2026-01-15', ''),
     },
     'accounts': {
-        'name': '域账号',
+        'name': '域账户',
         'model': Domain_Account,
         'key': 'login_name',
         'columns': [

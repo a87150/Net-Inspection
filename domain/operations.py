@@ -93,12 +93,12 @@ def domain_account_import(request):
                 password=form.cleaned_data['initial_password'],
             )
         except ValidationError:
-            messages.error(request, '域账号表格校验失败，未创建任务。')
+            messages.error(request, '域账户表格校验失败，未创建任务。')
         else:
-            messages.success(request, f'已创建 {len(operations)} 个域账号任务。')
+            messages.success(request, f'已创建 {len(operations)} 个域账户任务。')
             return redirect('task_list')
     else:
-        messages.error(request, '域账号表格校验失败，未创建任务。')
+        messages.error(request, '域账户表格校验失败，未创建任务。')
     return redirect(f'{reverse("domain_account_list")}?domain_modal=account_import')
 
 

@@ -105,7 +105,7 @@ def task_detail_payload(*, task, request, page_obj, table_definition, table_stat
         ]
         sections.append(list_section('域控同步结果', [
             {'label': message, 'detail': ''} for message in messages
-        ], empty='同步域账号、域计算机及域分组，不参与设备告警。'))
+        ], empty='同步域账户、域计算机及域分组，不参与设备告警。'))
 
     if domain_operation:
         fields = [

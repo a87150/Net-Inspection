@@ -894,7 +894,7 @@ class TaskTargetRun(models.Model):
         WEAK_CURRENT = 'monitor', '弱电设备'
         COMPUTER_LOG = 'computer_log', '计算机日志'
         PEOPLE_SOURCE = 'people_source', '人员目录来源'
-        DOMAIN_ACCOUNT = 'domain_account', '域账号'
+        DOMAIN_ACCOUNT = 'domain_account', '域账户'
         DOMAIN_COMPUTER = 'domain_computer', '域计算机'
         ACCESS_SOURCE = 'access_source', '门禁平台来源'
 
@@ -1020,7 +1020,7 @@ class TaskTargetRun(models.Model):
                     self.TargetType.DOMAIN_ACCOUNT,
                     self.TargetType.DOMAIN_COMPUTER,
                 }:
-                    errors['target_type'] = '域控操作只能包含域账号或域计算机目标。'
+                    errors['target_type'] = '域控操作只能包含域账户或域计算机目标。'
                 for field_name in ('target_snapshot', 'result_snapshot'):
                     if contains_sensitive_snapshot_value(getattr(self, field_name)):
                         errors[field_name] = '域控操作快照不能包含敏感载荷。'
