@@ -74,19 +74,24 @@
                 <span aria-hidden="true">ⓘ</span>已显示主要网络设备，尚未采集到 LLDP/CDP 物理链路。
             </p>
             <div v-if="snapshot.topology?.mode !== 'empty'" class="topology-canvas-shell">
-                <svg class="topology-canvas" :viewBox="`0 0 ${topologyWidth} ${canvasHeight}`"
+                <svg class="topology-canvas" :viewBox="`0 0 ${canvasWidth} ${canvasHeight}`" :style="{ minWidth: canvasWidth + 'px' }"
                      role="img" aria-labelledby="topology-title topology-description"
                      @pointerdown.self="startPan" @pointermove="movePan" @pointerup="endPan" @pointercancel="endPan">
                     <title id="topology-title">企业主要网络设备与 LLDP/CDP 物理拓扑</title>
                     <desc id="topology-description">按出口、核心、汇聚、接入自上而下排列；粗线是设备上下级关系，实线表示 LLDP/CDP，虚线表示网段推断。点击交换机或无线控制器可展开下联终端。</desc>
                     <g :transform="`translate(${viewport.x} ${viewport.y}) scale(${viewport.scale})`">
+                        <g v-for="site in topology.sites" :key="'site-' + site.id" class="topology-site" aria-hidden="true">
+                            <rect class="topology-site__frame" :x="site.left - 18" :y="site.top"
+                                  :width="site.right - site.left + 36" :height="site.bottom - site.top" rx="18" />
+                            <text class="topology-site__label" :x="site.left - 4" :y="site.top - 10">[[ site.label ]]</text>
+                        </g>
                         <path v-for="edge in topology.hierarchyEdges" :key="edge.id" :d="hierarchyPath(edge)"
                               class="topology-edge topology-edge--hierarchy" aria-hidden="true" />
                         <path v-for="edge in topology.attachmentEdges" :key="edge.id" :d="edgePath(edge)"
                               class="topology-edge" :class="edge.attachmentSource === 'physical_discovered' ? 'topology-edge--attachment-physical' : 'topology-edge--inferred'"
                               tabindex="0" role="button" :aria-label="edgeAriaLabel(edge)" @click="selectEdge(edge)" @keydown.enter.prevent="selectEdge(edge)" @keydown.space.prevent="selectEdge(edge)" />
                         <path v-for="edge in topology.physicalEdges" :key="edge.id" :d="edgePath(edge)"
-                              class="topology-edge topology-edge--physical" :class="{ 'is-stale': edge.status === 'stale', 'is-lateral': edge.lateral }"
+                              class="topology-edge topology-edge--physical" :class="{ 'is-stale': edge.status === 'stale', 'is-lateral': edge.lateral, 'is-vpn': edge.vpn }"
                               tabindex="0" role="button" :aria-label="edgeAriaLabel(edge)" @click="selectEdge(edge)" @keydown.enter.prevent="selectEdge(edge)" @keydown.space.prevent="selectEdge(edge)" />
                         <g v-for="node in topology.nodes" :key="node.id" data-topology-device-card
                            class="topology-node topology-device-card"

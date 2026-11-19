@@ -133,6 +133,10 @@
 .topology-edge--hierarchy { stroke: rgba(148, 196, 214, .42); stroke-width: 1.4; stroke-linecap: square; }
 /* 同层互联的链路在树状图里只是横向干扰，压到几乎看不见。 */
 .topology-edge--physical.is-lateral { stroke-width: 1; opacity: .28; filter: none; }
+/* 场地之间的隧道：单独一种颜色，横穿场地边界，一眼能看出哪个口子在互联。 */
+.topology-edge--physical.is-vpn { stroke: var(--overview-amber); stroke-width: 2.4; stroke-dasharray: 12 6; filter: none; }
+.topology-site__frame { fill: rgba(10, 32, 46, .35); stroke: rgba(116, 223, 244, .18); stroke-width: 1; }
+.topology-site__label { fill: rgba(163, 214, 233, .85); font-size: 13px; font-weight: 600; }
 .topology-device-card { cursor: default; outline: none; }
 .topology-device-card.is-backbone[role="button"] { cursor: pointer; }
 .topology-device-card__surface { fill: rgba(12, 34, 50, .96); stroke: rgba(116, 223, 244, .62); stroke-width: 1.2; vector-effect: non-scaling-stroke; transition: fill .18s ease, stroke .18s ease, filter .18s ease; }

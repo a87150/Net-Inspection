@@ -99,6 +99,7 @@ test('lays backbone tiers top-down and expanded children below their parent', as
   assert.ok(byId.get('networks:ap-1').y > byId.get('networks:ac').y);
   assert.deepEqual(first.legend, [
     { kind: 'physical', label: 'LLDP/CDP 物理链路' },
+    { kind: 'vpn', label: '场地间 VPN' },
     { kind: 'inferred', label: '网段推断终端' },
     { kind: 'external', label: '未解析邻居' },
   ]);
@@ -107,6 +108,37 @@ test('lays backbone tiers top-down and expanded children below their parent', as
     assert.ok(node.y >= first.bounds.minY && node.y <= first.bounds.maxY, node.id);
   }
   assert.ok(first.bounds.maxX <= 360);
+});
+
+test('每次场地各占一列，单场地时只占一列', async () => {
+  const { layoutTopology } = await loadModule();
+  const single = layoutTopology(
+    {
+      nodes: [
+        { id: 'networks:fw', kind: 'backbone', role: 'firewall', tier: 0, label: 'FW', siteId: 0, site: 'A' },
+        { id: 'networks:core', kind: 'backbone', role: 'core_switch', tier: 1, label: 'CORE', siteId: 0, site: 'A' },
+      ],
+      attachmentEdges: [], physicalEdges: [], hierarchyEdges: [],
+    },
+    { width: 900, height: 620 },
+  );
+  assert.equal(single.sites.length, 1);
+
+  const multi = layoutTopology(
+    {
+      nodes: [
+        { id: 'networks:fw-a', kind: 'backbone', role: 'firewall', tier: 0, label: 'A-FW', siteId: 0, site: 'A' },
+        { id: 'networks:fw-b', kind: 'backbone', role: 'firewall', tier: 0, label: 'B-FW', siteId: 1, site: 'B' },
+      ],
+      attachmentEdges: [], physicalEdges: [], hierarchyEdges: [],
+    },
+    { width: 900, height: 620 },
+  );
+  assert.equal(multi.sites.length, 2);
+  const [left, right] = multi.sites;
+  assert.ok(left.right < right.left, '两列不能重叠');
+  const byId = new Map(multi.nodes.map((node) => [node.id, node]));
+  assert.ok(byId.get('networks:fw-a').x < byId.get('networks:fw-b').x);
 });
 
 test('wraps dense backbone tiers on narrow screens without overlapping cards', async () => {

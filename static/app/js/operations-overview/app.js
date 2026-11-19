@@ -72,6 +72,11 @@ if (mountElement && bootstrapElement) {
         const maxY = (this.topology && this.topology.bounds && this.topology.bounds.maxY) || 0;
         return Math.max(this.topologyHeight, Math.ceil(maxY + 24));
       },
+      /* 多场地时横向排开，画布跟着变宽，用横向滚动看完整张图。 */
+      canvasWidth() {
+        const maxX = (this.topology && this.topology.bounds && this.topology.bounds.maxX) || 0;
+        return Math.max(this.topologyWidth, Math.ceil(maxX + 24));
+      },
       drawerDetails() {
         const details = (this.drawerNode && this.drawerNode.details) || [];
         return details.length ? details : [{ label: 'IP / 备注', value: this.drawerNode?.ip || '未配置' }];
