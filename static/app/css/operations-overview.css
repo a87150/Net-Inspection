@@ -134,7 +134,7 @@
 /* 同层互联的链路在树状图里只是横向干扰，压到几乎看不见。 */
 .topology-edge--physical.is-lateral { stroke-width: 1; opacity: .28; filter: none; }
 /* 场地之间的隧道：单独一种颜色，横穿场地边界，一眼能看出哪个口子在互联。 */
-.topology-edge--physical.is-vpn { stroke: var(--overview-amber); stroke-width: 2.4; stroke-dasharray: 12 6; filter: none; }
+.topology-edge--physical.is-vpn { stroke: var(--overview-amber); stroke-width: 2.6; stroke-dasharray: 14 7; opacity: 1; filter: none; }
 .topology-site__frame { fill: rgba(10, 32, 46, .35); stroke: rgba(116, 223, 244, .18); stroke-width: 1; }
 .topology-site__label { fill: rgba(163, 214, 233, .85); font-size: 13px; font-weight: 600; }
 .topology-device-card { cursor: default; outline: none; }
